@@ -67,14 +67,25 @@ export interface Conversation {
   /** Terminal session this conversation is bound to (for tool execution / context). */
   sessionId?: string
   agentMode: boolean
+  /** True only while an ai.chat request is in flight (between dispatch and done/error). */
   streaming: boolean
-  pendingTool?: PendingTool
+  /**
+   * Tool calls from the current assistant turn awaiting a decision or still
+   * executing. A single turn can legally contain several parallel tool_use
+   * blocks, so this is a queue keyed by tool_use id — never a single slot.
+   */
+  pendingTools: PendingTool[]
   pendingContext: AiContextChip[]
   /** Transport error from the last stream, shown as a dismissible banner. */
   error?: string
   createdAt: number
   /** requestId of the in-flight ai.chat call, if any (internal bookkeeping for abort()). */
   activeRequestId?: string
+}
+
+/** A conversation is "busy" (input blocked) while streaming OR while tools are unresolved. */
+export function isConversationBusy(conv: Conversation): boolean {
+  return conv.streaming || conv.pendingTools.length > 0
 }
 
 interface AiState {
@@ -90,8 +101,10 @@ interface AiState {
 
   send: (text: string, opts?: { conversationId?: string }) => Promise<void>
   abort: (conversationId?: string) => void
-  approveTool: (conversationId?: string) => Promise<void>
-  denyTool: (conversationId?: string) => void
+  /** Approve a pending tool by id (defaults to the first unsettled one). */
+  approveTool: (conversationId?: string, toolId?: string) => Promise<void>
+  /** Deny a pending tool by id (defaults to the first unsettled one). */
+  denyTool: (conversationId?: string, toolId?: string) => void
   attachBlockContext: (block: BlockRecord, conversationId?: string) => void
   attachContext: (label: string, content: string, conversationId?: string) => void
   removeContext: (contextId: string, conversationId?: string) => void
@@ -125,6 +138,31 @@ function findToolResult(
     }
   }
   return undefined
+}
+
+/**
+ * tool_use ids anywhere in the history that still lack a matching tool_result.
+ * The agentic loop must only continue (send the next turn) once every tool_use
+ * from the current turn has produced a tool_result — otherwise the provider
+ * rejects the request ("each tool_use must have a corresponding tool_result").
+ */
+function unresolvedToolUseIds(messages: AiMessage[]): string[] {
+  const ids: string[] = []
+  for (const m of messages) {
+    if (m.role !== 'assistant') continue
+    for (const p of m.content) {
+      if (p.type === 'tool_use' && !findToolResult(messages, p.id)) ids.push(p.id)
+    }
+  }
+  return ids
+}
+
+function lastAssistantHasToolUse(messages: AiMessage[]): boolean {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i]
+    if (m.role === 'assistant') return m.content.some((p) => p.type === 'tool_use')
+  }
+  return false
 }
 
 function appendText(conv: Conversation, text: string): Conversation {
@@ -241,6 +279,26 @@ async function buildSystemPrompt(conv: Conversation): Promise<string> {
 /** requestId -> conversationId, for the single global stream subscriber. */
 const requestConv = new Map<string, string>()
 
+/**
+ * Per-conversation serial execution chain. Parallel tool_use calls in one turn
+ * must run one at a time (they share a single terminal), so each executeTool is
+ * appended to this promise chain instead of firing concurrently.
+ */
+const execChains = new Map<string, Promise<void>>()
+
+/**
+ * Per-conversation run epoch, bumped by abort()/delete. A tool execution that
+ * finishes after its conversation was aborted checks the epoch and drops its
+ * result instead of resurrecting the loop.
+ */
+const runEpoch = new Map<string, number>()
+function currentEpoch(convId: string): number {
+  return runEpoch.get(convId) ?? 0
+}
+function bumpEpoch(convId: string): void {
+  runEpoch.set(convId, currentEpoch(convId) + 1)
+}
+
 export const useAiStore = create<AiState>((set, get) => {
   const patchConversation = (id: string, fn: (c: Conversation) => Conversation): void => {
     set((s) => ({ conversations: s.conversations.map((c) => (c.id === id ? fn(c) : c)) }))
@@ -282,7 +340,19 @@ export const useAiStore = create<AiState>((set, get) => {
     window.zarya.ai.chat(requestId, req)
   }
 
-  async function executeTool(convId: string, tool: { id: string; name: string; input: unknown }): Promise<void> {
+  /** Enqueue a tool execution on the conversation's serial chain. */
+  function enqueueTool(convId: string, tool: { id: string; name: string; input: unknown }): Promise<void> {
+    const prev = execChains.get(convId) ?? Promise.resolve()
+    const next = prev.catch(() => {}).then(() => executeToolInner(convId, tool))
+    execChains.set(convId, next)
+    return next
+  }
+
+  async function executeToolInner(
+    convId: string,
+    tool: { id: string; name: string; input: unknown }
+  ): Promise<void> {
+    const epoch = currentEpoch(convId)
     let content: string
     let isError = false
     if (tool.name !== 'run_command') {
@@ -305,15 +375,32 @@ export const useAiStore = create<AiState>((set, get) => {
         }
       }
     }
+    // Conversation was aborted/deleted while the command ran — drop the result.
+    if (currentEpoch(convId) !== epoch || !get().conversations.some((c) => c.id === convId)) return
+
     patchConversation(convId, (c) => ({
       ...c,
-      pendingTool: c.pendingTool?.id === tool.id ? undefined : c.pendingTool,
+      pendingTools: c.pendingTools.filter((t) => t.id !== tool.id),
       messages: [
         ...c.messages,
         { role: 'user', content: [{ type: 'tool_result', toolUseId: tool.id, content, isError }] }
       ]
     }))
-    await dispatchChat(convId)
+    maybeContinue(convId)
+  }
+
+  /**
+   * The agentic-loop barrier: dispatch the next turn only once the current
+   * turn's request has finished (streaming === false) AND every tool_use of the
+   * last assistant turn has a tool_result. Called after each tool resolves and
+   * after the stream's 'done'.
+   */
+  function maybeContinue(convId: string): void {
+    const conv = get().conversations.find((c) => c.id === convId)
+    if (!conv || conv.streaming) return
+    if (!lastAssistantHasToolUse(conv.messages)) return
+    if (unresolvedToolUseIds(conv.messages).length > 0) return
+    void dispatchChat(convId)
   }
 
   function handleStreamEvent(requestId: string, ev: AiStreamEvent): void {
@@ -331,11 +418,15 @@ export const useAiStore = create<AiState>((set, get) => {
       case 'tool_use': {
         patchConversation(convId, (c) => appendToolUse(c, ev.id, ev.name, ev.input))
         const auto = ev.name === 'run_command' ? getSettings().ai.autoApprove : true
+        // Queue the tool; parallel tool_use blocks each get their own card.
         patchConversation(convId, (c) => ({
           ...c,
-          pendingTool: { id: ev.id, name: ev.name, input: ev.input, autoApproved: auto, settled: auto }
+          pendingTools: [
+            ...c.pendingTools.filter((t) => t.id !== ev.id),
+            { id: ev.id, name: ev.name, input: ev.input, autoApproved: auto, settled: auto }
+          ]
         }))
-        if (auto) void executeTool(convId, { id: ev.id, name: ev.name, input: ev.input })
+        if (auto) void enqueueTool(convId, { id: ev.id, name: ev.name, input: ev.input })
         break
       }
 
@@ -344,6 +435,9 @@ export const useAiStore = create<AiState>((set, get) => {
         patchConversation(convId, (c) =>
           c.activeRequestId === requestId ? { ...c, streaming: false, activeRequestId: undefined } : c
         )
+        // If the finished turn contained tool calls that are already all
+        // resolved (fast auto-approve path), continue the loop now.
+        maybeContinue(convId)
         break
 
       case 'error':
@@ -352,6 +446,7 @@ export const useAiStore = create<AiState>((set, get) => {
           ...c,
           streaming: false,
           activeRequestId: undefined,
+          pendingTools: [],
           error: ev.message
         }))
         break
@@ -374,6 +469,7 @@ export const useAiStore = create<AiState>((set, get) => {
         sessionId: opts?.sessionId,
         agentMode: false,
         streaming: false,
+        pendingTools: [],
         pendingContext: [],
         createdAt: Date.now()
       }
@@ -386,6 +482,8 @@ export const useAiStore = create<AiState>((set, get) => {
     },
 
     deleteConversation: (id) => {
+      bumpEpoch(id)
+      execChains.delete(id)
       set((s) => {
         const conv = s.conversations.find((c) => c.id === id)
         if (conv?.activeRequestId) {
@@ -405,7 +503,11 @@ export const useAiStore = create<AiState>((set, get) => {
 
     send: async (text, opts) => {
       const conv = resolveConv(opts?.conversationId)
-      if (!conv || conv.streaming) return
+      // Block a new message while streaming OR while any tool call from the
+      // current turn is still unresolved — sending now would append a user
+      // message between an assistant tool_use and its tool_result, which the
+      // provider rejects and which corrupts the conversation permanently.
+      if (!conv || isConversationBusy(conv)) return
       const trimmed = text.trim()
       if (!trimmed && !conv.pendingContext.length) return
 
@@ -427,30 +529,48 @@ export const useAiStore = create<AiState>((set, get) => {
 
     abort: (conversationId) => {
       const conv = resolveConv(conversationId)
-      if (!conv?.activeRequestId) return
-      window.zarya.ai.abort(conv.activeRequestId)
-      requestConv.delete(conv.activeRequestId)
-      patchConversation(conv.id, (c) => ({ ...c, streaming: false, activeRequestId: undefined }))
-    },
-
-    approveTool: async (conversationId) => {
-      const conv = resolveConv(conversationId)
-      if (!conv?.pendingTool || conv.pendingTool.settled) return
-      const tool = conv.pendingTool
+      if (!conv) return
+      // Cancel the request (if any) and stop the agentic loop: drop pending
+      // tools and bump the epoch so an in-flight command's late result is
+      // discarded rather than re-triggering the loop.
+      bumpEpoch(conv.id)
+      execChains.delete(conv.id)
+      if (conv.activeRequestId) {
+        window.zarya.ai.abort(conv.activeRequestId)
+        requestConv.delete(conv.activeRequestId)
+      }
       patchConversation(conv.id, (c) => ({
         ...c,
-        pendingTool: c.pendingTool ? { ...c.pendingTool, settled: true } : undefined
+        streaming: false,
+        activeRequestId: undefined,
+        pendingTools: []
       }))
-      await executeTool(conv.id, { id: tool.id, name: tool.name, input: tool.input })
     },
 
-    denyTool: (conversationId) => {
+    approveTool: async (conversationId, toolId) => {
       const conv = resolveConv(conversationId)
-      if (!conv?.pendingTool || conv.pendingTool.settled) return
-      const tool = conv.pendingTool
+      if (!conv) return
+      const tool = toolId
+        ? conv.pendingTools.find((t) => t.id === toolId)
+        : conv.pendingTools.find((t) => !t.settled)
+      if (!tool || tool.settled) return
       patchConversation(conv.id, (c) => ({
         ...c,
-        pendingTool: undefined,
+        pendingTools: c.pendingTools.map((t) => (t.id === tool.id ? { ...t, settled: true } : t))
+      }))
+      await enqueueTool(conv.id, { id: tool.id, name: tool.name, input: tool.input })
+    },
+
+    denyTool: (conversationId, toolId) => {
+      const conv = resolveConv(conversationId)
+      if (!conv) return
+      const tool = toolId
+        ? conv.pendingTools.find((t) => t.id === toolId)
+        : conv.pendingTools.find((t) => !t.settled)
+      if (!tool || tool.settled) return
+      patchConversation(conv.id, (c) => ({
+        ...c,
+        pendingTools: c.pendingTools.filter((t) => t.id !== tool.id),
         messages: [
           ...c.messages,
           {
@@ -466,7 +586,7 @@ export const useAiStore = create<AiState>((set, get) => {
           }
         ]
       }))
-      void dispatchChat(conv.id)
+      maybeContinue(conv.id)
     },
 
     attachBlockContext: (block, conversationId) => {

@@ -99,6 +99,20 @@ export function registerIpc(ctx: IpcContext): void {
   // -------------------------------------------------------------------- ai
   ipcMain.on(CH.aiChat, (_e, requestId: string, req: AiChatRequest) => {
     const key = settingsStore.getSecret(req.provider)
+    // SECURITY: never forward a renderer-supplied baseUrl to a provider that
+    // has a stored API key. The renderer is untrusted for this purpose — an
+    // arbitrary baseUrl would make main attach the decrypted key (x-api-key /
+    // Authorization) to whatever host the renderer names, leaking it. Only
+    // the baseUrl the user actually configured in Settings is trusted; use it
+    // when it matches the request's provider, otherwise fall back to the
+    // provider's default official host (empty string, aiProxy fills it in).
+    if (key) {
+      const settings = settingsStore.get()
+      req = {
+        ...req,
+        baseUrl: req.provider === settings.ai.provider ? settings.ai.baseUrl : ''
+      }
+    }
     void aiProxy.chat(requestId, req, key)
   })
   ipcMain.on(CH.aiAbort, (_e, requestId: string) => aiProxy.abort(requestId))

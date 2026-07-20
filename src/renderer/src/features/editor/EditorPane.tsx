@@ -222,6 +222,35 @@ export default function EditorPane(): React.JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [monacoApi, activeId, switchSignal])
 
+  // Dispose Monaco models for tabs the store no longer has open (closeFile).
+  // Without this, fileModels/diffModels keep caching by id forever, so
+  // re-opening the same path would hand back the stale model — including
+  // any unsaved edits it still held — instead of a fresh one seeded from
+  // the store's current content. Detach from the editor first if it's still
+  // the attached model (can happen when the last tab is closed) so we never
+  // dispose a model while it's live on screen.
+  useEffect(() => {
+    const liveIds = new Set(files.map((f) => f.id))
+
+    for (const [id, model] of fileModels.current) {
+      if (liveIds.has(id)) continue
+      if (editorRef.current?.getModel() === model) editorRef.current.setModel(null)
+      model.dispose()
+      fileModels.current.delete(id)
+    }
+
+    for (const [id, entry] of diffModels.current) {
+      if (liveIds.has(id)) continue
+      const current = diffEditorRef.current?.getModel()
+      if (current?.original === entry.original || current?.modified === entry.modified) {
+        diffEditorRef.current?.setModel(null)
+      }
+      entry.original.dispose()
+      entry.modified.dispose()
+      diffModels.current.delete(id)
+    }
+  }, [files])
+
   // Reveal a requested line once its model exists.
   useEffect(() => {
     if (!pendingReveal || !editorRef.current) return

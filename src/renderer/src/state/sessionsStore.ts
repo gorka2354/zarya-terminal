@@ -105,6 +105,11 @@ interface SessionsState {
 
 let persistTimer: ReturnType<typeof setTimeout> | undefined
 let autosaveTimer: ReturnType<typeof setInterval> | undefined
+// In-flight lock for restoreSaved: prevents a double-click (or any rapid
+// re-invocation) from racing between the `loadSnapshot` await and session
+// creation, which would otherwise spawn two live sessions for one savedId
+// and clobber the terminal handle.
+const restoringIds = new Set<string>()
 
 function schedulePersistWorkspace(get: () => SessionsState): void {
   clearTimeout(persistTimer)
@@ -434,39 +439,47 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
         state.setActiveSession(savedId)
         return
       }
-      const snap = await window.zarya.sessions.loadSnapshot(savedId)
-      if (!snap) {
-        useUiStore.getState().toast('Снапшот сессии не найден', 'error')
-        return
+      // Guard against a double-click (or any rapid re-invocation) racing
+      // through the async gap below and spawning two sessions for the same id.
+      if (restoringIds.has(savedId)) return
+      restoringIds.add(savedId)
+      try {
+        const snap = await window.zarya.sessions.loadSnapshot(savedId)
+        if (!snap) {
+          useUiStore.getState().toast('Снапшот сессии не найден', 'error')
+          return
+        }
+        useBlocksStore.getState().setBlocks(savedId, snap.blocks)
+        if (snap.scrollback) setPendingRestore(savedId, snap.scrollback)
+        const session = makeRuntime({
+          id: savedId,
+          title: snap.meta.title,
+          customTitle: true,
+          profileId: snap.meta.profileId,
+          shellName: snap.meta.shellName,
+          shellIcon: snap.meta.shellIcon,
+          cwd: snap.meta.cwd,
+          createdAt: snap.meta.createdAt,
+          pinned: snap.meta.pinned,
+          favorite: snap.meta.favorite,
+          restored: true
+        })
+        const tab: TabState = {
+          id: uid('tab'),
+          layout: { type: 'leaf', sessionId: savedId },
+          activeSessionId: savedId
+        }
+        setPartial((s) => ({
+          sessions: { ...s.sessions, [savedId]: session },
+          tabs: [...s.tabs, tab],
+          activeTabId: tab.id
+        }))
+        await spawnSession(setPartial, session)
+        emitBus('session:restored', { sessionId: savedId })
+        schedulePersistWorkspace(get)
+      } finally {
+        restoringIds.delete(savedId)
       }
-      useBlocksStore.getState().setBlocks(savedId, snap.blocks)
-      if (snap.scrollback) setPendingRestore(savedId, snap.scrollback)
-      const session = makeRuntime({
-        id: savedId,
-        title: snap.meta.title,
-        customTitle: true,
-        profileId: snap.meta.profileId,
-        shellName: snap.meta.shellName,
-        shellIcon: snap.meta.shellIcon,
-        cwd: snap.meta.cwd,
-        createdAt: snap.meta.createdAt,
-        pinned: snap.meta.pinned,
-        favorite: snap.meta.favorite,
-        restored: true
-      })
-      const tab: TabState = {
-        id: uid('tab'),
-        layout: { type: 'leaf', sessionId: savedId },
-        activeSessionId: savedId
-      }
-      setPartial((s) => ({
-        sessions: { ...s.sessions, [savedId]: session },
-        tabs: [...s.tabs, tab],
-        activeTabId: tab.id
-      }))
-      await spawnSession(setPartial, session)
-      emitBus('session:restored', { sessionId: savedId })
-      schedulePersistWorkspace(get)
     },
 
     refreshSavedList: async () => {

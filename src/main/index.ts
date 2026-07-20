@@ -82,10 +82,12 @@ function createWindow(): void {
     e.preventDefault()
     mainWindow?.webContents.send(CH.prepareQuit, { reason: 'close' })
     quitTimer = setTimeout(() => {
-      // Renderer did not answer in time — quit anyway (autosave has recent data).
+      // Renderer did not answer in time — quit anyway (autosave has recent
+      // data). 8s gives snapshotAll/prune (session persistence) realistic
+      // room to finish instead of being cut off mid-write by a tight 2s cap.
       quitConfirmed = true
       mainWindow?.destroy()
-    }, 2000)
+    }, 8000)
   })
 
   mainWindow.on('closed', () => {
@@ -141,6 +143,7 @@ if (!gotLock) {
       requestQuitConfirmed: () => {
         if (quitTimer) clearTimeout(quitTimer)
         quitConfirmed = true
+        settingsStore.flush()
         mainWindow?.destroy()
       }
     })
@@ -163,5 +166,8 @@ if (!gotLock) {
 
   app.on('before-quit', () => {
     ptyManager.killAll()
+    // Flush any settings edit made within the last debounce window (250ms)
+    // so it isn't lost on quit.
+    settingsStore.flush()
   })
 }

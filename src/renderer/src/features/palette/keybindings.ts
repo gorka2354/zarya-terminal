@@ -52,6 +52,18 @@ export function shouldBypassTerminal(e: KeyboardEvent): boolean {
 
 let initialized = false
 
+// App-level actions that must stay reachable even while a Monaco editor has
+// focus (e.g. opening the command palette from inside a file). Everything
+// else falls through to Monaco's own keybindings (Ctrl+Shift+K delete line,
+// Ctrl+Up/Down, Ctrl+Shift+O, etc.) instead of being swallowed globally.
+const MONACO_ALLOWLIST = new Set([
+  'app.command-palette',
+  'app.quick-open',
+  'app.settings',
+  'app.toggle-ai-panel',
+  'app.toggle-sidebar'
+])
+
 /** Global keydown dispatcher: chord -> action. Call once at boot. */
 export function initKeybindings(): void {
   if (initialized) return
@@ -77,6 +89,10 @@ export function initKeybindings(): void {
           target.isContentEditable)
       const isXtermInput = target?.classList.contains('xterm-helper-textarea')
       if (inInput && !isXtermInput && !e.ctrlKey && !e.altKey && !e.metaKey) return
+      // Inside the Monaco editor, only app-level actions bypass it — everything
+      // else must reach Monaco's own keybindings unmolested.
+      const inMonaco = target?.closest('.monaco-editor')
+      if (inMonaco && !MONACO_ALLOWLIST.has(actionId)) return
       e.preventDefault()
       e.stopPropagation()
       runAction(actionId)

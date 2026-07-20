@@ -20,6 +20,10 @@ function toBashPath(p: string): string {
 
 export class PtyManager {
   private ptys = new Map<string, pty.IPty>()
+  // Session ids for which kill() arrived while spawn() was still in flight
+  // (async shell-integration setup runs before the native pty.spawn call) —
+  // consulted right after spawn() completes so the process isn't orphaned.
+  private killRequested = new Set<string>()
   private getWindow: () => BrowserWindow | null
 
   constructor(getWindow: () => BrowserWindow | null) {
@@ -32,6 +36,9 @@ export class PtyManager {
     if (this.ptys.has(req.sessionId)) {
       this.kill(req.sessionId)
     }
+    // A new spawn attempt supersedes any stale kill request left over from a
+    // previous attempt for this id (respawn must not be pre-killed by it).
+    this.killRequested.delete(req.sessionId)
 
     let cwd = req.cwd && existsSync(req.cwd) ? req.cwd : homedir()
     const nonce = randomBytes(16).toString('hex')
@@ -93,7 +100,21 @@ export class PtyManager {
         useConpty: true
       })
     } catch (e) {
+      this.killRequested.delete(req.sessionId)
       return { ok: false, error: e instanceof Error ? e.message : String(e) }
+    }
+
+    if (this.killRequested.has(req.sessionId)) {
+      // kill() arrived during the async setup above (no in-flight cancellation
+      // exists for pty.spawn) — don't register it as live, kill it right now
+      // so it isn't orphaned.
+      this.killRequested.delete(req.sessionId)
+      try {
+        proc.kill()
+      } catch {
+        // already dead
+      }
+      return { ok: false, error: 'Session was killed during spawn.' }
     }
 
     this.ptys.set(req.sessionId, proc)
@@ -129,7 +150,13 @@ export class PtyManager {
 
   kill(sessionId: string): void {
     const p = this.ptys.get(sessionId)
-    if (!p) return
+    if (!p) {
+      // No live pty yet — most likely a kill() racing an in-flight spawn().
+      // Remember it so spawn() kills the process the instant it's created
+      // instead of leaking it. Harmless no-op if no spawn ever follows.
+      this.killRequested.add(sessionId)
+      return
+    }
     this.ptys.delete(sessionId)
     try {
       p.kill()

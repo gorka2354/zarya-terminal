@@ -46,8 +46,11 @@ export class SessionStore {
     } else {
       this.metas.push(snap.meta)
     }
-    await this.prune()
+    // Write the new snapshot file BEFORE pruning/indexing, so index.json can
+    // never reference this entry before its file exists on disk (crash-safe:
+    // orphan files are harmless, orphan index entries are not).
     await writeJsonAtomic(this.snapshotFile(snap.meta.id), snap)
+    await this.prune()
     await writeJsonAtomic(this.indexFile, this.metas)
   }
 
@@ -83,6 +86,13 @@ export class SessionStore {
     if (!m) return
     m.title = title
     await writeJsonAtomic(this.indexFile, this.metas)
+    // Keep the snapshot file's embedded meta.title in sync (mirrors setFlag
+    // below) — otherwise a restart reloads the snapshot and the title reverts.
+    const snap = await this.loadSnapshot(id)
+    if (snap) {
+      snap.meta.title = title
+      await writeJsonAtomic(this.snapshotFile(id), snap)
+    }
   }
 
   async saveWorkspace(ws: WorkspaceState): Promise<void> {
@@ -99,8 +109,14 @@ export class SessionStore {
       .filter((m) => !m.pinned && !m.favorite)
       .sort((a, b) => a.updatedAt - b.updatedAt)
     const excess = this.metas.length - MAX_SESSIONS
-    for (const victim of removable.slice(0, excess)) {
-      this.metas = this.metas.filter((m) => m.id !== victim.id)
+    const victims = removable.slice(0, excess)
+    const victimIds = new Set(victims.map((v) => v.id))
+    // Update the index and persist it BEFORE deleting any snapshot files: if
+    // the process dies mid-prune, at worst we leak orphan files (harmless),
+    // never an index.json entry pointing at an already-deleted file.
+    this.metas = this.metas.filter((m) => !victimIds.has(m.id))
+    await writeJsonAtomic(this.indexFile, this.metas)
+    for (const victim of victims) {
       await fs.rm(this.snapshotFile(victim.id), { force: true })
     }
   }

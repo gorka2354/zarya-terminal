@@ -45,10 +45,12 @@ export default function AiPanel(): React.JSX.Element {
   useEffect(() => {
     const el = listRef.current
     if (el) el.scrollTop = el.scrollHeight
-  }, [conv?.messages, conv?.streaming, conv?.pendingTool])
+  }, [conv?.messages, conv?.streaming, conv?.pendingTools])
+
+  const busy = !!conv && (conv.streaming || conv.pendingTools.length > 0)
 
   const doSend = (text: string): void => {
-    if (!conv || conv.streaming) return
+    if (!conv || busy) return
     const trimmed = text.trim()
     if (!trimmed && !conv.pendingContext.length) return
     setInput('')
@@ -142,7 +144,14 @@ export default function AiPanel(): React.JSX.Element {
       return
     }
     if (action === 'insert') {
-      window.zarya.pty.write(sid, code)
+      // "Insert" must not silently execute. A trailing newline (and any
+      // embedded ones in multi-line snippets) would submit the command to the
+      // shell — strip the trailing one, and for multi-line snippets require the
+      // same explicit confirmation as "run".
+      const noTrailing = code.replace(/\r?\n$/, '')
+      const lineCount = noTrailing.split('\n').length
+      if (lineCount > 1 && !window.confirm(`Вставить ${lineCount} строк(и)? Многострочная вставка может выполниться сразу.`)) return
+      window.zarya.pty.write(sid, noTrailing)
       getTerminal(sid)?.focus()
     } else if (action === 'run') {
       const lineCount = code.trim().split('\n').length
@@ -252,9 +261,9 @@ export default function AiPanel(): React.JSX.Element {
                   }
                   if (p.type === 'tool_use') {
                     const result = findToolResult(conv.messages, p.id)
-                    const pending = conv.pendingTool?.id === p.id
-                    const settled = pending && conv.pendingTool?.settled
-                    const isAuto = pending && conv.pendingTool?.autoApproved
+                    const pendingTool = conv.pendingTools.find((t) => t.id === p.id)
+                    const settled = pendingTool?.settled
+                    const isAuto = pendingTool?.autoApproved
                     const input = p.input as { command?: string; reason?: string } | null
                     const command = input?.command ?? ''
                     const reason = input?.reason
@@ -266,12 +275,12 @@ export default function AiPanel(): React.JSX.Element {
                         reason={reason}
                         resolved={!!result}
                         denied={!!denied}
-                        awaitingDecision={pending && !settled}
-                        executing={pending && !!settled}
+                        awaitingDecision={!!pendingTool && !settled}
+                        executing={!!pendingTool && !!settled}
                         isAuto={!!isAuto}
                         resultContent={result?.content}
-                        onApprove={() => void useAiStore.getState().approveTool(conv.id)}
-                        onDeny={() => useAiStore.getState().denyTool(conv.id)}
+                        onApprove={() => void useAiStore.getState().approveTool(conv.id, p.id)}
+                        onDeny={() => useAiStore.getState().denyTool(conv.id, p.id)}
                       />
                     )
                   }

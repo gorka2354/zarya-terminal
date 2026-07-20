@@ -43,6 +43,17 @@ export class SettingsStore {
     return () => this.listeners.delete(l)
   }
 
+  /**
+   * Force an immediate synchronous-start write of the current settings,
+   * bypassing the 250ms debounce. Call before quit so edits made in the
+   * final <250ms window aren't lost. `persist.flush()` calls the underlying
+   * writer directly (it reads `this.settings` from closure, not from args),
+   * so it writes current state even if no debounced call was pending.
+   */
+  flush(): void {
+    this.persist.flush()
+  }
+
   /** Store an API key encrypted with the OS keychain (DPAPI on Windows). */
   async setSecret(provider: AiProviderKind, key: string): Promise<void> {
     if (!key) {
