@@ -94,6 +94,12 @@ function createWindow(): void {
 
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
 
+  // A renderer reload (dev HMR full-reload, Ctrl+R) re-boots the workspace and
+  // respawns sessions — orphaned ptys from the previous page must not linger.
+  mainWindow.webContents.on('did-navigate', () => {
+    ptyManager.killAll()
+  })
+
   if (process.env.ELECTRON_RENDERER_URL) {
     const url = process.env.ELECTRON_RENDERER_URL
     let attempts = 0

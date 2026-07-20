@@ -12,7 +12,16 @@ export function chordFromEvent(e: KeyboardEvent): string | null {
   if (e.metaKey) parts.push('Meta')
   let k = key
   if (k === ' ') k = 'Space'
-  else if (k.length === 1) k = k.toUpperCase()
+  else if (k.length === 1) {
+    k = k.toUpperCase()
+    // Non-latin keyboard layouts (e.g. Cyrillic): "Ctrl+Shift+Ц" would never
+    // match a "Ctrl+Shift+W" binding — fall back to the physical key code.
+    if (!/[A-Z0-9]/.test(k)) {
+      const code = e.code
+      if (/^Key[A-Z]$/.test(code)) k = code.slice(3)
+      else if (/^Digit[0-9]$/.test(code)) k = code.slice(5)
+    }
+  }
   parts.push(k)
   return parts.join('+')
 }

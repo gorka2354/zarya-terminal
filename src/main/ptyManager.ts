@@ -27,8 +27,10 @@ export class PtyManager {
   }
 
   async spawn(req: PtySpawnRequest, profile: ShellProfile): Promise<PtySpawnResult> {
+    // Idempotent respawn: a stale pty under the same id (e.g. after a renderer
+    // reload restored the workspace) is replaced, not treated as an error.
     if (this.ptys.has(req.sessionId)) {
-      return { ok: false, error: 'session already has a pty' }
+      this.kill(req.sessionId)
     }
 
     let cwd = req.cwd && existsSync(req.cwd) ? req.cwd : homedir()
@@ -97,9 +99,14 @@ export class PtyManager {
     this.ptys.set(req.sessionId, proc)
 
     proc.onData((data) => {
-      this.getWindow()?.webContents.send(CH.ptyData, req.sessionId, data)
+      // Only forward data while this proc is still the session's active pty.
+      if (this.ptys.get(req.sessionId) === proc) {
+        this.getWindow()?.webContents.send(CH.ptyData, req.sessionId, data)
+      }
     })
     proc.onExit(({ exitCode }) => {
+      // A superseded pty (killed during respawn) must not mark the session dead.
+      if (this.ptys.get(req.sessionId) !== proc) return
       this.ptys.delete(req.sessionId)
       this.getWindow()?.webContents.send(CH.ptyExit, req.sessionId, exitCode)
     })
