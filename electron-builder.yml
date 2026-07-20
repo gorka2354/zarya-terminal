@@ -1,0 +1,32 @@
+appId: dev.zarya.terminal
+productName: Zarya
+directories:
+  output: release
+  buildResources: build
+files:
+  - out/**
+asarUnpack:
+  - 'node_modules/@lydell/node-pty/**'
+  - '**/*.node'
+extraResources:
+  - from: resources
+    to: app-resources
+win:
+  target:
+    - nsis
+    - portable
+  artifactName: ${productName}-${version}-win-${arch}.${ext}
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false
+mac:
+  target:
+    - dmg
+  category: public.app-category.developer-tools
+linux:
+  target:
+    - AppImage
+    - deb
+  category: Development
+publish: null

@@ -1,0 +1,974 @@
+/* ============================================================
+   Zarya design system — tokens are set by the theme engine.
+   ============================================================ */
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('../assets/fonts/JetBrainsMono-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('../assets/fonts/JetBrainsMono-Bold.woff2') format('woff2');
+  font-weight: 600 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('../assets/fonts/JetBrainsMono-Italic.woff2') format('woff2');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+:root {
+  /* palette defaults (Zarya Dawn) — overwritten by applyTheme() */
+  --bg: #0b0f1a;
+  --bg-elev1: #111726;
+  --bg-elev2: #171f33;
+  --panel: #0e1421;
+  --border: rgba(148, 168, 220, 0.14);
+  --border-strong: rgba(148, 168, 220, 0.28);
+  --fg: #e6eaf2;
+  --fg-dim: #9aa5bd;
+  --fg-faint: #5a6785;
+  --accent: #ff8a4c;
+  --accent-2: #ffb86b;
+  --accent-grad: linear-gradient(135deg, #ff6b4a 0%, #ffb86b 100%);
+  --danger: #ff5c69;
+  --success: #3ddc97;
+  --warn: #ffc24b;
+  --term-bg: #0b0f1a;
+
+  /* layout */
+  --titlebar-h: 40px;
+  --statusbar-h: 26px;
+  --activitybar-w: 46px;
+  --radius: 10px;
+  --radius-sm: 6px;
+  --font-ui:
+    'Segoe UI Variable Text', 'Segoe UI', 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Cascadia Mono', Consolas, monospace;
+  --shadow-1: 0 4px 16px rgba(0, 0, 0, 0.35);
+  --shadow-2: 0 12px 48px rgba(0, 0, 0, 0.5);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  color: var(--fg);
+  background: var(--bg);
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+/* Scrollbars */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--fg-faint);
+  background-clip: content-box;
+  border: 2px solid transparent;
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ============================================================ primitives */
+
+.zy-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.zy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-elev1);
+  color: var(--fg);
+  font-family: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    transform 0.05s ease;
+}
+.zy-btn:hover {
+  background: var(--bg-elev2);
+  border-color: var(--border-strong);
+}
+.zy-btn:active {
+  transform: translateY(1px);
+}
+.zy-btn--accent {
+  background: var(--accent-grad);
+  border: none;
+  color: #14100c;
+  font-weight: 600;
+}
+.zy-btn--accent:hover {
+  filter: brightness(1.08);
+  background: var(--accent-grad);
+}
+.zy-btn--ghost {
+  background: transparent;
+  border-color: transparent;
+}
+.zy-btn--ghost:hover {
+  background: var(--bg-elev1);
+}
+.zy-btn--danger {
+  color: var(--danger);
+}
+.zy-btn--sm {
+  padding: 3px 8px;
+  font-size: 11.5px;
+}
+
+.zy-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+  color: var(--fg-dim);
+  cursor: pointer;
+  font-size: 14px;
+}
+.zy-icon-btn:hover {
+  background: var(--bg-elev2);
+  color: var(--fg);
+}
+.zy-icon-btn--active {
+  color: var(--accent);
+}
+
+.zy-input {
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--fg);
+  font-family: inherit;
+  font-size: 13px;
+  outline: none;
+}
+.zy-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+.zy-input--mono {
+  font-family: var(--font-mono);
+}
+
+.zy-select {
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-elev1);
+  color: var(--fg);
+  font-family: inherit;
+  font-size: 12.5px;
+  outline: none;
+}
+
+.zy-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  background: var(--bg-elev2);
+  color: var(--fg-dim);
+}
+.zy-badge--ok {
+  background: color-mix(in srgb, var(--success) 18%, transparent);
+  color: var(--success);
+}
+.zy-badge--fail {
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
+  color: var(--danger);
+}
+.zy-badge--accent {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+}
+
+.zy-kbd {
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  background: var(--bg-elev1);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--fg-dim);
+}
+
+.zy-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 8px 0;
+}
+
+.zy-empty {
+  padding: 28px 16px;
+  text-align: center;
+  color: var(--fg-faint);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+/* ============================================================ app layout */
+
+.zy-app {
+  display: grid;
+  grid-template-rows: var(--titlebar-h) 1fr var(--statusbar-h);
+  height: 100%;
+  background: var(--bg);
+}
+
+.zy-main {
+  display: flex;
+  min-height: 0;
+}
+
+.zy-content {
+  flex: 1;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+}
+
+.zy-workspace {
+  flex: 1;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+}
+
+/* ============================================================ titlebar */
+
+.zy-titlebar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-left: 10px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  -webkit-app-region: drag;
+}
+.zy-titlebar button,
+.zy-titlebar .zy-tab {
+  -webkit-app-region: no-drag;
+}
+
+.zy-logo {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  padding-right: 8px;
+}
+.zy-logo-mark {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  background: var(--accent-grad);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #14100c;
+  font-size: 11px;
+  font-weight: 800;
+}
+.zy-logo-text {
+  background: var(--accent-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.zy-tabs {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding-top: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.zy-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.zy-tab {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: calc(100% - 6px);
+  padding: 0 10px 0 12px;
+  max-width: 200px;
+  min-width: 110px;
+  border-radius: 8px 8px 0 0;
+  background: transparent;
+  color: var(--fg-dim);
+  font-size: 12px;
+  cursor: default;
+  position: relative;
+  border: 1px solid transparent;
+  border-bottom: none;
+  flex-shrink: 0;
+}
+.zy-tab:hover {
+  background: var(--bg-elev1);
+  color: var(--fg);
+}
+.zy-tab--active {
+  background: var(--bg);
+  color: var(--fg);
+  border-color: var(--border);
+}
+.zy-tab--active::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: 10px;
+  right: 10px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent-grad);
+}
+.zy-tab-icon {
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.zy-tab-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.zy-tab-close {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--fg-faint);
+  cursor: pointer;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  opacity: 0;
+}
+.zy-tab:hover .zy-tab-close,
+.zy-tab--active .zy-tab-close {
+  opacity: 1;
+}
+.zy-tab-close:hover {
+  background: var(--bg-elev2);
+  color: var(--danger);
+}
+.zy-tab-pin {
+  color: var(--accent);
+  font-size: 10px;
+}
+
+.zy-newtab {
+  margin-bottom: 4px;
+}
+
+.zy-win-controls {
+  display: flex;
+  height: 100%;
+  margin-left: 6px;
+}
+.zy-win-btn {
+  width: 44px;
+  height: 100%;
+  border: none;
+  background: transparent;
+  color: var(--fg-dim);
+  font-size: 11px;
+  cursor: default;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.zy-win-btn:hover {
+  background: var(--bg-elev2);
+  color: var(--fg);
+}
+.zy-win-btn--close:hover {
+  background: #e81123;
+  color: #fff;
+}
+
+/* ============================================================ activity bar */
+
+.zy-activitybar {
+  width: var(--activitybar-w);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 0;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+}
+.zy-activity-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  border: none;
+  background: transparent;
+  color: var(--fg-faint);
+  font-size: 16px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+.zy-activity-btn:hover {
+  background: var(--bg-elev1);
+  color: var(--fg);
+}
+.zy-activity-btn--active {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.zy-activity-btn--active::before {
+  content: '';
+  position: absolute;
+  left: -6px;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--accent-grad);
+}
+.zy-activity-spacer {
+  flex: 1;
+}
+
+/* ============================================================ sidebar */
+
+.zy-sidebar {
+  width: 264px;
+  min-width: 190px;
+  max-width: 420px;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  position: relative;
+}
+.zy-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+.zy-sidebar-body {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  padding: 0 8px 10px;
+}
+.zy-sidebar-search {
+  padding: 0 8px 8px;
+}
+
+/* generic list item used by panels */
+.zy-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--fg-dim);
+  border: 1px solid transparent;
+}
+.zy-item:hover {
+  background: var(--bg-elev1);
+  color: var(--fg);
+}
+.zy-item--active {
+  background: var(--bg-elev1);
+  border-color: var(--border);
+  color: var(--fg);
+}
+.zy-item-icon {
+  flex-shrink: 0;
+  width: 18px;
+  text-align: center;
+}
+.zy-item-body {
+  flex: 1;
+  min-width: 0;
+}
+.zy-item-title {
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.zy-item-sub {
+  font-size: 11px;
+  color: var(--fg-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 1px;
+}
+.zy-item-actions {
+  display: none;
+  gap: 2px;
+}
+.zy-item:hover .zy-item-actions {
+  display: flex;
+}
+.zy-item-flag {
+  color: var(--fg-faint);
+  font-size: 12px;
+}
+.zy-item-flag--on {
+  color: var(--accent);
+}
+
+.zy-section-label {
+  padding: 10px 9px 4px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+}
+
+/* ============================================================ terminal */
+
+.zy-panes {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  position: relative;
+}
+
+.zy-split {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+.zy-split--col {
+  flex-direction: column;
+}
+.zy-split-child {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+}
+.zy-split-gutter {
+  flex-shrink: 0;
+  background: transparent;
+  z-index: 5;
+  transition: background 0.15s ease;
+}
+.zy-split-gutter--row {
+  width: 5px;
+  cursor: col-resize;
+  margin: 0 -2px;
+}
+.zy-split-gutter--col {
+  height: 5px;
+  cursor: row-resize;
+  margin: -2px 0;
+}
+.zy-split-gutter:hover,
+.zy-split-gutter--dragging {
+  background: var(--accent);
+  opacity: 0.5;
+}
+
+.zy-pane {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  background: var(--term-bg);
+  border: 1px solid transparent;
+}
+.zy-pane--focused {
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.zy-pane--dim .zy-term-wrap {
+  opacity: 0.75;
+}
+
+.zy-term-wrap {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  background: var(--term-bg);
+}
+.zy-term {
+  width: 100%;
+  height: 100%;
+}
+.zy-term .xterm {
+  height: 100%;
+}
+
+.zy-bell {
+  animation: zy-bell-flash 0.16s ease;
+}
+@keyframes zy-bell-flash {
+  50% {
+    filter: brightness(1.5);
+  }
+}
+
+.zy-ghost {
+  position: absolute;
+  pointer-events: none;
+  font-family: var(--font-mono);
+  color: var(--fg-faint);
+  white-space: pre;
+  z-index: 3;
+}
+.zy-ghost-hint {
+  margin-left: 8px;
+  font-size: 9px;
+  padding: 0 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: 3px;
+  color: var(--fg-faint);
+}
+
+.zy-term-exited {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--bg) 55%, transparent);
+  backdrop-filter: blur(2px);
+  z-index: 6;
+}
+.zy-term-exited-card {
+  background: var(--bg-elev1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: var(--shadow-1);
+}
+.zy-term-exited-title {
+  font-size: 13px;
+  color: var(--fg-dim);
+}
+
+/* block decorations inside xterm */
+.zy-block-sep {
+  width: 100% !important;
+  height: 1px !important;
+  background: var(--border);
+  margin-top: -2px;
+  pointer-events: none;
+}
+.zy-exit-badge {
+  position: absolute !important;
+  right: 10px;
+  left: auto !important;
+  width: auto !important;
+  padding: 0 7px;
+  height: 16px;
+  line-height: 16px;
+  border-radius: 8px;
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 700;
+  background: var(--bg-elev2);
+  color: var(--fg-dim);
+  pointer-events: none;
+  white-space: nowrap;
+}
+.zy-exit-badge--ok {
+  background: color-mix(in srgb, var(--success) 16%, var(--bg-elev1));
+  color: var(--success);
+}
+.zy-exit-badge--fail {
+  background: color-mix(in srgb, var(--danger) 16%, var(--bg-elev1));
+  color: var(--danger);
+}
+.zy-exit-badge--running {
+  color: var(--fg-faint);
+}
+
+/* find-in-terminal bar */
+.zy-searchbar {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  z-index: 7;
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  background: var(--bg-elev1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 4px 6px;
+  box-shadow: var(--shadow-1);
+}
+.zy-searchbar input {
+  width: 180px;
+  border: none;
+  background: transparent;
+  color: var(--fg);
+  font-size: 12.5px;
+  outline: none;
+  font-family: var(--font-mono);
+}
+
+/* ============================================================ statusbar */
+
+.zy-statusbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 10px;
+  background: var(--panel);
+  border-top: 1px solid var(--border);
+  font-size: 11.5px;
+  color: var(--fg-dim);
+}
+.zy-status-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 5px;
+  cursor: default;
+  white-space: nowrap;
+}
+.zy-status-item--btn {
+  cursor: pointer;
+}
+.zy-status-item--btn:hover {
+  background: var(--bg-elev1);
+  color: var(--fg);
+}
+.zy-status-spacer {
+  flex: 1;
+}
+.zy-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--success);
+}
+
+/* ============================================================ overlays */
+
+.zy-overlay-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: rgba(4, 6, 12, 0.5);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+.zy-overlay-backdrop--center {
+  align-items: center;
+}
+
+.zy-modal {
+  margin-top: 9vh;
+  width: min(560px, calc(100vw - 80px));
+  background: var(--bg-elev1);
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  box-shadow: var(--shadow-2);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  max-height: 70vh;
+}
+.zy-modal--wide {
+  width: min(860px, calc(100vw - 80px));
+}
+
+.zy-toasts {
+  position: fixed;
+  right: 16px;
+  bottom: calc(var(--statusbar-h) + 12px);
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.zy-toast {
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  background: var(--bg-elev2);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-1);
+  font-size: 12.5px;
+  max-width: 360px;
+  animation: zy-toast-in 0.18s ease;
+}
+.zy-toast--success {
+  border-color: color-mix(in srgb, var(--success) 45%, transparent);
+}
+.zy-toast--error {
+  border-color: color-mix(in srgb, var(--danger) 55%, transparent);
+}
+@keyframes zy-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+.zy-context-menu {
+  position: fixed;
+  z-index: 300;
+  min-width: 190px;
+  background: var(--bg-elev1);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-2);
+  padding: 5px;
+}
+.zy-context-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg);
+  font-size: 12.5px;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.zy-context-item:hover {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.zy-context-item--danger {
+  color: var(--danger);
+}
+.zy-context-sep {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 6px;
+}
+.zy-context-hint {
+  font-size: 10.5px;
+  color: var(--fg-faint);
+}
+
+/* boot splash */
+.zy-splash {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  background: var(--bg);
+}
+.zy-splash-mark {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  background: var(--accent-grad);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30px;
+  font-weight: 800;
+  color: #14100c;
+  animation: zy-splash-pulse 1.4s ease infinite;
+}
+@keyframes zy-splash-pulse {
+  50% {
+    transform: scale(1.06);
+    box-shadow: 0 0 40px color-mix(in srgb, var(--accent) 40%, transparent);
+  }
+}
+.zy-splash-text {
+  color: var(--fg-faint);
+  font-size: 12px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}

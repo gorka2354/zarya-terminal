@@ -1,0 +1,21 @@
+# dependencies
+node_modules/
+
+# build output
+out/
+dist/
+release/
+
+# local state
+*.local
+.env
+.env.*
+
+# editors / OS
+.DS_Store
+Thumbs.db
+.idea/
+*.log
+
+# test coverage
+coverage/

@@ -1,0 +1,89 @@
+/* ============================================================
+   Feature styles: blocks panel, editor split, right sidebars.
+   Feature modules (AI, palette, settings, …) append their own
+   sections below their marker comments.
+   ============================================================ */
+
+/* ------------------------------------------------ right sidebars */
+.zy-sidebar--right {
+  border-right: none;
+  border-left: 1px solid var(--border);
+  width: 300px;
+}
+.zy-sidebar--ai {
+  width: 360px;
+  min-width: 280px;
+}
+
+/* ------------------------------------------------ editor split */
+.zy-editor-split {
+  min-width: 260px;
+  border-left: 1px solid var(--border);
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* ------------------------------------------------ block cards */
+.zy-block-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elev1);
+  padding: 9px 10px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: border-color 0.12s ease;
+}
+.zy-block-card:hover {
+  border-color: var(--border-strong);
+}
+.zy-block-card-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+.zy-block-card-cmd {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+.zy-block-card-out {
+  margin-top: 7px;
+  padding: 7px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--fg-dim);
+  max-height: 120px;
+  overflow: hidden;
+  white-space: pre-wrap;
+  word-break: break-all;
+  user-select: text;
+  mask-image: linear-gradient(to bottom, black 75%, transparent 100%);
+}
+.zy-block-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 6px;
+}
+.zy-block-card-meta {
+  font-size: 10.5px;
+  color: var(--fg-faint);
+}
+.zy-block-card-actions {
+  display: none;
+  gap: 2px;
+}
+.zy-block-card:hover .zy-block-card-actions {
+  display: flex;
+}
