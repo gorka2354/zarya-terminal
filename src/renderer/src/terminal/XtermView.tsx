@@ -79,6 +79,9 @@ export function XtermView({ sessionId, active, visible }: Props): React.JSX.Elem
     const initialCwd = useSessionsStore.getState().sessions[sessionId]?.cwd ?? ''
     const engine = new BlockEngine(term, sessionId, initialCwd)
 
+    // Dev HMR can re-run this effect for a live session — never stack a second
+    // xterm DOM inside the same container.
+    container.replaceChildren()
     term.open(container)
 
     if (s.terminal.webgl) {
@@ -266,21 +269,6 @@ export function XtermView({ sessionId, active, visible }: Props): React.JSX.Elem
     const ro = new ResizeObserver(doFit)
     ro.observe(container)
 
-    // ------------------------------------------------------------ register
-    registerTerminal(sessionId, {
-      term,
-      engine,
-      search,
-      write: (data) => term.write(data),
-      serialize: (maxLines) => serialize.serialize({ scrollback: maxLines }),
-      fit: doFit,
-      focus: () => term.focus(),
-      dispose: () => {
-        engine.dispose()
-        term.dispose()
-      }
-    })
-
     // Replay restored scrollback before any live pty data.
     const restored = takePendingRestore(sessionId)
     if (restored) {
@@ -290,11 +278,65 @@ export function XtermView({ sessionId, active, visible }: Props): React.JSX.Elem
       )
     }
 
+    // A freshly spawned ConPTY shell begins with a full-screen repaint
+    // (clear + cursor jumps over every row) which visually wipes the replayed
+    // scrollback. For restored sessions we gate the live stream: drop
+    // everything until the first OSC 133;A prompt mark, then continue from a
+    // clean new line. Fallback (no shell integration): flush after a timeout
+    // with clear/home sequences stripped.
+    let restoredGate: { buf: string } | null = restored ? { buf: '' } : null
+    let gateTimer: ReturnType<typeof setTimeout> | undefined
+    const releaseGate = (): void => {
+      if (!restoredGate) return
+      const tail = restoredGate.buf
+      restoredGate = null
+      clearTimeout(gateTimer)
+      term.write(
+        tail.replace(/\x1b\[[0-9;]*[23]J/g, '').replace(/\x1b\[(?:1;1)?H/g, '')
+      )
+    }
+    if (restoredGate) {
+      gateTimer = setTimeout(releaseGate, 2500)
+    }
+    const writeLive = (data: string): void => {
+      if (restoredGate) {
+        restoredGate.buf += data
+        const idx = restoredGate.buf.indexOf('\x1b]133;A')
+        if (idx >= 0) {
+          const tail = restoredGate.buf.slice(idx)
+          restoredGate = null
+          clearTimeout(gateTimer)
+          term.write('\r\n')
+          term.write(tail)
+        } else if (restoredGate.buf.length > 65536) {
+          releaseGate()
+        }
+        return
+      }
+      term.write(data)
+    }
+
+    // ------------------------------------------------------------ register
+    registerTerminal(sessionId, {
+      term,
+      engine,
+      search,
+      write: writeLive,
+      serialize: (maxLines) => serialize.serialize({ scrollback: maxLines }),
+      fit: doFit,
+      focus: () => term.focus(),
+      dispose: () => {
+        engine.dispose()
+        term.dispose()
+      }
+    })
+
     doFit()
 
     return () => {
       ro.disconnect()
       cancelAnimationFrame(fitRaf)
+      clearTimeout(gateTimer)
       dataDisp.dispose()
       selDisp.dispose()
       bellDisp.dispose()

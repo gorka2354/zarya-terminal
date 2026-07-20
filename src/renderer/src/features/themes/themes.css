@@ -1,0 +1,110 @@
+/* ============================================================
+   Theme gallery — grid of clickable theme preview cards.
+   Card visuals are built entirely from ThemeDef data (inline
+   styles); this file only handles layout/chrome.
+   ============================================================ */
+
+.zy-theme-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+  padding: 2px;
+}
+
+.zy-theme-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-elev1);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: var(--fg);
+  appearance: none;
+  transition:
+    border-color 0.12s ease,
+    transform 0.12s ease,
+    box-shadow 0.12s ease;
+}
+
+.zy-theme-card:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
+}
+
+.zy-theme-card:active {
+  transform: translateY(0);
+}
+
+.zy-theme-card--active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.zy-theme-preview {
+  position: relative;
+  height: 64px;
+  border-radius: var(--radius-sm);
+  border: 1px solid;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 6px 8px;
+}
+
+.zy-theme-preview-accent {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+}
+
+.zy-theme-preview-dots {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 5px;
+}
+
+.zy-theme-preview-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.zy-theme-preview-code {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.zy-theme-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.zy-theme-card-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zy-theme-card-check {
+  align-self: flex-start;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--accent);
+}

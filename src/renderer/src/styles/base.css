@@ -680,6 +680,13 @@ body {
 .zy-term .xterm {
   height: 100%;
 }
+/* xterm paints only rows*cellHeight — keep every layer on the theme bg so the
+   leftover strip below the last row never reads as a black band. */
+.zy-term .xterm,
+.zy-term .xterm-viewport,
+.zy-term .xterm-screen {
+  background: var(--term-bg) !important;
+}
 
 .zy-bell {
   animation: zy-bell-flash 0.16s ease;

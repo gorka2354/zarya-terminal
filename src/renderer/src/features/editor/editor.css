@@ -1,0 +1,169 @@
+/* ============================================================
+   Editor feature: file tabs, Monaco host, file tree.
+   ============================================================ */
+
+.zy-editor-pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+
+/* ------------------------------------------------ tabs */
+.zy-editor-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 5px 5px 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.zy-editor-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.zy-editor-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 6px 0 9px;
+  max-width: 190px;
+  min-width: 96px;
+  border-radius: 7px 7px 0 0;
+  background: transparent;
+  color: var(--fg-dim);
+  font-size: 12px;
+  cursor: default;
+  border: 1px solid transparent;
+  border-bottom: none;
+  flex-shrink: 0;
+}
+.zy-editor-tab:hover {
+  background: var(--bg-elev1);
+  color: var(--fg);
+}
+.zy-editor-tab--active {
+  background: var(--bg);
+  color: var(--fg);
+  border-color: var(--border);
+}
+.zy-editor-tab-icon {
+  font-size: 11px;
+  flex-shrink: 0;
+}
+.zy-editor-tab-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.zy-editor-tab-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+
+/* ------------------------------------------------ Monaco host */
+.zy-editor-body {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  background: var(--bg);
+}
+.zy-editor-host {
+  position: absolute;
+  inset: 0;
+}
+.zy-editor-host--hidden {
+  visibility: hidden;
+  pointer-events: none;
+}
+.zy-editor-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  color: var(--fg-faint);
+  font-size: 12.5px;
+}
+
+/* ------------------------------------------------ file tree */
+.zy-tree-root-label {
+  padding: 2px 9px 6px;
+  font-size: 10.5px;
+  color: var(--fg-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zy-tree-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--fg-dim);
+  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.zy-tree-row:hover {
+  background: var(--bg-elev1);
+  color: var(--fg);
+}
+.zy-tree-arrow {
+  width: 11px;
+  flex-shrink: 0;
+  text-align: center;
+  color: var(--fg-faint);
+  font-size: 9px;
+}
+.zy-tree-icon {
+  flex-shrink: 0;
+  font-size: 12px;
+}
+.zy-tree-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.zy-tree-ext-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.zy-tree-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.zy-tree-status-dot--mod {
+  background: var(--warn);
+}
+.zy-tree-status-dot--new {
+  background: var(--success);
+}
+.zy-tree-status-dot--del {
+  background: var(--danger);
+}
+.zy-tree-empty {
+  padding: 5px 9px;
+  color: var(--fg-faint);
+  font-size: 11.5px;
+}

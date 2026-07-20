@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <!-- Dark blue vignette: lighter center, darker corners -->
+    <radialGradient id="zaryaBgVignette" cx="50%" cy="36%" r="78%">
+      <stop offset="0%" stop-color="#171f33" />
+      <stop offset="100%" stop-color="#0b0f1a" />
+    </radialGradient>
+
+    <!-- Dawn gradient for the "Z" letterform, top-left to bottom-right -->
+    <linearGradient id="zaryaDawnGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff6b4a" />
+      <stop offset="100%" stop-color="#ffb86b" />
+    </linearGradient>
+
+    <!-- Soft radial glow sitting behind the letterform -->
+    <radialGradient id="zaryaSunGlow" cx="50%" cy="42%" r="50%">
+      <stop offset="0%" stop-color="#ffb86b" stop-opacity="0.30" />
+      <stop offset="100%" stop-color="#ffb86b" stop-opacity="0" />
+    </radialGradient>
+
+    <!-- Horizon line: fades out at both ends -->
+    <linearGradient id="zaryaHorizonGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#ff6b4a" stop-opacity="0" />
+      <stop offset="18%" stop-color="#ff8a5a" stop-opacity="0.9" />
+      <stop offset="50%" stop-color="#ffb86b" stop-opacity="1" />
+      <stop offset="82%" stop-color="#ff8a5a" stop-opacity="0.9" />
+      <stop offset="100%" stop-color="#ff6b4a" stop-opacity="0" />
+    </linearGradient>
+
+    <filter id="zaryaGlow" x="-40%" y="-300%" width="180%" height="700%">
+      <feGaussianBlur stdDeviation="9" result="blur" />
+    </filter>
+
+    <clipPath id="zaryaSquircle">
+      <rect x="0" y="0" width="512" height="512" rx="112" ry="112" />
+    </clipPath>
+  </defs>
+
+  <!-- Background: rounded square with dark blue vignette -->
+  <rect x="0" y="0" width="512" height="512" rx="112" ry="112" fill="url(#zaryaBgVignette)" />
+
+  <g clip-path="url(#zaryaSquircle)">
+    <!-- Subtle dawn glow behind the letterform -->
+    <circle cx="256" cy="216" r="200" fill="url(#zaryaSunGlow)" />
+
+    <!-- Horizon line glow (soft, blurred) -->
+    <rect x="90" y="400" width="332" height="14" rx="7" fill="url(#zaryaHorizonGrad)" filter="url(#zaryaGlow)" opacity="0.85" />
+    <!-- Horizon line (crisp core) -->
+    <rect x="90" y="405" width="332" height="4" rx="2" fill="url(#zaryaHorizonGrad)" />
+
+    <!-- Stylized letter "Z" -->
+    <path
+      d="M140,148 L372,148 L372,208 L230,304 L372,304 L372,364 L140,364 L140,304 L282,208 L140,208 Z"
+      fill="url(#zaryaDawnGrad)"
+    />
+  </g>
+</svg>

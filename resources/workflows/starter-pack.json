@@ -1,0 +1,706 @@
+[
+  {
+    "id": "git-rebase-interactive",
+    "name": "Интерактивный rebase последних N коммитов",
+    "command": "git rebase -i HEAD~{{count}}",
+    "params": [
+      {
+        "name": "count",
+        "description": "Сколько последних коммитов затронуть",
+        "default": "3"
+      }
+    ],
+    "tags": [
+      "git"
+    ]
+  },
+  {
+    "id": "git-undo-last-commit",
+    "name": "Отменить последний коммит (изменения остаются в staging)",
+    "command": "git reset --soft HEAD~1",
+    "params": [],
+    "tags": [
+      "git"
+    ]
+  },
+  {
+    "id": "git-amend-message",
+    "name": "Исправить сообщение последнего коммита",
+    "command": "git commit --amend -m \"{{message}}\"",
+    "params": [
+      {
+        "name": "message",
+        "description": "Новое сообщение коммита"
+      }
+    ],
+    "tags": [
+      "git"
+    ]
+  },
+  {
+    "id": "git-squash-last-n",
+    "name": "Сжать последние N коммитов в один",
+    "command": "git reset --soft HEAD~{{count}} && git commit -m \"{{message}}\"",
+    "params": [
+      {
+        "name": "count",
+        "description": "Сколько коммитов сжать",
+        "default": "3"
+      },
+      {
+        "name": "message",
+        "description": "Сообщение итогового коммита"
+      }
+    ],
+    "tags": [
+      "git"
+    ]
+  },
+  {
+    "id": "git-cherry-pick",
+    "name": "Перенести коммит в текущую ветку",
+    "command": "git cherry-pick {{commit}}",
+    "params": [
+      {
+        "name": "commit",
+        "description": "Хеш коммита"
+      }
+    ],
+    "tags": [
+      "git"
+    ]
+  },
+  {
+    "id": "git-prune-merged-branches",
+    "name": "Удалить локальные ветки, уже смёрженные в main",
+    "command": "git branch --merged main | grep -vE \"^\\*|main|master\" | xargs -r -n 1 git branch -d",
+    "params": [],
+    "tags": [
+      "git",
+      "unix"
+    ]
+  },
+  {
+    "id": "git-shallow-clone",
+    "name": "Клонировать репозиторий без истории (shallow clone)",
+    "command": "git clone --depth {{depth}} {{url}}",
+    "params": [
+      {
+        "name": "depth",
+        "description": "Глубина истории",
+        "default": "1"
+      },
+      {
+        "name": "url",
+        "description": "URL репозитория"
+      }
+    ],
+    "tags": [
+      "git"
+    ]
+  },
+  {
+    "id": "git-log-graph",
+    "name": "Красивый граф истории коммитов",
+    "command": "git log --oneline --graph --decorate --all -n {{count}}",
+    "params": [
+      {
+        "name": "count",
+        "description": "Сколько коммитов показать",
+        "default": "30"
+      }
+    ],
+    "tags": [
+      "git"
+    ]
+  },
+  {
+    "id": "git-stash-pop",
+    "name": "Вернуть последний stash",
+    "command": "git stash pop",
+    "params": [],
+    "tags": [
+      "git"
+    ]
+  },
+  {
+    "id": "docker-run-interactive-rm",
+    "name": "Запустить контейнер интерактивно и удалить после выхода",
+    "command": "docker run -it --rm {{image}} {{command}}",
+    "params": [
+      {
+        "name": "image",
+        "description": "Образ, например ubuntu:latest"
+      },
+      {
+        "name": "command",
+        "description": "Команда внутри контейнера",
+        "default": "/bin/sh"
+      }
+    ],
+    "tags": [
+      "docker"
+    ]
+  },
+  {
+    "id": "docker-logs-follow",
+    "name": "Смотреть логи контейнера в реальном времени",
+    "command": "docker logs -f --tail {{lines}} {{container}}",
+    "params": [
+      {
+        "name": "lines",
+        "description": "Сколько последних строк показать",
+        "default": "100"
+      },
+      {
+        "name": "container",
+        "description": "Имя или id контейнера"
+      }
+    ],
+    "tags": [
+      "docker"
+    ]
+  },
+  {
+    "id": "docker-exec-shell",
+    "name": "Зайти в шелл работающего контейнера",
+    "command": "docker exec -it {{container}} sh",
+    "params": [
+      {
+        "name": "container",
+        "description": "Имя или id контейнера"
+      }
+    ],
+    "tags": [
+      "docker"
+    ]
+  },
+  {
+    "id": "docker-compose-up-d",
+    "name": "Поднять docker-compose в фоне",
+    "command": "docker compose up -d",
+    "params": [],
+    "tags": [
+      "docker"
+    ]
+  },
+  {
+    "id": "docker-prune-all",
+    "name": "Очистить неиспользуемые образы, контейнеры и сети",
+    "command": "docker system prune -af",
+    "params": [],
+    "tags": [
+      "docker"
+    ]
+  },
+  {
+    "id": "docker-stats-live",
+    "name": "Живая статистика по контейнерам",
+    "command": "docker stats",
+    "params": [],
+    "tags": [
+      "docker"
+    ]
+  },
+  {
+    "id": "npm-init-ts-project",
+    "name": "Инициализировать TypeScript-проект",
+    "command": "npm init -y && npm install -D typescript @types/node && npx tsc --init",
+    "params": [],
+    "tags": [
+      "npm",
+      "node"
+    ]
+  },
+  {
+    "id": "npx-create-vite",
+    "name": "Создать проект через create-vite",
+    "command": "npx create-vite@latest {{name}} -- --template {{template}}",
+    "params": [
+      {
+        "name": "name",
+        "description": "Имя проекта/папки",
+        "default": "my-app"
+      },
+      {
+        "name": "template",
+        "description": "react-ts, vue-ts, svelte-ts, vanilla-ts…",
+        "default": "react-ts"
+      }
+    ],
+    "tags": [
+      "npm",
+      "node"
+    ]
+  },
+  {
+    "id": "npm-kill-port",
+    "name": "Освободить занятый порт",
+    "command": "npx kill-port {{port}}",
+    "params": [
+      {
+        "name": "port",
+        "description": "Номер порта"
+      }
+    ],
+    "tags": [
+      "npm",
+      "node",
+      "network"
+    ]
+  },
+  {
+    "id": "npm-audit-fix",
+    "name": "Исправить уязвимости зависимостей",
+    "command": "npm audit fix",
+    "params": [],
+    "tags": [
+      "npm",
+      "node"
+    ]
+  },
+  {
+    "id": "npm-link-package",
+    "name": "Слинковать локальный пакет глобально",
+    "command": "npm link {{package}}",
+    "params": [
+      {
+        "name": "package",
+        "description": "Имя пакета (или . в его папке)"
+      }
+    ],
+    "tags": [
+      "npm",
+      "node"
+    ]
+  },
+  {
+    "id": "curl-json-pretty",
+    "name": "Запрос с красивым выводом JSON",
+    "command": "curl -s {{url}} | jq .",
+    "params": [
+      {
+        "name": "url",
+        "description": "URL запроса"
+      }
+    ],
+    "tags": [
+      "network"
+    ]
+  },
+  {
+    "id": "netstat-port-windows",
+    "name": "Кто слушает порт (Windows)",
+    "command": "netstat -ano | findstr :{{port}}",
+    "params": [
+      {
+        "name": "port",
+        "description": "Номер порта"
+      }
+    ],
+    "tags": [
+      "network",
+      "windows"
+    ]
+  },
+  {
+    "id": "lsof-port-unix",
+    "name": "Кто слушает порт (Unix)",
+    "command": "lsof -i :{{port}}",
+    "params": [
+      {
+        "name": "port",
+        "description": "Номер порта"
+      }
+    ],
+    "tags": [
+      "network",
+      "unix"
+    ]
+  },
+  {
+    "id": "ping-test-windows",
+    "name": "Проверка связи (Windows)",
+    "command": "ping -n {{count}} {{host}}",
+    "params": [
+      {
+        "name": "count",
+        "description": "Число пакетов",
+        "default": "4"
+      },
+      {
+        "name": "host",
+        "description": "Хост или IP"
+      }
+    ],
+    "tags": [
+      "network",
+      "windows"
+    ]
+  },
+  {
+    "id": "ping-test-unix",
+    "name": "Проверка связи (Unix)",
+    "command": "ping -c {{count}} {{host}}",
+    "params": [
+      {
+        "name": "count",
+        "description": "Число пакетов",
+        "default": "4"
+      },
+      {
+        "name": "host",
+        "description": "Хост или IP"
+      }
+    ],
+    "tags": [
+      "network",
+      "unix"
+    ]
+  },
+  {
+    "id": "ssh-port-forward",
+    "name": "SSH с проброской локального порта",
+    "command": "ssh -L {{localPort}}:localhost:{{remotePort}} {{user}}@{{host}}",
+    "params": [
+      {
+        "name": "localPort",
+        "description": "Локальный порт",
+        "default": "8080"
+      },
+      {
+        "name": "remotePort",
+        "description": "Порт на удалённой машине",
+        "default": "80"
+      },
+      {
+        "name": "user",
+        "description": "Пользователь SSH"
+      },
+      {
+        "name": "host",
+        "description": "Хост или IP"
+      }
+    ],
+    "tags": [
+      "network",
+      "ssh"
+    ]
+  },
+  {
+    "id": "scp-copy-file",
+    "name": "Скопировать файл на удалённый сервер",
+    "command": "scp {{source}} {{user}}@{{host}}:{{destination}}",
+    "params": [
+      {
+        "name": "source",
+        "description": "Локальный путь к файлу"
+      },
+      {
+        "name": "user",
+        "description": "Пользователь SSH"
+      },
+      {
+        "name": "host",
+        "description": "Хост или IP"
+      },
+      {
+        "name": "destination",
+        "description": "Путь назначения на сервере",
+        "default": "~/"
+      }
+    ],
+    "tags": [
+      "network",
+      "ssh"
+    ]
+  },
+  {
+    "id": "find-large-files-windows",
+    "name": "Найти самые большие файлы (PowerShell)",
+    "command": "Get-ChildItem -Recurse -File | Sort-Object Length -Descending | Select-Object -First {{count}} FullName, Length",
+    "params": [
+      {
+        "name": "count",
+        "description": "Сколько файлов показать",
+        "default": "20"
+      }
+    ],
+    "tags": [
+      "files",
+      "windows"
+    ]
+  },
+  {
+    "id": "find-large-files-unix",
+    "name": "Найти самые большие файлы (bash)",
+    "command": "find . -type f -printf '%s %p\\n' | sort -rn | head -{{count}}",
+    "params": [
+      {
+        "name": "count",
+        "description": "Сколько файлов показать",
+        "default": "20"
+      }
+    ],
+    "tags": [
+      "files",
+      "unix"
+    ]
+  },
+  {
+    "id": "ripgrep-search",
+    "name": "Поиск текста по файлам (ripgrep)",
+    "command": "rg \"{{pattern}}\" {{path}}",
+    "params": [
+      {
+        "name": "pattern",
+        "description": "Что искать (regex)"
+      },
+      {
+        "name": "path",
+        "description": "Где искать",
+        "default": "."
+      }
+    ],
+    "tags": [
+      "files"
+    ]
+  },
+  {
+    "id": "extract-tar-archive",
+    "name": "Распаковать tar.gz архив",
+    "command": "tar -xzvf {{archive}}",
+    "params": [
+      {
+        "name": "archive",
+        "description": "Путь к архиву"
+      }
+    ],
+    "tags": [
+      "files"
+    ]
+  },
+  {
+    "id": "extract-zip-unix",
+    "name": "Распаковать zip архив (Unix)",
+    "command": "unzip {{archive}} -d {{destination}}",
+    "params": [
+      {
+        "name": "archive",
+        "description": "Путь к архиву"
+      },
+      {
+        "name": "destination",
+        "description": "Куда распаковать",
+        "default": "."
+      }
+    ],
+    "tags": [
+      "files",
+      "unix"
+    ]
+  },
+  {
+    "id": "extract-zip-windows",
+    "name": "Распаковать zip архив (PowerShell)",
+    "command": "Expand-Archive -Path {{archive}} -DestinationPath {{destination}}",
+    "params": [
+      {
+        "name": "archive",
+        "description": "Путь к архиву"
+      },
+      {
+        "name": "destination",
+        "description": "Куда распаковать",
+        "default": "."
+      }
+    ],
+    "tags": [
+      "files",
+      "windows"
+    ]
+  },
+  {
+    "id": "winget-install-package",
+    "name": "Установить пакет через winget",
+    "command": "winget install --id {{packageId}} -e",
+    "params": [
+      {
+        "name": "packageId",
+        "description": "Id пакета, например Git.Git"
+      }
+    ],
+    "tags": [
+      "windows"
+    ]
+  },
+  {
+    "id": "find-process-by-port-windows",
+    "name": "Найти процесс, занявший порт (PowerShell)",
+    "command": "Get-Process -Id (Get-NetTCPConnection -LocalPort {{port}}).OwningProcess",
+    "params": [
+      {
+        "name": "port",
+        "description": "Номер порта"
+      }
+    ],
+    "tags": [
+      "windows",
+      "network"
+    ]
+  },
+  {
+    "id": "restart-service-windows",
+    "name": "Перезапустить службу Windows",
+    "command": "Restart-Service -Name {{serviceName}} -Force",
+    "params": [
+      {
+        "name": "serviceName",
+        "description": "Имя службы"
+      }
+    ],
+    "tags": [
+      "windows"
+    ]
+  },
+  {
+    "id": "ffmpeg-mp4-to-gif",
+    "name": "Конвертировать видео в gif",
+    "command": "ffmpeg -i {{input}} -vf \"fps=15,scale=480:-1:flags=lanczos\" -loop 0 {{output}}",
+    "params": [
+      {
+        "name": "input",
+        "description": "Исходное видео"
+      },
+      {
+        "name": "output",
+        "description": "Файл результата",
+        "default": "output.gif"
+      }
+    ],
+    "tags": [
+      "ffmpeg"
+    ]
+  },
+  {
+    "id": "ffmpeg-trim-video",
+    "name": "Обрезать видео по времени",
+    "command": "ffmpeg -i {{input}} -ss {{start}} -to {{end}} -c copy {{output}}",
+    "params": [
+      {
+        "name": "input",
+        "description": "Исходное видео"
+      },
+      {
+        "name": "start",
+        "description": "Начало (00:00:00)",
+        "default": "00:00:00"
+      },
+      {
+        "name": "end",
+        "description": "Конец (00:00:00)"
+      },
+      {
+        "name": "output",
+        "description": "Файл результата"
+      }
+    ],
+    "tags": [
+      "ffmpeg"
+    ]
+  },
+  {
+    "id": "ffmpeg-compress-video",
+    "name": "Сжать видео (изменить качество)",
+    "command": "ffmpeg -i {{input}} -vcodec libx264 -crf {{quality}} {{output}}",
+    "params": [
+      {
+        "name": "input",
+        "description": "Исходное видео"
+      },
+      {
+        "name": "quality",
+        "description": "CRF, меньше = лучше качество (0-51)",
+        "default": "28"
+      },
+      {
+        "name": "output",
+        "description": "Файл результата"
+      }
+    ],
+    "tags": [
+      "ffmpeg"
+    ]
+  },
+  {
+    "id": "python-venv-create",
+    "name": "Создать виртуальное окружение Python",
+    "command": "python -m venv {{name}}",
+    "params": [
+      {
+        "name": "name",
+        "description": "Папка окружения",
+        "default": ".venv"
+      }
+    ],
+    "tags": [
+      "python"
+    ]
+  },
+  {
+    "id": "pip-install-requirements",
+    "name": "Установить зависимости из requirements.txt",
+    "command": "pip install -r {{file}}",
+    "params": [
+      {
+        "name": "file",
+        "description": "Путь к файлу зависимостей",
+        "default": "requirements.txt"
+      }
+    ],
+    "tags": [
+      "python"
+    ]
+  },
+  {
+    "id": "serve-static-dir",
+    "name": "Поднять простой HTTP-сервер для директории",
+    "command": "npx serve -l {{port}} {{dir}}",
+    "params": [
+      {
+        "name": "port",
+        "description": "Порт сервера",
+        "default": "3000"
+      },
+      {
+        "name": "dir",
+        "description": "Раздаваемая директория",
+        "default": "."
+      }
+    ],
+    "tags": [
+      "npm",
+      "files"
+    ]
+  },
+  {
+    "id": "ssh-keygen-new",
+    "name": "Сгенерировать новый SSH-ключ",
+    "command": "ssh-keygen -t ed25519 -C \"{{email}}\" -f {{path}}",
+    "params": [
+      {
+        "name": "email",
+        "description": "Комментарий (обычно почта)"
+      },
+      {
+        "name": "path",
+        "description": "Куда сохранить ключ",
+        "default": "~/.ssh/id_ed25519"
+      }
+    ],
+    "tags": [
+      "network",
+      "ssh"
+    ]
+  }
+]

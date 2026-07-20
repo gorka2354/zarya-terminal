@@ -1,0 +1,157 @@
+/* ============================================================
+   Shared overlay styles: Command Palette, Quick Open, History
+   Time Machine overlay + sidebar panel.
+   ============================================================ */
+
+.zy-palette-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.zy-palette-input-icon {
+  color: var(--fg-faint);
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.zy-palette-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  outline: none;
+  color: var(--fg);
+  font-family: var(--font-ui);
+  font-size: 14px;
+}
+.zy-palette-input--mono {
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+.zy-palette-input::placeholder {
+  color: var(--fg-faint);
+}
+.zy-palette-scanning {
+  font-size: 10.5px;
+  color: var(--fg-faint);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.zy-palette-list {
+  overflow-y: auto;
+  min-height: 0;
+  padding: 6px;
+}
+
+.zy-palette-group-label {
+  padding: 8px 8px 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+}
+
+.zy-palette-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--fg-dim);
+}
+.zy-palette-item:hover {
+  background: var(--bg-elev2);
+}
+.zy-palette-item--selected {
+  background: color-mix(in srgb, var(--accent) 16%, var(--bg-elev2));
+  color: var(--fg);
+}
+.zy-palette-item-icon {
+  flex-shrink: 0;
+  width: 16px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--fg-faint);
+}
+.zy-palette-item--selected .zy-palette-item-icon {
+  color: var(--accent);
+}
+.zy-palette-item-body {
+  flex: 1;
+  min-width: 0;
+}
+.zy-palette-item-title {
+  font-size: 12.5px;
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.zy-palette-item-title--mono {
+  font-family: var(--font-mono);
+}
+.zy-palette-item-sub {
+  font-size: 10.5px;
+  color: var(--fg-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 1px;
+}
+.zy-palette-item-chord {
+  flex-shrink: 0;
+}
+.zy-palette-item-meta {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  color: var(--fg-faint);
+  white-space: nowrap;
+}
+
+.zy-palette-footer {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--border);
+  font-size: 10.5px;
+  color: var(--fg-faint);
+  flex-shrink: 0;
+}
+.zy-palette-footer-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* -------------------------------------------- history sidebar panel */
+.zy-history-filters {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 9px 8px;
+  flex-wrap: wrap;
+}
+.zy-history-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--fg-dim);
+  cursor: pointer;
+  user-select: none;
+}
+.zy-history-filter input {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.zy-history-item-cmd {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
