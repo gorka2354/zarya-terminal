@@ -19,3 +19,6 @@ Thumbs.db
 
 # test coverage
 coverage/
+
+# gstack local artifacts / security reports
+.gstack/

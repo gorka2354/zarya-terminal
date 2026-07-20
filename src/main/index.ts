@@ -1,4 +1,4 @@
-import { BrowserWindow, app } from 'electron'
+import { BrowserWindow, app, shell } from 'electron'
 import { join } from 'path'
 import { CH } from '@shared/ipc'
 import { AiProxy } from './aiProxy'
@@ -95,6 +95,26 @@ function createWindow(): void {
   })
 
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+
+  // SECURITY: the top frame must only ever render our own dev-server / file://
+  // origin. The preload exposes window.zarya (pty.write, fs read/write/delete,
+  // etc.), so a remote page loaded in this frame would run with full RCE
+  // capability. Block any off-origin navigation and route external URLs to the
+  // system browser instead (Electron security checklist #13). No in-app flow
+  // navigates the top frame today — this is a preventive guard against a future
+  // stray location assignment or an anchor that slips past the click handlers.
+  const isOwnOrigin = (url: string): boolean => {
+    const dev = process.env.ELECTRON_RENDERER_URL
+    if (dev && url.startsWith(dev)) return true
+    return url.startsWith('file://')
+  }
+  const guardNavigation = (e: Electron.Event, url: string): void => {
+    if (isOwnOrigin(url)) return
+    e.preventDefault()
+    if (/^https?:\/\//i.test(url)) void shell.openExternal(url)
+  }
+  mainWindow.webContents.on('will-navigate', guardNavigation)
+  mainWindow.webContents.on('will-redirect', guardNavigation)
 
   // A renderer reload (dev HMR full-reload, Ctrl+R) re-boots the workspace and
   // respawns sessions — orphaned ptys from the previous page must not linger.
