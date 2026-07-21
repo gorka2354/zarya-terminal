@@ -23,6 +23,15 @@ function uniqueId(base: string, taken: Set<string>): string {
   return `${base}-${i}`
 }
 
+const enSubStyle: React.CSSProperties = {
+  fontFamily: 'var(--font-tech)',
+  fontSize: 12,
+  fontWeight: 400,
+  color: 'var(--fg-faint)',
+  letterSpacing: '.1em',
+  marginLeft: 8
+}
+
 interface ParamMeta {
   description: string
   default: string
@@ -108,13 +117,16 @@ export default function WorkflowsPanel(): React.JSX.Element {
   const renderItem = (wf: WorkflowDef): React.JSX.Element => (
     <div
       key={wf.id}
-      className="zy-item wf-item"
+      className="zy-item wf-item zy-wf-card"
       onClick={() => useWorkflowsStore.getState().openRunDialog(wf.id)}
       title={wf.description || wf.command}
     >
       <span className="zy-item-icon">▸</span>
       <div className="zy-item-body">
-        <div className="zy-item-title">
+        <div
+          className="zy-item-title"
+          style={{ fontFamily: 'var(--font-ui)', fontSize: 12.5, color: 'var(--fg)' }}
+        >
           {wf.name}
           {wf.builtin && (
             <span className="zy-badge" style={{ marginLeft: 6 }}>
@@ -122,7 +134,12 @@ export default function WorkflowsPanel(): React.JSX.Element {
             </span>
           )}
         </div>
-        <div className="zy-item-sub wf-cmd-preview">{wf.command}</div>
+        <div
+          className="zy-item-sub wf-cmd-preview"
+          style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--fg-faint)' }}
+        >
+          {wf.command}
+        </div>
       </div>
       <div className="zy-item-actions">
         <button
@@ -165,8 +182,21 @@ export default function WorkflowsPanel(): React.JSX.Element {
 
   return (
     <>
+      <style>{`
+        .zy-wf-card {
+          border: 1px solid var(--border);
+          border-radius: 3px;
+          transition: border-color .12s ease;
+        }
+        .zy-wf-card:hover {
+          border-color: var(--accent);
+        }
+      `}</style>
       <div className="zy-sidebar-header">
-        <span>Workflows</span>
+        <span>
+          Workflows
+          <span style={enSubStyle}>FLOWS</span>
+        </span>
         <button className="zy-icon-btn" title="Новый workflow" onClick={openCreate}>
           <Icon name="plus" size={15} strokeWidth={1.6} />
         </button>

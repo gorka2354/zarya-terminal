@@ -1,26 +1,26 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AI_MODEL_PRESETS, DEFAULT_KEYBINDINGS, OLLAMA_DEFAULT_URL } from '@shared/defaults'
-import type { AiProviderKind, AiProviderStatus, AppInfo } from '@shared/types'
+import { AI_MODEL_PRESETS, DEFAULT_KEYBINDINGS, EFFORT_TUNING, OLLAMA_DEFAULT_URL } from '@shared/defaults'
+import type { AiEffort, AiProviderKind, AiProviderStatus, AppInfo } from '@shared/types'
 import { getAllActions, onActionsChanged } from '@/lib/actionRegistry'
 import { Icon, type IconName } from '@/components/Icon'
 import { launchRocket } from '@/components/RocketLaunch'
 import { chordFromEvent, formatChord } from '@/features/palette/keybindings'
-import ThemeGallery from '@/features/themes/ThemeGallery'
+import { getThemes } from '@/features/themes/themes'
 import { useSettingsStore } from '@/state/settingsStore'
 import { useUiStore } from '@/state/uiStore'
 import './settings.css'
 
 type TabId = 'appearance' | 'terminal' | 'blocks' | 'ai' | 'sessions' | 'editor' | 'keybindings' | 'about'
 
-const TABS: Array<{ id: TabId; label: string; icon: IconName }> = [
-  { id: 'appearance', label: 'Внешний вид', icon: 'star' },
-  { id: 'terminal', label: 'Терминал', icon: 'terminal' },
-  { id: 'blocks', label: 'Блоки', icon: 'split-h' },
-  { id: 'ai', label: 'AI', icon: 'sputnik' },
-  { id: 'sessions', label: 'Сессии', icon: 'save' },
-  { id: 'editor', label: 'Редактор', icon: 'edit' },
-  { id: 'keybindings', label: 'Клавиши', icon: 'gear' },
-  { id: 'about', label: 'О программе', icon: 'orbit' }
+const TABS: Array<{ id: TabId; label: string; sub: string; icon: IconName }> = [
+  { id: 'appearance', label: 'Внешний вид', sub: 'APPEARANCE', icon: 'star' },
+  { id: 'terminal', label: 'Терминал', sub: 'TERMINAL', icon: 'terminal' },
+  { id: 'blocks', label: 'Блоки', sub: 'BLOCKS', icon: 'split-h' },
+  { id: 'ai', label: 'AI', sub: 'AGENT', icon: 'sputnik' },
+  { id: 'sessions', label: 'Сессии', sub: 'SESSIONS', icon: 'save' },
+  { id: 'editor', label: 'Редактор', sub: 'EDITOR', icon: 'edit' },
+  { id: 'keybindings', label: 'Клавиши', sub: 'KEYBINDINGS', icon: 'gear' },
+  { id: 'about', label: 'О программе', sub: 'ABOUT', icon: 'orbit' }
 ]
 
 const PROVIDERS: Array<{ id: AiProviderKind; label: string }> = [
@@ -29,6 +29,8 @@ const PROVIDERS: Array<{ id: AiProviderKind; label: string }> = [
   { id: 'ollama', label: 'Ollama (локально)' },
   { id: 'openai-compat', label: 'OpenAI-совместимый' }
 ]
+
+const EFFORTS: AiEffort[] = ['low', 'medium', 'high', 'max']
 
 /** Full-screen settings modal: vertical tabs on the left, content on the right. */
 export default function SettingsView(): React.JSX.Element | null {
@@ -56,24 +58,33 @@ export default function SettingsView(): React.JSX.Element | null {
     <div className="zy-overlay-backdrop zy-overlay-backdrop--center" onMouseDown={close}>
       <div className="zy-settings-panel" onMouseDown={(e) => e.stopPropagation()}>
         <nav className="zy-settings-nav">
-          <div className="zy-settings-nav-title">Настройки</div>
-          {TABS.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              className={`zy-settings-nav-item${tab === t.id ? ' zy-settings-nav-item--active' : ''}`}
-              onClick={() => setTab(t.id)}
-            >
-              <span className="zy-settings-nav-icon">
-                <Icon name={t.icon} size={17} strokeWidth={1.5} />
-              </span>
-              {t.label}
-            </button>
-          ))}
+          <div className="zy-settings-nav-title">ЦЕНТР УПРАВЛЕНИЯ</div>
+          <div className="zy-settings-nav-list">
+            {TABS.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                className={`zy-settings-nav-item${tab === t.id ? ' zy-settings-nav-item--active' : ''}`}
+                onClick={() => setTab(t.id)}
+              >
+                <span className="zy-settings-nav-icon">
+                  <Icon name={t.icon} size={17} strokeWidth={1.5} />
+                </span>
+                <span className="zy-settings-nav-item-text">
+                  <span className="zy-settings-nav-item-label">{t.label}</span>
+                  <span className="zy-settings-nav-item-sub">{t.sub}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+          <div className="zy-settings-nav-footer">ЗАРЯ v0.4 · ОРБИТА</div>
         </nav>
         <div className="zy-settings-content">
           <header className="zy-settings-content-header">
-            <h2 className="zy-settings-content-title">{activeTab?.label}</h2>
+            <div className="zy-settings-content-title-wrap">
+              <h2 className="zy-settings-content-title">{activeTab?.label}</h2>
+              {activeTab?.sub && <span className="zy-settings-content-sub">{activeTab.sub}</span>}
+            </div>
             <button type="button" className="zy-icon-btn" onClick={close} title="Закрыть (Esc)">
               <Icon name="close" size={16} />
             </button>
@@ -107,11 +118,14 @@ function clamp(n: number, min?: number, max?: number): number {
 
 function Row({
   title,
+  sub,
   desc,
   stack,
   children
 }: {
   title: string
+  /** Bilingual EN micro-label rendered under the title (Handjet, dim). */
+  sub?: string
   desc?: string
   stack?: boolean
   children: React.ReactNode
@@ -120,6 +134,7 @@ function Row({
     <div className={`zy-set-row${stack ? ' zy-set-row--stack' : ''}`}>
       <div className="zy-set-row-label">
         <div className="zy-set-row-title">{title}</div>
+        {sub && <div className="zy-set-row-sub">{sub}</div>}
         {desc && <div className="zy-item-sub">{desc}</div>}
       </div>
       <div className="zy-set-row-control">{children}</div>
@@ -146,6 +161,27 @@ function Toggle({
       onClick={() => onChange(!checked)}
     >
       <span className="zy-switch-knob" />
+    </button>
+  )
+}
+
+/** "Rocket" toggle — pill with a glowing knob, reserved for the dangerous auto-approve switch. */
+function RocketToggle({
+  checked,
+  onChange
+}: {
+  checked: boolean
+  onChange: (v: boolean) => void
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      className={`zy-rocket-switch${checked ? ' zy-rocket-switch--on' : ''}`}
+      onClick={() => onChange(!checked)}
+    >
+      <span className="zy-rocket-switch-knob" />
     </button>
   )
 }
@@ -185,6 +221,44 @@ function NumberField({
         if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
       }}
     />
+  )
+}
+
+/** Gold −/+ stepper for font size, glowing digit readout in the middle. */
+function FontSizeStepper({
+  value,
+  onChange,
+  min = 9,
+  max = 28
+}: {
+  value: number
+  onChange: (v: number) => void
+  min?: number
+  max?: number
+}): React.JSX.Element {
+  const set = (v: number): void => onChange(clamp(v, min, max))
+  return (
+    <div className="zy-fontsize-stepper">
+      <button
+        type="button"
+        className="zy-stepper-btn"
+        aria-label="Уменьшить размер шрифта"
+        disabled={value <= min}
+        onClick={() => set(value - 1)}
+      >
+        −
+      </button>
+      <span className="zy-stepper-value">{value}</span>
+      <button
+        type="button"
+        className="zy-stepper-btn"
+        aria-label="Увеличить размер шрифта"
+        disabled={value >= max}
+        onClick={() => set(value + 1)}
+      >
+        +
+      </button>
+    </div>
   )
 }
 
@@ -265,6 +339,32 @@ function SelectField<T extends string>({
   )
 }
 
+/** Two-way segmented control — framed pair of buttons, used for cozy/compact density. */
+function SegmentedField<T extends string>({
+  value,
+  options,
+  onChange
+}: {
+  value: T
+  options: Array<{ value: T; label: string }>
+  onChange: (v: T) => void
+}): React.JSX.Element {
+  return (
+    <div className="zy-segmented">
+      {options.map((o) => (
+        <button
+          key={o.value}
+          type="button"
+          className={`zy-segmented-btn${o.value === value ? ' zy-segmented-btn--on' : ''}`}
+          onClick={() => onChange(o.value)}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 function RangeField({
   value,
   min,
@@ -296,6 +396,7 @@ function RangeField({
   )
 }
 
+/** Model field styled as a gold console readout (min-width 190/height 34, Handjet). */
 function ModelField({
   value,
   options,
@@ -310,7 +411,7 @@ function ModelField({
   return (
     <>
       <input
-        className="zy-input zy-input--mono"
+        className="zy-input zy-input--model"
         list="zy-ai-model-presets"
         value={text}
         onChange={(e) => setText(e.target.value)}
@@ -330,6 +431,71 @@ function ModelField({
   )
 }
 
+/** 4-segment reasoning-thrust bar, mirrors the LaunchPad "тяга" control. */
+function EffortControl({
+  value,
+  onChange
+}: {
+  value: AiEffort
+  onChange: (v: AiEffort) => void
+}): React.JSX.Element {
+  const idx = EFFORTS.indexOf(value)
+  return (
+    <div className="zy-effort-control">
+      <div className="zy-effort-bars">
+        {EFFORTS.map((e, i) => (
+          <button
+            key={e}
+            type="button"
+            className={`zy-effort-bar${i <= idx ? ' zy-effort-bar--on' : ''}`}
+            title={EFFORT_TUNING[e].label}
+            onClick={() => onChange(e)}
+          />
+        ))}
+      </div>
+      <span className="zy-effort-value">{EFFORT_TUNING[value].label}</span>
+    </div>
+  )
+}
+
+/** 2-column theme picker: swatches + name + type + active marker. */
+function ThemeCardsGrid(): React.JSX.Element {
+  const themeId = useSettingsStore((s) => s.settings.appearance.themeId)
+  const themes = getThemes()
+
+  const select = (id: string): void => {
+    void useSettingsStore.getState().update({ appearance: { themeId: id } as never })
+  }
+
+  return (
+    <div className="zy-set-theme-grid">
+      {themes.map((t) => {
+        const active = t.id === themeId
+        return (
+          <button
+            key={t.id}
+            type="button"
+            className={`zy-set-theme-card${active ? ' zy-set-theme-card--active' : ''}`}
+            onClick={() => select(t.id)}
+            title={t.name}
+          >
+            <div className="zy-set-theme-swatches">
+              <span className="zy-set-theme-swatch" style={{ background: t.ui.bg }} />
+              <span className="zy-set-theme-swatch" style={{ background: t.ui.accent }} />
+              <span className="zy-set-theme-swatch" style={{ background: t.ui.accent2 }} />
+            </div>
+            <div className="zy-set-theme-info">
+              <div className="zy-set-theme-name">{t.name}</div>
+              <div className="zy-set-theme-type">{t.type === 'dark' ? 'ТЁМНАЯ · DARK' : 'СВЕТЛАЯ · LIGHT'}</div>
+            </div>
+            {active && <span className="zy-set-theme-active">● АКТИВНА</span>}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 // ---------------------------------------------------------------------------
 // Tabs
 // ---------------------------------------------------------------------------
@@ -342,26 +508,24 @@ function AppearanceTab(): React.JSX.Element {
     <>
       <section className="zy-set-section">
         <div className="zy-section-label">Тема</div>
-        <ThemeGallery />
+        <ThemeCardsGrid />
       </section>
       <section className="zy-set-section">
         <div className="zy-section-label">Шрифт и терминал</div>
-        <Row title="Шрифт" desc="Семейство шрифтов терминала (CSS font-family).">
+        <Row title="Шрифт" sub="FONT FAMILY" desc="Семейство шрифтов терминала (CSS font-family).">
           <TextField
             value={a.fontFamily}
             mono
             onCommit={(v) => void update({ appearance: { fontFamily: v } as never })}
           />
         </Row>
-        <Row title="Размер шрифта">
-          <NumberField
+        <Row title="Размер шрифта" sub="FONT SIZE">
+          <FontSizeStepper
             value={a.fontSize}
-            min={8}
-            max={32}
-            onCommit={(v) => void update({ appearance: { fontSize: v } as never })}
+            onChange={(v) => void update({ appearance: { fontSize: v } as never })}
           />
         </Row>
-        <Row title="Межстрочный интервал">
+        <Row title="Межстрочный интервал" sub="LINE HEIGHT">
           <NumberField
             value={a.lineHeight}
             min={1}
@@ -370,7 +534,7 @@ function AppearanceTab(): React.JSX.Element {
             onCommit={(v) => void update({ appearance: { lineHeight: v } as never })}
           />
         </Row>
-        <Row title="Отступы терминала" desc="Внутренний отступ вокруг текста, в пикселях.">
+        <Row title="Отступы терминала" sub="TERMINAL PADDING" desc="Внутренний отступ вокруг текста, в пикселях.">
           <NumberField
             value={a.terminalPadding}
             min={0}
@@ -378,7 +542,7 @@ function AppearanceTab(): React.JSX.Element {
             onCommit={(v) => void update({ appearance: { terminalPadding: v } as never })}
           />
         </Row>
-        <Row title="Стиль курсора">
+        <Row title="Стиль курсора" sub="CURSOR STYLE">
           <SelectField
             value={a.cursorStyle}
             options={[
@@ -389,7 +553,7 @@ function AppearanceTab(): React.JSX.Element {
             onChange={(v) => void update({ appearance: { cursorStyle: v } as never })}
           />
         </Row>
-        <Row title="Мигание курсора">
+        <Row title="Мигание курсора" sub="CURSOR BLINK">
           <Toggle
             checked={a.cursorBlink}
             onChange={(v) => void update({ appearance: { cursorBlink: v } as never })}
@@ -398,7 +562,7 @@ function AppearanceTab(): React.JSX.Element {
       </section>
       <section className="zy-set-section">
         <div className="zy-section-label">Окно</div>
-        <Row title="Прозрачность окна">
+        <Row title="Прозрачность окна" sub="WINDOW OPACITY">
           <RangeField
             value={a.windowOpacity}
             min={0.5}
@@ -410,15 +574,16 @@ function AppearanceTab(): React.JSX.Element {
         </Row>
         <Row
           title="Акриловый эффект (Windows 11)"
+          sub="ACRYLIC BLUR"
           desc="Полупрозрачный размытый фон окна. Нужен перезапуск приложения."
         >
           <Toggle checked={a.acrylic} onChange={(v) => void update({ appearance: { acrylic: v } as never })} />
         </Row>
-        <Row title="Плотность интерфейса">
-          <SelectField
+        <Row title="Плотность интерфейса" sub="UI DENSITY">
+          <SegmentedField
             value={a.uiDensity}
             options={[
-              { value: 'cozy', label: 'Комфортно' },
+              { value: 'cozy', label: 'Уютно' },
               { value: 'compact', label: 'Компактно' }
             ]}
             onChange={(v) => void update({ appearance: { uiDensity: v } as never })}
@@ -441,14 +606,14 @@ function TerminalTab(): React.JSX.Element {
 
   return (
     <section className="zy-set-section">
-      <Row title="Профиль по умолчанию" desc="Какая оболочка открывается для новых вкладок.">
+      <Row title="Профиль по умолчанию" sub="DEFAULT PROFILE" desc="Какая оболочка открывается для новых вкладок.">
         <SelectField
           value={t.defaultProfileId}
           options={profileOptions}
           onChange={(v) => void update({ terminal: { defaultProfileId: v } as never })}
         />
       </Row>
-      <Row title="Буфер прокрутки" desc="Количество строк истории терминала на сессию.">
+      <Row title="Буфер прокрутки" sub="SCROLLBACK" desc="Количество строк истории терминала на сессию.">
         <NumberField
           value={t.scrollback}
           min={100}
@@ -457,13 +622,13 @@ function TerminalTab(): React.JSX.Element {
           onCommit={(v) => void update({ terminal: { scrollback: v } as never })}
         />
       </Row>
-      <Row title="Копировать при выделении">
+      <Row title="Копировать при выделении" sub="COPY ON SELECT">
         <Toggle
           checked={t.copyOnSelect}
           onChange={(v) => void update({ terminal: { copyOnSelect: v } as never })}
         />
       </Row>
-      <Row title="Клик правой кнопкой" desc="Что делает правый клик по терминалу.">
+      <Row title="Клик правой кнопкой" sub="RIGHT CLICK" desc="Что делает правый клик по терминалу.">
         <SelectField
           value={t.rightClickBehavior}
           options={[
@@ -473,7 +638,7 @@ function TerminalTab(): React.JSX.Element {
           onChange={(v) => void update({ terminal: { rightClickBehavior: v } as never })}
         />
       </Row>
-      <Row title="Предупреждать при вставке многострочного текста">
+      <Row title="Предупреждать при вставке многострочного текста" sub="PASTE WARNING">
         <Toggle
           checked={t.pasteWarnMultiline}
           onChange={(v) => void update({ terminal: { pasteWarnMultiline: v } as never })}
@@ -481,11 +646,12 @@ function TerminalTab(): React.JSX.Element {
       </Row>
       <Row
         title="Ускорение WebGL"
+        sub="WEBGL RENDERER"
         desc="Рендер терминала через WebGL — быстрее, но может не работать на некоторых GPU."
       >
         <Toggle checked={t.webgl} onChange={(v) => void update({ terminal: { webgl: v } as never })} />
       </Row>
-      <Row title="Звуковой сигнал (bell)">
+      <Row title="Звуковой сигнал (bell)" sub="BELL">
         <SelectField
           value={t.bell}
           options={[
@@ -495,7 +661,7 @@ function TerminalTab(): React.JSX.Element {
           onChange={(v) => void update({ terminal: { bell: v } as never })}
         />
       </Row>
-      <Row title="Подтверждать закрытие при работающем процессе">
+      <Row title="Подтверждать закрытие при работающем процессе" sub="CONFIRM CLOSE">
         <Toggle
           checked={t.confirmCloseRunning}
           onChange={(v) => void update({ terminal: { confirmCloseRunning: v } as never })}
@@ -510,24 +676,36 @@ function BlocksTab(): React.JSX.Element {
   const update = useSettingsStore((s) => s.update)
   return (
     <section className="zy-set-section">
-      <Row title="Блоки команд" desc="Группировать вывод терминала в блоки по командам (в стиле Warp).">
+      <Row
+        title="Блоки команд"
+        sub="COMMAND BLOCKS"
+        desc="Группировать вывод терминала в блоки по командам (в стиле Warp)."
+      >
         <Toggle checked={b.enabled} onChange={(v) => void update({ blocks: { enabled: v } as never })} />
       </Row>
-      <Row title="Разделители" desc="Тонкая линия-граница между соседними блоками.">
+      <Row title="Разделители" sub="SEPARATORS" desc="Тонкая линия-граница между соседними блоками.">
         <Toggle
           checked={b.separators}
           disabled={!b.enabled}
           onChange={(v) => void update({ blocks: { separators: v } as never })}
         />
       </Row>
-      <Row title="Бейджи кода выхода" desc="Показывать код завершения команды (успех/ошибка) рядом с блоком.">
+      <Row
+        title="Бейджи кода выхода"
+        sub="EXIT BADGES"
+        desc="Показывать код завершения команды (успех/ошибка) рядом с блоком."
+      >
         <Toggle
           checked={b.exitBadges}
           disabled={!b.enabled}
           onChange={(v) => void update({ blocks: { exitBadges: v } as never })}
         />
       </Row>
-      <Row title="Автоподсказки" desc="Полупрозрачные подсказки команд из истории (в стиле fish shell).">
+      <Row
+        title="Автоподсказки"
+        sub="AUTOSUGGEST"
+        desc="Полупрозрачные подсказки команд из истории (в стиле fish shell)."
+      >
         <Toggle
           checked={b.autosuggest}
           disabled={!b.enabled}
@@ -567,7 +745,7 @@ function AiTab(): React.JSX.Element {
   return (
     <>
       <section className="zy-set-section">
-        <Row title="Провайдер">
+        <Row title="Провайдер" sub="PROVIDER">
           <SelectField
             value={ai.provider}
             options={PROVIDERS.map((p) => ({ value: p.id, label: p.label }))}
@@ -577,8 +755,13 @@ function AiTab(): React.JSX.Element {
             }}
           />
         </Row>
-        <Row title="Модель" desc="Можно ввести своё название или выбрать из списка пресетов.">
-          <div className="zy-inline-group">
+        <Row
+          title="Модель"
+          sub="MODEL"
+          desc="Можно ввести своё название или выбрать из списка пресетов."
+          stack
+        >
+          <div className="zy-inline-group zy-inline-group--wrap">
             <ModelField
               value={ai.model}
               options={modelOptions}
@@ -597,10 +780,19 @@ function AiTab(): React.JSX.Element {
                 {ollamaBusy ? '…' : 'Обновить список'}
               </button>
             )}
+            <button
+              type="button"
+              className="zy-btn zy-btn--sm zy-btn--launch"
+              onClick={() => useUiStore.getState().set({ launchPadOpen: true })}
+            >
+              <Icon name="rocket" size={13} strokeWidth={1.6} />
+              Открыть пусковой комплекс
+            </button>
           </div>
         </Row>
         <Row
           title="Base URL"
+          sub="BASE URL"
           desc={
             ai.provider === 'ollama'
               ? `По умолчанию: ${OLLAMA_DEFAULT_URL}`
@@ -614,7 +806,10 @@ function AiTab(): React.JSX.Element {
             onCommit={(v) => void update({ ai: { baseUrl: v } as never })}
           />
         </Row>
-        <Row title="Температура" desc="Выше — разнообразнее и менее предсказуемо.">
+        <Row title="Тяга рассуждений" sub={`REASONING EFFORT · ${EFFORT_TUNING[ai.effort].label}`}>
+          <EffortControl value={ai.effort} onChange={(v) => void update({ ai: { effort: v } as never })} />
+        </Row>
+        <Row title="Температура" sub="TEMPERATURE" desc="Выше — разнообразнее и менее предсказуемо.">
           <RangeField
             value={ai.temperature}
             min={0}
@@ -623,7 +818,7 @@ function AiTab(): React.JSX.Element {
             onChange={(v) => void update({ ai: { temperature: v } as never })}
           />
         </Row>
-        <Row title="Макс. токенов ответа">
+        <Row title="Макс. токенов ответа" sub="MAX TOKENS">
           <NumberField
             value={ai.maxTokens}
             min={256}
@@ -632,7 +827,11 @@ function AiTab(): React.JSX.Element {
             onCommit={(v) => void update({ ai: { maxTokens: v } as never })}
           />
         </Row>
-        <Row title="Блоков контекста" desc="Сколько последних блоков терминала прикреплять к запросу автоматически.">
+        <Row
+          title="Блоков контекста"
+          sub="CONTEXT BLOCKS"
+          desc="Сколько последних блоков терминала прикреплять к запросу автоматически."
+        >
           <NumberField
             value={ai.contextBlocks}
             min={0}
@@ -642,9 +841,10 @@ function AiTab(): React.JSX.Element {
         </Row>
         <Row
           title="Автоподтверждение команд"
+          sub="AUTO-APPROVE · опасно"
           desc="ИИ будет выполнять команды в терминале без запроса подтверждения."
         >
-          <Toggle
+          <RocketToggle
             checked={ai.autoApprove}
             onChange={(v) => void update({ ai: { autoApprove: v } as never })}
           />
@@ -656,6 +856,7 @@ function AiTab(): React.JSX.Element {
         )}
         <Row
           title="Доп. системный промпт"
+          sub="SYSTEM PROMPT"
           stack
           desc="Добавляется к системному промпту ИИ-агента при каждом запросе."
         >
@@ -767,7 +968,7 @@ function SessionsTab(): React.JSX.Element {
   const update = useSettingsStore((st) => st.update)
   return (
     <section className="zy-set-section">
-      <Row title="Восстановление при запуске">
+      <Row title="Восстановление при запуске" sub="RESTORE ON LAUNCH">
         <SelectField
           value={s.restoreOnLaunch}
           options={[
@@ -777,7 +978,7 @@ function SessionsTab(): React.JSX.Element {
           onChange={(v) => void update({ sessions: { restoreOnLaunch: v } as never })}
         />
       </Row>
-      <Row title="Автосохранение, сек">
+      <Row title="Автосохранение, сек" sub="AUTOSAVE INTERVAL">
         <NumberField
           value={s.autosaveSec}
           min={5}
@@ -787,6 +988,7 @@ function SessionsTab(): React.JSX.Element {
       </Row>
       <Row
         title="Строк истории на сессию"
+        sub="SCROLLBACK LINES"
         desc="Сколько строк вывода терминала сохраняется на диск для каждой сессии."
       >
         <NumberField
@@ -809,7 +1011,7 @@ function EditorTab(): React.JSX.Element {
   const update = useSettingsStore((s) => s.update)
   return (
     <section className="zy-set-section">
-      <Row title="Размер шрифта">
+      <Row title="Размер шрифта" sub="FONT SIZE">
         <NumberField
           value={e.fontSize}
           min={8}
@@ -817,13 +1019,13 @@ function EditorTab(): React.JSX.Element {
           onCommit={(v) => void update({ editor: { fontSize: v } as never })}
         />
       </Row>
-      <Row title="Перенос строк">
+      <Row title="Перенос строк" sub="WORD WRAP">
         <Toggle checked={e.wordWrap} onChange={(v) => void update({ editor: { wordWrap: v } as never })} />
       </Row>
-      <Row title="Миникарта">
+      <Row title="Миникарта" sub="MINIMAP">
         <Toggle checked={e.minimap} onChange={(v) => void update({ editor: { minimap: v } as never })} />
       </Row>
-      <Row title="Размер табуляции">
+      <Row title="Размер табуляции" sub="TAB SIZE">
         <NumberField
           value={e.tabSize}
           min={1}

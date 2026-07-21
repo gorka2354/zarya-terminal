@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { fuzzyFilter } from '@/lib/fuzzy'
 import { type AppAction, getAllActions, onActionsChanged, runAction } from '@/lib/actionRegistry'
+import { Icon } from '@/components/Icon'
 import { useSettingsStore } from '@/state/settingsStore'
 import { useUiStore } from '@/state/uiStore'
 import { formatChord } from './keybindings'
@@ -98,7 +99,9 @@ export default function CommandPalette(): React.JSX.Element | null {
     >
       <div className="zy-modal" role="dialog" aria-label="Палитра команд">
         <div className="zy-palette-input-row">
-          <span className="zy-palette-input-icon">&gt;_</span>
+          <span className="zy-palette-input-icon zy-palette-input-icon--accent">
+            <Icon name="search" size={14} strokeWidth={1.8} />
+          </span>
           <input
             ref={inputRef}
             className="zy-palette-input"
@@ -111,6 +114,7 @@ export default function CommandPalette(): React.JSX.Element | null {
             aria-controls="zy-palette-listbox"
             aria-activedescendant={flat[selectedIndex] ? `zy-palette-opt-${flat[selectedIndex].id}` : undefined}
           />
+          <span className="zy-palette-title">Палитра</span>
         </div>
         <div className="zy-palette-list" role="listbox" id="zy-palette-listbox">
           {!flat.length && <div className="zy-empty">Ничего не найдено</div>}
@@ -130,7 +134,9 @@ export default function CommandPalette(): React.JSX.Element | null {
                     onMouseEnter={() => setSelectedIndex(index)}
                     onClick={() => commit(action)}
                   >
-                    <span className="zy-palette-item-icon">›</span>
+                    <span className="zy-palette-item-icon">
+                      <span className="zy-palette-item-diamond" />
+                    </span>
                     <div className="zy-palette-item-body">
                       <div className="zy-palette-item-title">{action.title}</div>
                     </div>
@@ -145,13 +151,13 @@ export default function CommandPalette(): React.JSX.Element | null {
         </div>
         <div className="zy-palette-footer">
           <span className="zy-palette-footer-hint">
-            <span className="zy-kbd">↑↓</span> навигация
+            <span className="zy-kbd">↑↓</span> выбор
           </span>
           <span className="zy-palette-footer-hint">
-            <span className="zy-kbd">Enter</span> выполнить
+            <span className="zy-kbd">↵</span> запуск
           </span>
           <span className="zy-palette-footer-hint">
-            <span className="zy-kbd">Esc</span> закрыть
+            <span className="zy-kbd">esc</span> закрыть
           </span>
         </div>
       </div>

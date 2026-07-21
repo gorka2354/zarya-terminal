@@ -10,6 +10,15 @@ import '../palette/palette.css'
 const SEARCH_LIMIT = 60
 const DEBOUNCE_MS = 120
 
+const enSubStyle: React.CSSProperties = {
+  fontFamily: 'var(--font-tech)',
+  fontSize: 12,
+  fontWeight: 400,
+  color: 'var(--fg-faint)',
+  letterSpacing: '.1em',
+  marginLeft: 8
+}
+
 /**
  * Sidebar Time Machine: same global history search as the overlay, plus
  * quick filters (errors only / current folder only) for browsing at rest.
@@ -57,7 +66,10 @@ export default function HistoryPanel(): React.JSX.Element {
   return (
     <>
       <div className="zy-sidebar-header">
-        <span>История</span>
+        <span>
+          История
+          <span style={enSubStyle}>LOG</span>
+        </span>
       </div>
       <div className="zy-sidebar-search">
         <input

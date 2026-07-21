@@ -2,11 +2,38 @@ import { useMemo, useState } from 'react'
 import type { SessionMeta } from '@shared/types'
 import { formatRelative, shortenPath } from '@/lib/ansi'
 import { fuzzyFilter } from '@/lib/fuzzy'
+import { useAiStore } from '@/features/ai/aiStore'
 import { useSessionsStore } from '@/state/sessionsStore'
+import { useUiStore } from '@/state/uiStore'
 import { useContextMenu } from './ContextMenu'
 import { Icon, ShellGlyph } from './Icon'
 
 const sectionLabelStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 6 }
+const enSubStyle: React.CSSProperties = {
+  fontFamily: 'var(--font-tech)',
+  fontSize: 12,
+  fontWeight: 400,
+  color: 'var(--fg-faint)',
+  letterSpacing: '.1em',
+  marginLeft: 8
+}
+const crewLabelStyle: React.CSSProperties = {
+  fontFamily: 'var(--font-tech)',
+  fontSize: 12,
+  letterSpacing: '.1em',
+  textTransform: 'uppercase',
+  color: 'var(--fg-faint)'
+}
+const crewStatusStyle: React.CSSProperties = {
+  fontFamily: 'var(--font-mono)',
+  fontSize: 10.5,
+  color: 'var(--fg-faint)'
+}
+
+function openCrewMember(conversationId: string): void {
+  useUiStore.getState().set({ aiPanelOpen: true })
+  useAiStore.getState().setActiveConversation(conversationId)
+}
 
 /**
  * Saved sessions panel: pinned / favorites / recent.
@@ -16,9 +43,12 @@ const sectionLabelStyle: React.CSSProperties = { display: 'flex', alignItems: 'c
 export function SessionsPanel(): React.JSX.Element {
   const savedList = useSessionsStore((s) => s.savedList)
   const sessions = useSessionsStore((s) => s.sessions)
+  const conversations = useAiStore((s) => s.conversations)
   const [query, setQuery] = useState('')
   const { menu, open } = useContextMenu()
   const store = useSessionsStore.getState()
+
+  const crewActive = conversations.filter((c) => c.streaming || c.pendingTools.length > 0)
 
   const filtered = useMemo(
     () =>
@@ -118,8 +148,41 @@ export function SessionsPanel(): React.JSX.Element {
 
   return (
     <>
+      <style>{`
+        .zy-sessions-new-btn {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          width: 100%;
+          margin-top: 8px;
+          padding: 8px 10px;
+          border: 1px dashed var(--border-strong);
+          border-radius: var(--radius);
+          background: transparent;
+          color: var(--fg-dim);
+          font-family: var(--font-ui);
+          font-weight: 700;
+          font-size: 11px;
+          text-transform: uppercase;
+          letter-spacing: .1em;
+          cursor: pointer;
+          transition: border-color .12s ease, color .12s ease;
+        }
+        .zy-sessions-new-btn:hover {
+          border-color: var(--accent);
+          color: var(--fg);
+        }
+        @keyframes zy-crew-pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: .35; }
+        }
+      `}</style>
       <div className="zy-sidebar-header">
-        <span>Сессии</span>
+        <span>
+          Сессии
+          <span style={enSubStyle}>SESSIONS</span>
+        </span>
         <button
           className="zy-icon-btn"
           title="Новая сессия"
@@ -167,6 +230,49 @@ export function SessionsPanel(): React.JSX.Element {
             <br />
             Они переживают перезапуск и выключение — просто продолжай с того места, где
             остановился.
+          </div>
+        )}
+        <button className="zy-sessions-new-btn" onClick={() => void store.newTab()}>
+          <Icon name="plus" size={13} strokeWidth={1.8} />
+          Новая сессия
+        </button>
+        <div className="zy-section-label" style={crewLabelStyle}>
+          Экипаж · агенты
+        </div>
+        {crewActive.length > 0 ? (
+          crewActive.map((conv) => (
+            <div key={conv.id} className="zy-item" onClick={() => openCrewMember(conv.id)}>
+              <span
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: '50%',
+                  flexShrink: 0,
+                  background: 'var(--success)',
+                  boxShadow: '0 0 8px var(--success)',
+                  animation: 'zy-crew-pulse 1.6s ease-in-out infinite'
+                }}
+              />
+              <div className="zy-item-body">
+                <div className="zy-item-title">{conv.title}</div>
+                <div className="zy-item-sub" style={crewStatusStyle}>
+                  выполняется
+                </div>
+              </div>
+            </div>
+          ))
+        ) : (
+          <div className="zy-item" style={{ cursor: 'default' }}>
+            <span
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: '50%',
+                flexShrink: 0,
+                background: 'var(--fg-faint)'
+              }}
+            />
+            <div className="zy-item-title">Борт-инженер / готов</div>
           </div>
         )}
       </div>

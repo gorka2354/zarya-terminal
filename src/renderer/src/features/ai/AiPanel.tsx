@@ -34,6 +34,7 @@ export default function AiPanel(): React.JSX.Element {
   const activeId = useAiStore((s) => s.activeId)
   const conv = conversations.find((c) => c.id === activeId)
   const autoApprove = useSettingsStore((s) => s.settings.ai.autoApprove)
+  const model = useSettingsStore((s) => s.settings.ai.model)
 
   const [input, setInput] = useState('')
   const listRef = useRef<HTMLDivElement>(null)
@@ -310,6 +311,20 @@ export default function AiPanel(): React.JSX.Element {
         )}
       </div>
 
+      <button
+        type="button"
+        className="zy-ai-fuel"
+        title="Топливо · пусковой комплекс"
+        onClick={() => useUiStore.getState().set({ launchPadOpen: true })}
+      >
+        <span className="zy-ai-fuel-left">
+          <Icon name="rocket" size={13} className="zy-ai-fuel-icon" />
+          <span className="zy-ai-fuel-label">ТОПЛИВО</span>
+          <span className="zy-ai-fuel-value">∞ без лимита · локальный борт</span>
+        </span>
+        <span className="zy-ai-fuel-right">пульт ▴</span>
+      </button>
+
       <div className="zy-ai-composer">
         {conv && conv.pendingContext.length > 0 && (
           <div className="zy-ai-chips">
@@ -335,15 +350,34 @@ export default function AiPanel(): React.JSX.Element {
           </button>
         </div>
         <div className="zy-ai-input-row">
+          <button
+            type="button"
+            className={`zy-ai-star-btn ${conv?.agentMode ? 'zy-ai-star-btn--on' : ''}`}
+            title="Агентный режим: AI сможет сам выполнять команды в терминале"
+            onClick={() => conv && useAiStore.getState().setAgentMode(!conv.agentMode, conv.id)}
+          >
+            <Icon name="bolt" size={14} />
+          </button>
           <textarea
             ref={textareaRef}
             className="zy-input zy-ai-textarea"
-            placeholder="Спросите AI… (Enter — отправить, Shift+Enter — новая строка)"
+            placeholder="Спросите агента…"
+            title="Enter — отправить, Shift+Enter — новая строка"
             value={input}
             onChange={onInputChange}
             onKeyDown={onKeyDown}
             rows={1}
           />
+          <button
+            type="button"
+            className="zy-ai-model-btn"
+            title="Пусковой комплекс: модель и тяга рассуждений"
+            onClick={() => useUiStore.getState().set({ launchPadOpen: true })}
+          >
+            <Icon name="rocket" size={15} className="zy-ai-model-icon" />
+            <span className="zy-ai-model-name">{model}</span>
+            <span className="zy-ai-model-caret">▴</span>
+          </button>
           {conv?.streaming ? (
             <button
               className="zy-icon-btn zy-ai-stop"
@@ -386,6 +420,7 @@ function ToolCard(props: {
 
   return (
     <div className={`zy-ai-tool ${resolved && !denied ? 'zy-ai-tool--done' : ''} ${denied ? 'zy-ai-tool--denied' : ''}`}>
+      <div className="zy-ai-tool-kicker">Агент хочет выполнить</div>
       <div className="zy-ai-tool-head">
         <Icon name="run" size={10} className="zy-ai-tool-icon" />
         <code className="zy-ai-tool-cmd">{command || '—'}</code>

@@ -69,6 +69,40 @@ function classifyStatus(code: string): GitCode {
   return 'mod'
 }
 
+interface GitMarker {
+  glyph: string
+  color: string
+  label: string
+}
+
+/**
+ * Rendering-only mapping on top of classifyStatus(): picks the macro's
+ * three glyphs (★ staged-modified / ± modified / + new) from the raw
+ * two-char `git status` code without changing the underlying status logic.
+ */
+function gitMarkerFor(rawCode: string | undefined): GitMarker | null {
+  if (!rawCode) return null
+  const kind = classifyStatus(rawCode)
+  if (kind === 'new') return { glyph: '+', color: 'var(--success)', label: 'новый файл' }
+  if (kind === 'del') return { glyph: '−', color: 'var(--danger)', label: 'удалён' }
+  if (kind === 'mod') {
+    const staged = rawCode.length > 0 && rawCode[0] !== ' ' && rawCode[0] !== '?'
+    return staged
+      ? { glyph: '★', color: 'var(--accent-2)', label: 'изменён (в индексе)' }
+      : { glyph: '±', color: 'var(--warn)', label: 'изменён' }
+  }
+  return null
+}
+
+const enSubStyle: React.CSSProperties = {
+  fontFamily: 'var(--font-tech)',
+  fontSize: 12,
+  fontWeight: 400,
+  color: 'var(--fg-faint)',
+  letterSpacing: '.1em',
+  marginLeft: 8
+}
+
 /** repo-root-relative posix paths (from `git status`) -> absolute status code lookup. */
 function buildGitMap(status: GitStatus | null): Map<string, string> {
   const map = new Map<string, string>()
@@ -165,6 +199,10 @@ export default function FileTree(): React.JSX.Element {
     },
     [gitMap]
   )
+  const getGitMarker = useCallback(
+    (path: string): GitMarker | null => gitMarkerFor(gitMap.get(normPath(path))),
+    [gitMap]
+  )
 
   const toggleExpand = useCallback(
     (path: string): void => {
@@ -258,7 +296,10 @@ export default function FileTree(): React.JSX.Element {
   return (
     <>
       <div className="zy-sidebar-header">
-        <span>Файлы</span>
+        <span>
+          Файлы
+          <span style={enSubStyle}>FILES</span>
+        </span>
         <div className="zy-row" style={{ gap: 2 }}>
           <button
             className={`zy-icon-btn${followTerminal ? ' zy-icon-btn--active' : ''}`}
@@ -297,6 +338,7 @@ export default function FileTree(): React.JSX.Element {
               depth={0}
               nodes={nodes}
               getGitCode={getGitCode}
+              getGitMarker={getGitMarker}
               onToggle={toggleExpand}
               onOpenFile={(p) => void useEditorStore.getState().openFile(p)}
               onContextMenu={openEntryContext}
@@ -314,6 +356,7 @@ interface TreeChildrenProps {
   depth: number
   nodes: Record<string, NodeState>
   getGitCode: (path: string) => GitCode
+  getGitMarker: (path: string) => GitMarker | null
   onToggle: (path: string) => void
   onOpenFile: (path: string) => void
   onContextMenu: (e: React.MouseEvent, entry: DirEntry, gitCode: GitCode) => void
@@ -340,15 +383,26 @@ interface TreeEntryProps {
   depth: number
   nodes: Record<string, NodeState>
   getGitCode: (path: string) => GitCode
+  getGitMarker: (path: string) => GitMarker | null
   onToggle: (path: string) => void
   onOpenFile: (path: string) => void
   onContextMenu: (e: React.MouseEvent, entry: DirEntry, gitCode: GitCode) => void
 }
 
-function TreeEntry({ entry, depth, nodes, getGitCode, onToggle, onOpenFile, onContextMenu }: TreeEntryProps): React.JSX.Element {
+function TreeEntry({
+  entry,
+  depth,
+  nodes,
+  getGitCode,
+  getGitMarker,
+  onToggle,
+  onOpenFile,
+  onContextMenu
+}: TreeEntryProps): React.JSX.Element {
   const state = nodes[entry.path]
   const expanded = !!state?.expanded
   const gitCode = getGitCode(entry.path)
+  const marker = getGitMarker(entry.path)
   const dotColor = !entry.isDir ? extDotColor(entry.name) : null
 
   return (
@@ -366,9 +420,24 @@ function TreeEntry({ entry, depth, nodes, getGitCode, onToggle, onOpenFile, onCo
         <span className="zy-tree-icon">
           <Icon name={entry.isDir ? (expanded ? 'folder-open' : 'folder') : 'files'} size={13} />
         </span>
+        {marker && (
+          <span
+            title={marker.label}
+            style={{
+              flexShrink: 0,
+              width: 11,
+              textAlign: 'center',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 12,
+              lineHeight: 1,
+              color: marker.color
+            }}
+          >
+            {marker.glyph}
+          </span>
+        )}
         <span className="zy-tree-name">{entry.name}</span>
         {dotColor && <span className="zy-tree-ext-dot" style={{ background: dotColor }} />}
-        {gitCode && <span className={`zy-tree-status-dot zy-tree-status-dot--${gitCode}`} title={gitCode} />}
       </div>
       {entry.isDir && expanded && (
         <div
@@ -380,6 +449,7 @@ function TreeEntry({ entry, depth, nodes, getGitCode, onToggle, onOpenFile, onCo
             depth={depth + 1}
             nodes={nodes}
             getGitCode={getGitCode}
+            getGitMarker={getGitMarker}
             onToggle={onToggle}
             onOpenFile={onOpenFile}
             onContextMenu={onContextMenu}

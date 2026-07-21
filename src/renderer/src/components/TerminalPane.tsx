@@ -77,9 +77,87 @@ export function TerminalPane({ sessionId, active, visible }: Props): React.JSX.E
       }}
       onContextMenu={onContextMenu}
     >
+      <PaneHeader sessionId={sessionId} />
       <XtermView sessionId={sessionId} active={active} visible={visible} />
       {searchOpenFor === sessionId && <TermSearchBar sessionId={sessionId} />}
       {menu}
+    </div>
+  )
+}
+
+/**
+ * Thin instrument-panel strip above the xterm surface: "★ CLI-АГЕНТ · ЗАРЯ"
+ * mark, the pane's own cwd, split + search shortcuts. One per pane (not per
+ * split gutter) so every terminal keeps its own working-directory readout.
+ */
+function PaneHeader({ sessionId }: { sessionId: string }): React.JSX.Element {
+  const cwd = useSessionsStore((s) => s.sessions[sessionId]?.cwd)
+  const searchOpenFor = useUiStore((s) => s.searchOpenFor)
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 10,
+        padding: '6px 10px',
+        flexShrink: 0,
+        background: 'color-mix(in srgb, var(--panel) 60%, transparent)',
+        borderBottom: '1px solid var(--border)'
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+        <span style={{ display: 'inline-flex', color: 'var(--accent)', flexShrink: 0 }}>
+          <Icon name="star" size={12} />
+        </span>
+        <span
+          style={{
+            fontFamily: 'var(--font-tech)',
+            fontSize: 13,
+            letterSpacing: '0.1em',
+            color: 'var(--accent)',
+            whiteSpace: 'nowrap',
+            flexShrink: 0
+          }}
+        >
+          CLI-АГЕНТ · ЗАРЯ
+        </span>
+        {cwd && (
+          <span
+            title={cwd}
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 11,
+              color: 'var(--fg-faint)',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              minWidth: 0
+            }}
+          >
+            {cwd}
+          </span>
+        )}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+        <button
+          className="zy-icon-btn"
+          title="Разделить вправо"
+          onClick={() => void useSessionsStore.getState().splitActive('row')}
+        >
+          <Icon name="split-h" size={13} />
+        </button>
+        <button
+          className={`zy-icon-btn${searchOpenFor === sessionId ? ' zy-icon-btn--active' : ''}`}
+          title="Найти в терминале"
+          onClick={() =>
+            useUiStore.getState().set({ searchOpenFor: searchOpenFor === sessionId ? null : sessionId })
+          }
+        >
+          <Icon name="search" size={13} />
+        </button>
+      </div>
     </div>
   )
 }

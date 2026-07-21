@@ -34,6 +34,25 @@ export function BlocksPanel(): React.JSX.Element {
     copy(md, 'Markdown')
   }
 
+  const exitBadge = (b: BlockRecord): { label: string; background: string; color: string } => {
+    const dur = b.endedAt ? formatDuration(b.endedAt - b.startedAt) : ''
+    if (b.exitCode === undefined) {
+      return { label: '⋯', background: 'var(--bg-elev2)', color: 'var(--fg-dim)' }
+    }
+    if (b.exitCode === 0) {
+      return {
+        label: dur ? `✓ ${b.exitCode} · ${dur}` : `✓ ${b.exitCode}`,
+        background: 'color-mix(in srgb, var(--success) 16%, var(--bg-elev1))',
+        color: 'var(--success)'
+      }
+    }
+    return {
+      label: dur ? `✗ ${b.exitCode} · ${dur}` : `✗ ${b.exitCode}`,
+      background: 'color-mix(in srgb, var(--danger) 16%, var(--bg-elev1))',
+      color: 'var(--danger)'
+    }
+  }
+
   return (
     <>
       <div className="zy-sidebar-header">
@@ -53,23 +72,36 @@ export function BlocksPanel(): React.JSX.Element {
             integration — PowerShell/bash/zsh).
           </div>
         )}
-        {[...blocks].reverse().map((b) => (
+        {[...blocks].reverse().map((b) => {
+          const badge = exitBadge(b)
+          const failed = b.exitCode !== undefined && b.exitCode !== 0
+          return (
           <div
             key={b.id}
             className="zy-block-card"
+            style={
+              failed
+                ? { borderLeft: '2px solid color-mix(in srgb, var(--danger) 50%, transparent)' }
+                : undefined
+            }
             onClick={() => sessionId && getTerminal(sessionId)?.engine.scrollToBlock(b.id)}
           >
             <div className="zy-block-card-head">
               <span
-                className={`zy-badge ${
-                  b.exitCode === undefined
-                    ? ''
-                    : b.exitCode === 0
-                      ? 'zy-badge--ok'
-                      : 'zy-badge--fail'
-                }`}
+                style={{
+                  fontFamily: 'var(--font-tech)',
+                  fontSize: 12,
+                  lineHeight: '18px',
+                  padding: '0 7px',
+                  borderRadius: 8,
+                  letterSpacing: '0.02em',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                  background: badge.background,
+                  color: badge.color
+                }}
               >
-                {b.exitCode === undefined ? '⋯' : b.exitCode === 0 ? '✓' : `✗ ${b.exitCode}`}
+                {badge.label}
               </span>
               <span className="zy-block-card-cmd" title={b.command}>
                 {b.command || '(команда неизвестна)'}
@@ -135,7 +167,8 @@ export function BlocksPanel(): React.JSX.Element {
               </span>
             </div>
           </div>
-        ))}
+          )
+        })}
       </div>
     </>
   )

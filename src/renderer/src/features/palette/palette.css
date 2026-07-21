@@ -18,6 +18,19 @@
   font-size: 14px;
   flex-shrink: 0;
 }
+/* Command-palette search glyph — red magnifying glass, per the CLI-agent mark. */
+.zy-palette-input-icon--accent {
+  color: var(--accent);
+}
+/* Right-aligned "ПАЛИТРА" mark in the input row. */
+.zy-palette-title {
+  flex-shrink: 0;
+  font-family: var(--font-tech);
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+}
 .zy-palette-input {
   flex: 1;
   border: none;
@@ -53,10 +66,10 @@
 
 .zy-palette-group-label {
   padding: 8px 8px 4px;
-  font-family: var(--font-ui);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
+  font-family: var(--font-tech);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--fg-faint);
 }
@@ -75,7 +88,7 @@
     box-shadow 0.1s ease;
 }
 .zy-palette-item:hover {
-  background: var(--bg-elev2);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
 }
 .zy-palette-item--selected {
   background: color-mix(in srgb, var(--accent) 16%, var(--bg-elev2));
@@ -91,6 +104,19 @@
 }
 .zy-palette-item--selected .zy-palette-item-icon {
   color: var(--accent);
+}
+/* Diamond bullet — replaces the plain "›" marker per the constructivist mark language. */
+.zy-palette-item-diamond {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  background: var(--accent);
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+  opacity: 0.55;
+}
+.zy-palette-item--selected .zy-palette-item-diamond {
+  opacity: 1;
 }
 .zy-palette-item-body {
   flex: 1;
@@ -119,6 +145,10 @@
 .zy-palette-item-chord {
   flex-shrink: 0;
 }
+.zy-palette-item-chord.zy-kbd {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
 .zy-palette-item-meta {
   flex-shrink: 0;
   display: flex;
@@ -133,11 +163,13 @@
 .zy-palette-footer {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 14px;
   padding: 8px 14px;
   border-top: 1px solid var(--border);
-  font-family: var(--font-body);
-  font-size: 10.5px;
+  font-family: var(--font-tech);
+  font-size: 13px;
+  letter-spacing: 0.02em;
   color: var(--fg-faint);
   flex-shrink: 0;
 }
@@ -145,6 +177,9 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
+}
+.zy-palette-footer-hint .zy-kbd {
+  font-size: 11px;
 }
 
 /* -------------------------------------------- history sidebar panel */

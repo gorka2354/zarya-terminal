@@ -257,6 +257,14 @@
   border-color: color-mix(in srgb, var(--danger) 35%, var(--border));
   opacity: 0.8;
 }
+.zy-ai-tool-kicker {
+  font-family: var(--font-tech);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+  margin-bottom: 5px;
+}
 .zy-ai-tool-head {
   display: flex;
   align-items: center;
@@ -284,8 +292,21 @@
   gap: 6px;
   margin-top: 8px;
 }
+.zy-ai-tool-actions .zy-btn {
+  font-family: var(--font-ui);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.zy-ai-tool-actions .zy-btn--accent {
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.28);
+}
+.zy-ai-tool-actions .zy-badge {
+  font-family: var(--font-tech);
+}
 .zy-ai-tool-status {
   font-size: 11px;
+  font-family: var(--font-tech);
   color: var(--fg-faint);
 }
 .zy-ai-tool-toggle {
@@ -297,7 +318,7 @@
   background: transparent;
   color: var(--fg-dim);
   font-size: 10.5px;
-  font-family: var(--font-ui);
+  font-family: var(--font-tech);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   cursor: pointer;
@@ -334,6 +355,61 @@
   border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent);
   color: var(--danger);
   font-size: 12px;
+}
+
+/* ------------------------------------------------ fuel status strip */
+.zy-ai-fuel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 10px;
+  padding: 4px 12px;
+  flex-shrink: 0;
+  background: var(--panel);
+  border: none;
+  border-top: 1px solid var(--border);
+  color: inherit;
+  font-family: inherit;
+  cursor: pointer;
+}
+.zy-ai-fuel:hover .zy-ai-fuel-value {
+  filter: brightness(1.15);
+}
+.zy-ai-fuel-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+}
+.zy-ai-fuel-icon {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.zy-ai-fuel-label {
+  font-family: var(--font-tech);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.zy-ai-fuel-value {
+  font-family: var(--font-tech);
+  font-size: 13px;
+  color: var(--accent-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.zy-ai-fuel-right {
+  font-family: var(--font-tech);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: var(--fg-faint);
+  flex-shrink: 0;
 }
 
 /* ------------------------------------------------ composer */
@@ -393,6 +469,28 @@
   align-items: flex-end;
   gap: 6px;
 }
+.zy-ai-star-btn {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--accent);
+  cursor: pointer;
+}
+.zy-ai-star-btn:hover {
+  border-color: var(--accent);
+}
+.zy-ai-star-btn--on {
+  background: var(--accent);
+  border-color: var(--accent-2);
+  color: #fff5e8;
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.28);
+}
 .zy-ai-textarea {
   flex: 1;
   resize: none;
@@ -401,21 +499,70 @@
   line-height: 1.4;
   font-family: var(--font-ui);
 }
+.zy-ai-model-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 34px;
+  max-width: 130px;
+  padding: 0 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg);
+  cursor: pointer;
+}
+.zy-ai-model-btn:hover {
+  border-color: var(--accent-2);
+}
+.zy-ai-model-icon {
+  color: var(--accent-2);
+  flex-shrink: 0;
+}
+.zy-ai-model-name {
+  min-width: 0;
+  font-family: var(--font-tech);
+  font-size: 15px;
+  color: var(--accent-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.zy-ai-model-caret {
+  flex-shrink: 0;
+  font-family: var(--font-tech);
+  font-size: 11px;
+  color: var(--fg-faint);
+}
 .zy-ai-send,
 .zy-ai-stop {
   flex-shrink: 0;
-  width: 30px;
-  height: 30px;
+  width: 36px;
+  height: 34px;
+  border-radius: var(--radius);
 }
 .zy-ai-send {
-  color: var(--accent);
+  background: var(--accent);
+  color: #fff5e8;
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.28);
+}
+.zy-ai-send:hover {
+  filter: brightness(1.1);
+  background: var(--accent);
 }
 .zy-ai-send:disabled {
   opacity: 0.4;
   cursor: default;
+  box-shadow: none;
 }
 .zy-ai-stop {
-  color: var(--danger);
+  background: var(--danger);
+  color: #fff5e8;
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.28);
+}
+.zy-ai-stop:hover {
+  filter: brightness(1.1);
+  background: var(--danger);
 }
 
 /* ------------------------------------------------ inline command bar */
