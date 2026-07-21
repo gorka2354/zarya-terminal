@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { registerCoreActions } from '@/actions/coreActions'
 import { ActivityBar } from '@/components/ActivityBar'
 import { BlocksPanel } from '@/components/BlocksPanel'
+import { LaunchPad } from '@/components/LaunchPad'
 import { RocketLaunch } from '@/components/RocketLaunch'
+import { StarBackdrop } from '@/components/StarBackdrop'
 import { SessionsPanel } from '@/components/SessionsPanel'
 import { SplitLayout } from '@/components/SplitLayout'
 import { StatusBar } from '@/components/StatusBar'
@@ -69,6 +71,7 @@ export default function App(): React.JSX.Element {
 
   return (
     <div className="zy-app">
+      <StarBackdrop />
       <Titlebar />
       <div className="zy-main">
         <ActivityBar />
@@ -83,6 +86,7 @@ export default function App(): React.JSX.Element {
       <HistoryOverlay />
       <AiCommandBar />
       <SettingsView />
+      <LaunchPad />
       <Toasts />
       <RocketLaunch />
     </div>

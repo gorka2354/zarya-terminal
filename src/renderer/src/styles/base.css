@@ -50,10 +50,13 @@
   --radius: 3px;
   --radius-sm: 2px;
 
-  /* typography — Ruslan Display (hero), Oswald (UI voice), PT Sans (body),
-     JetBrains Mono (terminal + data) */
-  --font-display: 'Ruslan Display', 'Oswald', Impact, sans-serif;
-  --font-ui: 'Oswald', 'PT Sans', 'Segoe UI', system-ui, sans-serif;
+  /* typography — pixel/CLI voice.
+     Pixelify Sans (logo + hero headings), Handjet (tech labels, bilingual
+     sub-labels, telemetry gauges), PT Sans (UI + body), JetBrains Mono
+     (terminal + data). */
+  --font-display: 'Pixelify Sans', 'Handjet', Impact, sans-serif;
+  --font-tech: 'Handjet', 'PT Sans', system-ui, sans-serif;
+  --font-ui: 'PT Sans', 'Segoe UI', system-ui, sans-serif;
   --font-body: 'PT Sans', 'Segoe UI', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', 'Cascadia Mono', Consolas, monospace;
 
@@ -307,7 +310,17 @@ body {
   position: relative;
   isolation: isolate;
 }
-/* Cosmic backdrop: starfield + faint orbital grid painted behind everything. */
+/* Animated starfield canvas (twinkle + shooting stars). */
+.zy-star-backdrop {
+  position: absolute;
+  inset: var(--titlebar-h) 0 var(--statusbar-h) 0;
+  width: auto;
+  height: auto;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* Faint static texture layer under the animated stars. */
 .zy-app::before {
   content: '';
   position: absolute;
@@ -317,7 +330,7 @@ body {
   background-image: var(--texture);
   background-size: var(--texture-size);
   background-repeat: repeat;
-  opacity: 0.9;
+  opacity: 0.5;
 }
 .zy-app::after {
   content: '';
@@ -396,27 +409,35 @@ body {
   padding-right: 10px;
 }
 .zy-logo-mark {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   border-radius: 3px;
   background: var(--accent-grad);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: #fff5e8;
   flex-shrink: 0;
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-2) 50%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent-2) 55%, transparent),
+    0 0 16px color-mix(in srgb, var(--accent) 45%, transparent);
 }
 .zy-logo-text {
   font-family: var(--font-display);
-  font-size: 18px;
+  font-weight: 700;
+  font-size: 20px;
   line-height: 1;
-  letter-spacing: 0.14em;
-  padding-top: 2px;
+  letter-spacing: 0.1em;
+  padding-top: 1px;
   background: var(--accent-grad);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+}
+.zy-logo-tag {
+  font-family: var(--font-tech);
+  font-size: 13px;
+  letter-spacing: 0.16em;
+  color: var(--fg-faint);
 }
 
 .zy-tabs {
@@ -1266,4 +1287,29 @@ body {
   .zy-rocket-stage--liftoff .zy-rocket-flame {
     animation: none;
   }
+}
+
+/* ============================================================ cosmic chrome */
+/* Frame panels are slightly translucent so the animated starfield twinkles
+   behind them; the terminal pane stays opaque for text legibility. */
+.zy-titlebar,
+.zy-statusbar,
+.zy-activitybar,
+.zy-sidebar {
+  background: color-mix(in srgb, var(--panel) 80%, transparent);
+  backdrop-filter: blur(2px);
+}
+.zy-tab--active {
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
+}
+
+/* Launch-pad status buttons — Handjet gold telemetry voice. */
+.zy-status-fuel,
+.zy-status-model {
+  font-family: var(--font-tech);
+  font-size: 13px;
+  letter-spacing: 0.06em;
+}
+.zy-status-model {
+  color: var(--accent-2);
 }

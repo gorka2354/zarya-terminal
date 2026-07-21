@@ -65,6 +65,13 @@ export function registerCoreActions(): void {
       }
     },
     {
+      id: 'app.launch-pad',
+      title: 'Пусковой комплекс (модель · тяга)',
+      category: 'AI',
+      keywords: 'launch pad model effort тяга двигатель поехали',
+      run: () => ui.set({ launchPadOpen: !useUiStore.getState().launchPadOpen })
+    },
+    {
       id: 'ai.command-bar',
       title: 'AI: сгенерировать команду (натуральный язык)',
       category: 'AI',

@@ -59,6 +59,12 @@ try {
   // Let the app boot (spawn a shell, apply theme, render chrome).
   await page.waitForTimeout(wait)
 
+  const ui = arg('ui', null) // e.g. --ui launchPadOpen
+  if (ui) {
+    await page.evaluate((k) => window.__zaryaSetUi?.({ [k]: true }), String(ui))
+    await page.waitForTimeout(500)
+  }
+
   if (rocket) {
     // Fire the launch overlay via the test hook, then grab a mid-liftoff frame.
     await page.evaluate(() => window.__zaryaLaunchRocket?.({ label: 'claude-fable-5' }))

@@ -16,6 +16,7 @@ interface UiState {
   paletteOpen: boolean
   quickOpenOpen: boolean
   aiBarOpen: boolean
+  launchPadOpen: boolean
   historyOverlayOpen: boolean
   /** Session id whose find-in-terminal bar is open. */
   searchOpenFor: string | null
@@ -37,6 +38,7 @@ export const useUiStore = create<UiState>((set, get) => ({
   paletteOpen: false,
   quickOpenOpen: false,
   aiBarOpen: false,
+  launchPadOpen: false,
   historyOverlayOpen: false,
   searchOpenFor: null,
   blocksPanelOpen: false,
@@ -54,3 +56,8 @@ export const useUiStore = create<UiState>((set, get) => ({
   },
   dismissToast: (id) => set({ toasts: get().toasts.filter((t) => t.id !== id) })
 }))
+
+// QA hook: lets the offscreen capture harness drive UI overlays (launch pad,
+// settings, palette) without native clicks. Harmless in production.
+;(window as unknown as { __zaryaSetUi?: (p: Partial<UiState>) => void }).__zaryaSetUi = (p) =>
+  useUiStore.getState().set(p)

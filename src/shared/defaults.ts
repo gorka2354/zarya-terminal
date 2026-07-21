@@ -5,6 +5,7 @@ export const DEFAULT_KEYBINDINGS: Record<string, string> = {
   'app.quick-open': 'Ctrl+P',
   'app.settings': 'Ctrl+,',
   'app.toggle-ai-panel': 'Ctrl+Shift+A',
+  'app.launch-pad': 'Ctrl+Alt+M',
   'app.toggle-sidebar': 'Ctrl+B',
   'ai.command-bar': 'Ctrl+I',
   'history.search': 'Ctrl+R',
@@ -63,6 +64,7 @@ export const DEFAULT_SETTINGS: Settings = {
     provider: 'anthropic',
     model: 'claude-sonnet-5',
     baseUrl: '',
+    effort: 'medium',
     temperature: 0.4,
     maxTokens: 4096,
     autoApprove: false,
@@ -86,6 +88,14 @@ export const DEFAULT_SETTINGS: Settings = {
 
 /** Ollama default endpoint (local inference). */
 export const OLLAMA_DEFAULT_URL = 'http://127.0.0.1:11434'
+
+/** Reasoning thrust (тяга) → temperature + maxTokens. */
+export const EFFORT_TUNING: Record<string, { temperature: number; maxTokens: number; label: string }> = {
+  low: { temperature: 0.15, maxTokens: 2048, label: 'НИЗКАЯ' },
+  medium: { temperature: 0.4, maxTokens: 4096, label: 'СРЕДНЯЯ' },
+  high: { temperature: 0.6, maxTokens: 6144, label: 'ВЫСОКАЯ' },
+  max: { temperature: 0.85, maxTokens: 8192, label: 'МАКСИМУМ' }
+}
 
 export const AI_MODEL_PRESETS: Record<string, string[]> = {
   anthropic: ['claude-sonnet-5', 'claude-opus-4-8', 'claude-haiku-4-5-20251001'],

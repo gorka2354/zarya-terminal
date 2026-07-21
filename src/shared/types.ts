@@ -149,11 +149,16 @@ export interface BlocksSettings {
 
 export type AiProviderKind = 'anthropic' | 'openai' | 'ollama' | 'openai-compat'
 
+/** Reasoning "thrust" (тяга) — 4 levels mapped to temperature + token budget. */
+export type AiEffort = 'low' | 'medium' | 'high' | 'max'
+
 export interface AiSettings {
   provider: AiProviderKind
   model: string
   /** Base URL override (required for ollama / openai-compat). */
   baseUrl: string
+  /** Reasoning thrust; drives temperature + maxTokens when set. */
+  effort: AiEffort
   temperature: number
   maxTokens: number
   /** Auto-approve agent command execution (dangerous, off by default). */

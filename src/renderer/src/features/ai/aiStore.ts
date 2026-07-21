@@ -7,6 +7,7 @@ import type {
   AiToolDef,
   BlockRecord
 } from '@shared/types'
+import { EFFORT_TUNING } from '@shared/defaults'
 import { onBus } from '@/lib/bus'
 import { uid } from '@/lib/uid'
 import { useBlocksStore } from '@/state/blocksStore'
@@ -344,6 +345,8 @@ export const useAiStore = create<AiState>((set, get) => {
     requestConv.set(requestId, convId)
     patchConversation(convId, (c) => ({ ...c, activeRequestId: requestId }))
 
+    // Reasoning thrust (тяга) drives temperature + token budget.
+    const tune = EFFORT_TUNING[settings.ai.effort] ?? EFFORT_TUNING.medium
     const req: AiChatRequest = {
       provider: settings.ai.provider,
       model: settings.ai.model,
@@ -351,8 +354,8 @@ export const useAiStore = create<AiState>((set, get) => {
       system,
       messages: fresh.messages,
       tools: fresh.agentMode ? [RUN_COMMAND_TOOL] : undefined,
-      temperature: settings.ai.temperature,
-      maxTokens: settings.ai.maxTokens
+      temperature: tune.temperature,
+      maxTokens: Math.max(settings.ai.maxTokens, tune.maxTokens)
     }
     window.zarya.ai.chat(requestId, req)
   }

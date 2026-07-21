@@ -78,11 +78,29 @@ export function Titlebar(): React.JSX.Element {
 
   return (
     <header className="zy-titlebar" onMouseEnter={() => setHover(true)}>
-      <div className="zy-logo" title="Заря — новый рассвет твоего терминала">
+      <div className="zy-logo" title="Заря · ОРБИТА-1 — космический CLI-агент">
         <span className="zy-logo-mark">
-          <Icon name="star" size={13} />
+          <svg width="16" height="16" viewBox="0 0 16 16" shapeRendering="crispEdges">
+            <g fill="#fff5e8">
+              <rect x="6" y="4" width="4" height="1" />
+              <rect x="5" y="5" width="6" height="1" />
+              <rect x="5" y="6" width="6" height="1" />
+              <rect x="5" y="7" width="6" height="1" />
+              <rect x="6" y="8" width="4" height="1" />
+              <rect x="3" y="2" width="1" height="1" />
+              <rect x="4" y="3" width="1" height="1" />
+              <rect x="12" y="2" width="1" height="1" />
+              <rect x="11" y="3" width="1" height="1" />
+              <rect x="3" y="10" width="1" height="1" />
+              <rect x="4" y="9" width="1" height="1" />
+              <rect x="12" y="10" width="1" height="1" />
+              <rect x="11" y="9" width="1" height="1" />
+            </g>
+            <rect x="6" y="5" width="1" height="1" fill="#4fd6d6" />
+          </svg>
         </span>
         <span className="zy-logo-text">ЗАРЯ</span>
+        <span className="zy-logo-tag">// ОРБИТА-1</span>
       </div>
 
       <div className="zy-tabs">

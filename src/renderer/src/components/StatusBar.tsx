@@ -137,12 +137,20 @@ export function StatusBar(): React.JSX.Element {
         </span>
       )}
       <button
-        className="zy-status-item zy-status-item--btn"
+        className="zy-status-item zy-status-item--btn zy-status-fuel"
         style={sepStyle}
-        title="AI-модель (клик — настройки)"
-        onClick={() => useUiStore.getState().set({ settingsOpen: true })}
+        title="Топливо · борт"
+        onClick={() => useUiStore.getState().set({ launchPadOpen: true })}
       >
-        <Icon name="sputnik" size={12.5} />
+        <Icon name="rocket" size={12.5} />∞ борт
+      </button>
+      <button
+        className="zy-status-item zy-status-item--btn zy-status-model"
+        style={sepStyle}
+        title="Двигатель · модель и тяга (пусковой комплекс)"
+        onClick={() => useUiStore.getState().set({ launchPadOpen: true })}
+      >
+        <Icon name="orbit" size={12.5} />
         {settings.ai.model}
       </button>
       {menu}

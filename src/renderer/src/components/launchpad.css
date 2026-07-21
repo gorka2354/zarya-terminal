@@ -1,0 +1,211 @@
+/* Пусковой комплекс — launch console popover. */
+.zy-lp-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(4, 6, 12, 0.5);
+  animation: zy-lp-fade 0.12s ease;
+}
+@keyframes zy-lp-fade {
+  from {
+    opacity: 0;
+  }
+}
+.zy-launchpad {
+  width: 320px;
+  background: var(--bg-elev1);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+  animation: zy-lp-pop 0.16s ease;
+}
+@keyframes zy-lp-pop {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+  }
+}
+
+.zy-lp-console {
+  position: relative;
+  background: #05070f;
+  border-bottom: 1px solid var(--border);
+}
+.zy-lp-canvas {
+  display: block;
+  width: 100%;
+  height: 120px;
+  image-rendering: pixelated;
+}
+.zy-lp-console-title {
+  position: absolute;
+  top: 6px;
+  left: 8px;
+  font-family: var(--font-tech);
+  font-size: 13px;
+  letter-spacing: 0.14em;
+  color: color-mix(in srgb, var(--accent-2) 80%, #fff);
+}
+.zy-lp-clock {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  font-family: var(--font-tech);
+  font-size: 15px;
+  color: var(--accent-2);
+  text-shadow: 0 0 8px color-mix(in srgb, var(--accent-2) 60%, transparent);
+}
+.zy-lp-scan {
+  position: absolute;
+  top: 7px;
+  left: 0;
+  right: 0;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  animation: zy-lp-scanline 5s linear infinite;
+  pointer-events: none;
+}
+@keyframes zy-lp-scanline {
+  from {
+    transform: translateY(-100%);
+  }
+  to {
+    transform: translateY(1400%);
+  }
+}
+
+.zy-lp-body {
+  padding: 11px 12px 13px;
+}
+.zy-lp-label {
+  font-family: var(--font-tech);
+  font-size: 13px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+  margin-bottom: 6px;
+}
+.zy-lp-label--inline {
+  margin-bottom: 0;
+  letter-spacing: 0.1em;
+}
+.zy-lp-models {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 12px;
+}
+.zy-lp-model {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 9px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--font-tech);
+  font-size: 16px;
+  letter-spacing: 0.03em;
+  color: var(--fg-dim);
+}
+.zy-lp-model:hover {
+  background: var(--bg-elev2);
+  color: var(--fg);
+}
+.zy-lp-model--on {
+  color: var(--fg);
+}
+.zy-lp-bullet {
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border: 1px solid var(--fg-faint);
+  border-radius: 50%;
+}
+.zy-lp-bullet--on {
+  border: none;
+  border-radius: 0;
+  background: var(--accent);
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+}
+.zy-lp-model-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zy-lp-thrust {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 13px;
+}
+.zy-lp-bars {
+  display: flex;
+  gap: 3px;
+  flex: 1;
+}
+.zy-lp-bar {
+  flex: 1;
+  height: 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+  background: transparent;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+}
+.zy-lp-bar:hover {
+  border-color: var(--accent-2);
+}
+.zy-lp-bar--on::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--accent-grad);
+}
+.zy-lp-thrust-label {
+  font-family: var(--font-tech);
+  font-size: 15px;
+  color: var(--accent-2);
+  min-width: 76px;
+  text-align: right;
+}
+
+.zy-lp-launch {
+  width: 100%;
+  height: 36px;
+  border: 1px solid color-mix(in srgb, var(--accent-2) 45%, transparent);
+  border-radius: 3px;
+  background: var(--accent);
+  color: #fff5e8;
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  box-shadow:
+    inset 0 -2px 0 rgba(0, 0, 0, 0.28),
+    0 0 14px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.zy-lp-launch:hover {
+  filter: brightness(1.1);
+}
+.zy-lp-launch:active {
+  transform: translateY(1px);
+}
+.zy-lp-hint {
+  margin-top: 8px;
+  text-align: center;
+  font-family: var(--font-tech);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: var(--fg-faint);
+}
