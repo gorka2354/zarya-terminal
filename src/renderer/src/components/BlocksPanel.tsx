@@ -5,6 +5,7 @@ import { useSessionsStore } from '@/state/sessionsStore'
 import { useUiStore } from '@/state/uiStore'
 import { getTerminal } from '@/terminal/terminalRegistry'
 import { aiExplainBlock } from '@/features/ai/aiBridge'
+import { Icon } from './Icon'
 
 /**
  * Command blocks of the active session as cards (Warp-style):
@@ -42,7 +43,7 @@ export function BlocksPanel(): React.JSX.Element {
           title="Закрыть"
           onClick={() => useUiStore.getState().set({ blocksPanelOpen: false })}
         >
-          ✕
+          <Icon name="close" size={14} />
         </button>
       </div>
       <div className="zy-sidebar-body">
@@ -89,7 +90,7 @@ export function BlocksPanel(): React.JSX.Element {
                     copy(b.command, 'Команда')
                   }}
                 >
-                  ⧉
+                  <Icon name="copy" size={13} />
                 </button>
                 <button
                   className="zy-icon-btn"
@@ -99,7 +100,7 @@ export function BlocksPanel(): React.JSX.Element {
                     copy(b.output, 'Вывод')
                   }}
                 >
-                  ≡
+                  <Icon name="download" size={13} />
                 </button>
                 <button
                   className="zy-icon-btn"
@@ -109,7 +110,7 @@ export function BlocksPanel(): React.JSX.Element {
                     exportMd(b)
                   }}
                 >
-                  ↧
+                  <Icon name="download" size={13} />
                 </button>
                 <button
                   className="zy-icon-btn"
@@ -119,7 +120,7 @@ export function BlocksPanel(): React.JSX.Element {
                     rerun(b)
                   }}
                 >
-                  ↻
+                  <Icon name="rerun" size={13} />
                 </button>
                 <button
                   className="zy-icon-btn"
@@ -129,7 +130,7 @@ export function BlocksPanel(): React.JSX.Element {
                     aiExplainBlock(b)
                   }}
                 >
-                  ✦
+                  <Icon name="sputnik" size={13} />
                 </button>
               </span>
             </div>

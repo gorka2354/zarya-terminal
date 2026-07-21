@@ -4,6 +4,9 @@ import { formatRelative, shortenPath } from '@/lib/ansi'
 import { fuzzyFilter } from '@/lib/fuzzy'
 import { useSessionsStore } from '@/state/sessionsStore'
 import { useContextMenu } from './ContextMenu'
+import { Icon, ShellGlyph } from './Icon'
+
+const sectionLabelStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 6 }
 
 /**
  * Saved sessions panel: pinned / favorites / recent.
@@ -32,11 +35,11 @@ export function SessionsPanel(): React.JSX.Element {
     open(e.clientX, e.clientY, [
       { label: 'Открыть', onClick: () => void store.restoreSaved(m.id) },
       {
-        label: m.pinned ? 'Открепить' : 'Закрепить ⭐',
+        label: m.pinned ? 'Открепить' : 'Закрепить',
         onClick: () => void store.toggleFlag(m.id, 'pinned')
       },
       {
-        label: m.favorite ? 'Убрать из избранного' : 'В избранное ♥',
+        label: m.favorite ? 'Убрать из избранного' : 'В избранное',
         onClick: () => void store.toggleFlag(m.id, 'favorite')
       },
       {
@@ -70,7 +73,9 @@ export function SessionsPanel(): React.JSX.Element {
         onContextMenu={(e) => openContext(e, m)}
         title={`${m.cwd}\n${m.blocksCount} блоков · ${formatRelative(m.updatedAt)}`}
       >
-        <span className="zy-item-icon">{m.shellIcon || '❯'}</span>
+        <span className="zy-item-icon">
+          <ShellGlyph code={m.shellIcon || '>_'} />
+        </span>
         <div className="zy-item-body">
           <div className="zy-item-title">
             {m.title}
@@ -90,7 +95,9 @@ export function SessionsPanel(): React.JSX.Element {
               void store.toggleFlag(m.id, 'pinned')
             }}
           >
-            <span className={`zy-item-flag${m.pinned ? ' zy-item-flag--on' : ''}`}>⭐</span>
+            <span className={`zy-item-flag${m.pinned ? ' zy-item-flag--on' : ''}`}>
+              <Icon name="pin" size={13} />
+            </span>
           </button>
           <button
             className="zy-icon-btn"
@@ -100,7 +107,9 @@ export function SessionsPanel(): React.JSX.Element {
               void store.toggleFlag(m.id, 'favorite')
             }}
           >
-            <span className={`zy-item-flag${m.favorite ? ' zy-item-flag--on' : ''}`}>♥</span>
+            <span className={`zy-item-flag${m.favorite ? ' zy-item-flag--on' : ''}`}>
+              <Icon name={m.favorite ? 'star' : 'star-outline'} size={13} />
+            </span>
           </button>
         </div>
       </div>
@@ -116,7 +125,7 @@ export function SessionsPanel(): React.JSX.Element {
           title="Новая сессия"
           onClick={() => void store.newTab()}
         >
-          +
+          <Icon name="plus" size={15} />
         </button>
       </div>
       <div className="zy-sidebar-search">
@@ -130,13 +139,19 @@ export function SessionsPanel(): React.JSX.Element {
       <div className="zy-sidebar-body">
         {pinned.length > 0 && (
           <>
-            <div className="zy-section-label">⭐ Закреплённые</div>
+            <div className="zy-section-label" style={sectionLabelStyle}>
+              <Icon name="pin" size={11} />
+              Закреплённые
+            </div>
             {pinned.map(renderItem)}
           </>
         )}
         {favorites.length > 0 && (
           <>
-            <div className="zy-section-label">♥ Избранные</div>
+            <div className="zy-section-label" style={sectionLabelStyle}>
+              <Icon name="star" size={11} />
+              Избранные
+            </div>
             {favorites.map(renderItem)}
           </>
         )}

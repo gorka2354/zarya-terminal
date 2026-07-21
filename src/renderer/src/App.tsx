@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { registerCoreActions } from '@/actions/coreActions'
 import { ActivityBar } from '@/components/ActivityBar'
 import { BlocksPanel } from '@/components/BlocksPanel'
+import { RocketLaunch } from '@/components/RocketLaunch'
 import { SessionsPanel } from '@/components/SessionsPanel'
 import { SplitLayout } from '@/components/SplitLayout'
 import { StatusBar } from '@/components/StatusBar'
@@ -20,6 +21,7 @@ import { initKeybindings } from '@/features/palette/keybindings'
 import SettingsView from '@/features/settings/SettingsView'
 import { applyTheme, getTheme } from '@/features/themes/themes'
 import WorkflowsPanel from '@/features/workflows/WorkflowsPanel'
+import { Icon } from '@/components/Icon'
 import { seedHistoryCache } from '@/terminal/historyCache'
 import { useSessionsStore } from '@/state/sessionsStore'
 import { useSettingsStore } from '@/state/settingsStore'
@@ -57,8 +59,10 @@ export default function App(): React.JSX.Element {
   if (!booted) {
     return (
       <div className="zy-splash">
-        <div className="zy-splash-mark">Z</div>
-        <div className="zy-splash-text">Zarya · рассвет близко</div>
+        <div className="zy-splash-mark">
+          <Icon name="rocket" size={34} strokeWidth={1.4} />
+        </div>
+        <div className="zy-splash-text">Заря · подготовка к старту</div>
       </div>
     )
   }
@@ -80,6 +84,7 @@ export default function App(): React.JSX.Element {
       <AiCommandBar />
       <SettingsView />
       <Toasts />
+      <RocketLaunch />
     </div>
   )
 }

@@ -167,7 +167,7 @@ function makeRuntime(partial: Partial<RuntimeSession> & { id: string }): Runtime
     customTitle: false,
     profileId: getSettings().terminal.defaultProfileId || 'auto',
     shellName: '',
-    shellIcon: '❯',
+    shellIcon: '>_',
     cwd: '',
     createdAt: Date.now(),
     status: 'starting',

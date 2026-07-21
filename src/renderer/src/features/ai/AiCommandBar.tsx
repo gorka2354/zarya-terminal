@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Icon } from '@/components/Icon'
 import { uid } from '@/lib/uid'
 import { useSessionsStore } from '@/state/sessionsStore'
 import { useSettingsStore } from '@/state/settingsStore'
@@ -133,7 +134,9 @@ export default function AiCommandBar(): React.JSX.Element | null {
     <div className="zy-ai-cmdbar-backdrop" onMouseDown={close}>
       <div className="zy-ai-cmdbar" onMouseDown={(e) => e.stopPropagation()}>
         <div className="zy-ai-cmdbar-row">
-          <span className="zy-ai-cmdbar-icon">✦</span>
+          <span className="zy-ai-cmdbar-icon">
+            <Icon name="sputnik" size={15} />
+          </span>
           <input
             ref={inputRef}
             className="zy-ai-cmdbar-input"

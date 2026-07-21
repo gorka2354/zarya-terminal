@@ -3,6 +3,7 @@ import { listLeaves, useSessionsStore } from '@/state/sessionsStore'
 import { useSettingsStore } from '@/state/settingsStore'
 import { useUiStore } from '@/state/uiStore'
 import { useContextMenu } from './ContextMenu'
+import { Icon, ShellGlyph } from './Icon'
 
 export function Titlebar(): React.JSX.Element {
   const tabs = useSessionsStore((s) => s.tabs)
@@ -17,12 +18,12 @@ export function Titlebar(): React.JSX.Element {
 
   const tabTitle = (tabId: string): { icon: string; title: string; pinned: boolean } => {
     const tab = tabs.find((t) => t.id === tabId)
-    if (!tab) return { icon: '❯', title: '—', pinned: false }
+    if (!tab) return { icon: '>_', title: '—', pinned: false }
     const session = sessions[tab.activeSessionId]
     const count = listLeaves(tab.layout).length
     return {
-      icon: session?.shellIcon || '❯',
-      title: (session?.title || 'Терминал') + (count > 1 ? ` ⊞${count}` : ''),
+      icon: session?.shellIcon || '>_',
+      title: (session?.title || 'Терминал') + (count > 1 ? ` · ${count}` : ''),
       pinned: session?.pinned ?? false
     }
   }
@@ -52,11 +53,11 @@ export function Titlebar(): React.JSX.Element {
         }
       },
       {
-        label: sessions[sid]?.pinned ? 'Открепить' : 'Закрепить ⭐',
+        label: sessions[sid]?.pinned ? 'Открепить' : 'Закрепить',
         onClick: () => void store.toggleFlag(sid, 'pinned')
       },
       {
-        label: sessions[sid]?.favorite ? 'Убрать из избранного' : 'В избранное ♥',
+        label: sessions[sid]?.favorite ? 'Убрать из избранного' : 'В избранное',
         onClick: () => void store.toggleFlag(sid, 'favorite')
       },
       { separator: true },
@@ -77,9 +78,11 @@ export function Titlebar(): React.JSX.Element {
 
   return (
     <header className="zy-titlebar" onMouseEnter={() => setHover(true)}>
-      <div className="zy-logo" title="Zarya — a new dawn for your terminal">
-        <span className="zy-logo-mark">Z</span>
-        <span className="zy-logo-text">ZARYA</span>
+      <div className="zy-logo" title="Заря — новый рассвет твоего терминала">
+        <span className="zy-logo-mark">
+          <Icon name="star" size={13} />
+        </span>
+        <span className="zy-logo-text">ЗАРЯ</span>
       </div>
 
       <div className="zy-tabs">
@@ -101,8 +104,14 @@ export function Titlebar(): React.JSX.Element {
                 openTabContext(e.clientX, e.clientY, tab.id)
               }}
             >
-              {pinned && <span className="zy-tab-pin">⭐</span>}
-              <span className="zy-tab-icon">{icon}</span>
+              {pinned && (
+                <span className="zy-tab-pin">
+                  <Icon name="pin" size={11} />
+                </span>
+              )}
+              <span className="zy-tab-icon">
+                <ShellGlyph code={icon} />
+              </span>
               <span className="zy-tab-title">{title}</span>
               <button
                 className="zy-tab-close"
@@ -112,7 +121,7 @@ export function Titlebar(): React.JSX.Element {
                   void store.closeTab(tab.id)
                 }}
               >
-                ✕
+                <Icon name="close" size={12} />
               </button>
             </div>
           )
@@ -126,7 +135,7 @@ export function Titlebar(): React.JSX.Element {
             openNewTabMenu(e.clientX, e.clientY)
           }}
         >
-          +
+          <Icon name="plus" size={15} />
         </button>
       </div>
 
@@ -136,21 +145,21 @@ export function Titlebar(): React.JSX.Element {
           title="Свернуть"
           onClick={() => window.zarya.app.windowCommand('minimize')}
         >
-          ─
+          <Icon name="minus" size={14} />
         </button>
         <button
           className="zy-win-btn"
           title={maximized ? 'Восстановить' : 'Развернуть'}
           onClick={() => window.zarya.app.windowCommand('maximize')}
         >
-          {maximized ? '❐' : '□'}
+          <Icon name={maximized ? 'restore' : 'maximize'} size={13} />
         </button>
         <button
           className="zy-win-btn zy-win-btn--close"
           title="Закрыть"
           onClick={() => window.zarya.app.windowCommand('close')}
         >
-          ✕
+          <Icon name="close" size={14} />
         </button>
       </div>
       {menu}

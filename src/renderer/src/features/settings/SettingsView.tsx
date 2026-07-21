@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AI_MODEL_PRESETS, DEFAULT_KEYBINDINGS, OLLAMA_DEFAULT_URL } from '@shared/defaults'
 import type { AiProviderKind, AiProviderStatus, AppInfo } from '@shared/types'
 import { getAllActions, onActionsChanged } from '@/lib/actionRegistry'
+import { Icon, type IconName } from '@/components/Icon'
+import { launchRocket } from '@/components/RocketLaunch'
 import { chordFromEvent, formatChord } from '@/features/palette/keybindings'
 import ThemeGallery from '@/features/themes/ThemeGallery'
 import { useSettingsStore } from '@/state/settingsStore'
@@ -10,15 +12,15 @@ import './settings.css'
 
 type TabId = 'appearance' | 'terminal' | 'blocks' | 'ai' | 'sessions' | 'editor' | 'keybindings' | 'about'
 
-const TABS: Array<{ id: TabId; label: string; icon: string }> = [
-  { id: 'appearance', label: 'Внешний вид', icon: '🎨' },
-  { id: 'terminal', label: 'Терминал', icon: '⌨️' },
-  { id: 'blocks', label: 'Блоки', icon: '🧱' },
-  { id: 'ai', label: 'AI', icon: '✦' },
-  { id: 'sessions', label: 'Сессии', icon: '💾' },
-  { id: 'editor', label: 'Редактор', icon: '📝' },
-  { id: 'keybindings', label: 'Клавиши', icon: '⌥' },
-  { id: 'about', label: 'О программе', icon: 'ℹ️' }
+const TABS: Array<{ id: TabId; label: string; icon: IconName }> = [
+  { id: 'appearance', label: 'Внешний вид', icon: 'star' },
+  { id: 'terminal', label: 'Терминал', icon: 'terminal' },
+  { id: 'blocks', label: 'Блоки', icon: 'split-h' },
+  { id: 'ai', label: 'AI', icon: 'sputnik' },
+  { id: 'sessions', label: 'Сессии', icon: 'save' },
+  { id: 'editor', label: 'Редактор', icon: 'edit' },
+  { id: 'keybindings', label: 'Клавиши', icon: 'gear' },
+  { id: 'about', label: 'О программе', icon: 'orbit' }
 ]
 
 const PROVIDERS: Array<{ id: AiProviderKind; label: string }> = [
@@ -62,7 +64,9 @@ export default function SettingsView(): React.JSX.Element | null {
               className={`zy-settings-nav-item${tab === t.id ? ' zy-settings-nav-item--active' : ''}`}
               onClick={() => setTab(t.id)}
             >
-              <span className="zy-settings-nav-icon">{t.icon}</span>
+              <span className="zy-settings-nav-icon">
+                <Icon name={t.icon} size={17} strokeWidth={1.5} />
+              </span>
               {t.label}
             </button>
           ))}
@@ -71,7 +75,7 @@ export default function SettingsView(): React.JSX.Element | null {
           <header className="zy-settings-content-header">
             <h2 className="zy-settings-content-title">{activeTab?.label}</h2>
             <button type="button" className="zy-icon-btn" onClick={close} title="Закрыть (Esc)">
-              ✕
+              <Icon name="close" size={16} />
             </button>
           </header>
           <div className="zy-settings-content-body">
@@ -567,7 +571,10 @@ function AiTab(): React.JSX.Element {
           <SelectField
             value={ai.provider}
             options={PROVIDERS.map((p) => ({ value: p.id, label: p.label }))}
-            onChange={(v) => void update({ ai: { provider: v } as never })}
+            onChange={(v) => {
+              void update({ ai: { provider: v } as never })
+              launchRocket({ label: PROVIDERS.find((p) => p.id === v)?.label ?? v })
+            }}
           />
         </Row>
         <Row title="Модель" desc="Можно ввести своё название или выбрать из списка пресетов.">
@@ -575,7 +582,10 @@ function AiTab(): React.JSX.Element {
             <ModelField
               value={ai.model}
               options={modelOptions}
-              onCommit={(v) => void update({ ai: { model: v } as never })}
+              onCommit={(v) => {
+                if (v && v !== ai.model) launchRocket({ label: v })
+                void update({ ai: { model: v } as never })
+              }}
             />
             {ai.provider === 'ollama' && (
               <button

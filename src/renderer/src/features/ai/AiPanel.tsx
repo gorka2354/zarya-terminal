@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { AiContentPart, AiMessage } from '@shared/types'
+import { Icon } from '@/components/Icon'
 import { useBlocksStore } from '@/state/blocksStore'
 import { useSessionsStore } from '@/state/sessionsStore'
 import { useSettingsStore } from '@/state/settingsStore'
@@ -186,7 +187,7 @@ export default function AiPanel(): React.JSX.Element {
               useAiStore.getState().newConversation({ sessionId: useSessionsStore.getState().activeSessionId() ?? undefined })
             }
           >
-            +
+            <Icon name="plus" size={14} />
           </button>
           {conversations.length > 1 && conv && (
             <button
@@ -196,7 +197,7 @@ export default function AiPanel(): React.JSX.Element {
                 if (window.confirm('Удалить эту беседу?')) useAiStore.getState().deleteConversation(conv.id)
               }}
             >
-              🗑
+              <Icon name="trash" size={14} />
             </button>
           )}
         </div>
@@ -206,10 +207,10 @@ export default function AiPanel(): React.JSX.Element {
             title="Агентный режим: AI сможет сам выполнять команды в терминале (с подтверждением, если авто-подтверждение выключено в настройках AI)"
             onClick={() => conv && useAiStore.getState().setAgentMode(!conv.agentMode, conv.id)}
           >
-            ⚡ Агент
+            <Icon name="bolt" size={13} /> Агент
           </button>
           <button className="zy-icon-btn" title="Закрыть" onClick={() => useUiStore.getState().set({ aiPanelOpen: false })}>
-            ✕
+            <Icon name="close" size={14} />
           </button>
         </div>
       </div>
@@ -303,7 +304,7 @@ export default function AiPanel(): React.JSX.Element {
           <div className="zy-ai-error">
             <span>⚠ {conv.error}</span>
             <button className="zy-icon-btn" onClick={() => useAiStore.getState().dismissError(conv.id)}>
-              ✕
+              <Icon name="close" size={12} />
             </button>
           </div>
         )}
@@ -315,7 +316,9 @@ export default function AiPanel(): React.JSX.Element {
             {conv.pendingContext.map((ctx) => (
               <span key={ctx.id} className="zy-ai-chip zy-ai-chip--attached">
                 {ctx.label}
-                <button onClick={() => useAiStore.getState().removeContext(ctx.id, conv.id)}>✕</button>
+                <button onClick={() => useAiStore.getState().removeContext(ctx.id, conv.id)}>
+                  <Icon name="close" size={10} />
+                </button>
               </span>
             ))}
           </div>
@@ -347,7 +350,7 @@ export default function AiPanel(): React.JSX.Element {
               title="Остановить"
               onClick={() => useAiStore.getState().abort(conv.id)}
             >
-              ■
+              <Icon name="stop" size={14} />
             </button>
           ) : (
             <button
@@ -356,7 +359,7 @@ export default function AiPanel(): React.JSX.Element {
               disabled={!conv}
               onClick={() => doSend(input)}
             >
-              ➤
+              <Icon name="send" size={15} />
             </button>
           )}
         </div>
@@ -384,7 +387,7 @@ function ToolCard(props: {
   return (
     <div className={`zy-ai-tool ${resolved && !denied ? 'zy-ai-tool--done' : ''} ${denied ? 'zy-ai-tool--denied' : ''}`}>
       <div className="zy-ai-tool-head">
-        <span className="zy-ai-tool-icon">▶</span>
+        <Icon name="run" size={10} className="zy-ai-tool-icon" />
         <code className="zy-ai-tool-cmd">{command || '—'}</code>
       </div>
       {reason && <div className="zy-ai-tool-reason">{reason}</div>}
@@ -409,7 +412,15 @@ function ToolCard(props: {
 
       {resolved && (
         <button className="zy-ai-tool-toggle" onClick={() => setExpanded((v) => !v)}>
-          {denied ? '✕ Отклонено' : `${expanded ? '▾' : '▸'} Результат`}
+          {denied ? (
+            <>
+              <Icon name="close" size={10} /> Отклонено
+            </>
+          ) : (
+            <>
+              <Icon name={expanded ? 'chevron-down' : 'chevron-right'} size={10} /> Результат
+            </>
+          )}
         </button>
       )}
       {resolved && !denied && expanded && <pre className="zy-ai-tool-out">{resultContent}</pre>}

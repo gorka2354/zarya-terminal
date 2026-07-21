@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Icon } from '@/components/Icon'
 import { useSessionsStore } from '@/state/sessionsStore'
 import { useUiStore } from '@/state/uiStore'
 import { getTerminal } from '@/terminal/terminalRegistry'
@@ -57,7 +58,7 @@ export default function WorkflowRunDialog(): React.JSX.Element | null {
         <div className="zy-sidebar-header">
           <span>{wf.name}</span>
           <button className="zy-icon-btn" title="Закрыть" onClick={close}>
-            ✕
+            <Icon name="close" size={14} strokeWidth={1.6} />
           </button>
         </div>
         <div className="wf-run-body">
@@ -88,9 +89,11 @@ export default function WorkflowRunDialog(): React.JSX.Element | null {
             Отмена
           </button>
           <button className="zy-btn" onClick={() => dispatch(false)}>
+            <Icon name="insert" size={13} strokeWidth={1.6} />
             Вставить
           </button>
           <button className="zy-btn zy-btn--accent" onClick={() => dispatch(true)}>
+            <Icon name="run" size={13} strokeWidth={1.6} />
             Запустить
           </button>
         </div>

@@ -44,6 +44,9 @@
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent);
 }
+.zy-theme-card--active .zy-theme-preview {
+  border-color: var(--accent) !important;
+}
 
 .zy-theme-preview {
   position: relative;
@@ -95,16 +98,31 @@
 }
 
 .zy-theme-card-name {
+  font-family: var(--font-ui);
   font-size: 12.5px;
   font-weight: 600;
+  letter-spacing: 0.02em;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.zy-theme-card .zy-badge {
+  font-family: var(--font-ui);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .zy-theme-card-check {
   align-self: flex-start;
-  font-size: 10.5px;
-  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--accent);
 }

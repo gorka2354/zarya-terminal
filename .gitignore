@@ -22,3 +22,6 @@ coverage/
 
 # gstack local artifacts / security reports
 .gstack/
+
+# local QA captures
+shots/

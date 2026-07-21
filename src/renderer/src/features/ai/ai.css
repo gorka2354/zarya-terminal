@@ -38,7 +38,7 @@
   color: var(--fg-dim);
   font-size: 12px;
   cursor: pointer;
-  font-family: inherit;
+  font-family: var(--font-body);
 }
 .zy-ai-example:hover {
   border-color: var(--accent);
@@ -63,19 +63,20 @@
   border-radius: var(--radius);
   font-size: 12.5px;
   line-height: 1.5;
+  font-family: var(--font-body);
 }
 .zy-ai-bubble--user {
-  background: var(--accent-grad);
-  color: #14100c;
+  background: var(--accent);
+  color: #fff5e8;
   white-space: pre-wrap;
   word-break: break-word;
-  border-bottom-right-radius: 3px;
+  border-bottom-right-radius: var(--radius-sm);
 }
 .zy-ai-bubble--assistant {
   background: var(--bg-elev1);
   border: 1px solid var(--border);
   color: var(--fg);
-  border-bottom-left-radius: 3px;
+  border-bottom-left-radius: var(--radius-sm);
   width: 100%;
 }
 
@@ -212,9 +213,11 @@
   border-bottom: 1px solid var(--border);
 }
 .zy-md-code-lang {
+  font-family: var(--font-ui);
   font-size: 10px;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.12em;
   color: var(--fg-faint);
 }
 .zy-md-code-actions {
@@ -230,7 +233,7 @@
   border: none;
   background: transparent;
   color: var(--fg-dim);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 11px;
 }
@@ -262,7 +265,6 @@
 }
 .zy-ai-tool-icon {
   color: var(--accent);
-  font-size: 9px;
   flex-shrink: 0;
 }
 .zy-ai-tool-cmd {
@@ -287,14 +289,19 @@
   color: var(--fg-faint);
 }
 .zy-ai-tool-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   margin-top: 8px;
   border: none;
   background: transparent;
   color: var(--fg-dim);
-  font-size: 11px;
+  font-size: 10.5px;
+  font-family: var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
   cursor: pointer;
   padding: 0;
-  font-family: inherit;
 }
 .zy-ai-tool-toggle:hover {
   color: var(--accent);
@@ -367,11 +374,12 @@
   cursor: default;
 }
 .zy-ai-chip--attached button {
+  display: inline-flex;
+  align-items: center;
   border: none;
   background: transparent;
   color: inherit;
   cursor: pointer;
-  font-size: 10px;
   padding: 0;
   opacity: 0.7;
   line-height: 1;
@@ -438,8 +446,9 @@
   gap: 9px;
 }
 .zy-ai-cmdbar-icon {
+  display: inline-flex;
+  align-items: center;
   color: var(--accent);
-  font-size: 14px;
   flex-shrink: 0;
 }
 .zy-ai-cmdbar-input {
@@ -460,6 +469,7 @@
 }
 .zy-ai-cmdbar-model {
   flex-shrink: 0;
+  font-family: var(--font-mono);
   font-size: 10.5px;
   color: var(--fg-faint);
   white-space: nowrap;

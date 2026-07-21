@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type * as Monaco from 'monaco-editor'
+import { Icon } from '@/components/Icon'
 import { getTheme } from '@/features/themes/themes'
 import { useSettingsStore } from '@/state/settingsStore'
 import { type OpenFile, useEditorStore } from './editorStore'
@@ -278,11 +279,11 @@ export default function EditorPane(): React.JSX.Element {
             }}
             title={f.path}
           >
-            <span className="zy-editor-tab-icon">{f.kind === 'diff' ? '⇄' : '📄'}</span>
-            <span className="zy-editor-tab-title">
-              {f.name}
-              {f.kind === 'diff' ? ' (diff)' : ''}
+            <span className="zy-editor-tab-icon">
+              <Icon name={f.kind === 'diff' ? 'split-h' : 'files'} size={13} />
             </span>
+            <span className="zy-editor-tab-title">{f.name}</span>
+            {f.kind === 'diff' && <span className="zy-editor-tab-badge">diff</span>}
             {f.dirty && <span className="zy-editor-tab-dot" title="Есть несохранённые изменения" />}
             <button
               className="zy-tab-close"
@@ -292,7 +293,7 @@ export default function EditorPane(): React.JSX.Element {
                 closeFile(f.id)
               }}
             >
-              ×
+              <Icon name="close" size={12} />
             </button>
           </div>
         ))}

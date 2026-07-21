@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { HistoryEntry } from '@shared/types'
 import { formatRelative, shortenPath } from '@/lib/ansi'
+import { Icon } from '@/components/Icon'
 import { useSessionsStore } from '@/state/sessionsStore'
 import { useUiStore } from '@/state/uiStore'
 import { getTerminal } from '@/terminal/terminalRegistry'
@@ -89,7 +90,9 @@ export default function HistoryOverlay(): React.JSX.Element | null {
     >
       <div className="zy-modal zy-modal--wide" role="dialog" aria-label="История команд">
         <div className="zy-palette-input-row">
-          <span className="zy-palette-input-icon">⏱</span>
+          <span className="zy-palette-input-icon">
+            <Icon name="history" size={15} strokeWidth={1.6} />
+          </span>
           <input
             ref={inputRef}
             className="zy-palette-input zy-palette-input--mono"

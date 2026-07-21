@@ -10,7 +10,11 @@ import { SettingsStore } from './settingsStore'
 import { WorkflowStore } from './workflowStore'
 
 // Same userData in dev and production (dev would otherwise use "Electron").
-app.setPath('userData', join(app.getPath('appData'), 'Zarya'))
+// ZARYA_USER_DATA isolates a throwaway instance (visual-QA harness / offscreen
+// capture) so it never touches the user's real sessions or single-instance lock.
+const userDataOverride = process.env.ZARYA_USER_DATA
+app.setPath('userData', userDataOverride || join(app.getPath('appData'), 'Zarya'))
+const isolatedInstance = !!userDataOverride
 
 let mainWindow: BrowserWindow | null = null
 let quitConfirmed = false
@@ -138,7 +142,7 @@ function createWindow(): void {
   }
 }
 
-const gotLock = app.requestSingleInstanceLock()
+const gotLock = isolatedInstance || app.requestSingleInstanceLock()
 if (!gotLock) {
   app.quit()
 } else {

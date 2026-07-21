@@ -34,14 +34,16 @@
   padding: 0 6px 0 9px;
   max-width: 190px;
   min-width: 96px;
-  border-radius: 7px 7px 0 0;
+  border-radius: var(--radius) var(--radius) 0 0;
   background: transparent;
   color: var(--fg-dim);
   font-size: 12px;
   cursor: default;
+  position: relative;
   border: 1px solid transparent;
   border-bottom: none;
   flex-shrink: 0;
+  transition: background-color 0.12s ease, color 0.12s ease;
 }
 .zy-editor-tab:hover {
   background: var(--bg-elev1);
@@ -52,9 +54,24 @@
   color: var(--fg);
   border-color: var(--border);
 }
+.zy-editor-tab--active::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: 7px;
+  right: 7px;
+  height: 2px;
+  background: var(--accent-grad);
+}
 .zy-editor-tab-icon {
-  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
+  color: var(--fg-faint);
+}
+.zy-editor-tab--active .zy-editor-tab-icon {
+  color: var(--accent-2);
 }
 .zy-editor-tab-title {
   flex: 1;
@@ -62,6 +79,23 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.zy-editor-tab-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 15px;
+  padding: 0 5px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elev2);
+  color: var(--fg-faint);
+  font-family: var(--font-ui);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  flex-shrink: 0;
 }
 .zy-editor-tab-dot {
   width: 7px;
@@ -119,27 +153,52 @@
   font-size: 12.5px;
   white-space: nowrap;
   overflow: hidden;
+  transition: background-color 0.1s ease, color 0.1s ease;
 }
 .zy-tree-row:hover {
   background: var(--bg-elev1);
   color: var(--fg);
 }
 .zy-tree-arrow {
-  width: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
   flex-shrink: 0;
-  text-align: center;
   color: var(--fg-faint);
-  font-size: 9px;
 }
 .zy-tree-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
-  font-size: 12px;
+  color: var(--fg-faint);
+}
+.zy-tree-row:hover .zy-tree-icon {
+  color: var(--fg-dim);
 }
 .zy-tree-name {
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+/* Indent guide — thin rule under each expanded directory, aligned to its
+   arrow column via --zy-indent-x (set inline per depth in FileTree.tsx). */
+.zy-tree-indent {
+  position: relative;
+}
+.zy-tree-indent::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--zy-indent-x, 14px);
+  width: 1px;
+  background: var(--border);
+  opacity: 0.7;
+  pointer-events: none;
 }
 .zy-tree-ext-dot {
   width: 6px;

@@ -31,7 +31,7 @@ export const DEFAULT_KEYBINDINGS: Record<string, string> = {
 
 export const DEFAULT_SETTINGS: Settings = {
   appearance: {
-    themeId: 'zarya-dawn',
+    themeId: 'zarya-cosmos',
     fontFamily: "'JetBrains Mono', 'Cascadia Mono', Consolas, monospace",
     fontSize: 14,
     lineHeight: 1.35,

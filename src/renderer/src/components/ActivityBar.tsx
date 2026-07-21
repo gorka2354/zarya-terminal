@@ -1,10 +1,11 @@
 import { useUiStore, type SidebarView } from '@/state/uiStore'
+import { Icon, type IconName } from './Icon'
 
-const ITEMS: Array<{ view: Exclude<SidebarView, null>; icon: string; title: string }> = [
-  { view: 'sessions', icon: '▤', title: 'Сессии' },
-  { view: 'files', icon: '🗀', title: 'Файлы' },
-  { view: 'workflows', icon: '⚡', title: 'Workflows' },
-  { view: 'history', icon: '🕘', title: 'История (Time Machine)' }
+const ITEMS: Array<{ view: Exclude<SidebarView, null>; icon: IconName; title: string }> = [
+  { view: 'sessions', icon: 'sessions', title: 'Сессии' },
+  { view: 'files', icon: 'files', title: 'Файлы' },
+  { view: 'workflows', icon: 'workflows', title: 'Workflows' },
+  { view: 'history', icon: 'history', title: 'История (Хроника)' }
 ]
 
 export function ActivityBar(): React.JSX.Element {
@@ -21,7 +22,7 @@ export function ActivityBar(): React.JSX.Element {
           title={item.title}
           onClick={() => ui.toggleSidebar(item.view)}
         >
-          {item.icon}
+          <Icon name={item.icon} size={21} strokeWidth={1.5} />
         </button>
       ))}
       <div className="zy-activity-spacer" />
@@ -30,14 +31,14 @@ export function ActivityBar(): React.JSX.Element {
         title="AI-ассистент (Ctrl+Shift+A)"
         onClick={() => ui.set({ aiPanelOpen: !aiPanelOpen })}
       >
-        ✦
+        <Icon name="sputnik" size={21} strokeWidth={1.5} />
       </button>
       <button
         className="zy-activity-btn"
         title="Настройки (Ctrl+,)"
         onClick={() => ui.set({ settingsOpen: true })}
       >
-        ⚙
+        <Icon name="gear" size={21} strokeWidth={1.5} />
       </button>
     </nav>
   )

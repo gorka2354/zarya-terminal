@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { HistoryEntry } from '@shared/types'
 import { formatRelative, shortenPath } from '@/lib/ansi'
+import { Icon } from '@/components/Icon'
 import { useSessionsStore } from '@/state/sessionsStore'
 import { useUiStore } from '@/state/uiStore'
 import { getTerminal } from '@/terminal/terminalRegistry'
@@ -126,7 +127,7 @@ export default function HistoryPanel(): React.JSX.Element {
                   insert(entry, true)
                 }}
               >
-                ↻
+                <Icon name="rerun" size={14} strokeWidth={1.6} />
               </button>
               <button
                 className="zy-icon-btn"
@@ -136,7 +137,7 @@ export default function HistoryPanel(): React.JSX.Element {
                   copy(entry)
                 }}
               >
-                ⧉
+                <Icon name="copy" size={14} strokeWidth={1.6} />
               </button>
             </div>
           </div>

@@ -1,3 +1,4 @@
+import { Icon } from '@/components/Icon'
 import { useSettingsStore } from '@/state/settingsStore'
 import { getThemes } from './themes'
 import './themes.css'
@@ -53,7 +54,12 @@ export default function ThemeGallery(): React.JSX.Element {
                 {t.type === 'dark' ? 'тёмная' : 'светлая'}
               </span>
             </div>
-            {active && <span className="zy-theme-card-check">✓ активна</span>}
+            {active && (
+              <span className="zy-theme-card-check">
+                <Icon name="check" size={11} strokeWidth={1.8} />
+                активна
+              </span>
+            )}
           </button>
         )
       })}

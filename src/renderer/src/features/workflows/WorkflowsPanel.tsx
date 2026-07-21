@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { WorkflowDef, WorkflowParam } from '@shared/types'
 import { fuzzyFilter } from '@/lib/fuzzy'
+import { Icon } from '@/components/Icon'
 import { useUiStore } from '@/state/uiStore'
 import { extractParamNames, useWorkflowsStore } from './workflowsStore'
 import WorkflowRunDialog from './WorkflowRunDialog'
@@ -132,7 +133,7 @@ export default function WorkflowsPanel(): React.JSX.Element {
             useWorkflowsStore.getState().openRunDialog(wf.id)
           }}
         >
-          ▶
+          <Icon name="run" size={14} strokeWidth={1.6} />
         </button>
         {!wf.builtin && (
           <>
@@ -144,7 +145,7 @@ export default function WorkflowsPanel(): React.JSX.Element {
                 openEdit(wf)
               }}
             >
-              ✎
+              <Icon name="edit" size={14} strokeWidth={1.6} />
             </button>
             <button
               className="zy-icon-btn"
@@ -154,7 +155,7 @@ export default function WorkflowsPanel(): React.JSX.Element {
                 removeWorkflow(wf)
               }}
             >
-              ✕
+              <Icon name="trash" size={14} strokeWidth={1.6} />
             </button>
           </>
         )}
@@ -167,7 +168,7 @@ export default function WorkflowsPanel(): React.JSX.Element {
       <div className="zy-sidebar-header">
         <span>Workflows</span>
         <button className="zy-icon-btn" title="Новый workflow" onClick={openCreate}>
-          +
+          <Icon name="plus" size={15} strokeWidth={1.6} />
         </button>
       </div>
       <div className="zy-sidebar-search">
@@ -274,7 +275,7 @@ function WorkflowFormModal({
         <div className="zy-sidebar-header">
           <span>{local.id ? 'Редактировать workflow' : 'Новый workflow'}</span>
           <button className="zy-icon-btn" title="Закрыть" onClick={onClose}>
-            ✕
+            <Icon name="close" size={14} strokeWidth={1.6} />
           </button>
         </div>
         <div className="wf-form-body">

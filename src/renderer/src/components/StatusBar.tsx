@@ -7,6 +7,9 @@ import { useSettingsStore } from '@/state/settingsStore'
 import { useUiStore } from '@/state/uiStore'
 import { getTerminal } from '@/terminal/terminalRegistry'
 import { useContextMenu } from './ContextMenu'
+import { Icon, ShellGlyph } from './Icon'
+
+const sepStyle: React.CSSProperties = { borderLeft: '1px solid var(--border)', borderRadius: 0 }
 
 export function StatusBar(): React.JSX.Element {
   const sessions = useSessionsStore((s) => s.sessions)
@@ -71,7 +74,7 @@ export function StatusBar(): React.JSX.Element {
       ...(cwd
         ? [
             {
-              label: bookmarks.includes(cwd) ? '★ Убрать закладку' : '☆ Закладка на эту папку',
+              label: bookmarks.includes(cwd) ? 'Убрать закладку' : 'Закладка на эту папку',
               onClick: () => {
                 const next = bookmarks.includes(cwd)
                   ? bookmarks.filter((b) => b !== cwd)
@@ -87,7 +90,7 @@ export function StatusBar(): React.JSX.Element {
           ]
         : []),
       ...bookmarks.map((b) => ({
-        label: `📁 ${shortenPath(b, 44)}`,
+        label: shortenPath(b, 44),
         onClick: () => writeCd(b)
       }))
     ]
@@ -99,15 +102,18 @@ export function StatusBar(): React.JSX.Element {
     <footer className="zy-statusbar">
       {cwd && (
         <button className="zy-status-item zy-status-item--btn" onClick={openBookmarks} title={cwd}>
-          📁 {shortenPath(cwd, 46)}
+          <Icon name="folder" size={12.5} />
+          <span style={{ fontFamily: 'var(--font-mono)' }}>{shortenPath(cwd, 46)}</span>
         </button>
       )}
       {git && (
         <span
           className="zy-status-item"
+          style={sepStyle}
           title={`Ветка ${git.branch} · изменений: ${git.dirty}${git.ahead ? ` · ↑${git.ahead}` : ''}${git.behind ? ` · ↓${git.behind}` : ''}`}
         >
-          ⎇ {git.branch}
+          <Icon name="branch" size={12.5} />
+          {git.branch}
           {git.dirty > 0 && <span style={{ color: 'var(--warn)' }}>±{git.dirty}</span>}
           {git.ahead > 0 && <span>↑{git.ahead}</span>}
           {git.behind > 0 && <span>↓{git.behind}</span>}
@@ -115,13 +121,14 @@ export function StatusBar(): React.JSX.Element {
       )}
       <div className="zy-status-spacer" />
       {savedAt && (
-        <span className="zy-status-item" title="Автосохранение сессий">
-          💾 {formatRelative(savedAt)}
+        <span className="zy-status-item" style={sepStyle} title="Автосохранение сессий">
+          <Icon name="save" size={12.5} />
+          {formatRelative(savedAt)}
         </span>
       )}
       {session && (
-        <span className="zy-status-item">
-          {session.shellIcon} {session.shellName || '…'}
+        <span className="zy-status-item" style={sepStyle}>
+          <ShellGlyph code={session.shellIcon} size={13} /> {session.shellName || '…'}
           {session.integration && (
             <span title="Shell integration активна" style={{ color: 'var(--success)' }}>
               ●
@@ -131,10 +138,12 @@ export function StatusBar(): React.JSX.Element {
       )}
       <button
         className="zy-status-item zy-status-item--btn"
+        style={sepStyle}
         title="AI-модель (клик — настройки)"
         onClick={() => useUiStore.getState().set({ settingsOpen: true })}
       >
-        ✦ {settings.ai.model}
+        <Icon name="sputnik" size={12.5} />
+        {settings.ai.model}
       </button>
       {menu}
     </footer>

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DirEntry, GitStatus } from '@shared/types'
 import { type MenuItem, useContextMenu } from '@/components/ContextMenu'
+import { Icon } from '@/components/Icon'
 import { shortenPath } from '@/lib/ansi'
 import { onBus } from '@/lib/bus'
 import { useSessionsStore } from '@/state/sessionsStore'
@@ -264,10 +265,10 @@ export default function FileTree(): React.JSX.Element {
             title="Следовать за активным терминалом"
             onClick={() => setFollowTerminal((v) => !v)}
           >
-            📌
+            <Icon name="pin" size={14} />
           </button>
           <button className="zy-icon-btn" title="Обновить" onClick={() => void refresh()} disabled={!root}>
-            ↻
+            <Icon name="refresh" size={14} />
           </button>
         </div>
       </div>
@@ -359,22 +360,31 @@ function TreeEntry({ entry, depth, nodes, getGitCode, onToggle, onOpenFile, onCo
         onClick={() => (entry.isDir ? onToggle(entry.path) : onOpenFile(entry.path))}
         onContextMenu={(e) => onContextMenu(e, entry, gitCode)}
       >
-        <span className="zy-tree-arrow">{entry.isDir ? (expanded ? '▾' : '▸') : ''}</span>
-        <span className="zy-tree-icon">{entry.isDir ? '📁' : '📄'}</span>
+        <span className="zy-tree-arrow">
+          {entry.isDir && <Icon name={expanded ? 'chevron-down' : 'chevron-right'} size={10} strokeWidth={1.8} />}
+        </span>
+        <span className="zy-tree-icon">
+          <Icon name={entry.isDir ? (expanded ? 'folder-open' : 'folder') : 'files'} size={13} />
+        </span>
         <span className="zy-tree-name">{entry.name}</span>
         {dotColor && <span className="zy-tree-ext-dot" style={{ background: dotColor }} />}
         {gitCode && <span className={`zy-tree-status-dot zy-tree-status-dot--${gitCode}`} title={gitCode} />}
       </div>
       {entry.isDir && expanded && (
-        <TreeChildren
-          parentPath={entry.path}
-          depth={depth + 1}
-          nodes={nodes}
-          getGitCode={getGitCode}
-          onToggle={onToggle}
-          onOpenFile={onOpenFile}
-          onContextMenu={onContextMenu}
-        />
+        <div
+          className="zy-tree-indent"
+          style={{ '--zy-indent-x': `${8 + depth * 14 + 6}px` } as React.CSSProperties}
+        >
+          <TreeChildren
+            parentPath={entry.path}
+            depth={depth + 1}
+            nodes={nodes}
+            getGitCode={getGitCode}
+            onToggle={onToggle}
+            onOpenFile={onOpenFile}
+            onContextMenu={onContextMenu}
+          />
+        </div>
       )}
     </>
   )

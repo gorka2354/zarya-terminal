@@ -5,6 +5,7 @@ import { useSessionsStore } from '@/state/sessionsStore'
 import { useSettingsStore } from '@/state/settingsStore'
 import { useUiStore } from '@/state/uiStore'
 import { useContextMenu } from './ContextMenu'
+import { Icon } from './Icon'
 
 interface Props {
   sessionId: string
@@ -118,13 +119,13 @@ function TermSearchBar({ sessionId }: { sessionId: string }): React.JSX.Element 
         }}
       />
       <button className="zy-icon-btn" title="Назад (Shift+Enter)" onClick={() => find(-1)}>
-        ↑
+        <Icon name="chevron-up" size={13} />
       </button>
       <button className="zy-icon-btn" title="Далее (Enter)" onClick={() => find(1)}>
-        ↓
+        <Icon name="chevron-down" size={13} />
       </button>
       <button className="zy-icon-btn" title="Закрыть (Esc)" onClick={close}>
-        ✕
+        <Icon name="close" size={13} />
       </button>
     </div>
   )
