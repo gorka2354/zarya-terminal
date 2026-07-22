@@ -17,6 +17,13 @@ const PIXEL_SMALL = new Set(
     .filter(([, g]) => g.length <= 8)
     .map(([k]) => k)
 )
+// Names whose big (16×16) glyph belongs to the activity bar — Icon uses a small
+// dedicated variant so it stays 16px inline instead of ballooning to 32px.
+const PIXEL_ALIAS: Record<string, string> = {
+  sputnik: 'sputnik-sm',
+  gear: 'gear-sm',
+  history: 'history-sm'
+}
 
 export type IconName =
   | 'star'
@@ -245,8 +252,9 @@ const PATHS: Record<IconName, React.ReactNode> = {
 
 export function Icon({ name, size = 16, className, strokeWidth = 1.6, title }: Props): React.JSX.Element {
   // Pixel glyph if we have one at this small scale; otherwise the line glyph.
-  if (PIXEL_SMALL.has(name)) {
-    return <PixelIcon name={name as PixelIconName} className={className} title={title} />
+  const pixelName = PIXEL_ALIAS[name] ?? (PIXEL_SMALL.has(name) ? name : undefined)
+  if (pixelName) {
+    return <PixelIcon name={pixelName as PixelIconName} className={className} title={title} />
   }
   return (
     <svg
