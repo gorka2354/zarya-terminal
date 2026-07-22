@@ -37,8 +37,11 @@
 }
 .zy-lp-canvas {
   display: block;
-  width: 100%;
-  height: 120px;
+  /* Exact ×2 of the 132×48 buffer → PX=2, the same pixel size as every other
+     pixel element (consistent, Stardew-style). */
+  width: 264px;
+  height: 96px;
+  margin: 0 auto;
   image-rendering: pixelated;
 }
 .zy-lp-console-title {
