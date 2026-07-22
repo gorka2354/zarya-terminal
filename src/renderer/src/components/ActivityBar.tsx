@@ -1,7 +1,7 @@
 import { useUiStore, type SidebarView } from '@/state/uiStore'
-import { Icon, type IconName } from './Icon'
+import { PixelIcon, type PixelIconName } from './PixelIcon'
 
-const ITEMS: Array<{ view: Exclude<SidebarView, null>; icon: IconName; title: string }> = [
+const ITEMS: Array<{ view: Exclude<SidebarView, null>; icon: PixelIconName; title: string }> = [
   { view: 'sessions', icon: 'sessions', title: 'Сессии' },
   { view: 'files', icon: 'files', title: 'Файлы' },
   { view: 'workflows', icon: 'workflows', title: 'Workflows' },
@@ -22,7 +22,7 @@ export function ActivityBar(): React.JSX.Element {
           title={item.title}
           onClick={() => ui.toggleSidebar(item.view)}
         >
-          <Icon name={item.icon} size={21} strokeWidth={1.5} />
+          <PixelIcon name={item.icon} />
         </button>
       ))}
       <div className="zy-activity-spacer" />
@@ -31,14 +31,14 @@ export function ActivityBar(): React.JSX.Element {
         title="AI-ассистент (Ctrl+Shift+A)"
         onClick={() => ui.set({ aiPanelOpen: !aiPanelOpen })}
       >
-        <Icon name="sputnik" size={21} strokeWidth={1.5} />
+        <PixelIcon name="sputnik" />
       </button>
       <button
         className="zy-activity-btn"
         title="Настройки (Ctrl+,)"
         onClick={() => ui.set({ settingsOpen: true })}
       >
-        <Icon name="gear" size={21} strokeWidth={1.5} />
+        <PixelIcon name="gear" />
       </button>
     </nav>
   )
