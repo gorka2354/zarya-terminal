@@ -1,9 +1,9 @@
 /* Mission feed — the design's unified command/agent scroll (center stage). */
 .zy-mf {
   --zy-cyan: #4fd6d6;
-  position: relative;
-  z-index: 1;
-  flex: 1;
+  position: absolute;
+  inset: 0;
+  z-index: 2;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -403,16 +403,13 @@
   color: var(--accent-2);
 }
 
-/* offscreen engine host: keeps the xterm(s) alive (PTY I/O, OSC parsing,
-   output capture) while the mission feed owns the visible surface. */
+/* Live xterm layer — fills the workspace. In «Блоки» mode the opaque mission
+   feed overlays it (z-index below); in «Терминал» mode the feed is unmounted so
+   the interactive terminal shows through. */
 .zy-engine-host {
-  position: fixed;
-  left: -100000px;
-  top: 0;
-  width: 1000px;
-  height: 640px;
+  position: absolute;
+  inset: 0;
   overflow: hidden;
-  z-index: -1;
-  pointer-events: none;
-  opacity: 0;
+  z-index: 1;
+  display: flex;
 }

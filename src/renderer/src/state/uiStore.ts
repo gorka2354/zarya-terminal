@@ -17,6 +17,8 @@ interface UiState {
   quickOpenOpen: boolean
   aiBarOpen: boolean
   launchPadOpen: boolean
+  /** Raw interactive terminal (type directly, run vim/claude/ssh) vs the block feed. */
+  rawTerminal: boolean
   historyOverlayOpen: boolean
   /** Session id whose find-in-terminal bar is open. */
   searchOpenFor: string | null
@@ -39,6 +41,7 @@ export const useUiStore = create<UiState>((set, get) => ({
   quickOpenOpen: false,
   aiBarOpen: false,
   launchPadOpen: false,
+  rawTerminal: false,
   historyOverlayOpen: false,
   searchOpenFor: null,
   blocksPanelOpen: false,

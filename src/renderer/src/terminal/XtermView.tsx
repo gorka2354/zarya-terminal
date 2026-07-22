@@ -39,6 +39,7 @@ export function XtermView({ sessionId, active, visible }: Props): React.JSX.Elem
   const shadowRef = useRef<{ buf: string; reliable: boolean }>({ buf: '', reliable: true })
   const session = useSessionsStore((s) => s.sessions[sessionId])
   const settings = useSettingsStore((s) => s.settings)
+  const rawTerminal = useUiStore((s) => s.rawTerminal)
   const status = session?.status
 
   // ------------------------------------------------------------- lifecycle
@@ -60,10 +61,10 @@ export function XtermView({ sessionId, active, visible }: Props): React.JSX.Elem
       fontWeightBold: '600',
       minimumContrastRatio: 1,
       scrollOnUserInput: true,
-      // Display-only terminal: the single input is the ask-agent bar below
-      // (a `$`-prefixed line is written to the pty). Keeps the design's
-      // one-input model and avoids a confusing second CLI cursor.
-      disableStdin: true
+      // In «Блоки» mode the terminal is display-only (single input is the
+      // ask-agent bar). In «Терминал» mode stdin is enabled so you can type
+      // directly and run interactive tools (vim / claude / ssh). Toggled live.
+      disableStdin: !useUiStore.getState().rawTerminal
     })
 
     const fit = new FitAddon()
@@ -372,6 +373,18 @@ export function XtermView({ sessionId, active, visible }: Props): React.JSX.Elem
     handle?.fit()
     if (active) handle?.focus()
   }, [visible, active, sessionId])
+
+  // Toggle interactive stdin live; entering «Терминал» mode re-fits and focuses
+  // so you can type into vim/claude/ssh right away.
+  useEffect(() => {
+    const handle = getTerminal(sessionId)
+    if (!handle) return
+    handle.term.options.disableStdin = !rawTerminal
+    handle.fit()
+    if (rawTerminal && visible && active) {
+      requestAnimationFrame(() => handle.focus())
+    }
+  }, [rawTerminal, visible, active, sessionId])
 
   const pad = settings.appearance.terminalPadding
 

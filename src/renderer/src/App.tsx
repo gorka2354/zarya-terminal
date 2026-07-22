@@ -111,6 +111,7 @@ function MainContent(): React.JSX.Element {
   const tabs = useSessionsStore((s) => s.tabs)
   const activeTabId = useSessionsStore((s) => s.activeTabId)
   const activeSessionId = useSessionsStore((s) => s.activeSessionId())
+  const rawTerminal = useUiStore((s) => s.rawTerminal)
   const editorFiles = useEditorStore((s) => s.files)
   const [editorWidth, setEditorWidth] = useState(46) // percent
   const editorOpen = editorFiles.length > 0
@@ -119,21 +120,23 @@ function MainContent(): React.JSX.Element {
     <div className="zy-content">
       <div className="zy-terminal-col">
         <div className="zy-workspace">
-          {/* The xterm engines live off-screen: they still own PTY I/O, shell
-              integration (OSC 133), and per-command output capture that feeds
-              the blocks store — but the visible surface is the mission feed. */}
-          <div className="zy-engine-host" aria-hidden>
+          {/* The live xterm(s): PTY I/O, shell integration (OSC 133), output
+              capture. Visible & typeable in «Терминал» mode (run vim/claude/…);
+              in «Блоки» mode it sits behind the opaque mission-feed overlay and
+              is display-only. */}
+          <div className={`zy-engine-host${rawTerminal ? ' zy-engine-host--raw' : ''}`}>
             {tabs.map((tab) => (
               <SplitLayout key={tab.id} tab={tab} visible={tab.id === activeTabId} />
             ))}
           </div>
-          {activeSessionId ? (
-            <MissionFeed sessionId={activeSessionId} />
-          ) : (
-            <div className="zy-empty" style={{ margin: 'auto' }}>
-              Нет открытых сессий — создай новую вкладку (Ctrl+Shift+T)
-            </div>
-          )}
+          {!rawTerminal &&
+            (activeSessionId ? (
+              <MissionFeed sessionId={activeSessionId} />
+            ) : (
+              <div className="zy-empty" style={{ margin: 'auto' }}>
+                Открой терминал кнопкой + в сайдбаре (Ctrl+Shift+T)
+              </div>
+            ))}
         </div>
         <AgentBar />
       </div>

@@ -123,6 +123,13 @@ export function MissionFeed({ sessionId }: { sessionId: string }): React.JSX.Ele
         <div className="zy-mf-head-spacer" />
         <button
           className="zy-mf-head-btn"
+          title="Интерактивный терминал — набирать напрямую, запускать claude / vim / ssh"
+          onClick={() => useUiStore.getState().set({ rawTerminal: true })}
+        >
+          <Icon name="terminal" size={13} />
+        </button>
+        <button
+          className="zy-mf-head-btn"
           title="Разделить вправо"
           onClick={() => void useSessionsStore.getState().splitActive('row')}
         >

@@ -143,6 +143,13 @@ function PaneHeader({ sessionId }: { sessionId: string }): React.JSX.Element {
       <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
         <button
           className="zy-icon-btn"
+          title="Вернуться к блокам (Warp-фид)"
+          onClick={() => useUiStore.getState().set({ rawTerminal: false })}
+        >
+          <Icon name="sessions" size={13} />
+        </button>
+        <button
+          className="zy-icon-btn"
           title="Разделить вправо"
           onClick={() => void useSessionsStore.getState().splitActive('row')}
         >
