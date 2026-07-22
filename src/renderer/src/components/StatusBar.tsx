@@ -7,7 +7,7 @@ import { useSettingsStore } from '@/state/settingsStore'
 import { useUiStore } from '@/state/uiStore'
 import { getTerminal } from '@/terminal/terminalRegistry'
 import { useContextMenu } from './ContextMenu'
-import { Icon, ShellGlyph } from './Icon'
+import { Icon } from './Icon'
 
 const sepStyle: React.CSSProperties = { borderLeft: '1px solid var(--border)', borderRadius: 0 }
 
@@ -121,14 +121,17 @@ export function StatusBar(): React.JSX.Element {
       )}
       <div className="zy-status-spacer" />
       {savedAt && (
-        <span className="zy-status-item" style={sepStyle} title="Автосохранение сессий">
-          <Icon name="save" size={12.5} />
-          {formatRelative(savedAt)}
+        <span
+          className="zy-status-item zy-status-saved"
+          style={sepStyle}
+          title="Автосохранение сессий"
+        >
+          сохранено · {formatRelative(savedAt)}
         </span>
       )}
       {session && (
         <span className="zy-status-item" style={sepStyle}>
-          <ShellGlyph code={session.shellIcon} size={13} /> {session.shellName || '…'}
+          {session.shellName || '…'}
           {session.integration && (
             <span title="Shell integration активна" style={{ color: 'var(--success)' }}>
               ●

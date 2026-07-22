@@ -111,7 +111,7 @@ export function SessionsPanel(): React.JSX.Element {
             {m.title}
             {isOpen && <span className="zy-badge zy-badge--ok" style={{ marginLeft: 6 }}>открыта</span>}
           </div>
-          <div className="zy-item-sub">
+          <div className="zy-item-sub zy-item-sub--path">
             {m.lastCommand ? `❯ ${m.lastCommand}` : shortenPath(m.cwd, 34)} ·{' '}
             {formatRelative(m.updatedAt)}
           </div>
@@ -153,10 +153,11 @@ export function SessionsPanel(): React.JSX.Element {
           display: flex;
           align-items: center;
           justify-content: center;
-          gap: 6px;
+          gap: 7px;
           width: 100%;
-          margin-top: 8px;
-          padding: 8px 10px;
+          height: 34px;
+          margin-top: 12px;
+          padding: 0 10px;
           border: 1px dashed var(--border-strong);
           border-radius: var(--radius);
           background: transparent;

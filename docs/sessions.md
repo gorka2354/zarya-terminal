@@ -93,18 +93,18 @@ sequenceDiagram
     OS->>Main: BrowserWindow 'close' event
     Main->>Main: e.preventDefault()
     Main->>Renderer: send('app:prepare-quit', { reason })
-    Main->>Main: start 2000ms safety timer
+    Main->>Main: start 8000ms safety timer
     par renderer flushes
         Renderer->>Renderer: snapshotAll() every open session
         Renderer->>Renderer: saveWorkspace({ tabs, activeTabId })
         Renderer->>Main: send('app:ready-to-quit')
     and safety net
-        Main->>Main: if 2000ms elapse first, quit anyway
+        Main->>Main: if 8000ms elapse first, quit anyway
     end
     Main->>Main: quitConfirmed = true; window.destroy()
 ```
 
-Whichever happens first — the renderer acking `app:ready-to-quit`, or the 2-second
+Whichever happens first — the renderer acking `app:ready-to-quit`, or the 8-second
 timer — the window is destroyed. The timer exists so a hung/crashed renderer can never
 prevent the app from closing; because autosave already runs on a short interval, the
 worst case is losing at most `autosaveSec` seconds of scrollback, not a corrupt or

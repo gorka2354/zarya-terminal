@@ -167,7 +167,10 @@ See [docs/sessions.md](sessions.md) for the full persistence model, including th
 
 All of it lives under `app.getPath('userData')`, pinned in `src/main/index.ts` to
 `%APPDATA%/Zarya` on Windows (same path in dev and packaged builds, so dev doesn't
-fork state into an `Electron` folder):
+fork state into an `Electron` folder). Setting the `ZARYA_USER_DATA` environment
+variable overrides this path to point a throwaway instance at its own directory —
+used by the offscreen visual-QA harness (see below) so it never touches your real
+sessions, settings, or single-instance lock:
 
 ```
 %APPDATA%/Zarya/
@@ -184,3 +187,65 @@ fork state into an `Electron` folder):
 
 Session ids are sanitized to `[a-zA-Z0-9_-]` before being used as filenames
 (`sessionStore.ts`), so a malformed id can't escape the `sessions/` directory.
+
+## Renderer UI shell (cosmic redesign)
+
+The renderer's chrome is a "space CLI agent" layer composed in `App.tsx`. Beyond the
+functional panels, three presentational pieces give the app its launch-console feel;
+all three are pure renderer concerns (no IPC, no main-process involvement):
+
+- **`StarBackdrop.tsx`** — a full-window `<canvas>` starfield mounted behind
+  everything (`pointer-events: none`). Draws ~50–180 pixel stars (density scaled to
+  window area, DPR-capped) that drift and twinkle, plus the occasional shooting star.
+  Reads `documentElement.dataset.themeType` to invert to dark stars on light themes,
+  and freezes under `prefers-reduced-motion`.
+- **`RocketLaunch.tsx`** — a self-dismissing (~1.9s) full-screen "ПОЕХАЛИ!" liftoff
+  overlay (canvas starfield + exhaust embers via `requestAnimationFrame`, DOM/CSS for
+  crisp countdown/title, `root.zy-shake` screen shake). Fired imperatively through a
+  tiny listener registry — `launchRocket({ label })` — from anywhere (engine/thrust
+  commit, provider/model change). It also exposes a `window.__zaryaLaunchRocket` test
+  hook so the QA harness can trigger it without native clicks.
+- **`LaunchPad.tsx`** — the "Пусковой комплекс" model + thrust picker overlay (see
+  [docs/ai.md](ai.md)); its visibility is a `uiStore` flag (`launchPadOpen`), toggled
+  by the `app.launch-pad` action.
+
+**Fonts** are bundled offline via `@fontsource/*` (Cyrillic + Latin subsets, imported
+in `src/renderer/src/main.tsx`) so nothing is fetched at runtime: **Pixelify Sans**
+and **Handjet** carry the pixel/dot-matrix voice (logo, tech labels, telemetry),
+**Oswald** + **Ruslan Display** the constructivist headings, and **PT Sans** /
+**JetBrains Mono** the body and terminal text.
+
+## Offscreen visual-QA harness
+
+`scripts/shoot.mjs` captures the renderer's real pixels **independently of the
+screen** — it works regardless of which monitor the window is on, whether it's
+focused, or what covers it, because it reads the renderer surface rather than the
+desktop. It drives the built app (`out/main/index.js`, so `npm run build` is a
+prerequisite) through Playwright's Electron driver:
+
+```mermaid
+flowchart LR
+    Shoot[scripts/shoot.mjs] -->|electron.launch, env ZARYA_USER_DATA=tmpdir| App[Zarya main process]
+    Shoot -->|seed settings.json: themeId, restoreOnLaunch: none| Tmp[(throwaway userData)]
+    App --> Win[firstWindow]
+    Shoot -->|page.evaluate window.__zaryaSetUi / __zaryaLaunchRocket| Win
+    Win -->|page.screenshot| Png[shots/*.png]
+```
+
+- It launches with `ZARYA_USER_DATA` set to a fresh `mkdtemp` directory, so the
+  isolated instance boots with **no restored sessions and no user state**, and
+  bypasses the single-instance lock (`isolatedInstance` in `src/main/index.ts`) — a
+  running Zarya and the harness coexist without fighting over the lock.
+- A `settings.json` is seeded into that temp dir to force a `--theme` and
+  `restoreOnLaunch: 'none'`; `--rocket` fires the launch overlay via the test hook
+  and grabs a mid-liftoff frame; `--ui <flag>` flips a `uiStore` flag (e.g.
+  `launchPadOpen`) through `window.__zaryaSetUi` before capture.
+- The temp `userData` is removed in a `finally` block, so runs leave nothing behind.
+
+Run it directly with Node (there is no npm alias):
+
+```
+node scripts/shoot.mjs --theme zarya-cosmos --out shots/cosmos.png
+node scripts/shoot.mjs --theme zarya-plakat --rocket --out shots/rocket.png
+node scripts/shoot.mjs --ui launchPadOpen --out shots/launchpad.png
+```

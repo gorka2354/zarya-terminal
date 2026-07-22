@@ -4,6 +4,7 @@ import { useSettingsStore } from '@/state/settingsStore'
 import { useUiStore } from '@/state/uiStore'
 import { useContextMenu } from './ContextMenu'
 import { Icon, ShellGlyph } from './Icon'
+import { getThemes } from '@/features/themes/themes'
 
 export function Titlebar(): React.JSX.Element {
   const tabs = useSessionsStore((s) => s.tabs)
@@ -156,6 +157,21 @@ export function Titlebar(): React.JSX.Element {
           <Icon name="plus" size={15} />
         </button>
       </div>
+
+      <button
+        className="zy-theme-btn"
+        title="Сменить тему борта"
+        onClick={() => {
+          const themes = getThemes()
+          const cur = useSettingsStore.getState().settings.appearance.themeId
+          const i = themes.findIndex((t) => t.id === cur)
+          const next = themes[(i + 1) % themes.length]
+          void useSettingsStore.getState().update({ appearance: { themeId: next.id } as never })
+        }}
+      >
+        <Icon name="orbit" size={13} strokeWidth={1.5} />
+        ТЕМА
+      </button>
 
       <div className="zy-win-controls">
         <button

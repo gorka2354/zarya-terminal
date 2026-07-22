@@ -32,9 +32,10 @@ function decorateCodeBlocks(html: string): string {
     const codeText = codeEl?.textContent ?? pre.textContent ?? ''
     const langMatch = /language-(\S+)/.exec(codeEl?.className ?? '')
     const lang = langMatch?.[1] ?? 'text'
+    const isDiff = lang === 'diff' || lang === 'patch'
 
     const wrapper = doc.createElement('div')
-    wrapper.className = 'zy-md-code'
+    wrapper.className = isDiff ? 'zy-md-code zy-md-patch' : 'zy-md-code'
     wrapper.setAttribute('data-code', encodeURIComponent(codeText))
 
     const bar = doc.createElement('div')
@@ -42,7 +43,13 @@ function decorateCodeBlocks(html: string): string {
 
     const langSpan = doc.createElement('span')
     langSpan.className = 'zy-md-code-lang'
-    langSpan.textContent = lang
+    // Patch header: «ПАТЧ · <file>» if the diff names a target file.
+    if (isDiff) {
+      const fileMatch = /^\+\+\+\s+b?\/?(\S+)/m.exec(codeText) || /^diff --git a\/\S+ b\/(\S+)/m.exec(codeText)
+      langSpan.textContent = fileMatch ? `ПАТЧ · ${fileMatch[1]}` : 'ПАТЧ'
+    } else {
+      langSpan.textContent = lang
+    }
     bar.appendChild(langSpan)
 
     const actions = doc.createElement('span')
@@ -57,6 +64,20 @@ function decorateCodeBlocks(html: string): string {
       actions.appendChild(btn)
     }
     bar.appendChild(actions)
+
+    // Color diff lines (+ added / - removed), skipping the +++/--- headers.
+    if (isDiff && codeEl) {
+      const lines = codeText.replace(/\n$/, '').split('\n')
+      codeEl.textContent = ''
+      for (const line of lines) {
+        const span = doc.createElement('span')
+        span.className = 'zy-diff-line'
+        if (line.startsWith('+') && !line.startsWith('+++')) span.classList.add('zy-diff-add')
+        else if (line.startsWith('-') && !line.startsWith('---')) span.classList.add('zy-diff-del')
+        span.textContent = line + '\n'
+        codeEl.appendChild(span)
+      }
+    }
 
     pre.parentNode?.insertBefore(wrapper, pre)
     wrapper.appendChild(bar)

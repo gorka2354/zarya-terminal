@@ -14,6 +14,7 @@ menu-only commands.
 | `app.quick-open` | Quick open (file) | `Ctrl+P` |
 | `app.settings` | Settings | `Ctrl+,` |
 | `app.toggle-ai-panel` | Toggle AI panel | `Ctrl+Shift+A` |
+| `app.launch-pad` | Launch Pad — AI engine (model) · thrust (effort) | `Ctrl+Alt+M` |
 | `app.toggle-sidebar` | Toggle sidebar | `Ctrl+B` |
 | `ai.command-bar` | AI: natural language → command | `Ctrl+I` |
 | `history.search` | Global command history (Time Machine) | `Ctrl+R` |

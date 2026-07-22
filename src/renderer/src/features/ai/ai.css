@@ -48,36 +48,70 @@
 .zy-ai-row {
   display: flex;
 }
-.zy-ai-row--user {
-  justify-content: flex-end;
-}
 .zy-ai-row--assistant {
   flex-direction: column;
   align-items: flex-start;
   gap: 6px;
 }
 
-.zy-ai-bubble {
-  max-width: 92%;
-  padding: 8px 11px;
-  border-radius: var(--radius);
-  font-size: 12.5px;
-  line-height: 1.5;
-  font-family: var(--font-body);
+/* one request/response round: divider + the user's request echoed as a CLI line */
+.zy-ai-round {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
-.zy-ai-bubble--user {
-  background: var(--accent);
-  color: #fff5e8;
+.zy-ai-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.zy-ai-divider-line {
+  height: 1px;
+  flex: 1;
+  background: var(--border);
+}
+.zy-ai-divider-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  font-family: var(--font-tech);
+  font-size: 13px;
+  letter-spacing: 0.12em;
+  color: var(--accent);
+}
+.zy-ai-echo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+.zy-ai-echo-star {
+  color: var(--accent);
+}
+.zy-ai-echo-cwd {
+  color: #4fd6d6;
+}
+.zy-ai-echo-caret {
+  color: var(--fg-faint);
+}
+.zy-ai-echo-text {
+  color: var(--fg);
   white-space: pre-wrap;
   word-break: break-word;
-  border-bottom-right-radius: var(--radius-sm);
 }
-.zy-ai-bubble--assistant {
-  background: var(--bg-elev1);
-  border: 1px solid var(--border);
-  color: var(--fg);
-  border-bottom-left-radius: var(--radius-sm);
+
+/* assistant response text: plain CLI-style prose, no bubble/border */
+.zy-ai-answer {
   width: 100%;
+  padding-left: 16px;
+  font-family: var(--font-body);
+  color: var(--fg-dim);
+}
+.zy-ai-answer .zy-md {
+  color: inherit;
 }
 
 .zy-ai-cursor {
@@ -93,8 +127,10 @@
 
 .zy-ai-thinking {
   display: inline-flex;
+  align-items: center;
   gap: 4px;
-  padding: 11px 13px;
+  padding-left: 16px;
+  height: 20px;
 }
 .zy-ai-dot {
   width: 5px;
@@ -244,11 +280,12 @@
 
 /* tool_use cards (agent mode) */
 .zy-ai-tool {
+  max-width: 560px;
   width: 100%;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   background: var(--bg-elev1);
-  padding: 8px 10px;
+  padding: 9px 11px;
 }
 .zy-ai-tool--done {
   border-color: color-mix(in srgb, var(--success) 35%, var(--border));
@@ -257,18 +294,11 @@
   border-color: color-mix(in srgb, var(--danger) 35%, var(--border));
   opacity: 0.8;
 }
-.zy-ai-tool-kicker {
-  font-family: var(--font-tech);
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--fg-faint);
-  margin-bottom: 5px;
-}
 .zy-ai-tool-head {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
+  flex-wrap: wrap;
   min-width: 0;
 }
 .zy-ai-tool-icon {
@@ -281,51 +311,123 @@
   color: var(--fg);
   word-break: break-all;
 }
+.zy-ai-tool-kicker {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-family: var(--font-tech);
+  font-size: 12px;
+  color: var(--fg-faint);
+  white-space: nowrap;
+}
 .zy-ai-tool-reason {
   margin-top: 4px;
   font-size: 11px;
   color: var(--fg-dim);
 }
+
+/* awaiting-decision actions: ВЫПОЛНИТЬ / ОТКЛОНИТЬ */
 .zy-ai-tool-actions {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-top: 8px;
+  margin-top: 9px;
 }
-.zy-ai-tool-actions .zy-btn {
+.zy-ai-tool-btn {
+  height: 28px;
+  padding: 0 14px;
+  border-radius: var(--radius);
+  cursor: pointer;
   font-family: var(--font-ui);
   font-weight: 700;
-  text-transform: uppercase;
+  font-size: 11px;
   letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
-.zy-ai-tool-actions .zy-btn--accent {
+.zy-ai-tool-btn--approve {
+  border: 1px solid color-mix(in srgb, var(--accent-2) 45%, transparent);
+  background: var(--accent);
+  color: #fff5e8;
   box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.28);
 }
-.zy-ai-tool-actions .zy-badge {
-  font-family: var(--font-tech);
+.zy-ai-tool-btn--approve:hover {
+  filter: brightness(1.1);
 }
-.zy-ai-tool-status {
-  font-size: 11px;
-  font-family: var(--font-tech);
-  color: var(--fg-faint);
+.zy-ai-tool-btn--approve:active {
+  transform: translateY(1px);
 }
-.zy-ai-tool-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin-top: 8px;
-  border: none;
+.zy-ai-tool-btn--deny {
+  border: 1px solid var(--border);
   background: transparent;
   color: var(--fg-dim);
-  font-size: 10.5px;
-  font-family: var(--font-tech);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  cursor: pointer;
-  padding: 0;
 }
-.zy-ai-tool-toggle:hover {
-  color: var(--accent);
+.zy-ai-tool-btn--deny:hover {
+  border-color: var(--border-strong);
+  color: var(--fg);
+}
+
+/* executing */
+.zy-ai-tool-exec {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 9px;
+}
+.zy-ai-tool-spinner {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: zy-ai-spin 0.7s linear infinite;
+}
+@keyframes zy-ai-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.zy-ai-tool-status {
+  font-family: var(--font-tech);
+  font-size: 13px;
+  color: var(--fg-faint);
+}
+
+/* denied */
+.zy-ai-tool-denied {
+  margin-top: 8px;
+  font-family: var(--font-tech);
+  font-size: 13px;
+  color: var(--danger);
+}
+
+/* done: "✓ <summary>" — click to expand full output */
+.zy-ai-tool-done {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  margin-top: 8px;
+  padding: 6px 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--success);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.zy-ai-tool-done:hover {
+  filter: brightness(1.15);
+}
+.zy-ai-tool-done-text {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .zy-ai-tool-out {
   margin-top: 6px;
@@ -647,4 +749,26 @@
 }
 .zy-ai-cmdbar-hint .zy-kbd {
   margin-right: 4px;
+}
+
+/* Diff patch card (```diff blocks) — red/green lines like the design's ПАТЧ. */
+.zy-md-patch .zy-md-code-lang {
+  color: var(--fg-faint);
+  letter-spacing: 0.12em;
+}
+.zy-md-patch pre {
+  padding: 0;
+}
+.zy-diff-line {
+  display: block;
+  padding: 0 10px;
+  white-space: pre;
+}
+.zy-diff-add {
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+}
+.zy-diff-del {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
 }

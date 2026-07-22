@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { AiContentPart, AiMessage } from '@shared/types'
 import { Icon } from '@/components/Icon'
+import { shortenPath } from '@/lib/ansi'
 import { useBlocksStore } from '@/state/blocksStore'
 import { useSessionsStore } from '@/state/sessionsStore'
 import { useSettingsStore } from '@/state/settingsStore'
@@ -29,12 +30,25 @@ function targetSessionId(sessionId: string | undefined): string | null {
   return sessionId || useSessionsStore.getState().activeSessionId()
 }
 
+/** Short "✓ …" summary line for a settled tool result (first non-empty line, truncated). */
+function summarizeToolResult(content: string | undefined): string {
+  if (!content) return 'готово'
+  const firstLine = content.split('\n').find((l) => l.trim().length > 0)?.trim()
+  if (!firstLine) return 'готово'
+  return firstLine.length > 72 ? `${firstLine.slice(0, 72)}…` : firstLine
+}
+
 export default function AiPanel(): React.JSX.Element {
   const conversations = useAiStore((s) => s.conversations)
   const activeId = useAiStore((s) => s.activeId)
   const conv = conversations.find((c) => c.id === activeId)
   const autoApprove = useSettingsStore((s) => s.settings.ai.autoApprove)
   const model = useSettingsStore((s) => s.settings.ai.model)
+  const echoCwd = useSessionsStore((s) => {
+    const sid = conv?.sessionId || s.activeSessionId()
+    return sid ? s.sessions[sid]?.cwd : undefined
+  })
+  const echoCwdDisplay = echoCwd ? shortenPath(echoCwd, 26) : '~'
 
   const [input, setInput] = useState('')
   const listRef = useRef<HTMLDivElement>(null)
@@ -243,8 +257,21 @@ export default function AiPanel(): React.JSX.Element {
                 .join('\n\n')
               if (!text) return null
               return (
-                <div key={mi} className="zy-ai-row zy-ai-row--user">
-                  <div className="zy-ai-bubble zy-ai-bubble--user">{text}</div>
+                <div key={mi} className="zy-ai-round">
+                  <div className="zy-ai-divider">
+                    <span className="zy-ai-divider-line" />
+                    <span className="zy-ai-divider-label">
+                      <Icon name="bolt" size={12} />
+                      ОТВЕТ АГЕНТА
+                    </span>
+                    <span className="zy-ai-divider-line" />
+                  </div>
+                  <div className="zy-ai-echo">
+                    <span className="zy-ai-echo-star">✦</span>
+                    <span className="zy-ai-echo-cwd">{echoCwdDisplay}</span>
+                    <span className="zy-ai-echo-caret">❯</span>
+                    <span className="zy-ai-echo-text">{text}</span>
+                  </div>
                 </div>
               )
             }
@@ -255,7 +282,7 @@ export default function AiPanel(): React.JSX.Element {
                   if (p.type === 'text') {
                     if (!p.text && !(conv.streaming && isLastPart)) return null
                     return (
-                      <div key={pi} className="zy-ai-bubble zy-ai-bubble--assistant">
+                      <div key={pi} className="zy-ai-answer">
                         <div className="zy-md" dangerouslySetInnerHTML={{ __html: renderMarkdown(p.text) }} />
                         {conv.streaming && isLastPart && <span className="zy-ai-cursor">▍</span>}
                       </div>
@@ -294,7 +321,7 @@ export default function AiPanel(): React.JSX.Element {
         )}
         {showThinking && (
           <div className="zy-ai-row zy-ai-row--assistant">
-            <div className="zy-ai-bubble zy-ai-bubble--assistant zy-ai-thinking">
+            <div className="zy-ai-thinking">
               <span className="zy-ai-dot" />
               <span className="zy-ai-dot" />
               <span className="zy-ai-dot" />
@@ -420,42 +447,38 @@ function ToolCard(props: {
 
   return (
     <div className={`zy-ai-tool ${resolved && !denied ? 'zy-ai-tool--done' : ''} ${denied ? 'zy-ai-tool--denied' : ''}`}>
-      <div className="zy-ai-tool-kicker">Агент хочет выполнить</div>
       <div className="zy-ai-tool-head">
-        <Icon name="run" size={10} className="zy-ai-tool-icon" />
+        <Icon name="run" size={11} className="zy-ai-tool-icon" />
         <code className="zy-ai-tool-cmd">{command || '—'}</code>
+        <span className="zy-ai-tool-kicker">агент хочет выполнить</span>
       </div>
       {reason && <div className="zy-ai-tool-reason">{reason}</div>}
 
       {awaitingDecision && (
         <div className="zy-ai-tool-actions">
-          <button className="zy-btn zy-btn--sm zy-btn--accent" onClick={onApprove}>
+          <button className="zy-ai-tool-btn zy-ai-tool-btn--approve" onClick={onApprove}>
             Выполнить
           </button>
-          <button className="zy-btn zy-btn--sm zy-btn--ghost" onClick={onDeny}>
+          <button className="zy-ai-tool-btn zy-ai-tool-btn--deny" onClick={onDeny}>
             Отклонить
           </button>
         </div>
       )}
 
       {executing && (
-        <div className="zy-ai-tool-actions">
+        <div className="zy-ai-tool-exec">
           {isAuto && <span className="zy-badge zy-badge--accent">авто</span>}
-          <span className="zy-ai-tool-status">Выполняется…</span>
+          <span className="zy-ai-tool-spinner" />
+          <span className="zy-ai-tool-status">выполняется в терминале…</span>
         </div>
       )}
 
-      {resolved && (
-        <button className="zy-ai-tool-toggle" onClick={() => setExpanded((v) => !v)}>
-          {denied ? (
-            <>
-              <Icon name="close" size={10} /> Отклонено
-            </>
-          ) : (
-            <>
-              <Icon name={expanded ? 'chevron-down' : 'chevron-right'} size={10} /> Результат
-            </>
-          )}
+      {denied && <div className="zy-ai-tool-denied">✗ отклонено оператором</div>}
+
+      {resolved && !denied && (
+        <button className="zy-ai-tool-done" onClick={() => setExpanded((v) => !v)}>
+          <span className="zy-ai-tool-done-text">✓ {summarizeToolResult(resultContent)}</span>
+          <Icon name={expanded ? 'chevron-down' : 'chevron-right'} size={10} />
         </button>
       )}
       {resolved && !denied && expanded && <pre className="zy-ai-tool-out">{resultContent}</pre>}

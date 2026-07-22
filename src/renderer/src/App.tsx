@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { registerCoreActions } from '@/actions/coreActions'
 import { ActivityBar } from '@/components/ActivityBar'
+import { AgentBar } from '@/components/AgentBar'
 import { BlocksPanel } from '@/components/BlocksPanel'
 import { LaunchPad } from '@/components/LaunchPad'
 import { RocketLaunch } from '@/components/RocketLaunch'
@@ -115,15 +116,18 @@ function MainContent(): React.JSX.Element {
 
   return (
     <div className="zy-content">
-      <div className="zy-workspace">
-        {tabs.map((tab) => (
-          <SplitLayout key={tab.id} tab={tab} visible={tab.id === activeTabId} />
-        ))}
-        {!tabs.length && (
-          <div className="zy-empty" style={{ margin: 'auto' }}>
-            Нет открытых сессий — создай новую вкладку (Ctrl+Shift+T)
-          </div>
-        )}
+      <div className="zy-terminal-col">
+        <div className="zy-workspace">
+          {tabs.map((tab) => (
+            <SplitLayout key={tab.id} tab={tab} visible={tab.id === activeTabId} />
+          ))}
+          {!tabs.length && (
+            <div className="zy-empty" style={{ margin: 'auto' }}>
+              Нет открытых сессий — создай новую вкладку (Ctrl+Shift+T)
+            </div>
+          )}
+        </div>
+        <AgentBar />
       </div>
       {editorOpen && (
         <>
@@ -161,10 +165,9 @@ function EditorGutter({ onResize }: { onResize: (pct: number) => void }): React.
   )
 }
 
-function RightPanels(): React.JSX.Element | null {
+function RightPanels(): React.JSX.Element {
   const blocksOpen = useUiStore((s) => s.blocksPanelOpen)
   const aiOpen = useUiStore((s) => s.aiPanelOpen)
-  if (!blocksOpen && !aiOpen) return null
   return (
     <>
       {blocksOpen && (
@@ -172,9 +175,20 @@ function RightPanels(): React.JSX.Element | null {
           <BlocksPanel />
         </aside>
       )}
-      {aiOpen && (
+      {aiOpen ? (
         <aside className="zy-sidebar zy-sidebar--right zy-sidebar--ai">
           <AiPanel />
+        </aside>
+      ) : (
+        <aside className="zy-ide-rail">
+          <button
+            className="zy-ide-rail-btn"
+            title="Открыть IDE-агента (второй пилот)"
+            onClick={() => useUiStore.getState().set({ aiPanelOpen: true })}
+          >
+            <Icon name="sputnik" size={16} strokeWidth={1.5} />
+          </button>
+          <span className="zy-ide-rail-label">IDE-АГЕНТ</span>
         </aside>
       )}
     </>

@@ -1,0 +1,152 @@
+/* Unified ask-agent bar at the bottom of the terminal column. */
+.zy-agentbar {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border);
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  backdrop-filter: blur(2px);
+}
+
+.zy-agentbar-fuel {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 12px 5px;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+}
+.zy-agentbar-fuel:hover {
+  background: var(--bg-elev1);
+}
+.zy-agentbar-fuel-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+.zy-agentbar-fuel-tag {
+  font-family: var(--font-tech);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  color: var(--fg-faint);
+  flex-shrink: 0;
+}
+.zy-agentbar-fuel-val {
+  font-family: var(--font-tech);
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  color: var(--accent-2);
+  flex-shrink: 0;
+}
+.zy-agentbar-fuel-spacer {
+  flex: 1;
+}
+.zy-agentbar-fuel-pult {
+  font-family: var(--font-tech);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: var(--fg-faint);
+  flex-shrink: 0;
+}
+
+.zy-agentbar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+}
+.zy-agentbar-star {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border-strong);
+  border-radius: 3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  color: var(--accent);
+}
+.zy-agentbar-input {
+  flex: 1;
+  min-width: 0;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  outline: none;
+}
+.zy-agentbar-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.zy-agentbar-model {
+  flex-shrink: 0;
+  height: 34px;
+  padding: 0 10px 0 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: 3px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg);
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.25);
+}
+.zy-agentbar-model:hover {
+  border-color: var(--accent-2);
+}
+.zy-agentbar-model:active {
+  transform: translateY(1px);
+}
+.zy-agentbar-model-rocket {
+  display: inline-flex;
+  animation: zy-agentbar-bob 2.6s ease-in-out infinite;
+}
+@keyframes zy-agentbar-bob {
+  50% {
+    transform: translateY(-2px);
+  }
+}
+.zy-agentbar-model-name {
+  font-family: var(--font-tech);
+  font-size: 15px;
+  letter-spacing: 0.04em;
+  color: var(--accent-2);
+  white-space: nowrap;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.zy-agentbar-model-caret {
+  font-family: var(--font-tech);
+  font-size: 13px;
+  color: var(--fg-faint);
+}
+.zy-agentbar-send {
+  flex-shrink: 0;
+  width: 36px;
+  height: 34px;
+  border: 1px solid color-mix(in srgb, var(--accent-2) 40%, transparent);
+  border-radius: 3px;
+  background: var(--accent);
+  color: #fff5e8;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.28);
+}
+.zy-agentbar-send:hover {
+  filter: brightness(1.1);
+}
+.zy-agentbar-send:active {
+  transform: translateY(1px);
+}

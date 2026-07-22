@@ -1,16 +1,18 @@
 <div align="center">
 
-# Zarya
+# ЗАРЯ · Zarya
 
-**A new dawn for your terminal.**
+**Космический CLI-агент. A new dawn for your terminal.**
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-ff8a4c.svg)](LICENSE)
-[![Electron](https://img.shields.io/badge/Electron-43-9db8ff.svg)](https://www.electronjs.org/)
-[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-3ddc97.svg)](#install)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-ffc24b.svg)](CONTRIBUTING.md)
+[![License: MIT](https://img.shields.io/badge/license-MIT-e2231a.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/version-0.4.0%20%C2%AB%D0%9E%D1%80%D0%B1%D0%B8%D1%82%D0%B0%C2%BB-e0b15a.svg)](CHANGELOG.md)
+[![Electron](https://img.shields.io/badge/Electron-43-4fd6d6.svg)](https://www.electronjs.org/)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-5fb88a.svg)](#install)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-e0b15a.svg)](CONTRIBUTING.md)
 
-Zarya is an AI-native terminal with block-based command history, persistent sessions,
-and a built-in editor — running 100% on your machine, with no account and no telemetry.
+Zarya is an AI-native terminal with a Soviet space-age soul — block-based command
+history, an agent with its own **Launch Pad**, persistent sessions, and a built-in
+editor — running 100% on your machine, with no account and no telemetry.
 
 ![Zarya](docs/screenshot.png)
 
@@ -23,213 +25,207 @@ and a built-in editor — running 100% on your machine, with no account and no t
 | 100% local processing | ✅ | ❌ (cloud-assisted) | ✅ |
 | No account required | ✅ | ❌ | ✅ |
 | Open source | ✅ (MIT) | ❌ | varies |
-| Bring-your-own-key AI | ✅ (Anthropic / OpenAI / Ollama / any OpenAI-compatible endpoint) | ❌ | — |
-| Works fully offline | ✅ (with a local model via Ollama) | ❌ | ✅ |
+| Bring-your-own-key AI | ✅ (Anthropic / OpenAI / Ollama / any OpenAI-compatible) | ❌ | — |
+| Works fully offline | ✅ (local model via Ollama) | ❌ | ✅ |
 | Command blocks & exit status | ✅ | ✅ | ❌ |
 | Sessions survive a reboot | ✅ (scrollback + blocks) | partial | ❌ |
+| A rocket launches when you pick a model | ✅ 🚀 | ❌ | ❌ |
+
+## The look — космос + конструктивизм
+
+Zarya's chrome is a Soviet space-programme control panel: deep-space navy, Soviet
+red and brass gold, constructivist geometry, a pixel **ЗАРЯ // ОРБИТА-1** wordmark
+(Pixelify Sans) and dot-matrix tech labels (Handjet) over a live twinkling starfield.
+Everything is theme-token driven, so the whole thing recolors — including a full set
+of light "poster paper" themes for people who work on light backgrounds.
+
+Fonts are **bundled offline** (no CDN, CSP-safe): Pixelify Sans, Handjet, PT Sans and
+JetBrains Mono, all under the SIL Open Font License.
 
 ## Features
 
+### Пусковой комплекс — the Launch Pad
+The signature control. Instead of a boring model dropdown, Zarya has a **launch
+console**: pick your **двигатель** (model) and **ТЯГА** (reasoning thrust — 4 levels
+that drive temperature + token budget), hit **ПУСК · ПОЕХАЛИ**, and a rocket lifts
+off across the screen as the settings apply. Open it from the model chip in the
+ask-agent bar, the status bar, or `Ctrl+Alt+M`.
+
+![Launch Pad](docs/launchpad.png)
+
+### Ask-agent bar
+One unified input under the terminal: plain text goes to the AI agent, a line that
+starts with `$` is a shell command written straight to the active terminal. The model
+chip opens the Launch Pad; a **ТОПЛИВО** (fuel) strip sits on top.
+
 ### Blocks
 Every command becomes a distinct, navigable block — command, output, exit code and
-duration, exactly like Warp — but built on the open [OSC 133](docs/shell-integration.md)
-shell-integration standard rather than a proprietary protocol. Jump between blocks with
-`Ctrl+↑` / `Ctrl+↓`, re-run, copy command/output, or export a block as Markdown.
+duration, shown as an instrument-panel pill (`✓ 0 · 40мс` / `✗ 1 · 3.4с`) — built on
+the open [OSC 133](docs/shell-integration.md) shell-integration standard rather than a
+proprietary protocol. Jump between blocks with `Ctrl+↑` / `Ctrl+↓`, re-run, copy
+command/output, or export a block as Markdown.
 
-### AI Assistant
-Bring your own key. Zarya talks to **Anthropic**, **OpenAI**, **Ollama** (local inference,
-including a remote Ollama box over Tailscale/LAN) or any **OpenAI-compatible** endpoint —
-your choice, configured in Settings → AI. Keys never leave your machine unencrypted (see
-[Privacy](#privacy)).
+### AI Assistant («Экипаж»)
+Bring your own key. Zarya talks to **Anthropic**, **OpenAI**, **Ollama** (local
+inference, including a remote Ollama box over Tailscale/LAN) or any **OpenAI-compatible**
+endpoint. Keys never leave your machine unencrypted (see [Privacy](#privacy)).
 
 - **Agentic mode** — the assistant can call tools to inspect and run commands; every
-  command execution is presented to you for confirmation before it runs. `autoApprove`
-  exists to skip that confirmation, but it is **off by default** and should be enabled at
-  your own risk.
-- **Inline command bar** (`Ctrl+I`) — describe what you want in natural language, get a
-  shell command back without leaving the terminal.
-- **Ask AI about a block** — click **✦** on any command block (handy right after a
-  failure) to open the AI panel with that block's command, output and exit code as
-  context, and ask it to explain or suggest a fix.
-- Context is scoped on purpose: only the last *N* blocks (configurable, default 3) are
-  attached automatically. See [docs/ai.md](docs/ai.md) for exactly what gets sent.
+  command execution is presented to you for confirmation (`ВЫПОЛНИТЬ` / `ОТКЛОНИТЬ`)
+  before it runs. `autoApprove` skips that confirmation, but it is **off by default**.
+- **Reasoning thrust (ТЯГА)** — a 4-level effort dial that scales temperature and the
+  token budget. Set it in the Launch Pad or Центр управления → AI.
+- **Patch cards** — a ` ```diff ` block in a reply renders as a **ПАТЧ** card with
+  red/green lines and copy/insert actions.
+- **Inline command bar** (`Ctrl+I`) — natural language → shell command.
+- **Ask AI about a block** — one click on any command block opens the agent with that
+  block's command, output and exit code as context.
+- Untrusted terminal output injected as context is **spotlighted** in the system prompt
+  (OWASP LLM01 mitigation). See [docs/ai.md](docs/ai.md).
 
 ### Persistent Sessions
-Sessions are not just scrollback — closing Zarya (or the whole machine losing power)
-does not lose your work:
+Closing Zarya — or the whole machine losing power — does not lose your work:
 
-- Autosaves scrollback + command blocks on an interval (default every 20s) and on a
-  graceful-quit handshake between the window and the renderer.
-- Restoring a session replays its scrollback and blocks, then starts a **fresh shell**
-  in the saved working directory — there is no process reattachment.
+- Autosaves scrollback + command blocks on an interval and on a graceful-quit handshake.
+- Restoring replays scrollback + blocks, then starts a **fresh shell** in the saved cwd.
 - Pin or favorite sessions to keep them out of the 200-session prune.
+- The sidebar frames running agents as **«Экипаж · агенты»** (crew).
 
 Full model: [docs/sessions.md](docs/sessions.md).
 
-### IDE-lite
-A built-in **Monaco** editor pane with a file tree and git diff view, wired directly to
-the terminal: click a file path printed in terminal output (with line:col suffix
-support) and it opens at that line. Powered by native `fs`/`git` IPC in the main
-process — no external LSP or extra process required.
+### IDE-lite («IDE-агент»)
+A built-in **Monaco** editor with a file tree (git-status markers) and git diff view,
+wired to the terminal: click a file path in output (with `line:col` support) and it
+opens at that line. A collapsed **IDE-АГЕНТ** rail keeps it one click away.
 
-### Time Machine
-A global, cross-session command history (`Ctrl+R`) — every command you run, with its
-cwd, shell and exit code, appended to a local JSONL log and searchable by fuzzy,
-multi-token match across every session you've ever had, not just the current one.
+### Time Machine («Хроника»)
+Global, cross-session command history (`Ctrl+R`) — every command with cwd, shell and
+exit code, fuzzy-searchable across every session you've ever had.
 
-### Workflows
-Parameterized, reusable command snippets (`{{param}}` placeholders) — bring your own or
-start from the bundled pack. Stored per-user, independent of any single session.
+### More
+Workflows (parameterized snippets, themed presets), Command Palette (`Ctrl+K` /
+`Ctrl+Shift+P`), splits & tabs (persisted), ghost autosuggest, a boot handshake, and
+a `ТЕМА` quick-cycle button.
 
-### Command Palette
-`Ctrl+Shift+P` — every action in Zarya (tabs, splits, AI, blocks, view) is registered in
-a single action registry and searchable from one place, no separate menu hunting.
+### Themes — 9, dark and light
 
-### Themes
-A small CSS-variable + xterm-color theme engine (`ThemeDef`) drives both the chrome and
-the terminal palette from one source of truth. Ships with **Zarya Dawn** and
-**Zarya Night** out of the box and is built to be extended — `registerThemes()` is a
-one-call plugin point for adding more.
+| Theme | Type | |
+|---|---|---|
+| Заря · Космос | dark | signature deep-space (default) |
+| Заря · Восток | dark | red-dominant maroon space |
+| Заря · Орбита | dark | teal oscilloscope |
+| Заря · Спутник | dark | cold graphite + brass |
+| Заря · Байконур | dark | warm launch-pad amber |
+| Заря · Рассвет | dark | original sunrise |
+| Заря · Плакат | **light** | constructivist poster paper |
+| Заря · Полдень | **light** | warm cosmonaut daylight |
+| Заря · Чертёж | **light** | blueprint on cool paper |
 
-### Splits & tabs
-Arbitrary row/column split trees per tab, drag-resizable gutters, independent shell per
-pane. Tabs and layouts are part of the persisted workspace and restore on launch.
-
-### Ghost autosuggest
-Fish-style inline suggestions drawn from your cross-session command history while
-you type at a prompt — press `→` to accept.
+Switch in Центр управления → Внешний вид, or cycle with the `ТЕМА` button. Add your
+own via `registerThemes()` — see [docs/themes.md](docs/themes.md).
 
 ## Keyboard shortcuts
 
-All chords are user-remappable in Settings → Keybindings (`Ctrl+,`); table below is the
-shipped default (`DEFAULT_KEYBINDINGS` in `src/shared/defaults.ts`). Full reference with
-remapping instructions: [docs/keybindings.md](docs/keybindings.md).
+Remappable in Центр управления → Клавиши (`Ctrl+,`); this is the shipped default
+(`DEFAULT_KEYBINDINGS`). Full reference: [docs/keybindings.md](docs/keybindings.md).
 
 | Action | Default |
 |---|---|
 | Command palette | `Ctrl+Shift+P` |
 | Quick open (file) | `Ctrl+P` |
-| Settings | `Ctrl+,` |
+| Settings (Центр управления) | `Ctrl+,` |
+| Launch Pad (model · thrust) | `Ctrl+Alt+M` |
 | Toggle AI panel | `Ctrl+Shift+A` |
-| Toggle sidebar | `Ctrl+B` |
 | AI: natural language → command | `Ctrl+I` |
-| Global command history (Time Machine) | `Ctrl+R` |
-| New tab | `Ctrl+Shift+T` |
-| Close tab | `Ctrl+Shift+W` |
-| Next tab | `Ctrl+Tab` |
-| Previous tab | `Ctrl+Shift+Tab` |
-| Split right | `Ctrl+Shift+D` |
-| Split down | `Ctrl+Shift+S` |
-| Close pane | `Ctrl+Shift+X` |
-| Focus next pane | `Alt+→` |
-| Focus previous pane | `Alt+←` |
-| Clear terminal | `Ctrl+Shift+K` |
+| Global command history | `Ctrl+R` |
+| Toggle sidebar | `Ctrl+B` |
+| New / close tab | `Ctrl+Shift+T` / `Ctrl+Shift+W` |
+| Next / previous tab | `Ctrl+Tab` / `Ctrl+Shift+Tab` |
+| Split right / down | `Ctrl+Shift+D` / `Ctrl+Shift+S` |
+| Previous / next block | `Ctrl+↑` / `Ctrl+↓` |
 | Find in terminal | `Ctrl+Shift+F` |
-| Copy | `Ctrl+Shift+C` |
-| Paste | `Ctrl+Shift+V` |
-| Previous block | `Ctrl+↑` |
-| Next block | `Ctrl+↓` |
-| Copy last command's output | `Ctrl+Shift+O` |
-| Increase font size | `Ctrl+=` |
-| Decrease font size | `Ctrl+-` |
-| Reset font size | `Ctrl+0` |
 
 ## Install
 
-**Requirements:** Node.js **20.19+** or **22+** (electron-vite / Vite 6 requirement),
-npm.
+### Prebuilt (Windows)
+Grab `Zarya-<version>-win-x64.exe` from the `release/` output (or the GitHub Releases
+page) and run it — a per-user installer, no admin required. A portable `.exe` is built
+alongside it.
+
+### From source
 
 ```bash
-# Development
 git clone https://github.com/gorka2354/zarya-terminal.git
 cd zarya-terminal
 npm install
-npm run dev
-
-# Production build for your current platform (out/ then release/)
-npm run dist
-
-# Unpacked build only (faster, for local testing)
-npm run pack
+npm run dev                 # development
+npm run build              # bundle main/preload/renderer -> out/
+npx electron-builder       # installer + portable -> release/
 ```
 
-`npm run dist` produces a Windows installer + portable exe (nsis/portable), a macOS
-`.dmg`, or a Linux AppImage/`.deb`, depending on the host OS (`electron-builder.yml`).
+**Notes.** Node 20.14+ works for dev and build. Packaging uses **electron-builder 24**
+(v26 requires Node ≥ 20.19 for a `require(ESM)` dependency). On macOS/Linux
+`electron-builder` produces a `.dmg` / AppImage+`.deb` instead.
 
 ## Architecture
 
-Zarya is a standard three-process Electron app: the **main** process owns the OS-level
-resources (PTYs, the filesystem, git, API keys), the **preload** script exposes a single
-typed, whitelisted `window.zarya` bridge, and the **renderer** (React 19 + Zustand 5)
-owns all UI state and never touches Node APIs directly.
+Standard three-process Electron app: **main** owns OS resources (PTYs, filesystem, git,
+API keys), **preload** exposes one typed, whitelisted `window.zarya` bridge, and the
+**renderer** (React 19 + Zustand 5) owns all UI and never touches Node directly.
 
 ```mermaid
 flowchart LR
-    subgraph Main["Main process (Node)"]
+    subgraph Main["Main (Node)"]
         PTY[PtyManager]
-        SET[SettingsStore\n+ safeStorage secrets]
+        SET[SettingsStore + safeStorage]
         SESS[SessionStore]
-        HIST[HistoryStore]
-        WF[WorkflowStore]
         AI[AiProxy]
         FS[fsService / gitService]
     end
-
-    subgraph Bridge["Preload (contextBridge)"]
-        API["window.zarya\n(typed, whitelisted IPC)"]
+    subgraph Bridge["Preload"]
+        API["window.zarya (typed IPC)"]
     end
-
     subgraph Renderer["Renderer (React + Zustand)"]
         TERM[terminalRegistry + xterm]
-        BE[BlockEngine\nOSC 133 / 6973 parser]
-        STORES[sessionsStore / blocksStore\nsettingsStore / uiStore]
-        FEAT[Feature panels\nBlocks · AI · Editor · History · Workflows]
+        BE[BlockEngine · OSC 133/6973]
+        UI[LaunchPad · RocketLaunch · StarBackdrop · AgentBar]
+        FEAT[Panels: Blocks · AI · Editor · History · Workflows]
     end
-
     PTY <--> API
     SET <--> API
     SESS <--> API
-    HIST <--> API
-    WF <--> API
     AI <--> API
     FS <--> API
     API <--> TERM
-    TERM --> BE
-    BE --> STORES
-    STORES --> FEAT
+    TERM --> BE --> FEAT
+    UI --> FEAT
 ```
 
-Full write-up, IPC channel list and data-flow diagrams: [docs/architecture.md](docs/architecture.md).
+Visual QA runs through an **offscreen harness** (`scripts/shoot.mjs`, Playwright-Electron
+in an isolated `ZARYA_USER_DATA` instance) — screenshots the renderer regardless of the
+screen. Full write-up + IPC list: [docs/architecture.md](docs/architecture.md).
 
 ## Shell integration
 
-On spawn, Zarya injects a small integration script for the shell it starts (PowerShell,
-bash, or zsh) that emits standard **OSC 133** prompt/command marks plus a private,
-nonce-signed **OSC 6973** sequence carrying the exact command line — that's what powers
-Blocks, Time Machine and cwd tracking. `cmd.exe`, Fish and WSL distros run without
-integration (plain terminal, no blocks). Details and how to add your own shell:
+On spawn Zarya injects an integration script (PowerShell / bash / zsh) that emits
+standard **OSC 133** prompt/command marks plus a private, nonce-signed **OSC 6973**
+sequence carrying the exact command line — powering Blocks, Time Machine and cwd
+tracking. `cmd.exe`, Fish and WSL run without integration. Details:
 [docs/shell-integration.md](docs/shell-integration.md).
 
 ## Privacy
 
-- **API keys** are encrypted at rest with Electron's `safeStorage` (Windows DPAPI /
-  macOS Keychain / Linux Secret Service) before touching disk — never plaintext, never
-  sent anywhere but the provider you configured.
-- **All data is local.** Sessions, history, workflows and settings live under
-  `%APPDATA%/Zarya` (Windows) / the platform-equivalent `userData` directory — nothing
-  syncs to a server Zarya controls, because there isn't one.
-- **No telemetry, no account.** Zarya makes network requests only to the AI provider
-  you explicitly configure.
+- **API keys** are encrypted at rest with Electron `safeStorage` (Windows DPAPI / macOS
+  Keychain / Linux Secret Service) — never plaintext, never sent anywhere but the
+  provider you configured. The renderer can't redirect a keyed request to another host.
+- **All data is local**, under `%APPDATA%/Zarya` (or the platform `userData` dir).
+- **No telemetry, no account.** Network requests go only to the AI provider you set.
 
 ## Contributing
 
-Dev setup, code style and how to add a theme/workflow/provider: [CONTRIBUTING.md](CONTRIBUTING.md).
+Dev setup, code style, adding a theme/workflow/provider: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
-
-The default font stack is `'JetBrains Mono', 'Cascadia Mono', Consolas, monospace`.
-JetBrains Mono is licensed under the [SIL Open Font License 1.1](https://github.com/JetBrains/JetBrainsMono/blob/master/OFL.txt)
-by JetBrains s.r.o. and is **not bundled** with Zarya — install it separately for the
-intended look, or Zarya falls back to the next font in the stack.
+MIT — see [LICENSE](LICENSE). Bundled fonts (Pixelify Sans, Handjet, PT Sans, JetBrains
+Mono) are under the [SIL Open Font License 1.1](https://openfontlicense.org/).

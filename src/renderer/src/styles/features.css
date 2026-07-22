@@ -87,3 +87,19 @@
 .zy-block-card:hover .zy-block-card-actions {
   display: flex;
 }
+
+/* ------------------------------------------------ chrome micro-polish */
+/* Sessions panel: second-line path/last-command reads as telemetry mono,
+   matching the design-composer mockup (font-mono, 10.5px, dim). */
+.zy-item-sub--path {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--fg-faint);
+}
+/* Status bar: autosave readout uses the Handjet telemetry voice, same as
+   the fuel/model buttons next to it. */
+.zy-status-saved {
+  font-family: var(--font-tech);
+  font-size: 13px;
+  letter-spacing: 0.06em;
+}

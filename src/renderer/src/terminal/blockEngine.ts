@@ -237,6 +237,9 @@ export class BlockEngine {
       outputTruncated: truncated
     })
     this.fillBadge(blockId, exitCode, endedAt - this.currentStartedAt)
+    if (exitCode !== undefined && exitCode !== 0) {
+      this.addFailBorder()
+    }
 
     const command = this.currentCommand
     if (command) {
@@ -329,10 +332,30 @@ export class BlockEngine {
       el.textContent = `· ${formatDuration(durationMs)}`
     } else if (exitCode === 0) {
       el.classList.add('zy-exit-badge--ok')
-      el.textContent = `✓ ${formatDuration(durationMs)}`
+      el.textContent = `✓ ${exitCode} · ${formatDuration(durationMs)}`
     } else {
       el.classList.add('zy-exit-badge--fail')
       el.textContent = `✗ ${exitCode} · ${formatDuration(durationMs)}`
+    }
+  }
+
+  /** Left-edge marker on the block's rows for a non-zero exit code (Warp-style fail bar). */
+  private addFailBorder(): void {
+    if (!getSettings().blocks.exitBadges) return
+    try {
+      const marker = this.currentMarker
+      if (!marker || marker.isDisposed || marker.line < 0) return
+      const buf = this.term.buffer.normal
+      const end = buf.baseY + buf.cursorY
+      const height = Math.max(1, end - marker.line)
+      const deco = this.term.registerDecoration({ marker, x: 0, width: 1, height })
+      if (!deco) return
+      deco.onRender((el) => {
+        el.classList.add('zy-block-fail-border')
+      })
+      this.decorations.push(deco)
+    } catch {
+      // cosmetic
     }
   }
 
