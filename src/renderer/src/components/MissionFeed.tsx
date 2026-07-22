@@ -153,9 +153,9 @@ export function MissionFeed({ sessionId }: { sessionId: string }): React.JSX.Ele
             ))}
             {hasConv && conv && <AgentSection conv={conv} cwd={cwdShort} />}
             <div className="zy-mf-ready">
-              <span className="zy-mf-spark">✦</span>
+              <span className="zy-mf-spark"><PixelIcon name="star" /></span>
               <span className="zy-mf-cwd">{cwdShort || '~'}</span>
-              <span className="zy-mf-chev">❯</span>
+              <span className="zy-mf-chev"><PixelIcon name="chevron-right" /></span>
               <span className="zy-mf-ready-text">готов · введите запрос в строку ниже ↓</span>
             </div>
           </>
@@ -185,7 +185,7 @@ function ShellBlock({
   return (
     <div className={`zy-mf-block${failed ? ' zy-mf-block--fail' : ''}`}>
       <div className="zy-mf-cmd">
-        <span className="zy-mf-star">★</span>
+        <span className="zy-mf-star"><PixelIcon name="star" /></span>
         <span className="zy-mf-cwd">{cwdShort}</span>
         {branch && (
           <span className="zy-mf-git">
@@ -276,9 +276,9 @@ function AgentMessage({
     if (!text) return null
     return (
       <div className="zy-mf-user">
-        <span className="zy-mf-spark">✦</span>
+        <span className="zy-mf-spark"><PixelIcon name="star" /></span>
         <span className="zy-mf-cwd">{cwd}</span>
-        <span className="zy-mf-chev">❯</span>
+        <span className="zy-mf-chev"><PixelIcon name="chevron-right" /></span>
         <span className="zy-mf-user-text">{text}</span>
       </div>
     )

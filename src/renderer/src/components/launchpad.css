@@ -187,9 +187,12 @@
 
 .zy-lp-launch {
   width: 100%;
-  height: 36px;
-  border: 1px solid color-mix(in srgb, var(--accent-2) 45%, transparent);
-  border-radius: 3px;
+  height: 38px;
+  /* Pixel frame (like the inputs). */
+  border: 4px solid transparent;
+  border-image: url(../assets/pixel-frame-dark.png) 2 / 4px / 0 round;
+  border-radius: 0;
+  image-rendering: pixelated;
   background: var(--accent);
   color: #fff5e8;
   cursor: pointer;
@@ -206,6 +209,10 @@
 }
 .zy-lp-launch:active {
   transform: translateY(1px);
+}
+:root[data-theme-type='light'] .zy-lp-launch,
+:root[data-theme-type='light'] .zy-lp-acc {
+  border-image-source: url(../assets/pixel-frame-light.png);
 }
 .zy-lp-hint {
   margin-top: 8px;
@@ -236,9 +243,11 @@
 }
 .zy-lp-acc {
   flex: 1;
-  height: 26px;
-  border: 1px solid var(--border-strong);
-  border-radius: 3px;
+  height: 28px;
+  border: 4px solid transparent;
+  border-image: url(../assets/pixel-frame-dark.png) 2 / 4px / 0 round;
+  border-radius: 0;
+  image-rendering: pixelated;
   background: var(--bg);
   cursor: pointer;
   font-family: var(--font-tech);

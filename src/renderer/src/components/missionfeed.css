@@ -103,6 +103,19 @@
 .zy-mf-spark {
   color: var(--accent);
 }
+/* Pixel markers (star / spark / chevron) — align the little SVG on the line. */
+.zy-mf-star,
+.zy-mf-spark,
+.zy-mf-chev {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.zy-mf-star svg,
+.zy-mf-spark svg,
+.zy-mf-chev svg {
+  display: block;
+}
 .zy-mf-cwd {
   color: var(--zy-cyan);
 }
@@ -280,17 +293,24 @@
 }
 .zy-mf-btn-run,
 .zy-mf-btn-deny {
-  height: 28px;
-  padding: 0 14px;
-  border-radius: 3px;
+  height: 30px;
+  padding: 0 12px;
+  /* Pixel frame (like the inputs), no rounding. */
+  border: 4px solid transparent;
+  border-image: url(../assets/pixel-frame-dark.png) 2 / 4px / 0 round;
+  border-radius: 0;
+  image-rendering: pixelated;
   cursor: pointer;
   font-family: var(--font-ui);
   font-weight: 700;
   font-size: 11px;
   letter-spacing: 0.08em;
 }
+:root[data-theme-type='light'] .zy-mf-btn-run,
+:root[data-theme-type='light'] .zy-mf-btn-deny {
+  border-image-source: url(../assets/pixel-frame-light.png);
+}
 .zy-mf-btn-run {
-  border: 1px solid color-mix(in srgb, var(--accent-2) 45%, transparent);
   background: var(--accent);
   color: #fff5e8;
   box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.28);
@@ -302,12 +322,10 @@
   transform: translateY(1px);
 }
 .zy-mf-btn-deny {
-  border: 1px solid var(--border);
   background: transparent;
   color: var(--fg-dim);
 }
 .zy-mf-btn-deny:hover {
-  border-color: var(--border-strong);
   color: var(--fg);
 }
 .zy-mf-tool-exec {

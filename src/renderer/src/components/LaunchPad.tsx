@@ -190,6 +190,19 @@ interface Rocket {
   gone: number
 }
 
+// Rocket sprites (11×18) — hand-designed pixel art (generated via the Aseprite/
+// pixelforge pipeline), one per model slot. Palette chars below.
+const ROCKET_PAL: Record<string, string> = {
+  W: '#f6f1e2', w: '#ddd6c2', s: '#a89f88', R: '#e2231a', r: '#a81810',
+  C: '#6fe0e0', c: '#2f9f9f', G: '#e0b15a', o: '#f0662e', y: '#fff2c0'
+}
+const ROCKETS: string[][] = [
+  ['.....R.....', '....RRr....', '...RRRrr...', '...GGGGG...', '...WWwss...', '...Wwwss...', '...WcCcs...', '...WCCcs...', '...Wcccs...', '...Wwwss...', '...Wwwss...', '...Wwwss...', '..RWwwssR..', '.RRWwwssRR.', 'RRRWwwssRRR', '...sGGGs...', '...oyyyo...', '..RoyyyoR..'],
+  ['.....W.....', '....Wws....', '...WWwss...', '...WWwss...', '..WWWwsss..', '..GGGGGGG..', '..WWcCcss..', '..WwCCCss..', '..WWcCcss..', '..RRRRrrr..', '.WWWWwssss.', '.RWWWwsssr.', '..WWWwsss..', '..GGGGGGG..', '...WWwss...', '...oyyyo...', '....ooo....', '.....R.....'],
+  ['.....W.....', '....Wws....', '....Wws....', '...Wwwss...', '...WcCcs...', '...Wwwss...', '...Wwwss...', '..rWwwssr..', '..WWwwssW..', '..WRRRrrW..', '..WRRrrrW..', '..WWwwssW..', '..rWwwssr..', '.WWwwsssrr.', '....sGs....', '...oyyyo...', '..RoyyyoR..', '.RRoyyyoRR.'],
+  ['.....W.....', '....Wws....', '...WWwss...', '...GGGGG...', '...WWwss...', '...WcCcs...', '...WcCcs...', '...WcCcs...', '...GGGGG...', '...WWwss...', '...Wwwss...', '..WWwwsss..', '.WWwwwssss.', '...WWwss...', '....Wws....', '....oyo....', '....RoR....', '.....R.....']
+]
+
 /**
  * Pixel launch-pad scene (a faithful port of the design's `_drawScene`): a
  * vertical-gradient sky over a planet arc, drifting twinkling stars, a gantry
@@ -380,59 +393,33 @@ function PadScene({
       // launch pad base
       px(Math.round(W * 0.42) - 4, H - 7, 8, 2, '#3a4560')
 
-      // rocket sprite (5 model variants) + thrust-scaled flame
+      // rocket sprite (hand-drawn pixel art, one per model) + thrust plume
       if (R.y > -16) {
-        const type = typeRef.current % 5
+        const g = ROCKETS[typeRef.current % ROCKETS.length]
         const thr = R.thr
-        let cx = Math.round(W * 0.42)
-        const top = Math.round(R.y)
-        if (thr > 0.2 && !R.launching) cx += Math.round((Math.random() - 0.5) * thr * 3)
-        if (thr > 0.08) {
-          const L = Math.round(thr * 18) + (Math.random() < 0.5 ? 1 : 0)
-          px(cx - 1, top + 12, 2, L, '#fff2c0')
-          px(cx - 2, top + 12, 4, Math.max(1, L - 3), G)
-          px(cx - 1, top + 13, 2, L + 2, A)
+        const cx = Math.round(W * 0.42)
+        const jitter = thr > 0.2 && !R.launching ? Math.round((Math.random() - 0.5) * thr * 2) : 0
+        const rx = cx - 5 + jitter // sprite is 11 wide, centre col = 5
+        const ry = Math.round(R.y) - 4
+        // extra exhaust plume during thrust, below the sprite's own flame
+        if (thr > 0.14) {
+          const L = Math.round(thr * 16) + (Math.random() < 0.5 ? 1 : 0)
+          px(cx - 1 + jitter, ry + 18, 2, L, '#fff2c0')
+          px(cx - 2 + jitter, ry + 18, 4, Math.max(1, L - 3), G)
+          px(cx - 1 + jitter, ry + 19, 2, L + 2, A)
           if (thr > 0.62) {
-            const s = Math.max(2, Math.round(L * 0.5))
-            px(cx - 4, top + 13, 1, s, G)
-            px(cx + 3, top + 13, 1, s, G)
+            const sc = Math.max(2, Math.round(L * 0.5))
+            px(cx - 3 + jitter, ry + 19, 1, sc, G)
+            px(cx + 2 + jitter, ry + 19, 1, sc, G)
           }
         }
-        if (type === 1) {
-          px(cx - 2, top - 2, 4, 16, '#e8e2d2')
-          px(cx - 2, top + 2, 4, 1, A)
-          px(cx - 1, top - 4, 2, 2, G)
-          px(cx - 3, top + 9, 2, 4, A)
-          px(cx + 3, top + 9, 2, 4, A)
-          px(cx - 1, top + 4, 2, 2, G)
-        } else if (type === 2) {
-          px(cx - 2, top + 3, 4, 9, '#e8e2d2')
-          px(cx - 1, top + 1, 2, 2, C)
-          px(cx - 3, top + 8, 2, 4, C)
-          px(cx + 3, top + 8, 2, 4, C)
-          px(cx - 1, top + 6, 2, 2, C)
-        } else if (type === 3) {
-          px(cx - 4, top + 4, 2, 9, '#c9c3b2')
-          px(cx + 2, top + 4, 2, 9, '#c9c3b2')
-          px(cx - 2, top, 4, 12, '#e8e2d2')
-          px(cx - 2, top + 3, 4, 1, A)
-          px(cx - 1, top - 2, 2, 2, A)
-          px(cx - 1, top + 5, 2, 2, C)
-        } else if (type === 4) {
-          px(cx - 3, top + 2, 6, 8, '#c9c3b2')
-          px(cx - 3, top + 2, 6, 1, A)
-          px(cx - 4, top + 10, 2, 3, A)
-          px(cx + 3, top + 10, 2, 3, A)
-          px(cx - 1, top + 4, 2, 2, C)
-          px(cx - 1, top, 2, 2, A)
-        } else {
-          px(cx - 2, top, 4, 12, '#e8e2d2')
-          px(cx - 2, top + 3, 4, 1, A)
-          px(cx - 3, top + 7, 2, 4, A)
-          px(cx + 3, top + 7, 2, 4, A)
-          px(cx - 1, top - 2, 2, 2, A)
-          px(cx - 2, top - 1, 4, 1, A)
-          px(cx - 1, top + 5, 2, 2, C)
+        // blit the sprite
+        for (let r = 0; r < g.length; r++) {
+          const row = g[r]
+          for (let c = 0; c < row.length; c++) {
+            const col = ROCKET_PAL[row[c]]
+            if (col) px(rx + c, ry + r, 1, 1, col)
+          }
         }
       }
 
