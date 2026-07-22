@@ -159,9 +159,15 @@
   margin: 2px 0 10px;
 }
 .zy-mf-divider-line {
-  height: 1px;
+  height: 6px;
   flex: 1;
-  background: var(--border);
+  /* Pixel divider: a slightly hand-drawn line (Aseprite mask) tinted by the
+     theme via background-color — same PX=2 unit as the icons. */
+  background-color: var(--fg-faint);
+  -webkit-mask: url(../assets/pixel-line.png) repeat-x center;
+  mask: url(../assets/pixel-line.png) repeat-x center;
+  -webkit-mask-size: 48px 6px;
+  mask-size: 48px 6px;
 }
 .zy-mf-divider-label {
   display: inline-flex;
