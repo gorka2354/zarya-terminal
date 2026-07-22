@@ -25,6 +25,7 @@ import SettingsView from '@/features/settings/SettingsView'
 import { applyTheme, getTheme } from '@/features/themes/themes'
 import WorkflowsPanel from '@/features/workflows/WorkflowsPanel'
 import { Icon } from '@/components/Icon'
+import logoZarya from '@/assets/logo-zarya-64.png'
 import { seedHistoryCache } from '@/terminal/historyCache'
 import { useSessionsStore } from '@/state/sessionsStore'
 import { useSettingsStore } from '@/state/settingsStore'
@@ -63,7 +64,7 @@ export default function App(): React.JSX.Element {
     return (
       <div className="zy-splash">
         <div className="zy-splash-mark">
-          <Icon name="rocket" size={34} strokeWidth={1.4} />
+          <img src={logoZarya} width={48} height={48} style={{ imageRendering: 'pixelated' }} alt="" />
         </div>
         <div className="zy-splash-text">Заря · подготовка к старту</div>
       </div>

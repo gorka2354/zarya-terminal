@@ -5,7 +5,7 @@ import { useUiStore } from '@/state/uiStore'
 import { useContextMenu } from './ContextMenu'
 import { Icon, ShellGlyph } from './Icon'
 import { getThemes } from '@/features/themes/themes'
-import logoRocket from '@/assets/logo-rocket-48.png'
+import logoZarya from '@/assets/logo-zarya-48.png'
 
 export function Titlebar(): React.JSX.Element {
   const tabs = useSessionsStore((s) => s.tabs)
@@ -81,7 +81,7 @@ export function Titlebar(): React.JSX.Element {
   return (
     <header className="zy-titlebar" onMouseEnter={() => setHover(true)}>
       <div className="zy-logo" title="Заря · ОРБИТА-1 — космический CLI-агент">
-        <img className="zy-logo-mark" src={logoRocket} width={24} height={24} alt="Заря" />
+        <img className="zy-logo-mark" src={logoZarya} width={24} height={24} alt="Заря" />
         <span className="zy-logo-text">ЗАРЯ</span>
         <span className="zy-logo-tag">// ОРБИТА-1</span>
       </div>

@@ -10,6 +10,7 @@ import { renderMarkdown } from '@/features/ai/markdown'
 import { getTerminal } from '@/terminal/terminalRegistry'
 import { Icon } from './Icon'
 import { PixelIcon } from './PixelIcon'
+import logoZarya from '@/assets/logo-zarya-64.png'
 import './missionfeed.css'
 
 /**
@@ -377,7 +378,7 @@ function EmptyHero(): React.JSX.Element {
   return (
     <div className="zy-mf-empty">
       <div className="zy-mf-empty-mark">
-        <Icon name="rocket" size={30} strokeWidth={1.4} />
+        <img src={logoZarya} width={44} height={44} style={{ imageRendering: 'pixelated' }} alt="" />
       </div>
       <div className="zy-mf-empty-title">Борт готов к старту</div>
       <div className="zy-mf-empty-hint">
