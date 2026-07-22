@@ -449,6 +449,11 @@ body {
   color: var(--fg-faint);
 }
 
+.zy-titlebar-spacer {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+}
 .zy-tabs {
   display: flex;
   align-items: flex-end;

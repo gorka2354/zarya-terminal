@@ -86,59 +86,8 @@ export function Titlebar(): React.JSX.Element {
         <span className="zy-logo-tag">// ОРБИТА-1</span>
       </div>
 
-      <div className="zy-tabs">
-        {tabs.map((tab) => {
-          const { icon, title, pinned } = tabTitle(tab.id)
-          return (
-            <div
-              key={tab.id}
-              className={`zy-tab${tab.id === activeTabId ? ' zy-tab--active' : ''}`}
-              onMouseDown={(e) => {
-                if (e.button === 1) {
-                  void store.closeTab(tab.id)
-                } else if (e.button === 0) {
-                  store.setActiveTab(tab.id)
-                }
-              }}
-              onContextMenu={(e) => {
-                e.preventDefault()
-                openTabContext(e.clientX, e.clientY, tab.id)
-              }}
-            >
-              {pinned && (
-                <span className="zy-tab-pin">
-                  <Icon name="pin" size={11} />
-                </span>
-              )}
-              <span className="zy-tab-icon">
-                <ShellGlyph code={icon} />
-              </span>
-              <span className="zy-tab-title">{title}</span>
-              <button
-                className="zy-tab-close"
-                title="Закрыть"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  void store.closeTab(tab.id)
-                }}
-              >
-                <Icon name="close" size={12} />
-              </button>
-            </div>
-          )
-        })}
-        <button
-          className="zy-icon-btn zy-newtab"
-          title="Новая вкладка (Ctrl+Shift+T) · ПКМ — выбор шелла"
-          onClick={() => void store.newTab()}
-          onContextMenu={(e) => {
-            e.preventDefault()
-            openNewTabMenu(e.clientX, e.clientY)
-          }}
-        >
-          <Icon name="plus" size={15} />
-        </button>
-      </div>
+      {/* Terminals live in the Sessions sidebar now (single source, no tab bar). */}
+      <div className="zy-titlebar-spacer" />
 
       <button
         className="zy-theme-btn"

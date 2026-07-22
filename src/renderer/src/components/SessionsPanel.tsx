@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react'
-import type { SessionMeta } from '@shared/types'
+import type { SessionMeta, TabState } from '@shared/types'
 import { formatRelative, shortenPath } from '@/lib/ansi'
 import { fuzzyFilter } from '@/lib/fuzzy'
 import { useAiStore } from '@/features/ai/aiStore'
-import { useSessionsStore } from '@/state/sessionsStore'
+import { listLeaves, useSessionsStore } from '@/state/sessionsStore'
 import { useUiStore } from '@/state/uiStore'
 import { useContextMenu } from './ContextMenu'
 import { Icon, ShellGlyph } from './Icon'
@@ -43,6 +43,8 @@ function openCrewMember(conversationId: string): void {
 export function SessionsPanel(): React.JSX.Element {
   const savedList = useSessionsStore((s) => s.savedList)
   const sessions = useSessionsStore((s) => s.sessions)
+  const tabs = useSessionsStore((s) => s.tabs)
+  const activeTabId = useSessionsStore((s) => s.activeTabId)
   const conversations = useAiStore((s) => s.conversations)
   const [query, setQuery] = useState('')
   const { menu, open } = useContextMenu()
@@ -50,24 +52,24 @@ export function SessionsPanel(): React.JSX.Element {
 
   const crewActive = conversations.filter((c) => c.streaming || c.pendingTools.length > 0)
 
+  // Session ids currently open in a tab — excluded from the saved list so an
+  // open terminal shows once (in ОТКРЫТЫЕ), never duplicated below.
+  const openIds = useMemo(() => new Set(tabs.flatMap((t) => listLeaves(t.layout))), [tabs])
+
   const filtered = useMemo(
     () =>
       fuzzyFilter(query, savedList, (m) => `${m.title} ${m.cwd} ${m.lastCommand ?? ''}`, 200),
     [query, savedList]
   )
 
-  const pinned = filtered.filter((m) => m.pinned)
-  const favorites = filtered.filter((m) => m.favorite && !m.pinned)
-  const recent = filtered.filter((m) => !m.pinned && !m.favorite)
+  const savedClosed = filtered.filter((m) => !openIds.has(m.id))
+  const favorites = savedClosed.filter((m) => m.favorite)
+  const recent = savedClosed.filter((m) => !m.favorite)
 
   const openContext = (e: React.MouseEvent, m: SessionMeta): void => {
     e.preventDefault()
     open(e.clientX, e.clientY, [
       { label: 'Открыть', onClick: () => void store.restoreSaved(m.id) },
-      {
-        label: m.pinned ? 'Открепить' : 'Закрепить',
-        onClick: () => void store.toggleFlag(m.id, 'pinned')
-      },
       {
         label: m.favorite ? 'Убрать из избранного' : 'В избранное',
         onClick: () => void store.toggleFlag(m.id, 'favorite')
@@ -119,18 +121,6 @@ export function SessionsPanel(): React.JSX.Element {
         <div className="zy-item-actions">
           <button
             className="zy-icon-btn"
-            title={m.pinned ? 'Открепить' : 'Закрепить'}
-            onClick={(e) => {
-              e.stopPropagation()
-              void store.toggleFlag(m.id, 'pinned')
-            }}
-          >
-            <span className={`zy-item-flag${m.pinned ? ' zy-item-flag--on' : ''}`}>
-              <Icon name="pin" size={13} />
-            </span>
-          </button>
-          <button
-            className="zy-icon-btn"
             title={m.favorite ? 'Убрать из избранного' : 'В избранное'}
             onClick={(e) => {
               e.stopPropagation()
@@ -140,6 +130,41 @@ export function SessionsPanel(): React.JSX.Element {
             <span className={`zy-item-flag${m.favorite ? ' zy-item-flag--on' : ''}`}>
               <Icon name={m.favorite ? 'star' : 'star-outline'} size={13} />
             </span>
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  const renderOpenTab = (tab: TabState): React.JSX.Element => {
+    const session = sessions[tab.activeSessionId]
+    const count = listLeaves(tab.layout).length
+    return (
+      <div
+        key={tab.id}
+        className={`zy-item${tab.id === activeTabId ? ' zy-item--active' : ''}`}
+        onClick={() => store.setActiveTab(tab.id)}
+        title={session?.cwd}
+      >
+        <span className="zy-item-icon">
+          <ShellGlyph code={session?.shellIcon || '>_'} />
+        </span>
+        <div className="zy-item-body">
+          <div className="zy-item-title">
+            {(session?.title || 'Терминал') + (count > 1 ? ` · ${count}` : '')}
+          </div>
+          <div className="zy-item-sub zy-item-sub--path">{shortenPath(session?.cwd || '', 34)}</div>
+        </div>
+        <div className="zy-item-actions">
+          <button
+            className="zy-icon-btn"
+            title="Закрыть терминал"
+            onClick={(e) => {
+              e.stopPropagation()
+              void store.closeTab(tab.id)
+            }}
+          >
+            <Icon name="close" size={13} />
           </button>
         </div>
       </div>
@@ -159,6 +184,13 @@ export function SessionsPanel(): React.JSX.Element {
           Сессии
           <span style={enSubStyle}>SESSIONS</span>
         </span>
+        <button
+          className="zy-icon-btn"
+          title="Новый терминал (Ctrl+Shift+T)"
+          onClick={() => void store.newTab()}
+        >
+          <Icon name="plus" size={15} />
+        </button>
       </div>
       <div className="zy-sidebar-search">
         <input
@@ -169,13 +201,13 @@ export function SessionsPanel(): React.JSX.Element {
         />
       </div>
       <div className="zy-sidebar-body">
-        {pinned.length > 0 && (
+        {tabs.length > 0 && (
           <>
             <div className="zy-section-label" style={sectionLabelStyle}>
-              <Icon name="pin" size={11} />
-              Закреплённые
+              <Icon name="terminal" size={11} />
+              Открытые
             </div>
-            {pinned.map(renderItem)}
+            {tabs.map(renderOpenTab)}
           </>
         )}
         {favorites.length > 0 && (
@@ -193,15 +225,13 @@ export function SessionsPanel(): React.JSX.Element {
             {recent.map(renderItem)}
           </>
         )}
-        {!filtered.length && (
+        {!tabs.length && !favorites.length && !recent.length && (
           <div className="zy-empty">
-            Здесь появятся сохранённые сессии.
-            <br />
-            Они переживают перезапуск и выключение — просто продолжай с того места, где
-            остановился.
+            Открой новый терминал кнопкой <b>+</b> в заголовке (Ctrl+Shift+T).
             <br />
             <br />
-            Новую сессию открывай вкладкой <b>+</b> сверху (Ctrl+Shift+T).
+            Сессии переживают перезапуск и выключение — закрытые появятся здесь для
+            восстановления.
           </div>
         )}
         <div className="zy-section-label" style={crewLabelStyle}>
