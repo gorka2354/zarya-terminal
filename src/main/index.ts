@@ -7,7 +7,7 @@ import { registerIpc } from './ipc'
 import { PtyManager } from './ptyManager'
 import { SessionStore } from './sessionStore'
 import { SettingsStore } from './settingsStore'
-import { WorkflowStore } from './workflowStore'
+import { WorkflowStore, builtinResourcesDir } from './workflowStore'
 
 // Same userData in dev and production (dev would otherwise use "Electron").
 // ZARYA_USER_DATA isolates a throwaway instance (visual-QA harness / offscreen
@@ -32,6 +32,10 @@ function createWindow(): void {
   const useAcrylic = process.platform === 'win32' && settings.appearance.acrylic
 
   mainWindow = new BrowserWindow({
+    // Explicit window icon (the pixel «заря») so the taskbar shows it directly,
+    // independent of the exe-icon cache. A multi-size .ico with crisp native
+    // entries per size → Windows picks the right one instead of blurring.
+    icon: join(builtinResourcesDir(), 'zarya-icon.ico'),
     width: 1360,
     height: 860,
     minWidth: 920,
