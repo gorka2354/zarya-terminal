@@ -149,31 +149,6 @@ export function SessionsPanel(): React.JSX.Element {
   return (
     <>
       <style>{`
-        .zy-sessions-new-btn {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 7px;
-          width: 100%;
-          height: 34px;
-          margin-top: 12px;
-          padding: 0 10px;
-          border: 1px dashed var(--border-strong);
-          border-radius: var(--radius);
-          background: transparent;
-          color: var(--fg-dim);
-          font-family: var(--font-ui);
-          font-weight: 700;
-          font-size: 11px;
-          text-transform: uppercase;
-          letter-spacing: .1em;
-          cursor: pointer;
-          transition: border-color .12s ease, color .12s ease;
-        }
-        .zy-sessions-new-btn:hover {
-          border-color: var(--accent);
-          color: var(--fg);
-        }
         @keyframes zy-crew-pulse {
           0%, 100% { opacity: 1; }
           50% { opacity: .35; }
@@ -184,13 +159,6 @@ export function SessionsPanel(): React.JSX.Element {
           Сессии
           <span style={enSubStyle}>SESSIONS</span>
         </span>
-        <button
-          className="zy-icon-btn"
-          title="Новая сессия"
-          onClick={() => void store.newTab()}
-        >
-          <Icon name="plus" size={15} />
-        </button>
       </div>
       <div className="zy-sidebar-search">
         <input
@@ -231,12 +199,11 @@ export function SessionsPanel(): React.JSX.Element {
             <br />
             Они переживают перезапуск и выключение — просто продолжай с того места, где
             остановился.
+            <br />
+            <br />
+            Новую сессию открывай вкладкой <b>+</b> сверху (Ctrl+Shift+T).
           </div>
         )}
-        <button className="zy-sessions-new-btn" onClick={() => void store.newTab()}>
-          <Icon name="plus" size={13} strokeWidth={1.8} />
-          Новая сессия
-        </button>
         <div className="zy-section-label" style={crewLabelStyle}>
           Экипаж · агенты
         </div>

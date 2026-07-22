@@ -1,21 +1,20 @@
-/* Пусковой комплекс — launch console popover. */
+/* Пусковой комплекс — launch console popover. Anchored to the bottom-right
+   corner, popping up right above the model chip (as in the design:
+   right:12px; bottom:92px), NOT a centered modal. The backdrop is a
+   transparent full-screen click-catcher — the app stays visible behind it. */
 .zy-lp-backdrop {
   position: fixed;
   inset: 0;
   z-index: 120;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(4, 6, 12, 0.5);
-  animation: zy-lp-fade 0.12s ease;
-}
-@keyframes zy-lp-fade {
-  from {
-    opacity: 0;
-  }
 }
 .zy-launchpad {
-  width: 320px;
+  position: absolute;
+  right: 16px;
+  bottom: 92px;
+  width: 302px;
+  max-height: calc(100vh - 150px);
+  display: flex;
+  flex-direction: column;
   background: var(--bg-elev1);
   border: 1px solid var(--border-strong);
   border-radius: 6px;
@@ -26,12 +25,13 @@
 @keyframes zy-lp-pop {
   from {
     opacity: 0;
-    transform: translateY(8px) scale(0.97);
+    transform: translateY(8px) scale(0.96);
   }
 }
 
 .zy-lp-console {
   position: relative;
+  flex-shrink: 0;
   background: #05070f;
   border-bottom: 1px solid var(--border);
 }
@@ -80,6 +80,9 @@
 
 .zy-lp-body {
   padding: 11px 12px 13px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden auto;
 }
 .zy-lp-label {
   font-family: var(--font-tech);
@@ -254,32 +257,4 @@
 .zy-lp-thrust-label--max {
   color: var(--accent);
   text-shadow: 0 0 8px color-mix(in srgb, var(--accent) 55%, transparent);
-}
-.zy-lp-poehali {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  font-family: var(--font-display);
-  font-size: 30px;
-  letter-spacing: 0.08em;
-  color: transparent;
-  background: var(--accent-grad);
-  -webkit-background-clip: text;
-  background-clip: text;
-  filter: drop-shadow(0 0 14px color-mix(in srgb, var(--accent) 60%, transparent));
-  animation: zy-lp-poehali 0.5s cubic-bezier(0.2, 1.4, 0.4, 1);
-  pointer-events: none;
-}
-@keyframes zy-lp-poehali {
-  0% {
-    opacity: 0;
-    transform: translate(-50%, -50%) scale(0.5);
-    letter-spacing: 0.4em;
-  }
-  100% {
-    opacity: 1;
-    transform: translate(-50%, -50%) scale(1);
-    letter-spacing: 0.08em;
-  }
 }

@@ -39,15 +39,15 @@ export function StarBackdrop(): React.JSX.Element {
     let H = 0
     let raf = 0
     let last = performance.now()
-    let shootTimer = 2600 + Math.random() * 3200
+    let shootTimer = 1400 + Math.random() * 2000
 
     const resize = (): void => {
       W = canvas.clientWidth
       H = canvas.clientHeight
       canvas.width = W
       canvas.height = H
-      const count = Math.round((W * H) / 14000)
-      stars = Array.from({ length: Math.min(180, Math.max(50, count)) }, () => ({
+      const count = Math.round((W * H) / 19000)
+      stars = Array.from({ length: Math.min(130, Math.max(40, count)) }, () => ({
         x: Math.random() * W,
         y: Math.random() * H,
         vy: 0.004 + Math.random() * 0.012,
@@ -81,7 +81,7 @@ export function StarBackdrop(): React.JSX.Element {
           s.p += dt * 0.003
         }
         const tw = 0.22 + 0.6 * (0.5 + 0.5 * Math.sin(s.p))
-        ctx.globalAlpha = Math.min(1, tw * s.a) * (light ? 0.5 : 0.9)
+        ctx.globalAlpha = Math.min(1, tw * s.a) * (light ? 0.38 : 0.55)
         ctx.fillStyle = 'rgb(' + (s.gold ? gold : base) + ')'
         ctx.fillRect(s.x | 0, s.y | 0, s.sz, s.sz)
       }
@@ -90,7 +90,7 @@ export function StarBackdrop(): React.JSX.Element {
       if (!reduce) {
         shootTimer -= dt
         if (shootTimer <= 0) {
-          shootTimer = 4200 + Math.random() * 5000
+          shootTimer = 2600 + Math.random() * 3400
           shoots.push({
             x: W * (0.5 + Math.random() * 0.5),
             y: Math.random() * H * 0.4,

@@ -310,13 +310,17 @@ body {
   position: relative;
   isolation: isolate;
 }
-/* Animated starfield canvas (twinkle + shooting stars). */
+/* Animated starfield canvas (twinkle + shooting stars). Overlays the whole
+   work area (above the panels and the mission feed, below popovers) so the
+   drifting stars and — the point — the occasional shooting star streak across
+   the full window and are actually visible. pointer-events:none keeps clicks
+   passing through; the twinkle is kept faint so feed text stays legible. */
 .zy-star-backdrop {
   position: absolute;
   inset: var(--titlebar-h) 0 var(--statusbar-h) 0;
   width: auto;
   height: auto;
-  z-index: 0;
+  z-index: 5;
   pointer-events: none;
 }
 
