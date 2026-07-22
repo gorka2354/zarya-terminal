@@ -5,7 +5,18 @@
  *
  * Usage: <Icon name="star" /> · size via the `size` prop or font-size context.
  */
-import { PixelText } from './PixelIcon'
+import { PixelText, PixelIcon, type PixelIconName } from './PixelIcon'
+import pixelIconData from './pixelIcons.json'
+
+// Names available as small (≤8-tall) pixel glyphs — routed through PixelIcon so
+// the whole UI shares one pixel look at the consistent PX. Larger 16×16 names
+// (sessions/files/… ) stay as line glyphs here; the activity bar renders those
+// big via PixelIcon directly.
+const PIXEL_SMALL = new Set(
+  Object.entries((pixelIconData as { icons: Record<string, string[]> }).icons)
+    .filter(([, g]) => g.length <= 8)
+    .map(([k]) => k)
+)
 
 export type IconName =
   | 'star'
@@ -233,6 +244,10 @@ const PATHS: Record<IconName, React.ReactNode> = {
 }
 
 export function Icon({ name, size = 16, className, strokeWidth = 1.6, title }: Props): React.JSX.Element {
+  // Pixel glyph if we have one at this small scale; otherwise the line glyph.
+  if (PIXEL_SMALL.has(name)) {
+    return <PixelIcon name={name as PixelIconName} className={className} title={title} />
+  }
   return (
     <svg
       className={className}
