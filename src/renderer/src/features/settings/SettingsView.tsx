@@ -3,7 +3,6 @@ import { AI_MODEL_PRESETS, DEFAULT_KEYBINDINGS, EFFORT_TUNING, OLLAMA_DEFAULT_UR
 import type { AiEffort, AiProviderKind, AiProviderStatus, AppInfo } from '@shared/types'
 import { getAllActions, onActionsChanged } from '@/lib/actionRegistry'
 import { Icon, type IconName } from '@/components/Icon'
-import { launchRocket } from '@/components/RocketLaunch'
 import { chordFromEvent, formatChord } from '@/features/palette/keybindings'
 import { getThemes } from '@/features/themes/themes'
 import { useSettingsStore } from '@/state/settingsStore'
@@ -749,10 +748,7 @@ function AiTab(): React.JSX.Element {
           <SelectField
             value={ai.provider}
             options={PROVIDERS.map((p) => ({ value: p.id, label: p.label }))}
-            onChange={(v) => {
-              void update({ ai: { provider: v } as never })
-              launchRocket({ label: PROVIDERS.find((p) => p.id === v)?.label ?? v })
-            }}
+            onChange={(v) => void update({ ai: { provider: v } as never })}
           />
         </Row>
         <Row
@@ -765,10 +761,7 @@ function AiTab(): React.JSX.Element {
             <ModelField
               value={ai.model}
               options={modelOptions}
-              onCommit={(v) => {
-                if (v && v !== ai.model) launchRocket({ label: v })
-                void update({ ai: { model: v } as never })
-              }}
+              onCommit={(v) => void update({ ai: { model: v } as never })}
             />
             {ai.provider === 'ollama' && (
               <button

@@ -4,7 +4,6 @@ import { ActivityBar } from '@/components/ActivityBar'
 import { AgentBar } from '@/components/AgentBar'
 import { BlocksPanel } from '@/components/BlocksPanel'
 import { LaunchPad } from '@/components/LaunchPad'
-import { RocketLaunch } from '@/components/RocketLaunch'
 import { StarBackdrop } from '@/components/StarBackdrop'
 import { SessionsPanel } from '@/components/SessionsPanel'
 import { SplitLayout } from '@/components/SplitLayout'
@@ -89,7 +88,6 @@ export default function App(): React.JSX.Element {
       <SettingsView />
       <LaunchPad />
       <Toasts />
-      <RocketLaunch />
     </div>
   )
 }

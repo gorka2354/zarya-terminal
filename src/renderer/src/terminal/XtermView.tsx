@@ -59,7 +59,11 @@ export function XtermView({ sessionId, active, visible }: Props): React.JSX.Elem
       theme: toXtermTheme(theme),
       fontWeightBold: '600',
       minimumContrastRatio: 1,
-      scrollOnUserInput: true
+      scrollOnUserInput: true,
+      // Display-only terminal: the single input is the ask-agent bar below
+      // (a `$`-prefixed line is written to the pty). Keeps the design's
+      // one-input model and avoids a confusing second CLI cursor.
+      disableStdin: true
     })
 
     const fit = new FitAddon()
