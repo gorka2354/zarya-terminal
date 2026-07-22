@@ -120,11 +120,17 @@
 }
 .zy-mf-pill {
   margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   font-family: var(--font-tech);
   font-size: 12px;
-  padding: 0 7px;
+  padding: 1px 7px;
   border-radius: 8px;
   white-space: nowrap;
+}
+.zy-mf-pill-glyph {
+  flex-shrink: 0;
 }
 .zy-mf-pill--ok {
   background: color-mix(in srgb, var(--success) 16%, var(--bg-elev1));

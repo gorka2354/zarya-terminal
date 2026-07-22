@@ -9,6 +9,7 @@ import { useAiStore, type Conversation } from '@/features/ai/aiStore'
 import { renderMarkdown } from '@/features/ai/markdown'
 import { getTerminal } from '@/terminal/terminalRegistry'
 import { Icon } from './Icon'
+import { PixelIcon } from './PixelIcon'
 import './missionfeed.css'
 
 /**
@@ -197,11 +198,14 @@ function ShellBlock({
             running ? 'zy-mf-pill--run' : failed ? 'zy-mf-pill--fail' : 'zy-mf-pill--ok'
           }`}
         >
-          {running
-            ? '⋯'
-            : failed
-              ? `✗ ${block.exitCode} · ${formatDuration(dur)}`
-              : `✓ ${block.exitCode ?? 0} · ${formatDuration(dur)}`}
+          {running ? (
+            '⋯'
+          ) : (
+            <>
+              <PixelIcon name={failed ? 'cross' : 'check'} className="zy-mf-pill-glyph" />
+              {`${block.exitCode ?? 0} · ${formatDuration(dur)}`}
+            </>
+          )}
         </span>
       </div>
       {output.trim() !== '' && <OutputLines text={output} failed={failed} />}

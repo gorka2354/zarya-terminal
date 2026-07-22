@@ -499,8 +499,9 @@ body {
   background: var(--accent-grad);
 }
 .zy-tab-icon {
-  font-size: 12px;
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
 }
 .zy-tab-title {
   flex: 1;
@@ -688,8 +689,12 @@ body {
 }
 .zy-item-icon {
   flex-shrink: 0;
-  width: 18px;
-  text-align: center;
+  min-width: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* Size to the (wider) pixel shell badge instead of clipping it — prevents the
+     badge from overflowing the slot and overlapping the title. */
 }
 .zy-item-body {
   flex: 1;
@@ -1133,18 +1138,17 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 22px;
+  flex-shrink: 0;
   height: 16px;
-  padding: 0 4px;
+  padding: 0 3px;
   border: 1px solid var(--border-strong);
   border-radius: 2px;
-  font-family: var(--font-ui);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
   color: var(--accent-2);
   background: color-mix(in srgb, var(--accent-2) 8%, transparent);
   line-height: 1;
+}
+.zy-shell-mono svg {
+  display: block;
 }
 .zy-shell-mono[data-shell='PS'],
 .zy-shell-mono[data-shell='PWSH'] {

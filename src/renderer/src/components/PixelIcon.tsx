@@ -10,7 +10,6 @@ import { PIXEL_FONT, FONT_W, FONT_H } from './pixelFont'
 export const PX = 2
 
 const ICONS = pixelIcons.icons as Record<string, string[]>
-const GRID = pixelIcons.size // 16
 
 export type PixelIconName = keyof typeof pixelIcons.icons
 
@@ -33,14 +32,19 @@ export function PixelIcon({
   title?: string
 }): React.JSX.Element {
   const grid = ICONS[name]
+  // Per-glyph dimensions (Stardew rule: same PX everywhere, but a small glyph
+  // simply has fewer pixels → renders smaller, e.g. an 8×8 badge vs a 16×16 nav
+  // icon — both at PX). This keeps a check/cross from ballooning a tiny pill.
+  const gh = grid.length
+  const gw = grid[0]?.length ?? gh
   const rects: React.JSX.Element[] = []
-  for (let y = 0; y < grid.length; y++) {
+  for (let y = 0; y < gh; y++) {
     const row = grid[y]
     let x = 0
-    while (x < GRID) {
+    while (x < gw) {
       if (row[x] === '1') {
         let w = 1
-        while (x + w < GRID && row[x + w] === '1') w++
+        while (x + w < gw && row[x + w] === '1') w++
         rects.push(<rect key={`${x}-${y}`} x={x} y={y} width={w} height={1} />)
         x += w
       } else {
@@ -48,13 +52,12 @@ export function PixelIcon({
       }
     }
   }
-  const size = GRID * px
   return (
     <svg
       className={className}
-      width={size}
-      height={size}
-      viewBox={`0 0 ${GRID} ${GRID}`}
+      width={gw * px}
+      height={gh * px}
+      viewBox={`0 0 ${gw} ${gh}`}
       fill="currentColor"
       shapeRendering="crispEdges"
       aria-hidden={title ? undefined : true}
