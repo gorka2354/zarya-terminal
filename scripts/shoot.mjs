@@ -59,6 +59,13 @@ try {
   // Let the app boot (spawn a shell, apply theme, render chrome).
   await page.waitForTimeout(wait)
 
+  if (arg('seed', false)) {
+    // Populate the mission feed with the design's sample mission (2 shell
+    // blocks + an agent turn with a patch + tool-call card).
+    await page.evaluate(() => window.__zaryaSeedMission?.())
+    await page.waitForTimeout(500)
+  }
+
   const ui = arg('ui', null) // e.g. --ui launchPadOpen
   if (ui) {
     await page.evaluate((k) => window.__zaryaSetUi?.({ [k]: true }), String(ui))

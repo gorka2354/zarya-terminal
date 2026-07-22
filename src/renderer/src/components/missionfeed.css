@@ -1,0 +1,388 @@
+/* Mission feed — the design's unified command/agent scroll (center stage). */
+.zy-mf {
+  --zy-cyan: #4fd6d6;
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg);
+}
+
+/* instrument header ---------------------------------------------------- */
+.zy-mf-head {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  flex-shrink: 0;
+  background: color-mix(in srgb, var(--panel, var(--bg-elev1)) 60%, transparent);
+  border-bottom: 1px solid var(--border);
+}
+.zy-mf-head-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-tech);
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  color: var(--accent);
+  white-space: nowrap;
+}
+.zy-mf-head-cwd {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.zy-mf-head-spacer {
+  flex: 1;
+}
+.zy-mf-head-btn {
+  width: 24px;
+  height: 22px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--fg-faint);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.zy-mf-head-btn:hover {
+  background: var(--bg-elev1);
+  color: var(--fg);
+}
+.zy-mf-head-btn--on {
+  color: var(--accent-2);
+}
+
+/* scroll body ---------------------------------------------------------- */
+.zy-mf-scroll {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden auto;
+  padding: 12px 16px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: var(--fg);
+}
+
+/* shell block ---------------------------------------------------------- */
+.zy-mf-block {
+  margin-bottom: 14px;
+}
+.zy-mf-block--fail {
+  border-left: 2px solid color-mix(in srgb, var(--danger) 50%, transparent);
+  padding-left: 12px;
+  margin-left: -14px;
+}
+.zy-mf-cmd {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.zy-mf-block--fail .zy-mf-cmd {
+  padding-left: 2px;
+}
+.zy-mf-star {
+  color: var(--accent-2);
+}
+.zy-mf-spark {
+  color: var(--accent);
+}
+.zy-mf-cwd {
+  color: var(--zy-cyan);
+}
+.zy-mf-git {
+  color: var(--fg-faint);
+}
+.zy-mf-branch {
+  color: var(--accent);
+}
+.zy-mf-dollar {
+  color: var(--fg);
+}
+.zy-mf-chev {
+  color: var(--fg-faint);
+}
+.zy-mf-pill {
+  margin-left: auto;
+  font-family: var(--font-tech);
+  font-size: 12px;
+  padding: 0 7px;
+  border-radius: 8px;
+  white-space: nowrap;
+}
+.zy-mf-pill--ok {
+  background: color-mix(in srgb, var(--success) 16%, var(--bg-elev1));
+  color: var(--success);
+}
+.zy-mf-pill--fail {
+  background: color-mix(in srgb, var(--danger) 18%, var(--bg-elev1));
+  color: var(--danger);
+}
+.zy-mf-pill--run {
+  background: var(--bg-elev1);
+  color: var(--fg-faint);
+}
+.zy-mf-out {
+  color: var(--fg-dim);
+  padding-left: 16px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.zy-mf-block--fail .zy-mf-out {
+  padding-left: 18px;
+}
+.zy-mf-out-err {
+  color: var(--danger);
+}
+
+/* agent divider -------------------------------------------------------- */
+.zy-mf-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0 10px;
+}
+.zy-mf-divider-line {
+  height: 1px;
+  flex: 1;
+  background: var(--border);
+}
+.zy-mf-divider-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-tech);
+  font-size: 13px;
+  letter-spacing: 0.12em;
+  color: var(--accent);
+}
+
+/* agent echo + answer -------------------------------------------------- */
+.zy-mf-user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.zy-mf-user-text {
+  color: var(--fg);
+}
+.zy-mf-answer {
+  color: var(--fg-dim);
+  padding-left: 16px;
+  margin-bottom: 10px;
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+.zy-mf-answer :is(p, ul, ol) {
+  margin: 0 0 6px;
+}
+.zy-mf-answer strong {
+  color: var(--fg);
+}
+.zy-mf-answer code {
+  font-family: var(--font-mono);
+  color: var(--zy-cyan);
+}
+
+.zy-mf-typing {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 16px;
+  margin-bottom: 10px;
+  font-family: var(--font-tech);
+  font-size: 13px;
+  color: var(--fg-faint);
+}
+.zy-mf-errbanner {
+  margin: 0 0 10px 16px;
+  font-family: var(--font-tech);
+  font-size: 13px;
+  color: var(--danger);
+}
+
+/* spinner shared ------------------------------------------------------- */
+.zy-mf-spinner {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: zy-mf-spin 0.7s linear infinite;
+}
+@keyframes zy-mf-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* tool-call card ------------------------------------------------------- */
+.zy-mf-tool {
+  margin: 0 0 12px 16px;
+  max-width: 560px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg-elev1);
+  padding: 9px 11px;
+}
+.zy-mf-tool-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.zy-mf-tool-cmd {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--fg);
+}
+.zy-mf-tool-note {
+  margin-left: auto;
+  font-family: var(--font-tech);
+  font-size: 12px;
+  color: var(--fg-faint);
+}
+.zy-mf-tool-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 9px;
+}
+.zy-mf-btn-run,
+.zy-mf-btn-deny {
+  height: 28px;
+  padding: 0 14px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+.zy-mf-btn-run {
+  border: 1px solid color-mix(in srgb, var(--accent-2) 45%, transparent);
+  background: var(--accent);
+  color: #fff5e8;
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.28);
+}
+.zy-mf-btn-run:hover {
+  filter: brightness(1.1);
+}
+.zy-mf-btn-run:active {
+  transform: translateY(1px);
+}
+.zy-mf-btn-deny {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--fg-dim);
+}
+.zy-mf-btn-deny:hover {
+  border-color: var(--border-strong);
+  color: var(--fg);
+}
+.zy-mf-tool-exec {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 9px;
+  font-family: var(--font-tech);
+  font-size: 13px;
+  color: var(--fg-faint);
+}
+.zy-mf-tool-done {
+  margin-top: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--success);
+  background: var(--bg);
+  border-radius: 2px;
+  padding: 6px 8px;
+}
+.zy-mf-tool-denied {
+  margin-top: 8px;
+  font-family: var(--font-tech);
+  font-size: 13px;
+  color: var(--danger);
+}
+
+/* ready prompt --------------------------------------------------------- */
+.zy-mf-ready {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.zy-mf-ready-text {
+  font-family: var(--font-tech);
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  color: var(--fg-faint);
+}
+
+/* empty state ---------------------------------------------------------- */
+.zy-mf-empty {
+  margin: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+  color: var(--fg-faint);
+}
+.zy-mf-empty-mark {
+  width: 58px;
+  height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  color: var(--accent-2);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border: 1px solid var(--border);
+}
+.zy-mf-empty-title {
+  font-family: var(--font-display);
+  font-size: 20px;
+  letter-spacing: 0.06em;
+  color: var(--fg-dim);
+}
+.zy-mf-empty-hint {
+  font-family: var(--font-tech);
+  font-size: 14px;
+  letter-spacing: 0.04em;
+}
+.zy-mf-empty-hint b {
+  color: var(--accent-2);
+}
+
+/* offscreen engine host: keeps the xterm(s) alive (PTY I/O, OSC parsing,
+   output capture) while the mission feed owns the visible surface. */
+.zy-engine-host {
+  position: fixed;
+  left: -100000px;
+  top: 0;
+  width: 1000px;
+  height: 640px;
+  overflow: hidden;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0;
+}

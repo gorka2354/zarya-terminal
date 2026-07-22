@@ -88,6 +88,17 @@ export class BlockEngine {
     return this.phase === 'input'
   }
 
+  /**
+   * Live snapshot of the currently-running block's output, read straight from
+   * the (offscreen) xterm buffer. The DOM mission-feed polls this while a block
+   * is running so long commands stream their tail instead of showing a bare
+   * spinner. Returns '' when nothing is running.
+   */
+  snapshotOutput(): string {
+    if (!this.currentBlockId) return ''
+    return this.extractOutput().output
+  }
+
   private expectedNonce(): string | undefined {
     return useSessionsStore.getState().sessions[this.sessionId]?.nonce
   }

@@ -4,6 +4,7 @@ import { ActivityBar } from '@/components/ActivityBar'
 import { AgentBar } from '@/components/AgentBar'
 import { BlocksPanel } from '@/components/BlocksPanel'
 import { LaunchPad } from '@/components/LaunchPad'
+import { MissionFeed } from '@/components/MissionFeed'
 import { StarBackdrop } from '@/components/StarBackdrop'
 import { SessionsPanel } from '@/components/SessionsPanel'
 import { SplitLayout } from '@/components/SplitLayout'
@@ -108,6 +109,7 @@ function Sidebar(): React.JSX.Element | null {
 function MainContent(): React.JSX.Element {
   const tabs = useSessionsStore((s) => s.tabs)
   const activeTabId = useSessionsStore((s) => s.activeTabId)
+  const activeSessionId = useSessionsStore((s) => s.activeSessionId())
   const editorFiles = useEditorStore((s) => s.files)
   const [editorWidth, setEditorWidth] = useState(46) // percent
   const editorOpen = editorFiles.length > 0
@@ -116,10 +118,17 @@ function MainContent(): React.JSX.Element {
     <div className="zy-content">
       <div className="zy-terminal-col">
         <div className="zy-workspace">
-          {tabs.map((tab) => (
-            <SplitLayout key={tab.id} tab={tab} visible={tab.id === activeTabId} />
-          ))}
-          {!tabs.length && (
+          {/* The xterm engines live off-screen: they still own PTY I/O, shell
+              integration (OSC 133), and per-command output capture that feeds
+              the blocks store — but the visible surface is the mission feed. */}
+          <div className="zy-engine-host" aria-hidden>
+            {tabs.map((tab) => (
+              <SplitLayout key={tab.id} tab={tab} visible={tab.id === activeTabId} />
+            ))}
+          </div>
+          {activeSessionId ? (
+            <MissionFeed sessionId={activeSessionId} />
+          ) : (
             <div className="zy-empty" style={{ margin: 'auto' }}>
               Нет открытых сессий — создай новую вкладку (Ctrl+Shift+T)
             </div>

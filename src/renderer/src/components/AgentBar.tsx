@@ -3,7 +3,6 @@ import { useSessionsStore } from '@/state/sessionsStore'
 import { useSettingsStore } from '@/state/settingsStore'
 import { useUiStore } from '@/state/uiStore'
 import { getTerminal } from '@/terminal/terminalRegistry'
-import { aiOpenPanel } from '@/features/ai/aiBridge'
 import { useAiStore } from '@/features/ai/aiStore'
 import { Icon } from './Icon'
 import './agentbar.css'
@@ -35,8 +34,9 @@ export function AgentBar(): React.JSX.Element {
       }
       return
     }
-    // Otherwise → AI agent.
-    aiOpenPanel()
+    // Otherwise → AI agent. The turn renders inline in the mission feed (no
+    // side panel) — bind the conversation to the active session so the feed
+    // picks it up.
     const store = useAiStore.getState()
     const conv = store.activeConversation()
     const convId =
