@@ -130,5 +130,12 @@ export function StarBackdrop(): React.JSX.Element {
     }
   }, [])
 
-  return <canvas ref={ref} className="zy-star-backdrop" aria-hidden />
+  // Wrapper div fills the inset area (a <canvas> is a replaced element and
+  // would otherwise keep its intrinsic 300×150 size, confining stars to a
+  // top-left box). The canvas then fills the wrapper at 100%.
+  return (
+    <div className="zy-star-backdrop" aria-hidden>
+      <canvas ref={ref} className="zy-star-canvas" />
+    </div>
+  )
 }

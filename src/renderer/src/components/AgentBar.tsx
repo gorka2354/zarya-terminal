@@ -1,4 +1,6 @@
 import { useRef, useState } from 'react'
+import type { AiEffort } from '@shared/types'
+import { EFFORT_TUNING } from '@shared/defaults'
 import { useSessionsStore } from '@/state/sessionsStore'
 import { useSettingsStore } from '@/state/settingsStore'
 import { useUiStore } from '@/state/uiStore'
@@ -6,6 +8,18 @@ import { getTerminal } from '@/terminal/terminalRegistry'
 import { useAiStore } from '@/features/ai/aiStore'
 import { Icon } from './Icon'
 import './agentbar.css'
+
+const EFFORTS: AiEffort[] = ['low', 'medium', 'high', 'max']
+
+/** claude-haiku-4-5-20251001 → HAIKU 4.5 — a compact chip label. */
+function prettyModel(id: string): string {
+  return id
+    .replace(/^claude-/, '')
+    .replace(/-\d{6,}$/, '')
+    .replace(/-(\d+)-(\d+)$/, ' $1.$2')
+    .replace(/-/g, ' ')
+    .toUpperCase()
+}
 
 /**
  * Unified "ask agent" command bar under the terminal area — the design's
@@ -16,6 +30,8 @@ import './agentbar.css'
  */
 export function AgentBar(): React.JSX.Element {
   const model = useSettingsStore((s) => s.settings.ai.model)
+  const effort = useSettingsStore((s) => s.settings.ai.effort)
+  const effortIdx = EFFORTS.indexOf(effort)
   const [text, setText] = useState('')
   const ref = useRef<HTMLInputElement>(null)
 
@@ -90,22 +106,26 @@ export function AgentBar(): React.JSX.Element {
           }}
         />
         <button
-          className="zy-agentbar-model"
-          title="Двигатель · модель и тяга (пусковой комплекс)"
+          className={`zy-agentbar-effort${effort === 'max' ? ' zy-agentbar-effort--max' : ''}`}
+          title={`Тяга (effort): ${EFFORT_TUNING[effort].label} · пусковой комплекс`}
           onClick={openLaunchPad}
         >
-          <span className="zy-agentbar-model-rocket">
-            <svg width="14" height="17" viewBox="0 0 20 24" shapeRendering="crispEdges">
-              <rect x="8" y="1" width="4" height="3" fill="var(--accent)" />
-              <rect x="7" y="4" width="6" height="11" fill="#e8e2d2" />
-              <rect x="7" y="7" width="6" height="2" fill="var(--accent)" />
-              <rect x="8" y="10" width="4" height="3" fill="#4fd6d6" />
-              <rect x="5" y="12" width="2" height="4" fill="var(--accent)" />
-              <rect x="13" y="12" width="2" height="4" fill="var(--accent)" />
-              <rect x="8" y="16" width="4" height="3" fill="var(--accent-2)" />
-            </svg>
+          <span className="zy-agentbar-effort-bars">
+            {EFFORTS.map((e, i) => (
+              <span
+                key={e}
+                className={`zy-agentbar-effort-bar${i <= effortIdx ? ' zy-agentbar-effort-bar--on' : ''}`}
+              />
+            ))}
           </span>
-          <span className="zy-agentbar-model-name">{model}</span>
+          <span className="zy-agentbar-effort-label">{EFFORT_TUNING[effort].label}</span>
+        </button>
+        <button
+          className="zy-agentbar-model"
+          title={`Двигатель · модель: ${model} (пусковой комплекс)`}
+          onClick={openLaunchPad}
+        >
+          <span className="zy-agentbar-model-name">{prettyModel(model)}</span>
           <span className="zy-agentbar-model-caret">▴</span>
         </button>
         <button className="zy-agentbar-send" title="Отправить агенту" onClick={submit}>

@@ -91,21 +91,65 @@
 .zy-agentbar-input:focus {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent);
 }
+/* Effort (тяга) indicator — 4 mini bars + label, opens the launch pad. */
+.zy-agentbar-effort {
+  flex-shrink: 0;
+  height: 34px;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 4px solid transparent;
+  border-image: url(../assets/pixel-frame-dark.png) 2 / 4px / 0 round;
+  image-rendering: pixelated;
+  background: var(--bg);
+  cursor: pointer;
+  font-family: var(--font-tech);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  color: var(--fg-dim);
+}
+:root[data-theme-type='light'] .zy-agentbar-effort {
+  border-image-source: url(../assets/pixel-frame-light.png);
+}
+.zy-agentbar-effort-bars {
+  display: inline-flex;
+  gap: 2px;
+  align-items: flex-end;
+}
+.zy-agentbar-effort-bar {
+  width: 3px;
+  height: 13px;
+  background: var(--border-strong);
+}
+.zy-agentbar-effort-bar--on {
+  background: var(--accent-2);
+}
+.zy-agentbar-effort--max .zy-agentbar-effort-bar--on {
+  background: var(--accent);
+}
+.zy-agentbar-effort-label {
+  color: var(--fg-dim);
+}
+.zy-agentbar-effort--max .zy-agentbar-effort-label {
+  color: var(--accent);
+}
+
 .zy-agentbar-model {
   flex-shrink: 0;
   height: 34px;
-  padding: 0 10px 0 9px;
-  border: 1px solid var(--border-strong);
-  border-radius: 3px;
+  padding: 0 8px;
+  border: 4px solid transparent;
+  border-image: url(../assets/pixel-frame-dark.png) 2 / 4px / 0 round;
+  image-rendering: pixelated;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   background: var(--bg);
-  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.25);
 }
-.zy-agentbar-model:hover {
-  border-color: var(--accent-2);
+:root[data-theme-type='light'] .zy-agentbar-model {
+  border-image-source: url(../assets/pixel-frame-light.png);
 }
 .zy-agentbar-model:active {
   transform: translateY(1px);
