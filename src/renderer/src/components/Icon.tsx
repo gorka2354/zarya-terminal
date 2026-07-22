@@ -5,6 +5,7 @@
  *
  * Usage: <Icon name="star" /> · size via the `size` prop or font-size context.
  */
+import { PixelText } from './PixelIcon'
 
 export type IconName =
   | 'star'
@@ -261,14 +262,16 @@ export function Icon({ name, size = 16, className, strokeWidth = 1.6, title }: P
 const SHELL_CODES = new Set(['PS', 'CMD', 'SH', 'WSL', 'ZSH', 'FSH', 'PWSH', '>_'])
 
 export function ShellGlyph({ code, size = 15 }: { code: string; size?: number }): React.JSX.Element {
-  const known = SHELL_CODES.has(code.toUpperCase())
-  if (!known) {
+  const up = code.toUpperCase()
+  if (!SHELL_CODES.has(up)) {
     // Legacy emoji or unknown — show a generic terminal glyph, not the emoji.
     return <Icon name="terminal" size={size + 1} />
   }
+  // Pixel monogram (5×7 font, PX=2) tinted by the badge's per-shell colour.
+  const label = up === 'PWSH' ? 'PS' : up
   return (
-    <span className="zy-shell-mono" data-shell={code.toUpperCase()}>
-      {code.toUpperCase() === 'PWSH' ? 'PS' : code.toUpperCase()}
+    <span className="zy-shell-mono" data-shell={up}>
+      <PixelText text={label} />
     </span>
   )
 }

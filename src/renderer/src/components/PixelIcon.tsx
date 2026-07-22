@@ -1,4 +1,5 @@
 import pixelIcons from './pixelIcons.json'
+import { PIXEL_FONT, FONT_W, FONT_H } from './pixelFont'
 
 /**
  * Global art-pixel unit — the Stardew-Valley rule: ONE pixel size everywhere.
@@ -61,6 +62,62 @@ export function PixelIcon({
       focusable="false"
     >
       {title && <title>{title}</title>}
+      {rects}
+    </svg>
+  )
+}
+
+/**
+ * Short string rendered in the 5×7 {@link PIXEL_FONT} as run-length <rect>s
+ * (currentColor, crisp) — used for shell monograms. Same PX unit as the icons,
+ * so a "pixel" here matches everywhere. Unknown characters are skipped.
+ */
+export function PixelText({
+  text,
+  px = PX,
+  gap = 1,
+  className
+}: {
+  text: string
+  px?: number
+  gap?: number
+  className?: string
+}): React.JSX.Element {
+  const chars = text.toUpperCase().split('')
+  const rects: React.JSX.Element[] = []
+  let ox = 0
+  for (const ch of chars) {
+    const g = PIXEL_FONT[ch]
+    if (g) {
+      for (let y = 0; y < FONT_H; y++) {
+        const row = g[y]
+        let x = 0
+        while (x < FONT_W) {
+          if (row[x] === '1') {
+            let w = 1
+            while (x + w < FONT_W && row[x + w] === '1') w++
+            rects.push(<rect key={`${ox}-${x}-${y}`} x={ox + x} y={y} width={w} height={1} />)
+            x += w
+          } else {
+            x++
+          }
+        }
+      }
+    }
+    ox += FONT_W + gap
+  }
+  const totalW = Math.max(1, chars.length * (FONT_W + gap) - gap)
+  return (
+    <svg
+      className={className}
+      width={totalW * px}
+      height={FONT_H * px}
+      viewBox={`0 0 ${totalW} ${FONT_H}`}
+      fill="currentColor"
+      shapeRendering="crispEdges"
+      aria-hidden
+      focusable="false"
+    >
       {rects}
     </svg>
   )
