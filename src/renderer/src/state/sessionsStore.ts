@@ -10,6 +10,7 @@ import type {
 } from '@shared/types'
 import { uid } from '@/lib/uid'
 import { emitBus, onBus } from '@/lib/bus'
+import { runQuitFlushers } from '@/lib/quitFlush'
 import { useBlocksStore } from './blocksStore'
 import { getSettings } from './settingsStore'
 import { useUiStore } from './uiStore'
@@ -242,6 +243,9 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
             await get().snapshotAll()
             const { tabs, activeTabId } = get()
             await window.zarya.sessions.saveWorkspace({ tabs, activeTabId })
+            // Flush AI conversations (registered via quitFlush) so the last
+            // messages survive shutdown alongside the terminal snapshots.
+            await runQuitFlushers()
           } finally {
             window.zarya.sessions.readyToQuit()
           }
@@ -305,6 +309,8 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
       set({ activeTabId: tabId })
       const tab = get().tabs.find((t) => t.id === tabId)
       if (tab) {
+        // Let the AI store follow the terminal (activeId → this terminal's chat).
+        emitBus('terminal:focus', { sessionId: tab.activeSessionId })
         requestAnimationFrame(() => getTerminal(tab.activeSessionId)?.focus())
       }
       schedulePersistWorkspace(get)
@@ -574,6 +580,42 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
     }
   }
 })
+
+// QA hook: force a full persist (terminal snapshots + workspace + conversations)
+// so a restart-restore test is deterministic without relying on graceful close.
+;(window as unknown as { __zaryaPersistAll?: () => Promise<void> }).__zaryaPersistAll = async () => {
+  await useSessionsStore.getState().snapshotAll()
+  const { tabs, activeTabId } = useSessionsStore.getState()
+  await window.zarya.sessions.saveWorkspace({ tabs, activeTabId })
+  await runQuitFlushers()
+}
+
+// QA hook: inspect the tab/session model from the offscreen harness.
+;(window as unknown as { __zaryaDumpSessions?: () => unknown }).__zaryaDumpSessions = () => {
+  const s = useSessionsStore.getState()
+  return {
+    activeTabId: s.activeTabId,
+    activeSessionId: s.activeSessionId(),
+    tabs: s.tabs.map((t) => ({ id: t.id, activeSessionId: t.activeSessionId, leaves: listLeaves(t.layout) })),
+    sessions: Object.values(s.sessions).map((x) => ({ id: x.id, title: x.title, cwd: x.cwd, status: x.status }))
+  }
+}
+
+// QA hooks: drive terminals from the offscreen harness (create / run a shell
+// command / split / close) so a full-app QA sweep can exercise the real PTY.
+;(window as unknown as { __zaryaNewTerminal?: (cwd?: string) => Promise<string> }).__zaryaNewTerminal = (
+  cwd
+) => useSessionsStore.getState().newTab(undefined, cwd)
+;(window as unknown as { __zaryaRunShell?: (cmd: string, sessionId?: string) => string | null }).__zaryaRunShell =
+  (cmd, sessionId) => {
+    const sid = sessionId || useSessionsStore.getState().activeSessionId()
+    if (sid) window.zarya.pty.write(sid, cmd + '\r')
+    return sid
+  }
+;(window as unknown as { __zaryaSplitActive?: (dir: SplitDirection) => Promise<void> }).__zaryaSplitActive =
+  (dir) => useSessionsStore.getState().splitActive(dir)
+;(window as unknown as { __zaryaCloseSession?: (sid: string) => Promise<void> }).__zaryaCloseSession = (sid) =>
+  useSessionsStore.getState().closeSession(sid, { save: false })
 
 async function restoreWorkspace(
   ws: WorkspaceState,

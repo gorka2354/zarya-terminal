@@ -4,9 +4,16 @@ import { formatRelative, shortenPath } from '@/lib/ansi'
 import { fuzzyFilter } from '@/lib/fuzzy'
 import { useAiStore } from '@/features/ai/aiStore'
 import { listLeaves, useSessionsStore } from '@/state/sessionsStore'
+import { useSettingsStore } from '@/state/settingsStore'
 import { useUiStore } from '@/state/uiStore'
-import { useContextMenu } from './ContextMenu'
+import { useContextMenu, type MenuItem } from './ContextMenu'
 import { Icon, ShellGlyph } from './Icon'
+
+/** Open a native folder picker and start a new terminal there. */
+export async function openFolderAsTerminal(): Promise<void> {
+  const dir = await window.zarya.app.pickDirectory()
+  if (dir) await useSessionsStore.getState().newTab(undefined, dir)
+}
 
 const sectionLabelStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 6 }
 const enSubStyle: React.CSSProperties = {
@@ -46,9 +53,57 @@ export function SessionsPanel(): React.JSX.Element {
   const tabs = useSessionsStore((s) => s.tabs)
   const activeTabId = useSessionsStore((s) => s.activeTabId)
   const conversations = useAiStore((s) => s.conversations)
+  const bookmarks = useSettingsStore((s) => s.settings.bookmarks)
   const [query, setQuery] = useState('')
   const { menu, open } = useContextMenu()
   const store = useSessionsStore.getState()
+
+  // Recent folders: distinct cwds from saved sessions, minus already-bookmarked.
+  const recentFolders = useMemo(() => {
+    const seen = new Set(bookmarks)
+    const out: string[] = []
+    for (const m of savedList) {
+      if (m.cwd && !seen.has(m.cwd)) {
+        seen.add(m.cwd)
+        out.push(m.cwd)
+      }
+      if (out.length >= 6) break
+    }
+    return out
+  }, [savedList, bookmarks])
+
+  const addProject = async (): Promise<void> => {
+    const dir = await window.zarya.app.pickDirectory()
+    if (dir && !bookmarks.includes(dir)) {
+      await useSettingsStore.getState().update({ bookmarks: [...bookmarks, dir] })
+    }
+  }
+
+  // Dropdown on the header ▾: quick-new + open-in-folder + projects + recents.
+  const openNewMenu = (e: React.MouseEvent): void => {
+    const items: MenuItem[] = [
+      { label: 'Новый терминал', hint: 'Ctrl+Shift+T', onClick: () => void store.newTab() },
+      { label: 'Открыть папку…', hint: 'Ctrl+Shift+O', onClick: () => void openFolderAsTerminal() }
+    ]
+    if (bookmarks.length) {
+      items.push({ separator: true }, { label: 'ПРОЕКТЫ', disabled: true })
+      for (const b of bookmarks) {
+        items.push({ label: shortenPath(b, 40), onClick: () => void store.newTab(undefined, b) })
+      }
+    }
+    items.push(
+      { separator: true },
+      { label: 'Добавить папку в проекты…', onClick: () => void addProject() }
+    )
+    if (recentFolders.length) {
+      items.push({ separator: true }, { label: 'НЕДАВНИЕ ПАПКИ', disabled: true })
+      for (const f of recentFolders) {
+        items.push({ label: shortenPath(f, 40), onClick: () => void store.newTab(undefined, f) })
+      }
+    }
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    open(r.left, r.bottom + 4, items)
+  }
 
   const crewActive = conversations.filter((c) => c.streaming || c.pendingTools.length > 0)
 
@@ -65,6 +120,16 @@ export function SessionsPanel(): React.JSX.Element {
   const savedClosed = filtered.filter((m) => !openIds.has(m.id))
   const favorites = savedClosed.filter((m) => m.favorite)
   const recent = savedClosed.filter((m) => !m.favorite)
+
+  // The search box filters ALL sections, not just saved sessions.
+  const q = query.trim().toLowerCase()
+  const shownTabs = q
+    ? tabs.filter((t) => {
+        const s = sessions[t.activeSessionId]
+        return `${s?.title ?? ''} ${s?.cwd ?? ''}`.toLowerCase().includes(q)
+      })
+    : tabs
+  const shownProjects = q ? bookmarks.filter((b) => b.toLowerCase().includes(q)) : bookmarks
 
   const openContext = (e: React.MouseEvent, m: SessionMeta): void => {
     e.preventDefault()
@@ -136,6 +201,83 @@ export function SessionsPanel(): React.JSX.Element {
     )
   }
 
+  const renderProject = (dir: string): React.JSX.Element => {
+    const name = dir.split(/[\\/]/).filter(Boolean).pop() || dir
+    return (
+      <div
+        key={dir}
+        className="zy-item"
+        title={`Открыть терминал в ${dir}`}
+        onClick={() => void store.newTab(undefined, dir)}
+        onContextMenu={(e) => {
+          e.preventDefault()
+          open(e.clientX, e.clientY, [
+            { label: 'Открыть терминал здесь', onClick: () => void store.newTab(undefined, dir) },
+            { label: 'Открыть в проводнике', onClick: () => window.zarya.app.showItemInFolder(dir) },
+            { separator: true },
+            {
+              label: 'Убрать из проектов',
+              danger: true,
+              onClick: () =>
+                void useSettingsStore
+                  .getState()
+                  .update({ bookmarks: bookmarks.filter((b) => b !== dir) })
+            }
+          ])
+        }}
+      >
+        <span className="zy-item-icon" style={{ color: 'var(--accent)' }}>
+          <Icon name="folder" size={15} />
+        </span>
+        <div className="zy-item-body">
+          <div className="zy-item-title">{name}</div>
+          <div className="zy-item-sub zy-item-sub--path">{shortenPath(dir, 34)}</div>
+        </div>
+        <div className="zy-item-actions">
+          <button
+            className="zy-icon-btn"
+            title="Убрать из проектов"
+            onClick={(e) => {
+              e.stopPropagation()
+              void useSettingsStore
+                .getState()
+                .update({ bookmarks: bookmarks.filter((b) => b !== dir) })
+            }}
+          >
+            <Icon name="close" size={13} />
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  const openTabContext = (e: React.MouseEvent, tab: TabState): void => {
+    e.preventDefault()
+    const sid = tab.activeSessionId
+    const s = sessions[sid]
+    if (!s) return
+    open(e.clientX, e.clientY, [
+      {
+        label: 'Переименовать…',
+        onClick: () => {
+          const title = window.prompt('Название сессии', s.title)
+          if (title) void store.renameSession(sid, title)
+        }
+      },
+      {
+        label: s.favorite ? 'Убрать из избранного' : 'В избранное',
+        onClick: () => void store.toggleFlag(sid, 'favorite')
+      },
+      {
+        label: s.pinned ? 'Открепить' : 'Закрепить (защита от очистки)',
+        onClick: () => void store.toggleFlag(sid, 'pinned')
+      },
+      { separator: true },
+      { label: 'Разделить вправо', onClick: () => void store.splitActive('row') },
+      { label: 'Закрыть терминал', danger: true, onClick: () => void store.closeTab(tab.id) }
+    ])
+  }
+
   const renderOpenTab = (tab: TabState): React.JSX.Element => {
     const session = sessions[tab.activeSessionId]
     const count = listLeaves(tab.layout).length
@@ -144,6 +286,7 @@ export function SessionsPanel(): React.JSX.Element {
         key={tab.id}
         className={`zy-item${tab.id === activeTabId ? ' zy-item--active' : ''}`}
         onClick={() => store.setActiveTab(tab.id)}
+        onContextMenu={(e) => openTabContext(e, tab)}
         title={session?.cwd}
       >
         <span className="zy-item-icon">
@@ -151,11 +294,35 @@ export function SessionsPanel(): React.JSX.Element {
         </span>
         <div className="zy-item-body">
           <div className="zy-item-title">
+            {session?.pinned && (
+              <span
+                title="Закреплена"
+                style={{
+                  display: 'inline-block',
+                  width: 6,
+                  height: 6,
+                  marginRight: 5,
+                  borderRadius: '50%',
+                  background: 'var(--accent)',
+                  verticalAlign: 'middle'
+                }}
+              />
+            )}
             {(session?.title || 'Терминал') + (count > 1 ? ` · ${count}` : '')}
           </div>
           <div className="zy-item-sub zy-item-sub--path">{shortenPath(session?.cwd || '', 34)}</div>
         </div>
         <div className="zy-item-actions">
+          <button
+            className="zy-icon-btn"
+            title={session?.favorite ? 'Убрать из избранного' : 'В избранное'}
+            onClick={(e) => {
+              e.stopPropagation()
+              void store.toggleFlag(tab.activeSessionId, 'favorite')
+            }}
+          >
+            <Icon name={session?.favorite ? 'star' : 'star-outline'} size={13} />
+          </button>
           <button
             className="zy-icon-btn"
             title="Закрыть терминал"
@@ -184,13 +351,23 @@ export function SessionsPanel(): React.JSX.Element {
           Сессии
           <span style={enSubStyle}>SESSIONS</span>
         </span>
-        <button
-          className="zy-icon-btn"
-          title="Новый терминал (Ctrl+Shift+T)"
-          onClick={() => void store.newTab()}
-        >
-          <Icon name="plus" size={15} />
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <button
+            className="zy-icon-btn"
+            title="Новый терминал (Ctrl+Shift+T)"
+            onClick={() => void store.newTab()}
+            onContextMenu={openNewMenu}
+          >
+            <Icon name="plus" size={15} />
+          </button>
+          <button
+            className="zy-icon-btn"
+            title="Открыть в папке / проект / недавние…"
+            onClick={openNewMenu}
+          >
+            <Icon name="chevron-down" size={12} />
+          </button>
+        </div>
       </div>
       <div className="zy-sidebar-search">
         <input
@@ -201,13 +378,22 @@ export function SessionsPanel(): React.JSX.Element {
         />
       </div>
       <div className="zy-sidebar-body">
-        {tabs.length > 0 && (
+        {shownTabs.length > 0 && (
           <>
             <div className="zy-section-label" style={sectionLabelStyle}>
               <Icon name="terminal" size={11} />
               Открытые
             </div>
-            {tabs.map(renderOpenTab)}
+            {shownTabs.map(renderOpenTab)}
+          </>
+        )}
+        {shownProjects.length > 0 && (
+          <>
+            <div className="zy-section-label" style={sectionLabelStyle}>
+              <Icon name="folder" size={11} />
+              Проекты
+            </div>
+            {shownProjects.map(renderProject)}
           </>
         )}
         {favorites.length > 0 && (

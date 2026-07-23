@@ -24,6 +24,22 @@ export interface ShellProfile {
   detected?: boolean
 }
 
+/** An external AI coding CLI Zarya can launch straight into the terminal. */
+export interface AiCli {
+  id: string
+  name: string
+  /** Full command to run (may include args, e.g. "ollama run llama3"). */
+  cmd: string
+  /** Short 2-char glyph for the launcher tile. */
+  glyph: string
+  /** Theme color token used to tint the tile ('accent' | 'accent-2'). */
+  tint: 'accent' | 'accent-2'
+  /** Resolved executable path, when found on PATH. */
+  path: string | null
+  /** True when the CLI is installed / reachable. */
+  detected: boolean
+}
+
 export interface PtySpawnRequest {
   sessionId: string
   profileId: string
@@ -167,6 +183,12 @@ export interface AiSettings {
   contextBlocks: number
   /** Extra instructions appended to the system prompt. */
   systemPromptExtra: string
+  /** Claude Code model override ('' = account default from ~/.claude). */
+  claudeModel: string
+  /** Claude Code effort override ('' = account default). */
+  claudeEffort: string
+  /** Auto-approve tool calls without prompting (canUseTool auto-allow; AskUserQuestion still surfaces). */
+  claudeBypass: boolean
 }
 
 export interface SessionsSettings {
@@ -193,6 +215,12 @@ export interface Settings {
   keybindings: Record<string, string>
   /** Bookmarked directories for quick cd. */
   bookmarks: string[]
+  /**
+   * IDE superstructure (Files, Monaco editor, Workflows, the IDE-agent panel and
+   * their settings) layered over the base terminal. Off by default — the base
+   * stays a clean terminal + Claude Code agent until you opt in.
+   */
+  ideMode: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -238,6 +266,150 @@ export interface AiProviderStatus {
   provider: AiProviderKind
   hasKey: boolean
 }
+
+/** A conversation persisted to disk (survives restart), bound to a terminal + cwd. */
+export interface PersistedConversation {
+  id: string
+  title: string
+  engine: 'builtin' | 'claude-code'
+  /** Terminal session this conversation belongs to. */
+  sessionId?: string
+  /** Claude Code session id — resumed on the next turn to keep full context. */
+  claudeSessionId?: string
+  /** Working directory the conversation was opened in. */
+  cwd?: string
+  messages: AiMessage[]
+  createdAt: number
+}
+
+export interface AiConversationsState {
+  conversations: PersistedConversation[]
+  /** Which conversation is active per terminal session. */
+  activeBySession: Record<string, string>
+  /** Last known Claude Code status (model/effort/usage) for the fuel gauge. */
+  claudeStatus?: { model?: string; effort?: string; usage?: ClaudeUsage }
+  /** Cached SDK model catalog so the launch pad (incl. Fable) is populated on cold start. */
+  claudeModels?: ClaudeModelInfo[]
+}
+
+// ---------------------------------------------------------------------------
+// Native Claude Code driver (headless Agent SDK, main process owns the child)
+// ---------------------------------------------------------------------------
+
+/** A single AskUserQuestion prompt (Claude's structured choice widget). */
+export interface ClaudeCliQuestion {
+  question: string
+  header: string
+  options: { label: string; description?: string; preview?: string }[]
+  multiSelect?: boolean
+}
+
+/**
+ * Only these three are representable. 'bypassPermissions'/'dontAsk' are
+ * deliberately excluded: bypassPermissions shadows canUseTool entirely (which
+ * would also silently auto-answer AskUserQuestion), so bypass is implemented as
+ * an auto-allow INSIDE canUseTool instead — see claudeCodeDriver. The main
+ * process also whitelists this at the trust boundary.
+ */
+export type ClaudePermissionMode = 'default' | 'acceptEdits' | 'plan'
+
+export interface ClaudeStartOpts {
+  /** The user's turn text. */
+  prompt: string
+  /** Working directory the agent operates in (the bound session's cwd). */
+  cwd?: string
+  /** Model id override; omit to use the CLI's configured default. */
+  model?: string
+  /** Reasoning effort override; omit to use the account default. */
+  effort?: string
+  permissionMode?: ClaudePermissionMode
+  /** Auto-approve tool calls in canUseTool without prompting (AskUserQuestion still surfaces). */
+  bypass?: boolean
+  /** Ultracode: xhigh effort + standing dynamic-workflow orchestration (session-scoped). */
+  ultracode?: boolean
+  /** Resume a prior Claude Code session id (multi-turn continuity). */
+  resume?: string
+}
+
+/**
+ * Events streamed main -> renderer for a native Claude Code turn. Distinct from
+ * {@link AiStreamEvent} (the built-in provider agent) so neither path perturbs
+ * the other; the renderer adapter maps these onto the shared Conversation shape.
+ */
+/** Subscription rate-limit windows (utilization %, reset time) for the fuel gauge. */
+export interface ClaudeUsage {
+  subscriptionType?: string
+  fiveHourPct?: number
+  fiveHourResetsAt?: number
+  sevenDayPct?: number
+  sevenDayResetsAt?: number
+}
+
+export type ClaudeStreamEvent =
+  | {
+      type: 'init'
+      sessionId: string
+      model: string
+      cwd: string
+      permissionMode: string
+      tools: string[]
+      /** Reasoning effort from the account config (~/.claude/settings.json). */
+      effort?: string
+    }
+  | { type: 'usage'; usage: ClaudeUsage }
+  | { type: 'models'; models: ClaudeModelInfo[] }
+  | { type: 'assistant'; content: AiContentPart[] }
+  | { type: 'tool_result'; toolUseId: string; content: string; isError: boolean }
+  | {
+      type: 'permission'
+      toolUseId: string
+      toolName: string
+      input: unknown
+      title?: string
+      displayName?: string
+      /** Present when toolName === 'AskUserQuestion' — the choice widget payload. */
+      questions?: ClaudeCliQuestion[]
+    }
+  | {
+      type: 'result'
+      isError: boolean
+      result?: string
+      costUsd?: number
+      numTurns?: number
+      sessionId?: string
+      /** Model ids actually used this turn (keys of modelUsage) — ground truth. */
+      models?: string[]
+    }
+  | { type: 'error'; message: string }
+
+/** SDK effort levels (mirrors the Agent SDK's EffortLevel — future-proof). */
+export type ClaudeEffortLevel = 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+
+/** A Claude model as reported dynamically by the SDK (query.supportedModels()). */
+export interface ClaudeModelInfo {
+  /** Model id / alias to pass to the SDK (e.g. 'opus', 'claude-sonnet-5'). */
+  value: string
+  /** Canonical wire id this resolves to. */
+  resolvedModel?: string
+  displayName: string
+  description?: string
+  supportsEffort?: boolean
+  supportedEffortLevels?: ClaudeEffortLevel[]
+}
+
+/** A past Claude Code session on disk (for the resume picker), scoped by folder. */
+export interface ClaudeSessionInfo {
+  sessionId: string
+  summary: string
+  lastModified: number
+  firstPrompt?: string
+  gitBranch?: string
+}
+
+/** Renderer -> main decision resolving a pending canUseTool permission. */
+export type ClaudePermissionDecision =
+  | { behavior: 'allow'; updatedInput?: Record<string, unknown> }
+  | { behavior: 'deny'; message: string }
 
 // ---------------------------------------------------------------------------
 // Global command history (Time Machine)

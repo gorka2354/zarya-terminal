@@ -77,6 +77,9 @@
   font-size: 12.5px;
   line-height: 1.65;
   color: var(--fg);
+  /* The agent/command text must be selectable & copyable (global body sets none). */
+  user-select: text;
+  cursor: auto;
 }
 
 /* shell block ---------------------------------------------------------- */
@@ -274,22 +277,62 @@
   display: flex;
   align-items: center;
   gap: 7px;
+  min-width: 0;
+}
+.zy-mf-tool-head--clickable {
+  cursor: pointer;
 }
 .zy-mf-tool-cmd {
   font-family: var(--font-mono);
   font-size: 12px;
   color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  user-select: text;
+}
+.zy-mf-tool-expand {
+  display: inline-flex;
+  align-items: center;
+  color: var(--fg-faint);
+  flex-shrink: 0;
+}
+.zy-mf-tool-full {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  max-height: 240px;
+  overflow: auto;
+  background: var(--bg);
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--fg-dim);
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
 }
 .zy-mf-tool-note {
   margin-left: auto;
   font-family: var(--font-tech);
   font-size: 12px;
   color: var(--fg-faint);
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 .zy-mf-tool-actions {
   display: flex;
+  align-items: center;
   gap: 6px;
   margin-top: 9px;
+}
+.zy-mf-tool-kbd {
+  margin-left: auto;
+  font-family: var(--font-tech);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--fg-faint);
 }
 .zy-mf-btn-run,
 .zy-mf-btn-deny {
@@ -364,6 +407,90 @@
   font-family: var(--font-tech);
   font-size: 13px;
   letter-spacing: 0.06em;
+  color: var(--fg-faint);
+}
+
+/* queued message (typed while the agent works) ------------------------- */
+.zy-mf-queued {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0 10px 16px;
+  padding: 6px 10px;
+  border-left: 2px solid var(--accent-2);
+  background: color-mix(in srgb, var(--accent-2) 8%, transparent);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--fg-dim);
+}
+.zy-mf-queued-text {
+  color: var(--fg);
+  white-space: pre-wrap;
+  min-width: 0;
+}
+.zy-mf-queued-hint {
+  margin-left: auto;
+  font-family: var(--font-tech);
+  font-size: 11px;
+  color: var(--fg-faint);
+  white-space: nowrap;
+}
+
+/* recent-sessions resume list (empty state) ---------------------------- */
+.zy-resume {
+  margin-top: 20px;
+  width: 100%;
+  max-width: 460px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.zy-resume-label {
+  font-family: var(--font-tech);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+  text-align: center;
+}
+.zy-resume-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.zy-resume-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 11px;
+  border: 4px solid transparent;
+  border-image: url(../assets/pixel-frame-dark.png) 2 / 4px / 0 round;
+  border-radius: 0;
+  image-rendering: pixelated;
+  background: var(--bg-elev1);
+  color: var(--fg);
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+}
+:root[data-theme-type='light'] .zy-resume-item {
+  border-image-source: url(../assets/pixel-frame-light.png);
+}
+.zy-resume-item:hover {
+  filter: brightness(1.12);
+}
+.zy-resume-summary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.zy-resume-time {
+  flex-shrink: 0;
+  font-family: var(--font-tech);
+  font-size: 11px;
   color: var(--fg-faint);
 }
 

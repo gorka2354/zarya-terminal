@@ -2,7 +2,10 @@ import { BrowserWindow, app, dialog, ipcMain, shell } from 'electron'
 import { CH } from '@shared/ipc'
 import type {
   AiChatRequest,
+  AiConversationsState,
   AiProviderKind,
+  ClaudePermissionDecision,
+  ClaudeStartOpts,
   HistoryEntry,
   PtySpawnRequest,
   SessionSnapshot,
@@ -12,12 +15,14 @@ import type {
   WorkspaceState
 } from '@shared/types'
 import type { AiProxy } from './aiProxy'
+import type { ClaudeCodeDriver } from './claudeCodeDriver'
 import * as fsService from './fsService'
 import * as gitService from './gitService'
 import type { HistoryStore } from './historyStore'
 import type { PtyManager } from './ptyManager'
 import type { SessionStore } from './sessionStore'
 import type { SettingsStore } from './settingsStore'
+import { detectAiClis } from './aiClis'
 import { detectShells, resolveProfile } from './shellProfiles'
 import type { WorkflowStore } from './workflowStore'
 
@@ -29,6 +34,7 @@ export interface IpcContext {
   historyStore: HistoryStore
   workflowStore: WorkflowStore
   aiProxy: AiProxy
+  claudeCodeDriver: ClaudeCodeDriver
   requestQuitConfirmed: () => void
 }
 
@@ -40,7 +46,8 @@ export function registerIpc(ctx: IpcContext): void {
     sessionStore,
     historyStore,
     workflowStore,
-    aiProxy
+    aiProxy,
+    claudeCodeDriver
   } = ctx
 
   // ------------------------------------------------------------------- pty
@@ -80,6 +87,10 @@ export function registerIpc(ctx: IpcContext): void {
     sessionStore.saveWorkspace(ws)
   )
   ipcMain.handle(CH.sessionsLoadWorkspace, () => sessionStore.loadWorkspace())
+  ipcMain.handle(CH.aiConversationsSave, (_e, state: AiConversationsState) =>
+    sessionStore.saveConversations(state)
+  )
+  ipcMain.handle(CH.aiConversationsLoad, () => sessionStore.loadConversations())
   ipcMain.on(CH.readyToQuit, () => ctx.requestQuitConfirmed())
 
   // -------------------------------------------------------------- settings
@@ -95,6 +106,9 @@ export function registerIpc(ctx: IpcContext): void {
     const settings = settingsStore.get()
     return [...settings.terminal.customProfiles, ...(await detectShells())]
   })
+
+  // --------------------------------------------------------------- ai clis
+  ipcMain.handle(CH.aiClisDetect, () => detectAiClis())
 
   // -------------------------------------------------------------------- ai
   ipcMain.on(CH.aiChat, (_e, requestId: string, req: AiChatRequest) => {
@@ -117,6 +131,45 @@ export function registerIpc(ctx: IpcContext): void {
   })
   ipcMain.on(CH.aiAbort, (_e, requestId: string) => aiProxy.abort(requestId))
   ipcMain.handle(CH.aiOllamaModels, (_e, baseUrl: string) => aiProxy.listOllamaModels(baseUrl))
+
+  // ------------------------------------------------------- claude code driver
+  ipcMain.on(CH.claudeCodeStart, (_e, requestId: string, opts: ClaudeStartOpts) => {
+    void claudeCodeDriver.start(requestId, opts)
+  })
+  ipcMain.on(CH.claudeCodeInput, (_e, requestId: string, text: string) => {
+    claudeCodeDriver.input(requestId, text)
+  })
+  ipcMain.on(CH.claudeCodeInterrupt, (_e, requestId: string) => {
+    claudeCodeDriver.interrupt(requestId)
+  })
+  ipcMain.on(
+    CH.claudeCodePermission,
+    (_e, requestId: string, toolUseId: string, decision: ClaudePermissionDecision) => {
+      claudeCodeDriver.resolvePermission(requestId, toolUseId, decision)
+    }
+  )
+  ipcMain.handle(CH.claudeCodeListSessions, (_e, cwd: string | undefined) =>
+    claudeCodeDriver.listSessions(cwd)
+  )
+  ipcMain.handle(CH.claudeCodeSessionMessages, (_e, sessionId: string, cwd: string | undefined) =>
+    claudeCodeDriver.loadSessionMessages(sessionId, cwd)
+  )
+  ipcMain.on(CH.claudeCodeSetModel, (_e, requestId: string, model: string | undefined) =>
+    claudeCodeDriver.setModel(requestId, model)
+  )
+  ipcMain.on(CH.claudeCodeSetBypass, (_e, requestId: string, bypass: boolean) =>
+    claudeCodeDriver.setBypass(requestId, bypass)
+  )
+  ipcMain.on(CH.claudeCodeSetEffort, (_e, requestId: string, effort: string | undefined) =>
+    claudeCodeDriver.setEffort(requestId, effort)
+  )
+  ipcMain.on(CH.claudeCodeSetUltracode, (_e, requestId: string, on: boolean) =>
+    claudeCodeDriver.setUltracode(requestId, on)
+  )
+  ipcMain.handle(CH.claudeCodeListModels, () => claudeCodeDriver.listModels())
+  ipcMain.handle(CH.claudeCodeDebugFlags, (_e, requestId?: string) =>
+    claudeCodeDriver.debugFlags(requestId)
+  )
 
   // --------------------------------------------------------------- fs / git
   ipcMain.handle(CH.fsReadDir, (_e, path: string) => fsService.readDir(path))

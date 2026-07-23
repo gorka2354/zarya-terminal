@@ -1,9 +1,13 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { CH } from '../shared/ipc'
 import type {
   AiChatRequest,
+  AiConversationsState,
   AiProviderKind,
   AiStreamEvent,
+  ClaudePermissionDecision,
+  ClaudeStartOpts,
+  ClaudeStreamEvent,
   HistoryEntry,
   PrepareQuitPayload,
   PtySpawnRequest,
@@ -47,6 +51,10 @@ const api = {
     onPrepareQuit: (cb: (p: PrepareQuitPayload) => void) => on(CH.prepareQuit, cb),
     readyToQuit: () => ipcRenderer.send(CH.readyToQuit)
   },
+  aiConversations: {
+    save: (state: AiConversationsState) => ipcRenderer.invoke(CH.aiConversationsSave, state),
+    load: () => ipcRenderer.invoke(CH.aiConversationsLoad)
+  },
   settings: {
     get: () => ipcRenderer.invoke(CH.settingsGet),
     set: (patch: Partial<Settings>) => ipcRenderer.invoke(CH.settingsSet, patch),
@@ -58,11 +66,39 @@ const api = {
   shells: {
     detect: () => ipcRenderer.invoke(CH.shellsDetect)
   },
+  aiClis: {
+    detect: () => ipcRenderer.invoke(CH.aiClisDetect)
+  },
   ai: {
     chat: (requestId: string, req: AiChatRequest) => ipcRenderer.send(CH.aiChat, requestId, req),
     abort: (requestId: string) => ipcRenderer.send(CH.aiAbort, requestId),
     onStream: (cb: (requestId: string, ev: AiStreamEvent) => void) => on(CH.aiStream, cb),
     listOllamaModels: (baseUrl: string) => ipcRenderer.invoke(CH.aiOllamaModels, baseUrl)
+  },
+  claudeCode: {
+    start: (requestId: string, opts: ClaudeStartOpts) =>
+      ipcRenderer.send(CH.claudeCodeStart, requestId, opts),
+    input: (requestId: string, text: string) =>
+      ipcRenderer.send(CH.claudeCodeInput, requestId, text),
+    interrupt: (requestId: string) => ipcRenderer.send(CH.claudeCodeInterrupt, requestId),
+    permission: (requestId: string, toolUseId: string, decision: ClaudePermissionDecision) =>
+      ipcRenderer.send(CH.claudeCodePermission, requestId, toolUseId, decision),
+    onStream: (cb: (requestId: string, ev: ClaudeStreamEvent) => void) =>
+      on(CH.claudeCodeStream, cb),
+    listSessions: (cwd: string | undefined) =>
+      ipcRenderer.invoke(CH.claudeCodeListSessions, cwd),
+    sessionMessages: (sessionId: string, cwd: string | undefined) =>
+      ipcRenderer.invoke(CH.claudeCodeSessionMessages, sessionId, cwd),
+    setModel: (requestId: string, model: string | undefined) =>
+      ipcRenderer.send(CH.claudeCodeSetModel, requestId, model),
+    setBypass: (requestId: string, bypass: boolean) =>
+      ipcRenderer.send(CH.claudeCodeSetBypass, requestId, bypass),
+    setEffort: (requestId: string, effort: string | undefined) =>
+      ipcRenderer.send(CH.claudeCodeSetEffort, requestId, effort),
+    setUltracode: (requestId: string, on: boolean) =>
+      ipcRenderer.send(CH.claudeCodeSetUltracode, requestId, on),
+    listModels: () => ipcRenderer.invoke(CH.claudeCodeListModels),
+    debugFlags: (requestId?: string) => ipcRenderer.invoke(CH.claudeCodeDebugFlags, requestId)
   },
   fs: {
     readDir: (path: string) => ipcRenderer.invoke(CH.fsReadDir, path),
@@ -94,6 +130,8 @@ const api = {
     openExternal: (url: string) => ipcRenderer.send(CH.openExternal, url),
     showItemInFolder: (path: string) => ipcRenderer.send(CH.showItemInFolder, path),
     pickDirectory: () => ipcRenderer.invoke(CH.pickDirectory),
+    /** Resolve an absolute path for a dropped File (drag-and-drop a folder). */
+    getPathForFile: (file: File) => webUtils.getPathForFile(file),
     setOpacity: (value: number) => ipcRenderer.send(CH.setOpacity, value)
   }
 }

@@ -2,6 +2,7 @@ import { BrowserWindow, app, shell } from 'electron'
 import { join } from 'path'
 import { CH } from '@shared/ipc'
 import { AiProxy } from './aiProxy'
+import { ClaudeCodeDriver } from './claudeCodeDriver'
 import { HistoryStore } from './historyStore'
 import { registerIpc } from './ipc'
 import { PtyManager } from './ptyManager'
@@ -26,6 +27,7 @@ const historyStore = new HistoryStore()
 const workflowStore = new WorkflowStore()
 const ptyManager = new PtyManager(() => mainWindow)
 const aiProxy = new AiProxy(() => mainWindow)
+const claudeCodeDriver = new ClaudeCodeDriver(() => mainWindow)
 
 function createWindow(): void {
   const settings = settingsStore.get()
@@ -128,6 +130,7 @@ function createWindow(): void {
   // respawns sessions — orphaned ptys from the previous page must not linger.
   mainWindow.webContents.on('did-navigate', () => {
     ptyManager.killAll()
+    claudeCodeDriver.killAll()
   })
 
   if (process.env.ELECTRON_RENDERER_URL) {
@@ -168,6 +171,7 @@ if (!gotLock) {
       historyStore,
       workflowStore,
       aiProxy,
+      claudeCodeDriver,
       requestQuitConfirmed: () => {
         if (quitTimer) clearTimeout(quitTimer)
         quitConfirmed = true
@@ -189,6 +193,7 @@ if (!gotLock) {
 
   app.on('window-all-closed', () => {
     ptyManager.killAll()
+    claudeCodeDriver.killAll()
     app.quit()
   })
 

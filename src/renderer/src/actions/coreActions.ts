@@ -1,10 +1,11 @@
 import { registerActions } from '@/lib/actionRegistry'
 import { useBlocksStore } from '@/state/blocksStore'
 import { listLeaves, useSessionsStore } from '@/state/sessionsStore'
-import { useSettingsStore } from '@/state/settingsStore'
+import { getSettings, useSettingsStore } from '@/state/settingsStore'
 import { useUiStore } from '@/state/uiStore'
 import { getTerminal } from '@/terminal/terminalRegistry'
 import { aiOpenCommandBar, aiOpenPanel } from '@/features/ai/aiBridge'
+import { setIdeMode, toggleIdeMode } from '@/features/ide/ideMode'
 
 function activeSessionId(): string | null {
   return useSessionsStore.getState().activeSessionId()
@@ -55,10 +56,18 @@ export function registerCoreActions(): void {
       }
     },
     {
+      id: 'app.toggle-ide',
+      title: 'IDE-надстройка: вкл/выкл (Файлы · Редактор · Workflows · IDE-агент)',
+      category: 'Приложение',
+      keywords: 'ide редактор файлы workflows надстройка ide-агент editor',
+      run: () => toggleIdeMode()
+    },
+    {
       id: 'app.toggle-ai-panel',
-      title: 'AI-панель',
-      category: 'AI',
+      title: 'IDE-агент: панель (второй пилот)',
+      category: 'IDE',
       run: () => {
+        if (!getSettings().ideMode) setIdeMode(true)
         const open = useUiStore.getState().aiPanelOpen
         if (open) ui.set({ aiPanelOpen: false })
         else aiOpenPanel()
@@ -101,6 +110,17 @@ export function registerCoreActions(): void {
       run: () => void sessions.newTab()
     },
     {
+      id: 'tab.new-in-folder',
+      title: 'Новый терминал в папке…',
+      category: 'Вкладки',
+      keywords: 'folder cwd папка проект open directory',
+      run: () => {
+        void window.zarya.app.pickDirectory().then((dir) => {
+          if (dir) void sessions.newTab(undefined, dir)
+        })
+      }
+    },
+    {
       id: 'tab.close',
       title: 'Закрыть вкладку',
       category: 'Вкладки',
@@ -123,6 +143,20 @@ export function registerCoreActions(): void {
     },
 
     // ------------------------------------------------------------- terminal
+    {
+      id: 'terminal.toggle-raw',
+      title: 'Режим: Терминал ⇄ Блоки',
+      category: 'Терминал',
+      keywords: 'raw interactive интерактивный warp фид блоки claude vim tui',
+      run: () => {
+        const raw = useUiStore.getState().rawTerminal
+        ui.set({ rawTerminal: !raw })
+        if (!raw) {
+          const id = activeSessionId()
+          if (id) setTimeout(() => getTerminal(id)?.focus(), 60)
+        }
+      }
+    },
     {
       id: 'terminal.split-right',
       title: 'Разделить вправо',

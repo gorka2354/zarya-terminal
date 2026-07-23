@@ -44,12 +44,44 @@
 .zy-agentbar-fuel-spacer {
   flex: 1;
 }
+.zy-agentbar-fuel-model {
+  font-family: var(--font-tech);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+  flex-shrink: 0;
+  margin-right: 10px;
+}
 .zy-agentbar-fuel-pult {
   font-family: var(--font-tech);
   font-size: 12px;
   letter-spacing: 0.06em;
   color: var(--fg-faint);
   flex-shrink: 0;
+}
+
+/* Pixel fuel gauge — 10 cells draining as the subscription window fills. */
+.zy-fuel-gauge {
+  display: inline-flex;
+  gap: 2px;
+  align-items: center;
+  margin: 0 8px;
+  flex-shrink: 0;
+}
+.zy-fuel-cell {
+  width: 5px;
+  height: 11px;
+  background: var(--border-strong);
+  image-rendering: pixelated;
+}
+.zy-fuel-gauge--ok .zy-fuel-cell--on {
+  background: var(--success);
+}
+.zy-fuel-gauge--warn .zy-fuel-cell--on {
+  background: var(--accent-2);
+}
+.zy-fuel-gauge--low .zy-fuel-cell--on {
+  background: var(--danger);
 }
 
 .zy-agentbar-row {
@@ -133,6 +165,74 @@
 }
 .zy-agentbar-effort--max .zy-agentbar-effort-label {
   color: var(--accent);
+}
+
+/* Bar mode chip — Терминал / Zarya / Claude Code (Enter targets the mode). */
+.zy-agentbar-mode {
+  flex-shrink: 0;
+  height: 34px;
+  padding: 0 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 4px solid transparent;
+  border-image: url(../assets/pixel-frame-dark.png) 2 / 4px / 0 round;
+  image-rendering: pixelated;
+  background: var(--bg);
+  cursor: pointer;
+  font-family: var(--font-tech);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: var(--fg-dim);
+  white-space: nowrap;
+}
+:root[data-theme-type='light'] .zy-agentbar-mode {
+  border-image-source: url(../assets/pixel-frame-light.png);
+}
+.zy-agentbar-mode--zarya {
+  color: var(--accent-2);
+}
+.zy-agentbar-mode--claude-code {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg));
+}
+
+/* Bypass-permissions toggle (--dangerously-skip-permissions). */
+.zy-agentbar-bypass {
+  flex-shrink: 0;
+  height: 34px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 4px solid transparent;
+  border-image: url(../assets/pixel-frame-dark.png) 2 / 4px / 0 round;
+  image-rendering: pixelated;
+  background: var(--bg);
+  cursor: pointer;
+  font-family: var(--font-tech);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--fg-faint);
+  white-space: nowrap;
+}
+:root[data-theme-type='light'] .zy-agentbar-bypass {
+  border-image-source: url(../assets/pixel-frame-light.png);
+}
+.zy-agentbar-bypass-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--success);
+  flex-shrink: 0;
+}
+.zy-agentbar-bypass--on {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, var(--bg));
+}
+.zy-agentbar-bypass--on .zy-agentbar-bypass-dot {
+  background: var(--danger);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--danger) 80%, transparent);
 }
 
 .zy-agentbar-model {

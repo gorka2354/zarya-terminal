@@ -5,21 +5,24 @@ import { getAllActions, onActionsChanged } from '@/lib/actionRegistry'
 import { Icon, type IconName } from '@/components/Icon'
 import { chordFromEvent, formatChord } from '@/features/palette/keybindings'
 import { getThemes } from '@/features/themes/themes'
+import { setIdeMode } from '@/features/ide/ideMode'
 import { useSettingsStore } from '@/state/settingsStore'
 import { useUiStore } from '@/state/uiStore'
 import './settings.css'
 
 type TabId = 'appearance' | 'terminal' | 'blocks' | 'ai' | 'sessions' | 'editor' | 'keybindings' | 'about'
 
-const TABS: Array<{ id: TabId; label: string; sub: string; icon: IconName }> = [
-  { id: 'appearance', label: 'Внешний вид', sub: 'APPEARANCE', icon: 'star' },
-  { id: 'terminal', label: 'Терминал', sub: 'TERMINAL', icon: 'terminal' },
-  { id: 'blocks', label: 'Блоки', sub: 'BLOCKS', icon: 'split-h' },
-  { id: 'ai', label: 'AI', sub: 'AGENT', icon: 'sputnik' },
-  { id: 'sessions', label: 'Сессии', sub: 'SESSIONS', icon: 'save' },
-  { id: 'editor', label: 'Редактор', sub: 'EDITOR', icon: 'edit' },
-  { id: 'keybindings', label: 'Клавиши', sub: 'KEYBINDINGS', icon: 'gear' },
-  { id: 'about', label: 'О программе', sub: 'ABOUT', icon: 'orbit' }
+type TabGroup = 'base' | 'ide' | 'meta'
+const TABS: Array<{ id: TabId; label: string; sub: string; icon: IconName; group: TabGroup }> = [
+  { id: 'appearance', label: 'Внешний вид', sub: 'APPEARANCE', icon: 'star', group: 'base' },
+  { id: 'terminal', label: 'Терминал', sub: 'TERMINAL', icon: 'terminal', group: 'base' },
+  { id: 'blocks', label: 'Блоки', sub: 'BLOCKS', icon: 'split-h', group: 'base' },
+  { id: 'sessions', label: 'Сессии', sub: 'SESSIONS', icon: 'save', group: 'base' },
+  { id: 'keybindings', label: 'Клавиши', sub: 'KEYBINDINGS', icon: 'gear', group: 'base' },
+  // IDE superstructure — only shown when the IDE layer is enabled.
+  { id: 'ai', label: 'AI-агент', sub: 'IDE · AGENT', icon: 'sputnik', group: 'ide' },
+  { id: 'editor', label: 'Редактор', sub: 'IDE · EDITOR', icon: 'edit', group: 'ide' },
+  { id: 'about', label: 'О программе', sub: 'ABOUT', icon: 'orbit', group: 'meta' }
 ]
 
 const PROVIDERS: Array<{ id: AiProviderKind; label: string }> = [
@@ -34,7 +37,13 @@ const EFFORTS: AiEffort[] = ['low', 'medium', 'high', 'max']
 /** Full-screen settings modal: vertical tabs on the left, content on the right. */
 export default function SettingsView(): React.JSX.Element | null {
   const open = useUiStore((s) => s.settingsOpen)
+  const ideMode = useSettingsStore((s) => s.settings.ideMode)
   const [tab, setTab] = useState<TabId>('appearance')
+
+  // If the IDE layer is turned off while an IDE tab is open, fall back to base.
+  useEffect(() => {
+    if (!ideMode && (tab === 'ai' || tab === 'editor')) setTab('appearance')
+  }, [ideMode, tab])
 
   useEffect(() => {
     if (!open) return
@@ -51,7 +60,25 @@ export default function SettingsView(): React.JSX.Element | null {
   if (!open) return null
 
   const close = (): void => useUiStore.getState().set({ settingsOpen: false })
-  const activeTab = TABS.find((t) => t.id === tab)
+  // Hide IDE-layer tabs when the IDE superstructure is off.
+  const visibleTabs = TABS.filter((t) => t.group !== 'ide' || ideMode)
+  const activeTab = visibleTabs.find((t) => t.id === tab) ?? visibleTabs[0]
+  const renderNavItem = (t: (typeof TABS)[number]): React.JSX.Element => (
+    <button
+      key={t.id}
+      type="button"
+      className={`zy-settings-nav-item${tab === t.id ? ' zy-settings-nav-item--active' : ''}`}
+      onClick={() => setTab(t.id)}
+    >
+      <span className="zy-settings-nav-icon">
+        <Icon name={t.icon} size={17} strokeWidth={1.5} />
+      </span>
+      <span className="zy-settings-nav-item-text">
+        <span className="zy-settings-nav-item-label">{t.label}</span>
+        <span className="zy-settings-nav-item-sub">{t.sub}</span>
+      </span>
+    </button>
+  )
 
   return (
     <div className="zy-overlay-backdrop zy-overlay-backdrop--center" onMouseDown={close}>
@@ -59,22 +86,30 @@ export default function SettingsView(): React.JSX.Element | null {
         <nav className="zy-settings-nav">
           <div className="zy-settings-nav-title">ЦЕНТР УПРАВЛЕНИЯ</div>
           <div className="zy-settings-nav-list">
-            {TABS.map((t) => (
+            <div className="zy-settings-nav-group">ТЕРМИНАЛ · база</div>
+            {visibleTabs.filter((t) => t.group === 'base').map(renderNavItem)}
+
+            <div className="zy-settings-nav-group zy-settings-nav-group--ide">
+              <span>IDE · надстройка</span>
               <button
-                key={t.id}
                 type="button"
-                className={`zy-settings-nav-item${tab === t.id ? ' zy-settings-nav-item--active' : ''}`}
-                onClick={() => setTab(t.id)}
+                className={`zy-settings-ide-switch${ideMode ? ' zy-settings-ide-switch--on' : ''}`}
+                title={ideMode ? 'IDE-надстройка включена' : 'Включить IDE-надстройку'}
+                onClick={() => setIdeMode(!ideMode)}
               >
-                <span className="zy-settings-nav-icon">
-                  <Icon name={t.icon} size={17} strokeWidth={1.5} />
-                </span>
-                <span className="zy-settings-nav-item-text">
-                  <span className="zy-settings-nav-item-label">{t.label}</span>
-                  <span className="zy-settings-nav-item-sub">{t.sub}</span>
-                </span>
+                <span className="zy-settings-ide-knob" />
               </button>
-            ))}
+            </div>
+            {ideMode ? (
+              visibleTabs.filter((t) => t.group === 'ide').map(renderNavItem)
+            ) : (
+              <div className="zy-settings-nav-hint">
+                Файлы, редактор, workflows и IDE-агент. Выключено — база чистая.
+              </div>
+            )}
+
+            <div className="zy-settings-nav-group" />
+            {visibleTabs.filter((t) => t.group === 'meta').map(renderNavItem)}
           </div>
           <div className="zy-settings-nav-footer">ЗАРЯ v0.4 · ОРБИТА</div>
         </nav>

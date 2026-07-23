@@ -17,6 +17,8 @@ export const CH = {
   sessionsRename: 'sessions:rename',
   sessionsSaveWorkspace: 'sessions:save-workspace',
   sessionsLoadWorkspace: 'sessions:load-workspace',
+  aiConversationsSave: 'ai-conversations:save',
+  aiConversationsLoad: 'ai-conversations:load',
   prepareQuit: 'app:prepare-quit', // main -> renderer
   readyToQuit: 'app:ready-to-quit', // renderer -> main
 
@@ -30,11 +32,29 @@ export const CH = {
   // shells
   shellsDetect: 'shells:detect',
 
+  // ai clis
+  aiClisDetect: 'ai-clis:detect',
+
   // ai
   aiChat: 'ai:chat',
   aiAbort: 'ai:abort',
   aiStream: 'ai:stream', // main -> renderer
   aiOllamaModels: 'ai:ollama-models',
+
+  // claude code native driver
+  claudeCodeStart: 'claude-code:start',
+  claudeCodeInput: 'claude-code:input',
+  claudeCodeInterrupt: 'claude-code:interrupt',
+  claudeCodePermission: 'claude-code:permission',
+  claudeCodeStream: 'claude-code:stream', // main -> renderer
+  claudeCodeListSessions: 'claude-code:list-sessions',
+  claudeCodeSessionMessages: 'claude-code:session-messages',
+  claudeCodeSetModel: 'claude-code:set-model',
+  claudeCodeSetBypass: 'claude-code:set-bypass',
+  claudeCodeSetEffort: 'claude-code:set-effort',
+  claudeCodeSetUltracode: 'claude-code:set-ultracode',
+  claudeCodeListModels: 'claude-code:list-models',
+  claudeCodeDebugFlags: 'claude-code:debug-flags',
 
   // fs / git
   fsReadDir: 'fs:read-dir',

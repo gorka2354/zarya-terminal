@@ -58,3 +58,22 @@ export const useBlocksStore = create<BlocksState>((set, get) => ({
     return undefined
   }
 }))
+
+// QA hook: inspect command blocks (command/exitCode/cwd/output) per session from
+// the offscreen harness. Returns all sessions when no id is given.
+;(window as unknown as { __zaryaDumpBlocks?: (sessionId?: string) => unknown }).__zaryaDumpBlocks = (
+  sessionId
+) => {
+  const by = useBlocksStore.getState().bySession
+  const slim = (b: BlockRecord): unknown => ({
+    command: b.command,
+    cwd: b.cwd,
+    exitCode: b.exitCode,
+    output: (b.output || '').slice(0, 400),
+    endedAt: b.endedAt
+  })
+  if (sessionId) return (by[sessionId] ?? []).map(slim)
+  const out: Record<string, unknown[]> = {}
+  for (const [sid, list] of Object.entries(by)) out[sid] = list.map(slim)
+  return out
+}

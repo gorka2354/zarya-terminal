@@ -30,6 +30,7 @@ import { seedHistoryCache } from '@/terminal/historyCache'
 import { useSessionsStore } from '@/state/sessionsStore'
 import { useSettingsStore } from '@/state/settingsStore'
 import { useUiStore } from '@/state/uiStore'
+import { useAiStore } from '@/features/ai/aiStore'
 
 export default function App(): React.JSX.Element {
   const [booted, setBooted] = useState(false)
@@ -46,6 +47,9 @@ export default function App(): React.JSX.Element {
       void seedHistoryCache()
       window.zarya.app.onMaximized((maximized) => useUiStore.getState().set({ maximized }))
       await useSessionsStore.getState().boot()
+      // Restore persisted agent conversations (each bound to its terminal),
+      // after sessions so the session ids they reference are back.
+      await useAiStore.getState().hydrate()
       setBooted(true)
     })()
   }, [])
@@ -72,7 +76,27 @@ export default function App(): React.JSX.Element {
   }
 
   return (
-    <div className="zy-app">
+    <div
+      className="zy-app"
+      onDragOver={(e) => {
+        // Allow dropping a folder to open a terminal there.
+        if (e.dataTransfer.types.includes('Files')) e.preventDefault()
+      }}
+      onDrop={(e) => {
+        if (!e.dataTransfer.files.length) return
+        e.preventDefault()
+        const file = e.dataTransfer.files[0]
+        const path = window.zarya.app.getPathForFile(file)
+        if (!path) return
+        void window.zarya.fs.stat(path).then((st) => {
+          const dir = st?.isDir ? path : path.replace(/[\\/][^\\/]*$/, '')
+          if (dir) {
+            void useSessionsStore.getState().newTab(undefined, dir)
+            useUiStore.getState().toast(`Терминал в ${dir}`, 'success')
+          }
+        })
+      }}
+    >
       <StarBackdrop />
       <Titlebar />
       <div className="zy-main">
@@ -96,7 +120,11 @@ export default function App(): React.JSX.Element {
 
 function Sidebar(): React.JSX.Element | null {
   const view = useUiStore((s) => s.sidebarView)
+  const ideMode = useSettingsStore((s) => s.settings.ideMode)
   if (!view) return null
+  // Files/Workflows are IDE-only; fall back to Sessions if the IDE layer is off.
+  const ideView = view === 'files' || view === 'workflows'
+  if (ideView && !ideMode) return <aside className="zy-sidebar"><SessionsPanel /></aside>
   return (
     <aside className="zy-sidebar">
       {view === 'sessions' && <SessionsPanel />}
@@ -112,9 +140,11 @@ function MainContent(): React.JSX.Element {
   const activeTabId = useSessionsStore((s) => s.activeTabId)
   const activeSessionId = useSessionsStore((s) => s.activeSessionId())
   const rawTerminal = useUiStore((s) => s.rawTerminal)
+  const ideMode = useSettingsStore((s) => s.settings.ideMode)
   const editorFiles = useEditorStore((s) => s.files)
   const [editorWidth, setEditorWidth] = useState(46) // percent
-  const editorOpen = editorFiles.length > 0
+  // The Monaco editor is part of the IDE superstructure — only when enabled.
+  const editorOpen = ideMode && editorFiles.length > 0
 
   return (
     <div className="zy-content">
@@ -138,7 +168,9 @@ function MainContent(): React.JSX.Element {
               </div>
             ))}
         </div>
-        <AgentBar />
+        {/* Hidden in «Терминал» mode: a raw TUI (claude/vim/ssh) owns the input,
+            so a second bar here would be a confusing double input. */}
+        {!rawTerminal && <AgentBar />}
       </div>
       {editorOpen && (
         <>
@@ -179,6 +211,8 @@ function EditorGutter({ onResize }: { onResize: (pct: number) => void }): React.
 function RightPanels(): React.JSX.Element {
   const blocksOpen = useUiStore((s) => s.blocksPanelOpen)
   const aiOpen = useUiStore((s) => s.aiPanelOpen)
+  // The IDE-agent (second pilot, own API key) is part of the IDE superstructure.
+  const ideMode = useSettingsStore((s) => s.settings.ideMode)
   return (
     <>
       {blocksOpen && (
@@ -186,22 +220,23 @@ function RightPanels(): React.JSX.Element {
           <BlocksPanel />
         </aside>
       )}
-      {aiOpen ? (
-        <aside className="zy-sidebar zy-sidebar--right zy-sidebar--ai">
-          <AiPanel />
-        </aside>
-      ) : (
-        <aside className="zy-ide-rail">
-          <button
-            className="zy-ide-rail-btn"
-            title="Открыть IDE-агента (второй пилот)"
-            onClick={() => useUiStore.getState().set({ aiPanelOpen: true })}
-          >
-            <Icon name="sputnik" size={16} strokeWidth={1.5} />
-          </button>
-          <span className="zy-ide-rail-label">IDE-АГЕНТ</span>
-        </aside>
-      )}
+      {ideMode &&
+        (aiOpen ? (
+          <aside className="zy-sidebar zy-sidebar--right zy-sidebar--ai">
+            <AiPanel />
+          </aside>
+        ) : (
+          <aside className="zy-ide-rail">
+            <button
+              className="zy-ide-rail-btn"
+              title="Открыть IDE-агента (второй пилот · свой ключ)"
+              onClick={() => useUiStore.getState().set({ aiPanelOpen: true })}
+            >
+              <Icon name="sputnik" size={16} strokeWidth={1.5} />
+            </button>
+            <span className="zy-ide-rail-label">IDE-АГЕНТ</span>
+          </aside>
+        ))}
     </>
   )
 }

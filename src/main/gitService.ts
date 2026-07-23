@@ -6,12 +6,34 @@ import type { GitDiff, GitStatus } from '@shared/types'
 
 const execFileAsync = promisify(execFile)
 
+/**
+ * Security: these read-only status/diff commands auto-run against ANY folder the
+ * user opens (terminal cwd / file tree), including untrusted ones. git honours
+ * the repo-local .git/config, and several config keys make git EXECUTE a named
+ * program — most notably `core.fsmonitor`, which `git status` spawns. A malicious
+ * repo (shipped in a zip / shared folder) could therefore run arbitrary code in
+ * our main process just by being opened. We neutralize those exec-capable keys
+ * on every invocation (command-line `-c` overrides win over any config), and
+ * disable prompts/optional locks. See SECURITY.md.
+ */
+const GIT_HARDEN = [
+  '-c',
+  'core.fsmonitor=',
+  '-c',
+  'core.hooksPath=',
+  '-c',
+  'core.sshCommand=',
+  '-c',
+  'core.pager=cat'
+]
+
 async function git(cwd: string, args: string[]): Promise<string> {
-  const { stdout } = await execFileAsync('git', args, {
+  const { stdout } = await execFileAsync('git', [...GIT_HARDEN, ...args], {
     cwd,
     timeout: 5000,
     maxBuffer: 10 * 1024 * 1024,
-    windowsHide: true
+    windowsHide: true,
+    env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_OPTIONAL_LOCKS: '0' }
   })
   return stdout
 }

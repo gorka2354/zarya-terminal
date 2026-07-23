@@ -36,6 +36,10 @@ export function XtermView({ sessionId, active, visible }: Props): React.JSX.Elem
   const containerRef = useRef<HTMLDivElement>(null)
   const [ghost, setGhost] = useState<Ghost | null>(null)
   const ghostRef = useRef<{ full: string; typed: string } | null>(null)
+  // True while «Терминал» mode was entered automatically by a full-screen (alt
+  // buffer) program — so we can return to «Блоки» when it exits, without ever
+  // yanking the user out of a Терминал they opened by hand.
+  const autoRawRef = useRef(false)
   const shadowRef = useRef<{ buf: string; reliable: boolean }>({ buf: '', reliable: true })
   const session = useSessionsStore((s) => s.sessions[sessionId])
   const settings = useSettingsStore((s) => s.settings)
@@ -257,6 +261,22 @@ export function XtermView({ sessionId, active, visible }: Props): React.JSX.Elem
       }
     })
 
+    // Full-screen (TUI) programs — vim, htop, less, the claude/codex agents —
+    // switch to the alternate screen buffer. Auto-flip to the live «Терминал»
+    // view so arrows/prompts work, and return to «Блоки» when they exit.
+    const bufDisp = term.buffer.onBufferChange((buf) => {
+      const isAlt = buf.type === 'alternate'
+      const ui = useUiStore.getState()
+      if (isAlt && !ui.rawTerminal) {
+        autoRawRef.current = true
+        ui.set({ rawTerminal: true })
+        requestAnimationFrame(() => term.focus())
+      } else if (!isAlt && autoRawRef.current) {
+        autoRawRef.current = false
+        ui.set({ rawTerminal: false })
+      }
+    })
+
     // ------------------------------------------------------------- sizing
     let fitRaf = 0
     const doFit = (): void => {
@@ -345,6 +365,7 @@ export function XtermView({ sessionId, active, visible }: Props): React.JSX.Elem
       dataDisp.dispose()
       selDisp.dispose()
       bellDisp.dispose()
+      bufDisp.dispose()
       // Terminal itself is disposed via the registry when the session closes.
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

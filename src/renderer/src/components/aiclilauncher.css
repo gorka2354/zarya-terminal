@@ -1,0 +1,75 @@
+/* AI-CLI launcher — tiles on the empty feed hero. */
+.zy-clilaunch {
+  margin-top: 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.zy-clilaunch-label {
+  font-family: var(--font-tech);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+}
+.zy-clilaunch-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  max-width: 380px;
+}
+.zy-clilaunch-tile {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px 7px 8px;
+  /* Pixel frame, same PX=2 unit as the inputs. */
+  border: 4px solid transparent;
+  border-image: url(../assets/pixel-frame-dark.png) 2 / 4px / 0 round;
+  border-radius: 0;
+  image-rendering: pixelated;
+  background: var(--bg-elev1);
+  color: var(--fg);
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  transition: filter 0.12s;
+}
+:root[data-theme-type='light'] .zy-clilaunch-tile {
+  border-image-source: url(../assets/pixel-frame-light.png);
+}
+.zy-clilaunch-tile:hover:not(:disabled) {
+  filter: brightness(1.12);
+}
+.zy-clilaunch-tile:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.zy-clilaunch-tile--off {
+  opacity: 0.42;
+  cursor: default;
+}
+.zy-clilaunch-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  font-family: var(--font-tech);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--bg);
+  border-radius: 3px;
+}
+.zy-clilaunch-glyph--accent {
+  background: var(--accent);
+}
+.zy-clilaunch-glyph--accent-2 {
+  background: var(--accent-2);
+}
+.zy-clilaunch-name {
+  white-space: nowrap;
+}

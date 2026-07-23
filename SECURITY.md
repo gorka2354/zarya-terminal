@@ -28,6 +28,29 @@ single-maintainer project, not a company with an SLA.
 - **No account, no server component.** There is nothing to breach on Zarya's side
   beyond your own machine — session data, history, workflows and settings are all
   local files under the OS `userData` directory.
+- **Cleartext at rest (everything except API keys).** Only provider API keys are
+  encrypted. Terminal scrollback (`sessions/<id>.json`), AI conversations
+  (`ai-conversations.json`) and command history (`history.jsonl`) are stored as
+  plaintext JSON. If secrets transit your terminal or a chat (`cat .env`, `env`,
+  `aws configure`, `curl -H "Authorization: …"`, tokens echoed by tools) they can
+  persist there in cleartext and be read by anything with access to your user
+  profile — notably an **AppData cloud backup, a shared/resold disk, or forensic
+  recovery**. On shared or backed-up machines, set **Sessions → Restore on launch
+  = none** to stop persisting scrollback, and avoid pasting long-lived credentials
+  into the terminal or AI chat. (Same-user malware is not meaningfully mitigated
+  by encryption here — the OS keystore decrypts transparently for the same user.)
+
+## Opening untrusted repositories
+
+The status/diff features run read-only `git` automatically against whatever folder
+you open (terminal cwd / file tree). Because git honours a repository's local
+`.git/config`, and some config keys make git execute an external program (e.g.
+`core.fsmonitor`, which `git status` spawns), a malicious repository shipped in a
+zip or shared folder could otherwise run code in Zarya's main process just by
+being opened. Zarya neutralizes those exec-capable config keys (`core.fsmonitor`,
+`core.hooksPath`, `core.sshCommand`, `core.pager`) on every internal git
+invocation. Still, treat repositories from untrusted sources with the caution you
+would give any downloaded code.
 - **Shell-integration anti-spoofing.** The private OSC 6973 channel used to capture
   exact command lines is signed with a per-session, cryptographically random nonce
   minted at PTY spawn and never exposed to child processes; payloads with a missing

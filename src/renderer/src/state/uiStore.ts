@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { ClaudeModelInfo, ClaudeUsage } from '@shared/types'
 import { uid } from '@/lib/uid'
 
 export type SidebarView = 'sessions' | 'files' | 'workflows' | 'history' | null
@@ -19,6 +20,18 @@ interface UiState {
   launchPadOpen: boolean
   /** Raw interactive terminal (type directly, run vim/claude/ssh) vs the block feed. */
   rawTerminal: boolean
+  /**
+   * What the bottom bar's Enter targets: 'shell' — run as a terminal command
+   * (Warp default); 'zarya' — Zarya's built-in agent; 'claude-code' — native
+   * Claude Code. The chip switches it; the placeholder/behavior follow.
+   */
+  barMode: 'shell' | 'zarya' | 'claude-code'
+  /** Live Claude Code account status for the fuel gauge (model, effort, limits). */
+  claudeStatus: { model?: string; effort?: string; usage?: ClaudeUsage }
+  /** Dynamic model catalog from the SDK (future-proof — no hardcoded list). */
+  claudeModels: ClaudeModelInfo[]
+  /** Ultracode session mode (xhigh + workflow orchestration). Session-scoped, default off. */
+  ultracode: boolean
   historyOverlayOpen: boolean
   /** Session id whose find-in-terminal bar is open. */
   searchOpenFor: string | null
@@ -42,6 +55,10 @@ export const useUiStore = create<UiState>((set, get) => ({
   aiBarOpen: false,
   launchPadOpen: false,
   rawTerminal: false,
+  barMode: 'shell',
+  claudeStatus: {},
+  claudeModels: [],
+  ultracode: false,
   historyOverlayOpen: false,
   searchOpenFor: null,
   blocksPanelOpen: false,
@@ -64,3 +81,7 @@ export const useUiStore = create<UiState>((set, get) => ({
 // settings, palette) without native clicks. Harmless in production.
 ;(window as unknown as { __zaryaSetUi?: (p: Partial<UiState>) => void }).__zaryaSetUi = (p) =>
   useUiStore.getState().set(p)
+;(window as unknown as { __zaryaClaudeStatus?: () => unknown }).__zaryaClaudeStatus = () =>
+  useUiStore.getState().claudeStatus
+;(window as unknown as { __zaryaClaudeModels?: () => unknown }).__zaryaClaudeModels = () =>
+  useUiStore.getState().claudeModels

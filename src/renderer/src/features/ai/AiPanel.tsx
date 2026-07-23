@@ -182,6 +182,9 @@ export default function AiPanel(): React.JSX.Element {
 
   return (
     <>
+      <div className="zy-ai-caption" title="Отдельный от нативного Claude Code (в терминале) агент со своим API-ключом, не привязан к конкретному терминалу">
+        IDE-агент · второй пилот · свой ключ
+      </div>
       <div className="zy-sidebar-header">
         <div className="zy-row" style={{ gap: 6, minWidth: 0 }}>
           <select

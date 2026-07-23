@@ -44,6 +44,47 @@
   margin: 0 auto;
   image-rendering: pixelated;
 }
+
+/* Collapsed idle strip — the rocket is out of the way while picking, and only
+   the full animated scene re-mounts for the ~3s launch sequence. */
+.zy-lp-console--idle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+}
+.zy-lp-idle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+.zy-lp-idle-rocket {
+  width: 22px;
+  height: 36px;
+  image-rendering: pixelated;
+  flex-shrink: 0;
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--accent) 40%, transparent));
+}
+.zy-lp-idle-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+.zy-lp-idle-title {
+  font-family: var(--font-tech);
+  font-size: 13px;
+  letter-spacing: 0.14em;
+  color: color-mix(in srgb, var(--accent-2) 80%, #fff);
+}
+.zy-lp-idle-clock {
+  font-family: var(--font-tech);
+  font-size: 12px;
+  color: var(--accent-2);
+  text-shadow: 0 0 8px color-mix(in srgb, var(--accent-2) 55%, transparent);
+}
 .zy-lp-console-title {
   position: absolute;
   top: 6px;
@@ -104,11 +145,14 @@
   flex-direction: column;
   gap: 2px;
   margin-bottom: 12px;
+  /* Independent scroll so 5+ described rows never blow out the popover. */
+  max-height: 232px;
+  overflow-y: auto;
 }
 .zy-lp-model {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  gap: 2px;
   padding: 6px 9px;
   border: 1px solid transparent;
   border-radius: 3px;
@@ -116,7 +160,6 @@
   cursor: pointer;
   text-align: left;
   font-family: var(--font-tech);
-  font-size: 16px;
   letter-spacing: 0.03em;
   color: var(--fg-dim);
 }
@@ -126,6 +169,13 @@
 }
 .zy-lp-model--on {
   color: var(--fg);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.zy-lp-model-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 .zy-lp-bullet {
   width: 6px;
@@ -145,6 +195,38 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 15px;
+}
+.zy-lp-model-desc {
+  padding-left: 14px;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--fg-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.zy-lp-ver {
+  flex-shrink: 0;
+  padding: 1px 5px;
+  border: 1px solid color-mix(in srgb, var(--accent-2) 45%, transparent);
+  border-radius: 3px;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--accent-2);
+}
+.zy-lp-ver--muted {
+  border-color: var(--border-strong);
+  color: var(--fg-faint);
+}
+.zy-lp-tag-active {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: color-mix(in srgb, var(--accent) 92%, #fff);
+  font-size: 10px;
+  letter-spacing: 0.06em;
 }
 
 .zy-lp-thrust {
@@ -183,6 +265,150 @@
   color: var(--accent-2);
   min-width: 76px;
   text-align: right;
+}
+
+/* Claude dynamic effort chips + ultracode toggle. */
+.zy-lp-cefforts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 4px 0 8px;
+}
+.zy-lp-ceff {
+  padding: 5px 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--fg-dim);
+  cursor: pointer;
+  font-family: var(--font-tech);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+.zy-lp-ceff:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.zy-lp-ceff--on {
+  border-color: var(--accent-2);
+  color: var(--accent-2);
+  background: color-mix(in srgb, var(--accent-2) 12%, var(--bg));
+}
+.zy-lp-ceff--hot.zy-lp-ceff--on {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg));
+}
+.zy-lp-ceff-none {
+  font-family: var(--font-tech);
+  font-size: 11px;
+  color: var(--fg-faint);
+}
+
+/* Effort header (label + live current value, like the CLI's status line). */
+.zy-lp-eff-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2px;
+}
+.zy-lp-eff-val {
+  font-family: var(--font-tech);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: var(--accent-2);
+}
+.zy-lp-eff-val--hot {
+  color: var(--accent);
+  text-shadow: 0 0 8px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+/* Faster ↔ Smarter poles under the chips (spatial speed-vs-depth cue). */
+.zy-lp-poles {
+  display: flex;
+  justify-content: space-between;
+  margin: -4px 2px 9px;
+  font-family: var(--font-tech);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--fg-faint);
+  text-transform: uppercase;
+}
+
+/* ULTRACODE as a labeled on/off switch row (title + description + track/thumb). */
+.zy-lp-switch-row {
+  width: 100%;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: var(--bg);
+  cursor: pointer;
+  text-align: left;
+}
+.zy-lp-switch-row--on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg));
+}
+.zy-lp-switch-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.zy-lp-switch-title {
+  font-family: var(--font-tech);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  color: var(--fg-dim);
+}
+.zy-lp-switch-row--on .zy-lp-switch-title {
+  color: var(--accent);
+}
+.zy-lp-switch-desc {
+  font-family: var(--font-tech);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  color: var(--fg-faint);
+}
+.zy-lp-switch {
+  flex-shrink: 0;
+  width: 34px;
+  height: 18px;
+  border-radius: 9px;
+  background: var(--border-strong);
+  position: relative;
+  transition: background 0.15s ease;
+}
+.zy-lp-switch--on {
+  background: var(--accent);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+.zy-lp-switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff5e8;
+  transition: transform 0.15s ease;
+}
+.zy-lp-switch--on .zy-lp-switch-thumb {
+  transform: translateX(16px);
+}
+
+/* One-line preview of what ПУСК will apply. */
+.zy-lp-preview {
+  margin-bottom: 8px;
+  font-family: var(--font-tech);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--fg-faint);
+  text-align: center;
 }
 
 .zy-lp-launch {

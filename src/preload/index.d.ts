@@ -1,8 +1,16 @@
 import type {
   AiChatRequest,
+  AiCli,
+  AiConversationsState,
+  AiMessage,
   AiProviderKind,
   AiProviderStatus,
   AiStreamEvent,
+  ClaudeModelInfo,
+  ClaudePermissionDecision,
+  ClaudeSessionInfo,
+  ClaudeStartOpts,
+  ClaudeStreamEvent,
   AppInfo,
   DirEntry,
   FileContent,
@@ -44,6 +52,10 @@ export interface ZaryaApi {
     onPrepareQuit(cb: (p: PrepareQuitPayload) => void): Unsub
     readyToQuit(): void
   }
+  aiConversations: {
+    save(state: AiConversationsState): Promise<void>
+    load(): Promise<AiConversationsState | null>
+  }
   settings: {
     get(): Promise<Settings>
     set(patch: Partial<Settings>): Promise<Settings>
@@ -54,11 +66,29 @@ export interface ZaryaApi {
   shells: {
     detect(): Promise<ShellProfile[]>
   }
+  aiClis: {
+    detect(): Promise<AiCli[]>
+  }
   ai: {
     chat(requestId: string, req: AiChatRequest): void
     abort(requestId: string): void
     onStream(cb: (requestId: string, ev: AiStreamEvent) => void): Unsub
     listOllamaModels(baseUrl: string): Promise<string[]>
+  }
+  claudeCode: {
+    start(requestId: string, opts: ClaudeStartOpts): void
+    input(requestId: string, text: string): void
+    interrupt(requestId: string): void
+    permission(requestId: string, toolUseId: string, decision: ClaudePermissionDecision): void
+    onStream(cb: (requestId: string, ev: ClaudeStreamEvent) => void): Unsub
+    listSessions(cwd: string | undefined): Promise<ClaudeSessionInfo[]>
+    sessionMessages(sessionId: string, cwd: string | undefined): Promise<AiMessage[]>
+    setModel(requestId: string, model: string | undefined): void
+    setBypass(requestId: string, bypass: boolean): void
+    setEffort(requestId: string, effort: string | undefined): void
+    setUltracode(requestId: string, on: boolean): void
+    listModels(): Promise<ClaudeModelInfo[]>
+    debugFlags(requestId?: string): Promise<Record<string, unknown>>
   }
   fs: {
     readDir(path: string): Promise<DirEntry[]>
@@ -89,6 +119,7 @@ export interface ZaryaApi {
     openExternal(url: string): void
     showItemInFolder(path: string): void
     pickDirectory(): Promise<string | null>
+    getPathForFile(file: File): string
     setOpacity(value: number): void
   }
 }

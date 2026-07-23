@@ -1,15 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
 import type { AiContentPart, BlockRecord } from '@shared/types'
 import { onBus } from '@/lib/bus'
-import { formatDuration, shortenPath } from '@/lib/ansi'
+import { formatDuration, formatRelative, shortenPath } from '@/lib/ansi'
 import { useBlocksStore } from '@/state/blocksStore'
 import { useSessionsStore } from '@/state/sessionsStore'
 import { useUiStore } from '@/state/uiStore'
-import { useAiStore, type Conversation } from '@/features/ai/aiStore'
+import { convForSession, useAiStore, type Conversation } from '@/features/ai/aiStore'
 import { renderMarkdown } from '@/features/ai/markdown'
 import { getTerminal } from '@/terminal/terminalRegistry'
 import { Icon } from './Icon'
 import { PixelIcon } from './PixelIcon'
+import { AiCliLauncher, launchAiCli } from './AiCliLauncher'
+import { useContextMenu } from './ContextMenu'
 import logoZarya from '@/assets/logo-zarya-64.png'
 import './missionfeed.css'
 
@@ -28,11 +30,58 @@ const NO_BLOCKS: BlockRecord[] = []
 export function MissionFeed({ sessionId }: { sessionId: string }): React.JSX.Element {
   const blocks = useBlocksStore((s) => s.bySession[sessionId] ?? NO_BLOCKS)
   const cwd = useSessionsStore((s) => s.sessions[sessionId]?.cwd ?? '')
-  const conv = useAiStore((s) => s.conversations.find((c) => c.id === s.activeId))
+  // Each terminal shows its OWN agent conversation (bound by sessionId).
+  const conv = useAiStore((s) => convForSession(s, sessionId))
   const searchOpen = useUiStore((s) => s.searchOpenFor === sessionId)
   const [branch, setBranch] = useState('')
   const [liveTail, setLiveTail] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
+  const { menu: cliMenu, open: openMenu } = useContextMenu()
+
+  // Header ↺ button → past Claude Code sessions for THIS folder (resume one).
+  const openSessionsMenu = (e: React.MouseEvent): void => {
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    const folder = useSessionsStore.getState().sessions[sessionId]?.cwd
+    void window.zarya.claudeCode.listSessions(folder).then((list) => {
+      if (!list.length) {
+        openMenu(r.left, r.bottom + 4, [
+          { label: 'Нет прошлых сессий Claude в этой папке', disabled: true }
+        ])
+        return
+      }
+      const items = list.slice(0, 25).map((s) => ({
+        label: (s.summary || s.firstPrompt || 'Сессия').slice(0, 46),
+        hint: formatRelative(s.lastModified),
+        onClick: () => {
+          void window.zarya.claudeCode.sessionMessages(s.sessionId, folder).then((messages) => {
+            useAiStore.getState().resumeClaudeSession({
+              claudeSessionId: s.sessionId,
+              title: s.summary || 'Claude сессия',
+              messages,
+              cwd: folder,
+              sessionId
+            })
+            useUiStore.getState().set({ barMode: 'claude-code', rawTerminal: false })
+          })
+        }
+      }))
+      openMenu(r.left, r.bottom + 4, items)
+    })
+  }
+
+  // Header ⚡ button → dropdown of installed AI CLIs (launch into «Терминал»).
+  const openCliMenu = (e: React.MouseEvent): void => {
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    void window.zarya.aiClis.detect().then((clis) => {
+      const items = clis.map((c) => ({
+        label: c.detected ? c.name : `${c.name} · не установлен`,
+        hint: c.detected ? c.cmd : undefined,
+        disabled: !c.detected,
+        onClick: () => launchAiCli(c)
+      }))
+      openMenu(r.left, r.bottom + 4, items)
+    })
+  }
 
   // Current git branch for the prompt line — refreshed when the cwd changes or
   // a command finishes (a checkout/commit could have moved the branch).
@@ -76,10 +125,12 @@ export function MissionFeed({ sessionId }: { sessionId: string }): React.JSX.Ele
     return () => clearTimeout(timer)
   }, [runningId, sessionId])
 
-  // Keep the feed pinned to the bottom as new content arrives.
+  // Follow new content only while the user is already near the bottom — so
+  // scrolling up to read during a long turn isn't yanked back down.
+  const stickRef = useRef(true)
   useEffect(() => {
     const el = scrollRef.current
-    if (el) el.scrollTop = el.scrollHeight
+    if (el && stickRef.current) el.scrollTop = el.scrollHeight
   }, [blocks, conv?.messages, liveTail])
 
   // Patch-card action buttons (Скопировать / Вставить / Выполнить), wired via
@@ -123,7 +174,21 @@ export function MissionFeed({ sessionId }: { sessionId: string }): React.JSX.Ele
         <div className="zy-mf-head-spacer" />
         <button
           className="zy-mf-head-btn"
-          title="Интерактивный терминал — набирать напрямую, запускать claude / vim / ssh"
+          title="Сессии Claude в этой папке — возобновить прошлую"
+          onClick={openSessionsMenu}
+        >
+          <Icon name="history" size={13} />
+        </button>
+        <button
+          className="zy-mf-head-btn"
+          title="Запустить ИИ-агента в терминале (Claude Code, Codex, Gemini…)"
+          onClick={openCliMenu}
+        >
+          <Icon name="bolt" size={13} />
+        </button>
+        <button
+          className="zy-mf-head-btn"
+          title="Интерактивный терминал — набирать напрямую, запускать claude / vim / ssh (Ctrl+`)"
           onClick={() => useUiStore.getState().set({ rawTerminal: true })}
         >
           <Icon name="terminal" size={13} />
@@ -146,9 +211,17 @@ export function MissionFeed({ sessionId }: { sessionId: string }): React.JSX.Ele
         </button>
       </div>
 
-      <div className="zy-mf-scroll" ref={scrollRef} onClick={onFeedClick}>
+      <div
+        className="zy-mf-scroll"
+        ref={scrollRef}
+        onClick={onFeedClick}
+        onScroll={(e) => {
+          const el = e.currentTarget
+          stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 64
+        }}
+      >
         {isEmpty ? (
-          <EmptyHero />
+          <EmptyHero sessionId={sessionId} />
         ) : (
           <>
             {blocks.map((b) => (
@@ -160,6 +233,13 @@ export function MissionFeed({ sessionId }: { sessionId: string }): React.JSX.Ele
               />
             ))}
             {hasConv && conv && <AgentSection conv={conv} cwd={cwdShort} />}
+            {conv?.queued && (
+              <div className="zy-mf-queued">
+                <Icon name="chevron-up" size={11} />
+                <span className="zy-mf-queued-text">в очереди: {conv.queued}</span>
+                <span className="zy-mf-queued-hint">↑ править · Esc прервать</span>
+              </div>
+            )}
             <div className="zy-mf-ready">
               <span className="zy-mf-spark"><PixelIcon name="star" /></span>
               <span className="zy-mf-cwd">{cwdShort || '~'}</span>
@@ -169,6 +249,7 @@ export function MissionFeed({ sessionId }: { sessionId: string }): React.JSX.Ele
           </>
         )}
       </div>
+      {cliMenu}
     </div>
   )
 }
@@ -219,6 +300,19 @@ function ShellBlock({
       {output.trim() !== '' && <OutputLines text={output} failed={failed} />}
     </div>
   )
+}
+
+/** Friendly per-tool verbs (not shell-hardcoded for Read/Edit/Write/etc). */
+function toolVerb(name: string): { want: string; run: string } {
+  const n = name.toLowerCase()
+  if (n === 'read' || n === 'grep' || n === 'glob' || n === 'ls')
+    return { want: 'агент хочет прочитать', run: 'читает…' }
+  if (n === 'edit' || n === 'write' || n === 'multiedit' || n === 'notebookedit')
+    return { want: 'агент хочет изменить файл', run: 'применяет правку…' }
+  if (n === 'webfetch' || n === 'websearch')
+    return { want: 'агент хочет в сеть', run: 'запрос в сеть…' }
+  if (n === 'task' || n === 'agent') return { want: 'агент хочет запустить субагента', run: 'субагент работает…' }
+  return { want: 'агент хочет выполнить', run: 'выполняется…' }
 }
 
 const ERR_RE = /error|ошибк|failed|exception|not found|cannot|no such|traceback/i
@@ -333,9 +427,25 @@ function ToolCard({
 }): React.JSX.Element {
   const pending = conv.pendingTools.find((t) => t.id === tool.id)
   const result = findToolResult(conv, tool.id)
-  const input = tool.input as { command?: string } | null
-  const cmd = typeof input?.command === 'string' ? input.command : tool.name
+  const input = tool.input as { command?: string; file_path?: string; path?: string } | null
+  const cmd =
+    typeof input?.command === 'string'
+      ? input.command
+      : typeof input?.file_path === 'string'
+        ? `${tool.name} · ${input.file_path}`
+        : typeof input?.path === 'string'
+          ? `${tool.name} · ${input.path}`
+          : tool.name
   const store = useAiStore.getState()
+
+  const verb = toolVerb(tool.name)
+  // Collapse long / multi-line commands to a single line (CLI-style), expand on click.
+  const [expanded, setExpanded] = useState(false)
+  const firstLine = cmd.split('\n')[0]
+  const isLong = cmd.includes('\n') || cmd.length > 88
+  const label = isLong
+    ? (firstLine.length > 88 ? firstLine.slice(0, 88) + '…' : firstLine) + (cmd.includes('\n') ? ' ⋯' : '…')
+    : cmd
 
   let body: React.JSX.Element
   if (result) {
@@ -344,6 +454,14 @@ function ToolCard({
       <div className="zy-mf-tool-denied">✗ {first || 'отклонено оператором'}</div>
     ) : (
       <div className="zy-mf-tool-done">✓ {first || 'exit 0'} — готово</div>
+    )
+  } else if (pending && !pending.settled && pending.kind === 'question') {
+    // AskUserQuestion — the bottom bar morphs into the selector; just point down.
+    body = (
+      <div className="zy-mf-tool-exec">
+        <Icon name="chevron-down" size={12} />
+        агент задал вопрос — выберите вариант в строке ниже
+      </div>
     )
   } else if (pending && !pending.settled) {
     body = (
@@ -354,26 +472,36 @@ function ToolCard({
         <button className="zy-mf-btn-deny" onClick={() => store.denyTool(conv.id, tool.id)}>
           ОТКЛОНИТЬ
         </button>
+        <span className="zy-mf-tool-kbd">Enter · Esc</span>
       </div>
     )
   } else {
     body = (
       <div className="zy-mf-tool-exec">
         <span className="zy-mf-spinner" />
-        выполняется в терминале…
+        {verb.run}
       </div>
     )
   }
 
   return (
     <div className="zy-mf-tool">
-      <div className="zy-mf-tool-head">
+      <div
+        className={`zy-mf-tool-head${isLong ? ' zy-mf-tool-head--clickable' : ''}`}
+        onClick={isLong ? () => setExpanded((v) => !v) : undefined}
+      >
         <svg width="11" height="11" viewBox="0 0 24 24" fill="var(--accent)">
           <path d="M8 5.5l11 6.5-11 6.5z" />
         </svg>
-        <code className="zy-mf-tool-cmd">{cmd}</code>
-        <span className="zy-mf-tool-note">агент хочет выполнить</span>
+        <code className="zy-mf-tool-cmd">{expanded ? firstLine : label}</code>
+        {isLong && (
+          <span className="zy-mf-tool-expand" title={expanded ? 'Свернуть' : 'Развернуть команду'}>
+            <Icon name={expanded ? 'chevron-up' : 'chevron-down'} size={11} />
+          </span>
+        )}
+        <span className="zy-mf-tool-note">{verb.want}</span>
       </div>
+      {expanded && isLong && <pre className="zy-mf-tool-full">{cmd}</pre>}
       {body}
     </div>
   )
@@ -381,7 +509,7 @@ function ToolCard({
 
 // -------------------------------------------------------------------- empty
 
-function EmptyHero(): React.JSX.Element {
+function EmptyHero({ sessionId }: { sessionId: string }): React.JSX.Element {
   return (
     <div className="zy-mf-empty">
       <div className="zy-mf-empty-mark">
@@ -389,7 +517,61 @@ function EmptyHero(): React.JSX.Element {
       </div>
       <div className="zy-mf-empty-title">Борт готов к старту</div>
       <div className="zy-mf-empty-hint">
-        введите команду с <b>$</b> или запрос агенту в строку ниже ↓
+        введите команду или запрос агенту в строку ниже ↓
+      </div>
+      <AiCliLauncher />
+      <ClaudeResumeList sessionId={sessionId} />
+    </div>
+  )
+}
+
+/**
+ * Recent Claude Code sessions for THIS folder, shown right in the agent window
+ * so you pick one to resume instead of always starting a new chat — the CLI's
+ * `--resume`, but visual and folder-scoped.
+ */
+function ClaudeResumeList({ sessionId }: { sessionId: string }): React.JSX.Element | null {
+  const [sessions, setSessions] = useState<
+    Array<{ sessionId: string; summary: string; lastModified: number; gitBranch?: string }>
+  >([])
+  const cwd = useSessionsStore((s) => s.sessions[sessionId]?.cwd)
+
+  useEffect(() => {
+    let alive = true
+    void window.zarya.claudeCode.listSessions(cwd).then((list) => {
+      if (alive) setSessions(list.slice(0, 6))
+    })
+    return () => {
+      alive = false
+    }
+  }, [cwd])
+
+  if (!sessions.length) return null
+
+  const resume = (s: { sessionId: string; summary: string }): void => {
+    void window.zarya.claudeCode.sessionMessages(s.sessionId, cwd).then((messages) => {
+      useAiStore.getState().resumeClaudeSession({
+        claudeSessionId: s.sessionId,
+        title: s.summary || 'Claude сессия',
+        messages,
+        cwd,
+        sessionId
+      })
+      useUiStore.getState().set({ barMode: 'claude-code', rawTerminal: false })
+    })
+  }
+
+  return (
+    <div className="zy-resume">
+      <div className="zy-resume-label">недавние сессии Claude в этой папке</div>
+      <div className="zy-resume-list">
+        {sessions.map((s) => (
+          <button key={s.sessionId} className="zy-resume-item" onClick={() => resume(s)}>
+            <Icon name="history" size={13} />
+            <span className="zy-resume-summary">{(s.summary || 'Сессия').slice(0, 52)}</span>
+            <span className="zy-resume-time">{formatRelative(s.lastModified)}</span>
+          </button>
+        ))}
       </div>
     </div>
   )

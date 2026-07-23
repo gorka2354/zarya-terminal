@@ -10,9 +10,11 @@ export const DEFAULT_KEYBINDINGS: Record<string, string> = {
   'ai.command-bar': 'Ctrl+I',
   'history.search': 'Ctrl+R',
   'tab.new': 'Ctrl+Shift+T',
+  'tab.new-in-folder': 'Ctrl+Shift+O',
   'tab.close': 'Ctrl+Shift+W',
   'tab.next': 'Ctrl+Tab',
   'tab.prev': 'Ctrl+Shift+Tab',
+  'terminal.toggle-raw': 'Ctrl+`',
   'terminal.split-right': 'Ctrl+Shift+D',
   'terminal.split-down': 'Ctrl+Shift+S',
   'terminal.close-pane': 'Ctrl+Shift+X',
@@ -24,7 +26,7 @@ export const DEFAULT_KEYBINDINGS: Record<string, string> = {
   'terminal.paste': 'Ctrl+Shift+V',
   'blocks.prev': 'Ctrl+ArrowUp',
   'blocks.next': 'Ctrl+ArrowDown',
-  'blocks.copy-last-output': 'Ctrl+Shift+O',
+  'blocks.copy-last-output': 'Ctrl+Shift+Y',
   'font.increase': 'Ctrl+=',
   'font.decrease': 'Ctrl+-',
   'font.reset': 'Ctrl+0'
@@ -69,7 +71,10 @@ export const DEFAULT_SETTINGS: Settings = {
     maxTokens: 4096,
     autoApprove: false,
     contextBlocks: 3,
-    systemPromptExtra: ''
+    systemPromptExtra: '',
+    claudeModel: '',
+    claudeEffort: '',
+    claudeBypass: false
   },
   sessions: {
     restoreOnLaunch: 'workspace',
@@ -83,7 +88,8 @@ export const DEFAULT_SETTINGS: Settings = {
     tabSize: 2
   },
   keybindings: DEFAULT_KEYBINDINGS,
-  bookmarks: []
+  bookmarks: [],
+  ideMode: false
 }
 
 /** Ollama default endpoint (local inference). */

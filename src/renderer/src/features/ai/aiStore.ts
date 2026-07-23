@@ -5,13 +5,17 @@ import type {
   AiMessage,
   AiStreamEvent,
   AiToolDef,
-  BlockRecord
+  BlockRecord,
+  ClaudeCliQuestion,
+  ClaudeStreamEvent
 } from '@shared/types'
+import type { AiConversationsState } from '@shared/types'
 import { EFFORT_TUNING } from '@shared/defaults'
 import { onBus } from '@/lib/bus'
+import { onQuitFlush } from '@/lib/quitFlush'
 import { uid } from '@/lib/uid'
 import { useBlocksStore } from '@/state/blocksStore'
-import { getSettings } from '@/state/settingsStore'
+import { getSettings, useSettingsStore } from '@/state/settingsStore'
 import { useSessionsStore } from '@/state/sessionsStore'
 import { useUiStore } from '@/state/uiStore'
 import { registerAiBridge } from './aiBridge'
@@ -59,6 +63,17 @@ export interface PendingTool {
   autoApproved: boolean
   /** True once a decision has been made (approved/auto) and it's executing — hides the action buttons. */
   settled: boolean
+  /**
+   * 'run' — a normal approve/deny gate (built-in run_command, or a Claude Code
+   * tool permission). 'question' — Claude Code's AskUserQuestion: the input bar
+   * morphs into a native choice selector. Undefined ⇒ 'run'.
+   */
+  kind?: 'run' | 'question'
+  /** AskUserQuestion payload when kind === 'question'. */
+  questions?: ClaudeCliQuestion[]
+  /** Human-readable prompt / short label from the driver (Claude Code). */
+  title?: string
+  displayName?: string
 }
 
 export interface Conversation {
@@ -67,6 +82,16 @@ export interface Conversation {
   messages: AiMessage[]
   /** Terminal session this conversation is bound to (for tool execution / context). */
   sessionId?: string
+  /**
+   * 'builtin' — Zarya's own provider agent (Anthropic/OpenAI/Ollama API key).
+   * 'claude-code' — the native Claude Code driver (subscription/Max login, its
+   * own tools + AskUserQuestion). Chosen at creation, drives send() routing.
+   */
+  engine: 'builtin' | 'claude-code'
+  /** Claude Code session id (from init/result) for resume / continuity. */
+  claudeSessionId?: string
+  /** Working directory the conversation was opened in (folder the AI worked in). */
+  cwd?: string
   agentMode: boolean
   /** True only while an ai.chat request is in flight (between dispatch and done/error). */
   streaming: boolean
@@ -77,6 +102,8 @@ export interface Conversation {
    */
   pendingTools: PendingTool[]
   pendingContext: AiContextChip[]
+  /** Message typed while the agent is working — queued, editable (↑), sent when it finishes. */
+  queued?: string
   /** Transport error from the last stream, shown as a dismissible banner. */
   error?: string
   createdAt: number
@@ -89,13 +116,47 @@ export function isConversationBusy(conv: Conversation): boolean {
   return conv.streaming || conv.pendingTools.length > 0
 }
 
+/**
+ * The conversation shown/edited for a terminal session — so each terminal keeps
+ * its OWN agent chat. Uses the session's tracked active conversation, falling
+ * back to the most recent conversation bound to that session. Returns a stable
+ * conversation object reference (safe as a zustand selector result).
+ */
+export function convForSession(
+  state: { conversations: Conversation[]; activeBySession: Record<string, string> },
+  sessionId: string | null | undefined
+): Conversation | undefined {
+  if (!sessionId) return undefined
+  const activeId = state.activeBySession[sessionId]
+  if (activeId) {
+    const c = state.conversations.find((x) => x.id === activeId)
+    if (c) return c
+  }
+  let latest: Conversation | undefined
+  for (const c of state.conversations) {
+    if (c.sessionId === sessionId && (!latest || c.createdAt >= latest.createdAt)) latest = c
+  }
+  return latest
+}
+
 interface AiState {
   conversations: Conversation[]
   activeId: string | null
+  /** Which conversation is active per terminal session (feed follows the terminal). */
+  activeBySession: Record<string, string>
   /** Session id remembered for the inline command bar (set by aiBridge.openCommandBar). */
   commandBarSessionId: string | null
 
-  newConversation: (opts?: { sessionId?: string; title?: string }) => string
+  /** Load persisted conversations from disk (call once at boot, after sessions). */
+  hydrate: () => Promise<void>
+  /** Persist conversations to disk now (used by the quit flush). */
+  saveNow: () => Promise<void>
+
+  newConversation: (opts?: {
+    sessionId?: string
+    title?: string
+    engine?: 'builtin' | 'claude-code'
+  }) => string
   setActiveConversation: (id: string) => void
   deleteConversation: (id: string) => void
   activeConversation: () => Conversation | undefined
@@ -106,6 +167,24 @@ interface AiState {
   approveTool: (conversationId?: string, toolId?: string) => Promise<void>
   /** Deny a pending tool by id (defaults to the first unsettled one). */
   denyTool: (conversationId?: string, toolId?: string) => void
+  /** Answer a Claude Code AskUserQuestion (maps question text -> chosen labels). */
+  answerQuestion: (
+    conversationId: string,
+    toolId: string,
+    answers: Record<string, string[]>
+  ) => void
+  /** Open a past Claude Code session in the active terminal (resume its context). */
+  resumeClaudeSession: (opts: {
+    claudeSessionId: string
+    title: string
+    messages: AiMessage[]
+    cwd?: string
+    sessionId?: string
+  }) => string
+  /** Queue a message typed while the agent is busy (sent when the turn ends). */
+  queueMessage: (conversationId: string, text: string) => void
+  /** Pull the queued message back out for editing (↑), clearing it. */
+  takeQueued: (conversationId: string) => string | undefined
   attachBlockContext: (block: BlockRecord, conversationId?: string) => void
   attachContext: (label: string, content: string, conversationId?: string) => void
   removeContext: (contextId: string, conversationId?: string) => void
@@ -317,6 +396,51 @@ function bumpEpoch(convId: string): void {
   runEpoch.set(convId, currentEpoch(convId) + 1)
 }
 
+// ------------------------------------------------------------- persistence
+/** Gate saves until the initial hydrate ran (never clobber disk with []). */
+let hydrated = false
+const CONV_PERSIST_CAP = 100
+
+function persistConversations(state: AiState): Promise<void> {
+  // Never write before hydrate ran: a quit during the async startup load would
+  // otherwise overwrite the on-disk conversations AND cached catalog with the
+  // empty initial store. scheduleSave gates too, but saveNow()/onQuitFlush call
+  // this directly, so the guard must live here.
+  if (!hydrated) return Promise.resolve()
+  const conversations = state.conversations
+    .filter((c) => c.messages.length > 0)
+    .slice(-CONV_PERSIST_CAP)
+    .map((c) => ({
+      id: c.id,
+      title: c.title,
+      engine: c.engine,
+      sessionId: c.sessionId,
+      claudeSessionId: c.claudeSessionId,
+      cwd: c.cwd,
+      messages: c.messages,
+      createdAt: c.createdAt
+    }))
+  const keptIds = new Set(conversations.map((c) => c.id))
+  const activeBySession: Record<string, string> = {}
+  for (const [sid, cid] of Object.entries(state.activeBySession)) {
+    if (keptIds.has(cid)) activeBySession[sid] = cid
+  }
+  const payload: AiConversationsState = {
+    conversations,
+    activeBySession,
+    claudeStatus: useUiStore.getState().claudeStatus,
+    claudeModels: useUiStore.getState().claudeModels
+  }
+  return window.zarya.aiConversations.save(payload)
+}
+
+let saveTimer: ReturnType<typeof setTimeout> | undefined
+function scheduleSave(): void {
+  if (!hydrated) return
+  clearTimeout(saveTimer)
+  saveTimer = setTimeout(() => void persistConversations(useAiStore.getState()), 800)
+}
+
 export const useAiStore = create<AiState>((set, get) => {
   const patchConversation = (id: string, fn: (c: Conversation) => Conversation): void => {
     set((s) => ({ conversations: s.conversations.map((c) => (c.id === id ? fn(c) : c)) }))
@@ -358,6 +482,158 @@ export const useAiStore = create<AiState>((set, get) => {
       maxTokens: Math.max(settings.ai.maxTokens, tune.maxTokens)
     }
     window.zarya.ai.chat(requestId, req)
+  }
+
+  /**
+   * Dispatch a turn to the native Claude Code driver. The driver key IS the
+   * conversation id (one live headless session per conversation): the first
+   * turn spawns the query, later turns are pushed as follow-up input.
+   */
+  function dispatchClaude(convId: string): void {
+    const conv = get().conversations.find((c) => c.id === convId)
+    if (!conv) return
+    const lastUser = [...conv.messages].reverse().find((m) => m.role === 'user')
+    const prompt = (lastUser?.content ?? [])
+      .filter((p): p is Extract<AiContentPart, { type: 'text' }> => p.type === 'text')
+      .map((p) => p.text)
+      .join('\n')
+      .trim()
+    if (!prompt) return
+    const settings = getSettings()
+    const sessionId = conv.sessionId || useSessionsStore.getState().activeSessionId()
+    const cwd = sessionId ? useSessionsStore.getState().sessions[sessionId]?.cwd : undefined
+    patchConversation(convId, (c) => ({ ...c, streaming: true, activeRequestId: convId, error: undefined }))
+    window.zarya.claudeCode.start(convId, {
+      prompt,
+      cwd: cwd || conv.cwd,
+      permissionMode: settings.ai.autoApprove ? 'acceptEdits' : 'default',
+      bypass: settings.ai.claudeBypass,
+      ultracode: useUiStore.getState().ultracode,
+      model: settings.ai.claudeModel || undefined,
+      // Ultracode forces xhigh; otherwise use the user's effort override.
+      effort: useUiStore.getState().ultracode ? 'xhigh' : settings.ai.claudeEffort || undefined,
+      // After a restart there's no live query for this conversation — resume the
+      // real Claude Code session (its transcript on disk) so context is intact.
+      // The driver only uses `resume` when spawning a fresh query; a live
+      // follow-up in the same run ignores it.
+      resume: conv.claudeSessionId
+    })
+  }
+
+  /** Map a Claude Code driver event onto the shared Conversation shape. */
+  function handleClaudeEvent(requestId: string, ev: ClaudeStreamEvent): void {
+    const convId = requestId // driver key === conversation id
+    if (!get().conversations.some((c) => c.id === convId)) return
+
+    switch (ev.type) {
+      case 'init':
+        patchConversation(convId, (c) => ({ ...c, claudeSessionId: ev.sessionId }))
+        useUiStore.getState().set({
+          claudeStatus: { ...useUiStore.getState().claudeStatus, model: ev.model, effort: ev.effort }
+        })
+        break
+
+      case 'usage':
+        useUiStore.getState().set({
+          claudeStatus: {
+            ...useUiStore.getState().claudeStatus,
+            usage: { ...useUiStore.getState().claudeStatus.usage, ...ev.usage }
+          }
+        })
+        break
+
+      case 'models':
+        useUiStore.getState().set({ claudeModels: ev.models })
+        // Persist the fresh catalog so the launch pad (incl. Fable / any future
+        // model) is populated on the next cold start without a live session.
+        scheduleSave()
+        break
+
+      case 'assistant':
+        patchConversation(convId, (c) => ({
+          ...c,
+          messages: [...c.messages, { role: 'assistant', content: ev.content }]
+        }))
+        break
+
+      case 'permission':
+        patchConversation(convId, (c) => ({
+          ...c,
+          pendingTools: [
+            ...c.pendingTools.filter((t) => t.id !== ev.toolUseId),
+            {
+              id: ev.toolUseId,
+              name: ev.toolName,
+              input: ev.input,
+              autoApproved: false,
+              settled: false,
+              kind: ev.questions ? 'question' : 'run',
+              questions: ev.questions,
+              title: ev.title,
+              displayName: ev.displayName
+            }
+          ]
+        }))
+        break
+
+      case 'tool_result':
+        patchConversation(convId, (c) => ({
+          ...c,
+          pendingTools: c.pendingTools.filter((t) => t.id !== ev.toolUseId),
+          messages: [
+            ...c.messages,
+            {
+              role: 'user',
+              content: [
+                { type: 'tool_result', toolUseId: ev.toolUseId, content: ev.content, isError: ev.isError }
+              ]
+            }
+          ]
+        }))
+        break
+
+      case 'result': {
+        patchConversation(convId, (c) => ({
+          ...c,
+          streaming: false,
+          activeRequestId: undefined,
+          claudeSessionId: ev.sessionId ?? c.claudeSessionId
+        }))
+        // Correct the fuel readout to the model that actually ran this turn.
+        // Only when a single model ran (subagents would add extra keys → keep config).
+        const ran = ev.models ?? []
+        if (ran.length === 1) {
+          const st = useUiStore.getState().claudeStatus
+          // Don't clobber a model the user just switched TO mid-turn: the finished
+          // turn ran the OLD model, but a live setModel already re-pinned the next
+          // one. Only correct when the committed pin still matches what ran.
+          const pin = getSettings().ai.claudeModel
+          const famOf = (id: string): string =>
+            (id || '').replace(/^claude-/, '').replace(/\[1m\]/i, '').split(/[-\s]/)[0].toLowerCase()
+          const pinMatches = !pin || famOf(pin) === famOf(ran[0])
+          if (pinMatches && st.model !== ran[0]) {
+            useUiStore.getState().set({ claudeStatus: { ...st, model: ran[0] } })
+          }
+        }
+        // Flush a message queued while the agent was working (CLI-style).
+        const queued = get().conversations.find((c) => c.id === convId)?.queued
+        if (queued && get().conversations.find((c) => c.id === convId)?.pendingTools.length === 0) {
+          patchConversation(convId, (c) => ({ ...c, queued: undefined }))
+          void get().send(queued, { conversationId: convId })
+        }
+        break
+      }
+
+      case 'error':
+        patchConversation(convId, (c) => ({
+          ...c,
+          streaming: false,
+          activeRequestId: undefined,
+          pendingTools: [],
+          error: ev.message
+        }))
+        break
+    }
   }
 
   /** Enqueue a tool execution on the conversation's serial chain. */
@@ -474,26 +750,75 @@ export const useAiStore = create<AiState>((set, get) => {
   }
 
   window.zarya.ai.onStream(handleStreamEvent)
+  window.zarya.claudeCode.onStream(handleClaudeEvent)
 
   return {
     conversations: [],
     activeId: null,
+    activeBySession: {},
     commandBarSessionId: null,
+
+    hydrate: async () => {
+      const saved = await window.zarya.aiConversations.load()
+      hydrated = true
+      // Restore ambient Claude state first (independent of conversations) so the
+      // fuel gauge and launch pad — incl. the Fable-bearing catalog — are
+      // populated on cold start even before any session init or if no
+      // conversation had messages worth persisting.
+      if (saved?.claudeStatus) useUiStore.getState().set({ claudeStatus: saved.claudeStatus })
+      if (saved?.claudeModels?.length) useUiStore.getState().set({ claudeModels: saved.claudeModels })
+      if (!saved?.conversations?.length) return
+      const conversations: Conversation[] = saved.conversations.map((p) => ({
+        id: p.id,
+        title: p.title,
+        messages: p.messages,
+        sessionId: p.sessionId,
+        engine: p.engine,
+        claudeSessionId: p.claudeSessionId,
+        cwd: p.cwd,
+        agentMode: p.engine === 'claude-code',
+        streaming: false,
+        pendingTools: [],
+        pendingContext: [],
+        createdAt: p.createdAt
+      }))
+      set({
+        conversations,
+        activeBySession: saved.activeBySession ?? {},
+        activeId: conversations[conversations.length - 1]?.id ?? null
+      })
+    },
+
+    saveNow: async () => {
+      await persistConversations(get())
+    },
 
     newConversation: (opts) => {
       const id = uid('conv')
+      const cwd = opts?.sessionId
+        ? useSessionsStore.getState().sessions[opts.sessionId]?.cwd
+        : undefined
       const conv: Conversation = {
         id,
         title: opts?.title ?? 'Новая беседа',
         messages: [],
         sessionId: opts?.sessionId,
-        agentMode: false,
+        engine: opts?.engine ?? 'builtin',
+        cwd,
+        // Claude Code has its own agentic tool loop — agent mode is implicit.
+        agentMode: opts?.engine === 'claude-code',
         streaming: false,
         pendingTools: [],
         pendingContext: [],
         createdAt: Date.now()
       }
-      set((s) => ({ conversations: [...s.conversations, conv], activeId: id }))
+      set((s) => ({
+        conversations: [...s.conversations, conv],
+        activeId: id,
+        activeBySession: opts?.sessionId
+          ? { ...s.activeBySession, [opts.sessionId]: id }
+          : s.activeBySession
+      }))
       return id
     },
 
@@ -544,7 +869,13 @@ export const useAiStore = create<AiState>((set, get) => {
         error: undefined,
         title: c.messages.length === 0 && c.title === 'Новая беседа' ? deriveTitle(trimmed || conv.pendingContext[0]?.label || '') : c.title
       }))
-      await dispatchChat(conv.id)
+      // Keep this the active conversation for its terminal (feed follows it).
+      if (conv.sessionId) {
+        const sid = conv.sessionId
+        set((s) => ({ activeBySession: { ...s.activeBySession, [sid]: conv.id }, activeId: conv.id }))
+      }
+      if (conv.engine === 'claude-code') dispatchClaude(conv.id)
+      else await dispatchChat(conv.id)
     },
 
     abort: (conversationId) => {
@@ -555,7 +886,9 @@ export const useAiStore = create<AiState>((set, get) => {
       // discarded rather than re-triggering the loop.
       bumpEpoch(conv.id)
       execChains.delete(conv.id)
-      if (conv.activeRequestId) {
+      if (conv.engine === 'claude-code') {
+        window.zarya.claudeCode.interrupt(conv.id)
+      } else if (conv.activeRequestId) {
         window.zarya.ai.abort(conv.activeRequestId)
         requestConv.delete(conv.activeRequestId)
       }
@@ -574,6 +907,16 @@ export const useAiStore = create<AiState>((set, get) => {
         ? conv.pendingTools.find((t) => t.id === toolId)
         : conv.pendingTools.find((t) => !t.settled)
       if (!tool || tool.settled) return
+      // Claude Code: the SDK owns execution — just resolve the permission gate.
+      // Mark settled (hide buttons); the tool_result event removes it later.
+      if (conv.engine === 'claude-code') {
+        patchConversation(conv.id, (c) => ({
+          ...c,
+          pendingTools: c.pendingTools.map((t) => (t.id === tool.id ? { ...t, settled: true } : t))
+        }))
+        window.zarya.claudeCode.permission(conv.id, tool.id, { behavior: 'allow' })
+        return
+      }
       patchConversation(conv.id, (c) => ({
         ...c,
         pendingTools: c.pendingTools.map((t) => (t.id === tool.id ? { ...t, settled: true } : t))
@@ -588,6 +931,18 @@ export const useAiStore = create<AiState>((set, get) => {
         ? conv.pendingTools.find((t) => t.id === toolId)
         : conv.pendingTools.find((t) => !t.settled)
       if (!tool || tool.settled) return
+      // Claude Code: resolve the gate as denied; the SDK emits the tool_result.
+      if (conv.engine === 'claude-code') {
+        patchConversation(conv.id, (c) => ({
+          ...c,
+          pendingTools: c.pendingTools.filter((t) => t.id !== tool.id)
+        }))
+        window.zarya.claudeCode.permission(conv.id, tool.id, {
+          behavior: 'deny',
+          message: 'Пользователь отклонил выполнение'
+        })
+        return
+      }
       patchConversation(conv.id, (c) => ({
         ...c,
         pendingTools: c.pendingTools.filter((t) => t.id !== tool.id),
@@ -607,6 +962,69 @@ export const useAiStore = create<AiState>((set, get) => {
         ]
       }))
       maybeContinue(conv.id)
+    },
+
+    queueMessage: (conversationId, text) => {
+      const t = text.trim()
+      if (!t) return
+      patchConversation(conversationId, (c) => ({
+        ...c,
+        queued: c.queued ? `${c.queued}\n${t}` : t
+      }))
+    },
+
+    takeQueued: (conversationId) => {
+      const conv = get().conversations.find((c) => c.id === conversationId)
+      const q = conv?.queued
+      if (q) patchConversation(conversationId, (c) => ({ ...c, queued: undefined }))
+      return q
+    },
+
+    resumeClaudeSession: (opts) => {
+      const sid = opts.sessionId ?? useSessionsStore.getState().activeSessionId() ?? undefined
+      const id = uid('conv')
+      const conv: Conversation = {
+        id,
+        title: opts.title || 'Claude сессия',
+        messages: opts.messages,
+        sessionId: sid,
+        engine: 'claude-code',
+        claudeSessionId: opts.claudeSessionId,
+        cwd: opts.cwd,
+        agentMode: true,
+        streaming: false,
+        pendingTools: [],
+        pendingContext: [],
+        createdAt: Date.now()
+      }
+      set((s) => ({
+        conversations: [...s.conversations, conv],
+        activeId: id,
+        activeBySession: sid ? { ...s.activeBySession, [sid]: id } : s.activeBySession
+      }))
+      return id
+    },
+
+    answerQuestion: (conversationId, toolId, answers) => {
+      const conv = get().conversations.find((c) => c.id === conversationId)
+      const tool = conv?.pendingTools.find((t) => t.id === toolId)
+      if (!conv || !tool || tool.settled) return
+      // Mark settled + resume streaming; the SDK continues once it receives the
+      // answer. Echo the choice into the transcript as a synthetic user turn so
+      // the feed shows what was picked.
+      const chosen = Object.values(answers).flat().join(', ')
+      patchConversation(conv.id, (c) => ({
+        ...c,
+        streaming: true,
+        pendingTools: c.pendingTools.filter((t) => t.id !== toolId),
+        messages: chosen
+          ? [...c.messages, { role: 'user', content: [{ type: 'text', text: `➤ ${chosen}` }] }]
+          : c.messages
+      }))
+      window.zarya.claudeCode.permission(conv.id, toolId, {
+        behavior: 'allow',
+        updatedInput: { questions: tool.questions ?? [], answers }
+      })
     },
 
     attachBlockContext: (block, conversationId) => {
@@ -655,6 +1073,89 @@ export const useAiStore = create<AiState>((set, get) => {
 })
 
 // -------------------------------------------------------------- ai bridge
+
+// Persist conversations on any change (debounced) and flush them on quit, so
+// each terminal's agent chat survives a restart / shutdown.
+useAiStore.subscribe(scheduleSave)
+onQuitFlush(() => persistConversations(useAiStore.getState()))
+
+// Follow the active terminal: keep the global activeId (used by the AI side
+// panel / crew list) pointed at whichever chat belongs to the focused terminal.
+onBus('terminal:focus', ({ sessionId }) => {
+  const conv = convForSession(useAiStore.getState(), sessionId)
+  if (conv && useAiStore.getState().activeId !== conv.id) {
+    useAiStore.setState({ activeId: conv.id })
+  }
+})
+
+// QA hooks: let the offscreen harness drive an agent turn and read back the
+// active conversation (verifies the native Claude Code path end-to-end).
+;(window as unknown as {
+  __zaryaAskAgent?: (text: string, engine?: 'builtin' | 'claude-code') => void
+  __zaryaDumpConv?: () => unknown
+}).__zaryaAskAgent = (text, engine = 'builtin') => {
+  const store = useAiStore.getState()
+  const sid = useSessionsStore.getState().activeSessionId() ?? undefined
+  const id = store.newConversation({ sessionId: sid, engine })
+  store.setActiveConversation(id)
+  void store.send(text, { conversationId: id })
+}
+;(window as unknown as { __zaryaConvFor?: (sessionId: string) => unknown }).__zaryaConvFor = (sessionId) => {
+  const c = convForSession(useAiStore.getState(), sessionId)
+  return c ? { id: c.id, engine: c.engine, sessionId: c.sessionId, cwd: c.cwd, claudeSessionId: c.claudeSessionId, msgs: c.messages.length, firstUser: c.messages.find((m) => m.role === 'user')?.content?.find((p) => p.type === 'text')?.text?.slice(0, 50) } : null
+}
+;(window as unknown as { __zaryaFollowUp?: (text: string) => void }).__zaryaFollowUp = (text) => {
+  const sid = useSessionsStore.getState().activeSessionId()
+  const c = convForSession(useAiStore.getState(), sid) ?? useAiStore.getState().activeConversation()
+  if (c) void useAiStore.getState().send(text, { conversationId: c.id })
+}
+;(window as unknown as { __zaryaDumpConv?: () => unknown }).__zaryaDumpConv = () => {
+  const c = useAiStore.getState().activeConversation()
+  return c ? { engine: c.engine, streaming: c.streaming, error: c.error, messages: c.messages, pendingTools: c.pendingTools, queued: c.queued } : null
+}
+;(window as unknown as { __zaryaQueue?: (t: string) => void }).__zaryaQueue = (t) => {
+  const c = useAiStore.getState().activeConversation()
+  if (c) useAiStore.getState().queueMessage(c.id, t)
+}
+;(window as unknown as { __zaryaBypassLive?: (on: boolean) => void }).__zaryaBypassLive = (on) => {
+  const cur = getSettings().ai
+  void useSettingsStore.getState().update({ ai: { ...cur, claudeBypass: on } })
+  const c = useAiStore.getState().activeConversation()
+  if (c?.engine === 'claude-code') window.zarya.claudeCode.setBypass(c.id, on)
+}
+;(window as unknown as { __zaryaApplyModelLive?: (model: string) => void }).__zaryaApplyModelLive = (
+  model
+) => {
+  const cur = getSettings().ai
+  void useSettingsStore.getState().update({ ai: { ...cur, claudeModel: model } })
+  const c = useAiStore.getState().activeConversation()
+  if (c?.engine === 'claude-code') window.zarya.claudeCode.setModel(c.id, model || undefined)
+}
+;(window as unknown as {
+  __zaryaSetClaudeCfg?: (model?: string, effort?: string, bypass?: boolean) => void
+}).__zaryaSetClaudeCfg = (model, effort, bypass) => {
+  const cur = getSettings().ai
+  void useSettingsStore.getState().update({
+    ai: {
+      ...cur,
+      claudeModel: model ?? cur.claudeModel,
+      claudeEffort: effort ?? cur.claudeEffort,
+      claudeBypass: bypass ?? cur.claudeBypass
+    }
+  })
+}
+;(window as unknown as { __zaryaApproveFirst?: () => void }).__zaryaApproveFirst = () => {
+  const c = useAiStore.getState().activeConversation()
+  const t = c?.pendingTools.find((x) => !x.settled)
+  if (c && t) void useAiStore.getState().approveTool(c.id, t.id)
+}
+;(window as unknown as { __zaryaAnswerFirst?: (label: string) => void }).__zaryaAnswerFirst = (label) => {
+  const c = useAiStore.getState().activeConversation()
+  const t = c?.pendingTools.find((x) => x.kind === 'question' && !x.settled)
+  if (c && t && t.questions?.[0]) {
+    useAiStore.getState().answerQuestion(c.id, t.id, { [t.questions[0].question]: [label] })
+  }
+}
 
 registerAiBridge({
   explainBlock: (block, question) => {

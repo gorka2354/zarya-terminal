@@ -131,6 +131,63 @@
   padding: 6px 24px 32px;
 }
 
+/* --- nav groups (base vs IDE superstructure) --- */
+.zy-settings-nav-group {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 12px 6px 4px;
+  font-family: var(--font-tech);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+  min-height: 14px;
+}
+.zy-settings-nav-group:first-child {
+  margin-top: 2px;
+}
+.zy-settings-nav-group--ide {
+  color: var(--accent-2);
+}
+.zy-settings-nav-hint {
+  margin: 2px 8px 4px;
+  font-family: var(--font-tech);
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--fg-faint);
+  opacity: 0.85;
+}
+/* IDE on/off pill switch in the nav */
+.zy-settings-ide-switch {
+  flex-shrink: 0;
+  width: 30px;
+  height: 16px;
+  border: none;
+  border-radius: 9px;
+  background: var(--border-strong);
+  cursor: pointer;
+  position: relative;
+  transition: background 0.12s;
+}
+.zy-settings-ide-switch--on {
+  background: var(--accent);
+}
+.zy-settings-ide-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--bg);
+  transition: transform 0.12s;
+}
+.zy-settings-ide-switch--on .zy-settings-ide-knob {
+  transform: translateX(14px);
+}
+
 /* ------------------------------------------------ sections & rows */
 .zy-set-section {
   padding: 14px 0 6px;

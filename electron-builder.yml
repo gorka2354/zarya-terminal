@@ -8,6 +8,10 @@ files:
 asarUnpack:
   - 'node_modules/@lydell/node-pty/**'
   - '**/*.node'
+  # Native Claude Code driver: the SDK spawns its bundled CLI as a subprocess,
+  # which can't execute from inside the asar archive.
+  - 'node_modules/@anthropic-ai/claude-agent-sdk/**'
+  - 'node_modules/@anthropic-ai/claude-agent-sdk-win32-x64/**'
 extraResources:
   - from: resources
     to: app-resources

@@ -2,7 +2,12 @@ import { app } from 'electron'
 import { promises as fs } from 'fs'
 import { join } from 'path'
 import { readJson, writeJsonAtomic } from './jsonStore'
-import type { SessionMeta, SessionSnapshot, WorkspaceState } from '@shared/types'
+import type {
+  AiConversationsState,
+  SessionMeta,
+  SessionSnapshot,
+  WorkspaceState
+} from '@shared/types'
 
 /** Sessions older than the cap are pruned, except pinned/favorite ones. */
 const MAX_SESSIONS = 200
@@ -101,6 +106,18 @@ export class SessionStore {
 
   async loadWorkspace(): Promise<WorkspaceState | null> {
     return readJson<WorkspaceState | null>(this.workspaceFile, null)
+  }
+
+  private get conversationsFile() {
+    return join(app.getPath('userData'), 'ai-conversations.json')
+  }
+
+  async saveConversations(state: AiConversationsState): Promise<void> {
+    await writeJsonAtomic(this.conversationsFile, state)
+  }
+
+  async loadConversations(): Promise<AiConversationsState | null> {
+    return readJson<AiConversationsState | null>(this.conversationsFile, null)
   }
 
   private async prune(): Promise<void> {

@@ -623,6 +623,30 @@ body {
 .zy-activity-spacer {
   flex: 1;
 }
+/* Divider between base views and the IDE-layer views in the activity rail. */
+.zy-activity-divider {
+  width: 20px;
+  height: 1px;
+  margin: 4px auto;
+  background: var(--border-strong);
+  opacity: 0.7;
+}
+.zy-activity-ide--on {
+  color: var(--accent);
+}
+.zy-activity-ide--on::after {
+  content: '';
+  position: absolute;
+  right: 3px;
+  top: 3px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.zy-activity-ide {
+  position: relative;
+}
 
 /* ============================================================ sidebar */
 
@@ -1406,6 +1430,20 @@ body {
 .zy-ide-rail-btn:hover {
   border-color: #4fd6d6;
   background: var(--bg-elev1);
+}
+/* IDE-agent panel caption: distinguishes it from the native Claude Code agent. */
+.zy-ai-caption {
+  padding: 5px 10px 4px;
+  font-family: var(--font-tech);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent-2);
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--accent-2) 6%, transparent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .zy-ide-rail-label {
   writing-mode: vertical-rl;
