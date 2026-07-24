@@ -20,11 +20,15 @@ win:
   target:
     - nsis
     - portable
-  artifactName: ${productName}-${version}-win-${arch}.${ext}
+# Distinct names per target — nsis and portable share the default ${ext}=exe, so
+# a single artifactName would make one silently overwrite the other.
 nsis:
+  artifactName: ${productName}-Setup-${version}-win-${arch}.${ext}
   oneClick: false
   allowToChangeInstallationDirectory: true
   deleteAppDataOnUninstall: false
+portable:
+  artifactName: ${productName}-Portable-${version}-win-${arch}.${ext}
 mac:
   target:
     - dmg
