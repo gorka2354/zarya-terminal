@@ -9,9 +9,10 @@ asarUnpack:
   - 'node_modules/@lydell/node-pty/**'
   - '**/*.node'
   # Native Claude Code driver: the SDK spawns its bundled CLI as a subprocess,
-  # which can't execute from inside the asar archive.
+  # which can't execute from inside the asar archive. Glob covers whichever
+  # platform binary is installed (win32-x64 / darwin-arm64 / darwin-x64 / linux-*).
   - 'node_modules/@anthropic-ai/claude-agent-sdk/**'
-  - 'node_modules/@anthropic-ai/claude-agent-sdk-win32-x64/**'
+  - 'node_modules/@anthropic-ai/claude-agent-sdk-*/**'
 extraResources:
   - from: resources
     to: app-resources

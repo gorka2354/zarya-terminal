@@ -3,6 +3,56 @@
 All notable changes to Zarya are documented here. This project uses
 [Semantic Versioning](https://semver.org/).
 
+## 0.5.0 — «Созвездие» (2026-07-24)
+
+A multi-agent release. Zarya is no longer tied to a single AI backend: a driver
+abstraction now lets **five native agent engines** live side by side —
+Claude Code, **Codex**, **Gemini**, **Kimi** and **Qwen** — each a chip in the
+command bar, each with its own tool-approval gates and resume. Plus bring-your-own-key
+presets for Kimi/Qwen/DeepSeek and macOS packaging.
+
+### Added
+
+- **AgentDriver abstraction** — the AI layer is generalized from a hardcoded
+  `engine === 'claude-code'` into an open `AgentDriver` interface + capability
+  flags + a driver registry, with generic `agent:*` IPC. The renderer renders
+  controls from each engine's declared capabilities (fuel gauge, effort dial,
+  model picker, bypass, question widget), so a new engine lights up the right UI
+  without touching the renderer (`src/main/agentDriver.ts`, `src/shared/types.ts`).
+- **Codex engine** — native driver over `codex app-server` (JSON-RPC/JSONL on
+  stdio): threads, streamed turns, live command/patch **approval gates**, resume,
+  interrupt, model catalog (`src/main/codexDriver.ts`). Appears as a chip when the
+  `codex` CLI is installed.
+- **Gemini engine (ACP)** — native driver over `gemini --acp` (Agent Client
+  Protocol): sessions, streamed chunks, a single unified permission gate, resume,
+  interrupt, and a **filesystem proxy confined to the session's working directory**
+  (`src/main/acpDriver.ts`).
+- **Kimi + Qwen engines** — the same parameterized ACP driver also backs
+  `kimi acp` and `qwen --acp`, so both Chinese frontier coding models run natively
+  with zero extra transport code. (Qwen's ACP is upstream-experimental.)
+- **Bring-your-own-key presets** — the OpenAI-compatible provider gains one-click
+  baseURL presets for **Kimi (Moonshot)**, **Qwen (DashScope)** and **DeepSeek** in
+  Settings → AI; model ids are typed in (they rotate often). See `docs/ai.md`.
+- **macOS packaging** — the Claude Code SDK's platform CLI is unpacked for every
+  platform (win/mac-arm/mac-x64/linux), so builds run outside the asar on macOS.
+
+### Security
+
+- **fs-proxy confinement (ACP)** — agent-driven file reads/writes are restricted
+  to the session working directory both lexically **and** after resolving symlinks
+  (a junction/symlink inside cwd can't escape); untrusted paths that aren't strings
+  can't crash the main process.
+- **Hardened stdio transports** — bounded JSONL decoder (a runaway line can't OOM
+  main), fail-closed tool approvals, request timeouts, and clean teardown of child
+  processes on every quit path, across the Codex and ACP drivers.
+
+### Tested
+
+- 80 unit tests + offscreen harnesses covering each driver end-to-end against a
+  protocol-accurate mock server (init, streaming, approve/deny, resume, interrupt,
+  fs-proxy + traversal, crash/recovery, quit teardown). Every increment was
+  reviewed adversarially before landing.
+
 ## 0.4.0 — «Орбита» (2026-07-21)
 
 A large "cosmic CLI agent" redesign — Soviet-space pixel-constructivism. The whole

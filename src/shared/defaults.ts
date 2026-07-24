@@ -109,3 +109,32 @@ export const AI_MODEL_PRESETS: Record<string, string[]> = {
   ollama: [],
   'openai-compat': []
 }
+
+/**
+ * Quick-pick presets for the `openai-compat` provider: pre-fill a known OpenAI-
+ * compatible baseURL so the user only pastes their key. Models are intentionally
+ * NOT preset — Kimi/Qwen rotate model ids monthly (kimi-k2→k3), so a stale list
+ * would mislead; the user types the current model id (see the hint / docs/ai.md).
+ * International endpoints by default (USD billing). Kimi/Qwen also expose native
+ * ACP agent chips (inc-12) — this API path is the BYOK alternative.
+ */
+export const OPENAI_COMPAT_PRESETS: { id: string; label: string; baseUrl: string; hint: string }[] = [
+  {
+    id: 'kimi',
+    label: 'Kimi (Moonshot)',
+    baseUrl: 'https://api.moonshot.ai/v1',
+    hint: 'Ключ: platform.moonshot.ai · модели: kimi-k3, kimi-k2.7-code (см. platform.kimi.ai/docs/models)'
+  },
+  {
+    id: 'qwen',
+    label: 'Qwen (DashScope)',
+    baseUrl: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
+    hint: 'Ключ: Alibaba Cloud Model Studio · модели: qwen3-coder-plus, qwen-max'
+  },
+  {
+    id: 'deepseek',
+    label: 'DeepSeek',
+    baseUrl: 'https://api.deepseek.com/v1',
+    hint: 'Ключ: platform.deepseek.com · модели: deepseek-chat, deepseek-reasoner'
+  }
+]

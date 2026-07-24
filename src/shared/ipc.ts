@@ -41,20 +41,23 @@ export const CH = {
   aiStream: 'ai:stream', // main -> renderer
   aiOllamaModels: 'ai:ollama-models',
 
-  // claude code native driver
-  claudeCodeStart: 'claude-code:start',
-  claudeCodeInput: 'claude-code:input',
-  claudeCodeInterrupt: 'claude-code:interrupt',
-  claudeCodePermission: 'claude-code:permission',
-  claudeCodeStream: 'claude-code:stream', // main -> renderer
-  claudeCodeListSessions: 'claude-code:list-sessions',
-  claudeCodeSessionMessages: 'claude-code:session-messages',
-  claudeCodeSetModel: 'claude-code:set-model',
-  claudeCodeSetBypass: 'claude-code:set-bypass',
-  claudeCodeSetEffort: 'claude-code:set-effort',
-  claudeCodeSetUltracode: 'claude-code:set-ultracode',
-  claudeCodeListModels: 'claude-code:list-models',
-  claudeCodeDebugFlags: 'claude-code:debug-flags',
+  // native agent drivers (claude-code, codex, gemini). Renderer->main calls carry
+  // `engine` as the first arg so the main handler routes to the registry driver.
+  agentCapabilities: 'agent:capabilities', // engine -> AgentCapabilities map (for UI gating)
+  agentStart: 'agent:start',
+  agentInput: 'agent:input',
+  agentInterrupt: 'agent:interrupt',
+  agentPermission: 'agent:permission',
+  agentQuestion: 'agent:question', // resolve a structured AskUserQuestion-style prompt
+  agentStream: 'agent:stream', // main -> renderer, payload carries `engine`
+  agentListSessions: 'agent:list-sessions',
+  agentSessionMessages: 'agent:session-messages',
+  agentSetModel: 'agent:set-model',
+  agentSetBypass: 'agent:set-bypass',
+  agentSetEffort: 'agent:set-effort',
+  agentSetVendorFlag: 'agent:set-vendor-flag', // generalizes set-ultracode
+  agentListModels: 'agent:list-models',
+  agentDebugFlags: 'agent:debug-flags',
 
   // fs / git
   fsReadDir: 'fs:read-dir',

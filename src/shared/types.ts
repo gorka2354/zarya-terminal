@@ -271,7 +271,7 @@ export interface AiProviderStatus {
 export interface PersistedConversation {
   id: string
   title: string
-  engine: 'builtin' | 'claude-code'
+  engine: 'builtin' | AgentEngine
   /** Terminal session this conversation belongs to. */
   sessionId?: string
   /** Claude Code session id — resumed on the next turn to keep full context. */
@@ -293,11 +293,22 @@ export interface AiConversationsState {
 }
 
 // ---------------------------------------------------------------------------
-// Native Claude Code driver (headless Agent SDK, main process owns the child)
+// Native agent drivers (Claude Code today; Codex / Gemini via inc-9 AgentDriver)
+//
+// These shapes are the driver-agnostic contract. Claude Code was the first
+// driver, so the names were originally `Claude*`; inc-9 renames the canonical
+// definitions to `Agent*` and keeps `Claude*` back-compat aliases for one
+// increment. A driver maps its vendor wire protocol onto these shapes; the
+// renderer talks only to this contract (no per-vendor `engine === 'claude-code'`
+// forks — it reads {@link AgentCapabilities} to decide which controls to show).
 // ---------------------------------------------------------------------------
 
-/** A single AskUserQuestion prompt (Claude's structured choice widget). */
-export interface ClaudeCliQuestion {
+/** Which native agent backs a conversation. Extend as drivers land. Kimi/Qwen
+ *  (inc-12) share the ACP driver with Gemini — just more engine ids. */
+export type AgentEngine = 'claude-code' | 'codex' | 'gemini' | 'kimi' | 'qwen'
+
+/** A single AskUserQuestion-style structured prompt (agent asks the user). */
+export interface AgentQuestion {
   question: string
   header: string
   options: { label: string; description?: string; preview?: string }[]
@@ -309,35 +320,33 @@ export interface ClaudeCliQuestion {
  * deliberately excluded: bypassPermissions shadows canUseTool entirely (which
  * would also silently auto-answer AskUserQuestion), so bypass is implemented as
  * an auto-allow INSIDE canUseTool instead — see claudeCodeDriver. The main
- * process also whitelists this at the trust boundary.
+ * process also whitelists this at the trust boundary. Drivers whose backend has
+ * no equivalent permission mode ignore it.
  */
-export type ClaudePermissionMode = 'default' | 'acceptEdits' | 'plan'
+export type AgentPermissionMode = 'default' | 'acceptEdits' | 'plan'
 
-export interface ClaudeStartOpts {
+export interface AgentStartOpts {
   /** The user's turn text. */
   prompt: string
   /** Working directory the agent operates in (the bound session's cwd). */
   cwd?: string
-  /** Model id override; omit to use the CLI's configured default. */
+  /** Model id override; omit to use the driver's configured default. */
   model?: string
-  /** Reasoning effort override; omit to use the account default. */
+  /** Reasoning effort override (vendor vocabulary); omit for the account default. */
   effort?: string
-  permissionMode?: ClaudePermissionMode
+  permissionMode?: AgentPermissionMode
   /** Auto-approve tool calls in canUseTool without prompting (AskUserQuestion still surfaces). */
   bypass?: boolean
-  /** Ultracode: xhigh effort + standing dynamic-workflow orchestration (session-scoped). */
+  /** Ultracode: xhigh effort + standing dynamic-workflow orchestration (Claude-only, session-scoped). */
   ultracode?: boolean
-  /** Resume a prior Claude Code session id (multi-turn continuity). */
+  /** Resume a prior session id (multi-turn continuity). */
   resume?: string
+  /** Escape hatch for vendor-specific flags (never a required member). */
+  vendorOpts?: Record<string, unknown>
 }
 
-/**
- * Events streamed main -> renderer for a native Claude Code turn. Distinct from
- * {@link AiStreamEvent} (the built-in provider agent) so neither path perturbs
- * the other; the renderer adapter maps these onto the shared Conversation shape.
- */
 /** Subscription rate-limit windows (utilization %, reset time) for the fuel gauge. */
-export interface ClaudeUsage {
+export interface AgentUsage {
   subscriptionType?: string
   fiveHourPct?: number
   fiveHourResetsAt?: number
@@ -345,7 +354,14 @@ export interface ClaudeUsage {
   sevenDayResetsAt?: number
 }
 
-export type ClaudeStreamEvent =
+/**
+ * Events streamed main -> renderer for a native agent turn. Distinct from
+ * {@link AiStreamEvent} (the built-in provider agent) so neither path perturbs
+ * the other; the renderer adapter maps these onto the shared Conversation shape.
+ * The 8-member union is proven sufficient for a full permission-gated agentic
+ * turn; a driver normalizes its vendor events onto it.
+ */
+export type AgentStreamEvent =
   | {
       type: 'init'
       sessionId: string
@@ -356,8 +372,8 @@ export type ClaudeStreamEvent =
       /** Reasoning effort from the account config (~/.claude/settings.json). */
       effort?: string
     }
-  | { type: 'usage'; usage: ClaudeUsage }
-  | { type: 'models'; models: ClaudeModelInfo[] }
+  | { type: 'usage'; usage: AgentUsage }
+  | { type: 'models'; models: AgentModelInfo[] }
   | { type: 'assistant'; content: AiContentPart[] }
   | { type: 'tool_result'; toolUseId: string; content: string; isError: boolean }
   | {
@@ -368,7 +384,7 @@ export type ClaudeStreamEvent =
       title?: string
       displayName?: string
       /** Present when toolName === 'AskUserQuestion' — the choice widget payload. */
-      questions?: ClaudeCliQuestion[]
+      questions?: AgentQuestion[]
     }
   | {
       type: 'result'
@@ -383,22 +399,22 @@ export type ClaudeStreamEvent =
   | { type: 'error'; message: string }
 
 /** SDK effort levels (mirrors the Agent SDK's EffortLevel — future-proof). */
-export type ClaudeEffortLevel = 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+export type AgentEffortLevel = 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 
-/** A Claude model as reported dynamically by the SDK (query.supportedModels()). */
-export interface ClaudeModelInfo {
-  /** Model id / alias to pass to the SDK (e.g. 'opus', 'claude-sonnet-5'). */
+/** A model as reported dynamically by a driver (e.g. query.supportedModels()). */
+export interface AgentModelInfo {
+  /** Model id / alias to pass to the driver (e.g. 'opus', 'claude-sonnet-5'). */
   value: string
   /** Canonical wire id this resolves to. */
   resolvedModel?: string
   displayName: string
   description?: string
   supportsEffort?: boolean
-  supportedEffortLevels?: ClaudeEffortLevel[]
+  supportedEffortLevels?: AgentEffortLevel[]
 }
 
-/** A past Claude Code session on disk (for the resume picker), scoped by folder. */
-export interface ClaudeSessionInfo {
+/** A past agent session on disk (for the resume picker), scoped by folder. */
+export interface AgentSessionInfo {
   sessionId: string
   summary: string
   lastModified: number
@@ -406,10 +422,55 @@ export interface ClaudeSessionInfo {
   gitBranch?: string
 }
 
-/** Renderer -> main decision resolving a pending canUseTool permission. */
-export type ClaudePermissionDecision =
+/** Renderer -> main decision resolving a pending canUseTool permission (allow/deny a tool). */
+export type AgentPermissionDecision =
   | { behavior: 'allow'; updatedInput?: Record<string, unknown> }
   | { behavior: 'deny'; message: string }
+
+/**
+ * Renderer -> main answer to a structured AskUserQuestion-style prompt. Generic
+ * across drivers: keyed by the question text, value = chosen option label(s).
+ * Each driver maps this onto its wire shape (Claude: updatedInput {questions,
+ * answers}; Gemini ask_user: {outcome:'selected', optionId}).
+ */
+export interface AgentQuestionAnswer {
+  answers: Record<string, string[]>
+}
+
+/**
+ * What a driver instance can do, so the UI conditionally renders controls
+ * (fuel gauge, effort dial, resume picker, bypass chip, model picker, question
+ * widget) instead of hardcoding `engine === 'claude-code'`.
+ */
+export interface AgentCapabilities {
+  /** listModels()/setModel() are meaningful. */
+  models: boolean
+  /** listModels() works WITHOUT a live session (Codex model/list) vs needs one (Claude). */
+  modelsWithoutSession: boolean
+  /** setEffort() is meaningful (a reasoning-effort dial exists). */
+  effort: boolean
+  /** An auto-approve-all-tools "без спроса" mode exists. */
+  bypass: boolean
+  /** listSessions()/loadSessionMessages()/opts.resume are meaningful. */
+  resumableSessions: boolean
+  /** A subscription/quota usage gauge exists (Claude only today). */
+  usage: boolean
+  /** The driver can emit a 'permission' event carrying `questions` (AskUserQuestion-style). */
+  structuredQuestions: boolean
+  /** Extra named toggles beyond the common set (e.g. Claude's 'ultracode'); UI renders generically. */
+  vendorFlags?: { key: string; label: string; desc?: string }[]
+}
+
+// --- Back-compat aliases (Claude Code was the first driver). Remove after inc-9. ---
+export type ClaudeCliQuestion = AgentQuestion
+export type ClaudePermissionMode = AgentPermissionMode
+export type ClaudeStartOpts = AgentStartOpts
+export type ClaudeUsage = AgentUsage
+export type ClaudeStreamEvent = AgentStreamEvent
+export type ClaudeEffortLevel = AgentEffortLevel
+export type ClaudeModelInfo = AgentModelInfo
+export type ClaudeSessionInfo = AgentSessionInfo
+export type ClaudePermissionDecision = AgentPermissionDecision
 
 // ---------------------------------------------------------------------------
 // Global command history (Time Machine)

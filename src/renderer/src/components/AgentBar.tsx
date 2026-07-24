@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { AiEffort, ClaudeCliQuestion } from '@shared/types'
+import type { AgentEngine, AiEffort, ClaudeCliQuestion } from '@shared/types'
 import { EFFORT_TUNING } from '@shared/defaults'
 import { useSessionsStore } from '@/state/sessionsStore'
 import { useSettingsStore } from '@/state/settingsStore'
@@ -23,30 +23,64 @@ function pushHistory(text: string): void {
   if (barHistory.length > 200) barHistory.shift()
 }
 
-type BarMode = 'shell' | 'zarya' | 'claude-code'
-// Everyday toggle is just Терминал ⇄ Claude Code. «Zarya» (own-key / Ollama
-// agent) is a niche — the bar still enters it automatically when a Zarya
-// conversation is active (auto-follow), but it doesn't clutter the manual cycle.
-const MODE_ORDER: BarMode[] = ['shell', 'claude-code']
+type BarMode = 'shell' | 'zarya' | AgentEngine
 const MODE_LABEL: Record<BarMode, string> = {
   shell: 'ТЕРМИНАЛ',
   zarya: 'ZARYA',
-  'claude-code': 'CLAUDE CODE'
+  'claude-code': 'CLAUDE CODE',
+  codex: 'CODEX',
+  gemini: 'GEMINI',
+  kimi: 'KIMI',
+  qwen: 'QWEN'
 }
 const MODE_PLACEHOLDER: Record<BarMode, string> = {
   shell: 'Команда терминала…  (Enter — выполнить)',
   zarya: 'Спросить агента Zarya…  (Enter)',
-  'claude-code': 'Спросить Claude Code…  (Enter, нативно, подписка Max)'
+  'claude-code': 'Спросить Claude Code…  (Enter, нативно, подписка Max)',
+  codex: 'Спросить Codex…  (Enter, нативно)',
+  gemini: 'Спросить Gemini…  (Enter, нативно)',
+  kimi: 'Спросить Kimi…  (Enter, нативно)',
+  qwen: 'Спросить Qwen…  (Enter, нативно)'
+}
+/** The manual chip cycle: Терминал ⇄ each detected native engine. «Zarya» is a
+ *  niche entered only by auto-follow, so it stays out of the cycle. */
+function modeCycle(engines: string[]): BarMode[] {
+  return ['shell', ...(engines as AgentEngine[])]
 }
 
 // Commands that take over the terminal (TUI / raw input) → auto-switch to the
 // live «Терминал» view so arrows/prompts work.
 const INTERACTIVE_CMDS = new Set([
-  'claude', 'gemini', 'codex', 'aider', 'cursor-agent', 'ollama',
-  'vim', 'nvim', 'vi', 'nano', 'emacs',
-  'less', 'more', 'top', 'htop', 'btop',
-  'ssh', 'tmux', 'screen', 'fzf', 'lazygit', 'lazydocker',
-  'python', 'python3', 'node', 'irb', 'psql', 'mysql', 'sqlite3', 'redis-cli'
+  'claude',
+  'gemini',
+  'codex',
+  'aider',
+  'cursor-agent',
+  'ollama',
+  'vim',
+  'nvim',
+  'vi',
+  'nano',
+  'emacs',
+  'less',
+  'more',
+  'top',
+  'htop',
+  'btop',
+  'ssh',
+  'tmux',
+  'screen',
+  'fzf',
+  'lazygit',
+  'lazydocker',
+  'python',
+  'python3',
+  'node',
+  'irb',
+  'psql',
+  'mysql',
+  'sqlite3',
+  'redis-cli'
 ])
 function isInteractiveCmd(cmd: string): boolean {
   const first = cmd
@@ -111,6 +145,11 @@ export function AgentBar(): React.JSX.Element {
   const claudeStatus = useUiStore((s) => s.claudeStatus)
   const ultracode = useUiStore((s) => s.ultracode)
   const bypass = useSettingsStore((s) => s.settings.ai.claudeBypass)
+  const agentCaps = useUiStore((s) => s.agentCaps)
+  // The native engine the bar currently targets (null in shell/zarya) + its
+  // capabilities — the UI gates controls on these, not on `=== 'claude-code'`.
+  const activeEngine: AgentEngine | null = mode !== 'shell' && mode !== 'zarya' ? mode : null
+  const caps = activeEngine ? agentCaps[activeEngine] : null
   const [text, setText] = useState('')
   // -1 = not browsing history; otherwise index into barHistory.
   const [histIdx, setHistIdx] = useState(-1)
@@ -182,14 +221,14 @@ export function AgentBar(): React.JSX.Element {
     if (!isAgentConv) return
     if (followedRef.current === activeConv.id) return
     followedRef.current = activeConv.id
-    const want: BarMode = activeConv.engine === 'claude-code' ? 'claude-code' : 'zarya'
+    const want: BarMode = activeConv.engine !== 'builtin' ? activeConv.engine : 'zarya'
     if (useUiStore.getState().barMode !== want) useUiStore.getState().set({ barMode: want })
   }, [activeConv?.id, activeConv?.engine, activeConv?.messages.length, activeConv?.streaming])
 
-  // A pending AskUserQuestion on the active Claude Code conversation replaces
+  // A pending AskUserQuestion on the active native-agent conversation replaces
   // the whole input area with the native choice selector.
   const question =
-    activeConv?.engine === 'claude-code'
+    activeConv && activeConv.engine !== 'builtin'
       ? activeConv.pendingTools.find((t) => t.kind === 'question' && !t.settled)
       : undefined
 
@@ -214,7 +253,7 @@ export function AgentBar(): React.JSX.Element {
     window.zarya.pty.write(activeSessionId, cmd + '\r')
   }
 
-  const askAgent = (agentEngine: 'builtin' | 'claude-code'): void => {
+  const askAgent = (agentEngine: 'builtin' | AgentEngine): void => {
     const q = text.trim()
     if (!q) return
     pushHistory(q)
@@ -236,7 +275,8 @@ export function AgentBar(): React.JSX.Element {
   // Only "busy" (queue instead of send) when the active conversation's engine
   // matches what THIS bar mode targets — not e.g. a background Zarya chat while
   // the bar is in Claude Code mode.
-  const modeEngine = mode === 'claude-code' ? 'claude-code' : mode === 'zarya' ? 'builtin' : null
+  const modeEngine: 'builtin' | AgentEngine | null =
+    activeEngine ?? (mode === 'zarya' ? 'builtin' : null)
   const busyConv =
     !!modeEngine &&
     activeConv?.engine === modeEngine &&
@@ -247,7 +287,7 @@ export function AgentBar(): React.JSX.Element {
       runShell()
       return
     }
-    const engine = mode === 'claude-code' ? 'claude-code' : 'builtin'
+    const engine: 'builtin' | AgentEngine = activeEngine ?? 'builtin'
     // Agent working on THIS terminal → queue the message (editable via ↑), CLI-style.
     if (activeConv && activeConv.engine === engine && busyConv) {
       const t = text.trim()
@@ -298,7 +338,16 @@ export function AgentBar(): React.JSX.Element {
   }
 
   const cycleMode = (): void => {
-    const next = MODE_ORDER[(MODE_ORDER.indexOf(mode) + 1) % MODE_ORDER.length]
+    // Don't switch away from a busy/gated engine: its permission or question
+    // would land on a now-hidden conversation and hang with no UI to resolve it.
+    if (busyConv) {
+      useUiStore
+        .getState()
+        .toast('Движок занят — дождитесь ответа или Esc, потом переключайтесь', 'info')
+      return
+    }
+    const order = modeCycle(Object.keys(agentCaps))
+    const next = order[(order.indexOf(mode) + 1) % order.length] ?? 'shell'
     useUiStore.getState().set({ barMode: next })
     setTimeout(() => ref.current?.focus(), 0)
   }
@@ -308,15 +357,25 @@ export function AgentBar(): React.JSX.Element {
   const toggleBypass = (): void => {
     const next = !bypass
     void useSettingsStore.getState().update({ ai: { claudeBypass: next } as never })
-    if (activeConv?.engine === 'claude-code') window.zarya.claudeCode.setBypass(activeConv.id, next)
-    useUiStore.getState().toast(
-      next ? 'Без подтверждений — агент выполняет всё сам' : 'Подтверждения инструментов включены',
-      next ? 'error' : 'success'
-    )
+    if (activeConv && activeConv.engine !== 'builtin')
+      window.zarya.agent.setBypass(activeConv.engine, activeConv.id, next)
+    useUiStore
+      .getState()
+      .toast(
+        next
+          ? 'Без подтверждений — агент выполняет всё сам'
+          : 'Подтверждения инструментов включены',
+        next ? 'error' : 'success'
+      )
   }
 
   const isShell = mode === 'shell'
-  const isClaude = mode === 'claude-code'
+  const isAgent = activeEngine !== null // a native agent mode is selected
+  // Conditional controls driven by the engine's declared capabilities, not by
+  // `=== 'claude-code'`. An engine without usage/models/bypass hides those.
+  const showFuel = !!caps?.usage
+  const showModel = !!caps?.models
+  const showBypass = !!caps?.bypass
 
   if (question) {
     return (
@@ -335,14 +394,20 @@ export function AgentBar(): React.JSX.Element {
       <button
         className="zy-agentbar-fuel"
         title={
-          isClaude
+          showFuel
             ? `Топливо: подписка ${claudeStatus.usage?.subscriptionType ?? 'Claude'}. 5ч и 7дн окна лимита · модель ${claudeStatus.model ?? '—'}${claudeStatus.effort ? ` · тяга ${claudeStatus.effort}` : ''}`
             : 'Топливо · пусковой комплекс'
         }
         onClick={openLaunchPad}
       >
         <span className="zy-agentbar-fuel-icon">
-          <svg width="10" height="10" viewBox="0 0 16 16" shapeRendering="crispEdges" fill="var(--accent-2)">
+          <svg
+            width="10"
+            height="10"
+            viewBox="0 0 16 16"
+            shapeRendering="crispEdges"
+            fill="var(--accent-2)"
+          >
             <rect x="4" y="2" width="6" height="2" />
             <rect x="4" y="4" width="6" height="9" />
             <rect x="10" y="5" width="3" height="2" />
@@ -350,7 +415,7 @@ export function AgentBar(): React.JSX.Element {
           </svg>
         </span>
         <span className="zy-agentbar-fuel-tag">ТОПЛИВО</span>
-        {isClaude && claudeStatus.usage?.fiveHourPct != null ? (
+        {showFuel && claudeStatus.usage?.fiveHourPct != null ? (
           <>
             <FuelGauge used={claudeStatus.usage.fiveHourPct} />
             <span className="zy-agentbar-fuel-val">
@@ -365,14 +430,20 @@ export function AgentBar(): React.JSX.Element {
           </>
         ) : (
           <span className="zy-agentbar-fuel-val">
-            {isClaude ? `подписка ${claudeStatus.usage?.subscriptionType ?? 'Max'} · борт заправлен` : '∞ без лимита · локальный борт'}
+            {showFuel
+              ? `подписка ${claudeStatus.usage?.subscriptionType ?? 'Max'} · борт заправлен`
+              : '∞ без лимита · локальный борт'}
           </span>
         )}
         <span className="zy-agentbar-fuel-spacer" />
-        {isClaude && (claudeStatus.model || claudeStatus.effort || ultracode) && (
+        {showModel && (claudeStatus.model || claudeStatus.effort || ultracode) && (
           <span className="zy-agentbar-fuel-model">
             {claudeStatus.model ? prettyModel(claudeStatus.model) : ''}
-            {ultracode ? ' · ⚡ULTRACODE' : claudeStatus.effort ? ` · ${claudeStatus.effort.toUpperCase()}` : ''}
+            {ultracode
+              ? ' · ⚡ULTRACODE'
+              : claudeStatus.effort
+                ? ` · ${claudeStatus.effort.toUpperCase()}`
+                : ''}
           </span>
         )}
         <span className="zy-agentbar-fuel-pult">пульт ▴</span>
@@ -384,8 +455,8 @@ export function AgentBar(): React.JSX.Element {
           title={
             isShell
               ? 'Режим: Терминал — Enter выполнит команду. Нажми, чтобы говорить с агентом'
-              : isClaude
-                ? 'Режим: Claude Code (нативно, подписка Max) — Enter отправит запрос. Нажми — сменить режим'
+              : isAgent
+                ? `Режим: ${MODE_LABEL[mode]} (нативно) — Enter отправит запрос. Нажми — сменить режим`
                 : 'Режим: Zarya (свой ключ) — Enter отправит запрос. Нажми — сменить режим'
           }
           onClick={cycleMode}
@@ -393,7 +464,7 @@ export function AgentBar(): React.JSX.Element {
           <Icon name={isShell ? 'terminal' : 'bolt'} size={13} />
           {MODE_LABEL[mode]}
         </button>
-        {isClaude && (
+        {showBypass && (
           <button
             className={`zy-agentbar-bypass${bypass ? ' zy-agentbar-bypass--on' : ''}`}
             title={

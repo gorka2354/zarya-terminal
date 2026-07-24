@@ -178,3 +178,38 @@ To defend against that, `buildSystemPrompt()` (`src/renderer/src/features/ai/aiS
 This is a mitigation, not a guarantee — combined with keeping `autoApprove` off (so
 you still see and approve every command), it means injected output can't silently
 drive the agent.
+
+## Китайские модели: Kimi, Qwen, DeepSeek
+
+Есть два способа подключить их, независимых друг от друга.
+
+### 1. По API-ключу (builtin, `openai-compat`)
+
+Settings → AI → провайдер **OpenAI-совместимый**, затем нажми пресет под полем
+Base URL — он подставит нужный baseURL, останется вставить свой ключ и вписать
+актуальную модель (id моделей у этих вендоров меняются часто, поэтому список не
+захардкожен — смотри их доки):
+
+| Пресет | Base URL | Ключ | Примеры моделей |
+|--------|----------|------|-----------------|
+| Kimi (Moonshot) | `https://api.moonshot.ai/v1` (intl) · `.cn` для Китая | platform.moonshot.ai | `kimi-k3`, `kimi-k2.7-code` |
+| Qwen (DashScope) | `https://dashscope-intl.aliyuncs.com/compatible-mode/v1` (intl) | Alibaba Cloud Model Studio | `qwen3-coder-plus`, `qwen-max` |
+| DeepSeek | `https://api.deepseek.com/v1` | platform.deepseek.com | `deepseek-chat`, `deepseek-reasoner` |
+
+Ключ одного региона не работает в другом (China ↔ intl — разные аккаунты/биллинг).
+Оплата из РФ — обычно через агрегаторы; сами API-запросы VPN не требуют.
+Function-calling (инструменты) и стриминг поддерживаются всеми тремя. Для Kimi
+стоит один раз проверить многоходовой tool-use на реальной задаче.
+
+### 2. Нативный агент (чип движка, ACP)
+
+У Kimi и Qwen есть собственные CLI-агенты на **ACP** (тот же протокол, что у
+Gemini). Установи CLI и войди в аккаунт — чип движка появится сам (probe):
+
+- **Kimi:** Kimi Code CLI (`kimi`), запуск ACP — `kimi acp`, вход — `kimi /login`.
+- **Qwen:** `npm i -g @qwen-code/qwen-code` (`qwen`), запуск ACP — `qwen --acp`
+  (апстрим помечает ACP как experimental; на Windows возможны шероховатости).
+
+Нативный путь даёт свои инструменты агента, resume сессий и tool-approval гейты;
+API-путь проще (свой ключ, без установки CLI), но использует агентский цикл самой
+Zarya. Оба безопасны: команды и запись файлов проходят через approval-гейты.

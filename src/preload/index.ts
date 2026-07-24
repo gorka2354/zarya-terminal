@@ -1,6 +1,11 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { CH } from '../shared/ipc'
 import type {
+  AgentEngine,
+  AgentPermissionDecision,
+  AgentQuestionAnswer,
+  AgentStartOpts,
+  AgentStreamEvent,
   AiChatRequest,
   AiConversationsState,
   AiProviderKind,
@@ -75,30 +80,76 @@ const api = {
     onStream: (cb: (requestId: string, ev: AiStreamEvent) => void) => on(CH.aiStream, cb),
     listOllamaModels: (baseUrl: string) => ipcRenderer.invoke(CH.aiOllamaModels, baseUrl)
   },
+  // Generic native-agent transport — every call carries `engine`; main routes it
+  // to the registry driver. Renderer migrates to this in inc-9 Ф3.
+  agent: {
+    capabilities: () => ipcRenderer.invoke(CH.agentCapabilities),
+    start: (engine: AgentEngine, requestId: string, opts: AgentStartOpts) =>
+      ipcRenderer.send(CH.agentStart, engine, requestId, opts),
+    input: (engine: AgentEngine, requestId: string, text: string) =>
+      ipcRenderer.send(CH.agentInput, engine, requestId, text),
+    interrupt: (engine: AgentEngine, requestId: string) =>
+      ipcRenderer.send(CH.agentInterrupt, engine, requestId),
+    permission: (
+      engine: AgentEngine,
+      requestId: string,
+      toolUseId: string,
+      decision: AgentPermissionDecision
+    ) => ipcRenderer.send(CH.agentPermission, engine, requestId, toolUseId, decision),
+    question: (
+      engine: AgentEngine,
+      requestId: string,
+      toolUseId: string,
+      answer: AgentQuestionAnswer
+    ) => ipcRenderer.send(CH.agentQuestion, engine, requestId, toolUseId, answer),
+    onStream: (cb: (requestId: string, engine: AgentEngine, ev: AgentStreamEvent) => void) =>
+      on(CH.agentStream, cb),
+    listSessions: (engine: AgentEngine, cwd: string | undefined) =>
+      ipcRenderer.invoke(CH.agentListSessions, engine, cwd),
+    sessionMessages: (engine: AgentEngine, sessionId: string, cwd: string | undefined) =>
+      ipcRenderer.invoke(CH.agentSessionMessages, engine, sessionId, cwd),
+    setModel: (engine: AgentEngine, requestId: string, model: string | undefined) =>
+      ipcRenderer.send(CH.agentSetModel, engine, requestId, model),
+    setBypass: (engine: AgentEngine, requestId: string, bypass: boolean) =>
+      ipcRenderer.send(CH.agentSetBypass, engine, requestId, bypass),
+    setEffort: (engine: AgentEngine, requestId: string, effort: string | undefined) =>
+      ipcRenderer.send(CH.agentSetEffort, engine, requestId, effort),
+    setVendorFlag: (engine: AgentEngine, requestId: string, key: string, value: unknown) =>
+      ipcRenderer.send(CH.agentSetVendorFlag, engine, requestId, key, value),
+    listModels: (engine: AgentEngine) => ipcRenderer.invoke(CH.agentListModels, engine),
+    debugFlags: (engine: AgentEngine, requestId?: string) =>
+      ipcRenderer.invoke(CH.agentDebugFlags, engine, requestId)
+  },
+  // Back-compat shim → generic agent.* transport with engine 'claude-code'.
+  // Lets the Ф3 renderer migrate call-sites incrementally without a big-bang
+  // rename. Removed at the end of Ф3.
   claudeCode: {
     start: (requestId: string, opts: ClaudeStartOpts) =>
-      ipcRenderer.send(CH.claudeCodeStart, requestId, opts),
+      ipcRenderer.send(CH.agentStart, 'claude-code', requestId, opts),
     input: (requestId: string, text: string) =>
-      ipcRenderer.send(CH.claudeCodeInput, requestId, text),
-    interrupt: (requestId: string) => ipcRenderer.send(CH.claudeCodeInterrupt, requestId),
+      ipcRenderer.send(CH.agentInput, 'claude-code', requestId, text),
+    interrupt: (requestId: string) => ipcRenderer.send(CH.agentInterrupt, 'claude-code', requestId),
     permission: (requestId: string, toolUseId: string, decision: ClaudePermissionDecision) =>
-      ipcRenderer.send(CH.claudeCodePermission, requestId, toolUseId, decision),
+      ipcRenderer.send(CH.agentPermission, 'claude-code', requestId, toolUseId, decision),
     onStream: (cb: (requestId: string, ev: ClaudeStreamEvent) => void) =>
-      on(CH.claudeCodeStream, cb),
+      on(CH.agentStream, (requestId: string, engine: AgentEngine, ev: ClaudeStreamEvent) => {
+        if (engine === 'claude-code') cb(requestId, ev)
+      }),
     listSessions: (cwd: string | undefined) =>
-      ipcRenderer.invoke(CH.claudeCodeListSessions, cwd),
+      ipcRenderer.invoke(CH.agentListSessions, 'claude-code', cwd),
     sessionMessages: (sessionId: string, cwd: string | undefined) =>
-      ipcRenderer.invoke(CH.claudeCodeSessionMessages, sessionId, cwd),
+      ipcRenderer.invoke(CH.agentSessionMessages, 'claude-code', sessionId, cwd),
     setModel: (requestId: string, model: string | undefined) =>
-      ipcRenderer.send(CH.claudeCodeSetModel, requestId, model),
+      ipcRenderer.send(CH.agentSetModel, 'claude-code', requestId, model),
     setBypass: (requestId: string, bypass: boolean) =>
-      ipcRenderer.send(CH.claudeCodeSetBypass, requestId, bypass),
+      ipcRenderer.send(CH.agentSetBypass, 'claude-code', requestId, bypass),
     setEffort: (requestId: string, effort: string | undefined) =>
-      ipcRenderer.send(CH.claudeCodeSetEffort, requestId, effort),
+      ipcRenderer.send(CH.agentSetEffort, 'claude-code', requestId, effort),
     setUltracode: (requestId: string, on: boolean) =>
-      ipcRenderer.send(CH.claudeCodeSetUltracode, requestId, on),
-    listModels: () => ipcRenderer.invoke(CH.claudeCodeListModels),
-    debugFlags: (requestId?: string) => ipcRenderer.invoke(CH.claudeCodeDebugFlags, requestId)
+      ipcRenderer.send(CH.agentSetVendorFlag, 'claude-code', requestId, 'ultracode', on),
+    listModels: () => ipcRenderer.invoke(CH.agentListModels, 'claude-code'),
+    debugFlags: (requestId?: string) =>
+      ipcRenderer.invoke(CH.agentDebugFlags, 'claude-code', requestId)
   },
   fs: {
     readDir: (path: string) => ipcRenderer.invoke(CH.fsReadDir, path),

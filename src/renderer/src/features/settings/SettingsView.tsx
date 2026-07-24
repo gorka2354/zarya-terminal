@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AI_MODEL_PRESETS, DEFAULT_KEYBINDINGS, EFFORT_TUNING, OLLAMA_DEFAULT_URL } from '@shared/defaults'
+import {
+  AI_MODEL_PRESETS,
+  DEFAULT_KEYBINDINGS,
+  EFFORT_TUNING,
+  OLLAMA_DEFAULT_URL,
+  OPENAI_COMPAT_PRESETS
+} from '@shared/defaults'
 import type { AiEffort, AiProviderKind, AiProviderStatus, AppInfo } from '@shared/types'
 import { getAllActions, onActionsChanged } from '@/lib/actionRegistry'
 import { Icon, type IconName } from '@/components/Icon'
@@ -833,6 +839,21 @@ function AiTab(): React.JSX.Element {
             placeholder={ai.provider === 'ollama' ? OLLAMA_DEFAULT_URL : 'https://…'}
             onCommit={(v) => void update({ ai: { baseUrl: v } as never })}
           />
+          {ai.provider === 'openai-compat' && (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+              {OPENAI_COMPAT_PRESETS.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  className="zy-btn zy-btn--sm"
+                  title={p.hint}
+                  onClick={() => void update({ ai: { baseUrl: p.baseUrl } as never })}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          )}
         </Row>
         <Row title="Тяга рассуждений" sub={`REASONING EFFORT · ${EFFORT_TUNING[ai.effort].label}`}>
           <EffortControl value={ai.effort} onChange={(v) => void update({ ai: { effort: v } as never })} />

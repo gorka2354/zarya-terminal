@@ -1,13 +1,14 @@
 import { create } from 'zustand'
 import type {
+  AgentEngine,
+  AgentStreamEvent,
   AiChatRequest,
   AiContentPart,
   AiMessage,
   AiStreamEvent,
   AiToolDef,
   BlockRecord,
-  ClaudeCliQuestion,
-  ClaudeStreamEvent
+  ClaudeCliQuestion
 } from '@shared/types'
 import type { AiConversationsState } from '@shared/types'
 import { EFFORT_TUNING } from '@shared/defaults'
@@ -87,7 +88,7 @@ export interface Conversation {
    * 'claude-code' — the native Claude Code driver (subscription/Max login, its
    * own tools + AskUserQuestion). Chosen at creation, drives send() routing.
    */
-  engine: 'builtin' | 'claude-code'
+  engine: 'builtin' | AgentEngine
   /** Claude Code session id (from init/result) for resume / continuity. */
   claudeSessionId?: string
   /** Working directory the conversation was opened in (folder the AI worked in). */
@@ -155,7 +156,7 @@ interface AiState {
   newConversation: (opts?: {
     sessionId?: string
     title?: string
-    engine?: 'builtin' | 'claude-code'
+    engine?: 'builtin' | AgentEngine
   }) => string
   setActiveConversation: (id: string) => void
   deleteConversation: (id: string) => void
@@ -283,7 +284,9 @@ function runCommandAndWait(sessionId: string, command: string): Promise<string> 
     let timer: ReturnType<typeof setTimeout>
     const unsub = onBus('block:finished', (payload) => {
       if (settled || payload.sessionId !== sessionId) return
-      const block = useBlocksStore.getState().bySession[sessionId]?.find((b) => b.id === payload.blockId)
+      const block = useBlocksStore
+        .getState()
+        .bySession[sessionId]?.find((b) => b.id === payload.blockId)
       if (!block || block.startedAt < startedAfter) return
       settled = true
       clearTimeout(timer)
@@ -316,7 +319,9 @@ async function buildSystemPrompt(conv: Conversation): Promise<string> {
     try {
       const git = await window.zarya.git.status(session.cwd)
       if (git) {
-        lines.push(`Git-ветка: ${git.branch}${git.dirty ? ` (незакоммиченных изменений: ${git.dirty})` : ''}.`)
+        lines.push(
+          `Git-ветка: ${git.branch}${git.dirty ? ` (незакоммиченных изменений: ${git.dirty})` : ''}.`
+        )
       }
     } catch {
       // not a repo, or git unavailable — silently omit
@@ -485,13 +490,15 @@ export const useAiStore = create<AiState>((set, get) => {
   }
 
   /**
-   * Dispatch a turn to the native Claude Code driver. The driver key IS the
-   * conversation id (one live headless session per conversation): the first
-   * turn spawns the query, later turns are pushed as follow-up input.
+   * Dispatch a turn to the conversation's native agent driver via the generic
+   * `agent:*` transport (routed to the registry by `conv.engine`). The driver
+   * key IS the conversation id (one live session per conversation): the first
+   * turn spawns/opens the session, later turns are pushed as follow-up input.
    */
-  function dispatchClaude(convId: string): void {
+  function dispatchAgent(convId: string): void {
     const conv = get().conversations.find((c) => c.id === convId)
-    if (!conv) return
+    if (!conv || conv.engine === 'builtin') return
+    const engine = conv.engine
     const lastUser = [...conv.messages].reverse().find((m) => m.role === 'user')
     const prompt = (lastUser?.content ?? [])
       .filter((p): p is Extract<AiContentPart, { type: 'text' }> => p.type === 'text')
@@ -502,8 +509,15 @@ export const useAiStore = create<AiState>((set, get) => {
     const settings = getSettings()
     const sessionId = conv.sessionId || useSessionsStore.getState().activeSessionId()
     const cwd = sessionId ? useSessionsStore.getState().sessions[sessionId]?.cwd : undefined
-    patchConversation(convId, (c) => ({ ...c, streaming: true, activeRequestId: convId, error: undefined }))
-    window.zarya.claudeCode.start(convId, {
+    patchConversation(convId, (c) => ({
+      ...c,
+      streaming: true,
+      activeRequestId: convId,
+      error: undefined
+    }))
+    // Opts are Claude-sourced today (the only native engine); per-engine settings
+    // (settings.ai.byEngine) arrive with Codex/Gemini in Ф4.
+    window.zarya.agent.start(engine, convId, {
       prompt,
       cwd: cwd || conv.cwd,
       permissionMode: settings.ai.autoApprove ? 'acceptEdits' : 'default',
@@ -512,41 +526,53 @@ export const useAiStore = create<AiState>((set, get) => {
       model: settings.ai.claudeModel || undefined,
       // Ultracode forces xhigh; otherwise use the user's effort override.
       effort: useUiStore.getState().ultracode ? 'xhigh' : settings.ai.claudeEffort || undefined,
-      // After a restart there's no live query for this conversation — resume the
-      // real Claude Code session (its transcript on disk) so context is intact.
-      // The driver only uses `resume` when spawning a fresh query; a live
-      // follow-up in the same run ignores it.
+      // After a restart there's no live session for this conversation — resume the
+      // real on-disk session so context is intact. The driver only uses `resume`
+      // when spawning fresh; a live follow-up in the same run ignores it.
       resume: conv.claudeSessionId
     })
   }
 
-  /** Map a Claude Code driver event onto the shared Conversation shape. */
-  function handleClaudeEvent(requestId: string, ev: ClaudeStreamEvent): void {
+  /** Map a native agent driver event onto the shared Conversation shape. */
+  function handleAgentEvent(requestId: string, engine: AgentEngine, ev: AgentStreamEvent): void {
     const convId = requestId // driver key === conversation id
     if (!get().conversations.some((c) => c.id === convId)) return
+    // The fuel-gauge / model-catalog UI slots are Claude-specific until per-engine
+    // ambient status lands (Ф4); gate status writes so a future Codex/Gemini
+    // 'result' can't clobber the Claude readout. The turn/tool branches below are
+    // fully generic and apply to every engine.
+    const isClaudeStatus = engine === 'claude-code'
 
     switch (ev.type) {
       case 'init':
         patchConversation(convId, (c) => ({ ...c, claudeSessionId: ev.sessionId }))
-        useUiStore.getState().set({
-          claudeStatus: { ...useUiStore.getState().claudeStatus, model: ev.model, effort: ev.effort }
-        })
+        if (isClaudeStatus)
+          useUiStore.getState().set({
+            claudeStatus: {
+              ...useUiStore.getState().claudeStatus,
+              model: ev.model,
+              effort: ev.effort
+            }
+          })
         break
 
       case 'usage':
-        useUiStore.getState().set({
-          claudeStatus: {
-            ...useUiStore.getState().claudeStatus,
-            usage: { ...useUiStore.getState().claudeStatus.usage, ...ev.usage }
-          }
-        })
+        if (isClaudeStatus)
+          useUiStore.getState().set({
+            claudeStatus: {
+              ...useUiStore.getState().claudeStatus,
+              usage: { ...useUiStore.getState().claudeStatus.usage, ...ev.usage }
+            }
+          })
         break
 
       case 'models':
-        useUiStore.getState().set({ claudeModels: ev.models })
-        // Persist the fresh catalog so the launch pad (incl. Fable / any future
-        // model) is populated on the next cold start without a live session.
-        scheduleSave()
+        if (isClaudeStatus) {
+          useUiStore.getState().set({ claudeModels: ev.models })
+          // Persist the fresh catalog so the launch pad (incl. Fable / any future
+          // model) is populated on the next cold start without a live session.
+          scheduleSave()
+        }
         break
 
       case 'assistant':
@@ -585,7 +611,12 @@ export const useAiStore = create<AiState>((set, get) => {
             {
               role: 'user',
               content: [
-                { type: 'tool_result', toolUseId: ev.toolUseId, content: ev.content, isError: ev.isError }
+                {
+                  type: 'tool_result',
+                  toolUseId: ev.toolUseId,
+                  content: ev.content,
+                  isError: ev.isError
+                }
               ]
             }
           ]
@@ -602,14 +633,18 @@ export const useAiStore = create<AiState>((set, get) => {
         // Correct the fuel readout to the model that actually ran this turn.
         // Only when a single model ran (subagents would add extra keys → keep config).
         const ran = ev.models ?? []
-        if (ran.length === 1) {
+        if (isClaudeStatus && ran.length === 1) {
           const st = useUiStore.getState().claudeStatus
           // Don't clobber a model the user just switched TO mid-turn: the finished
           // turn ran the OLD model, but a live setModel already re-pinned the next
           // one. Only correct when the committed pin still matches what ran.
           const pin = getSettings().ai.claudeModel
           const famOf = (id: string): string =>
-            (id || '').replace(/^claude-/, '').replace(/\[1m\]/i, '').split(/[-\s]/)[0].toLowerCase()
+            (id || '')
+              .replace(/^claude-/, '')
+              .replace(/\[1m\]/i, '')
+              .split(/[-\s]/)[0]
+              .toLowerCase()
           const pinMatches = !pin || famOf(pin) === famOf(ran[0])
           if (pinMatches && st.model !== ran[0]) {
             useUiStore.getState().set({ claudeStatus: { ...st, model: ran[0] } })
@@ -637,7 +672,10 @@ export const useAiStore = create<AiState>((set, get) => {
   }
 
   /** Enqueue a tool execution on the conversation's serial chain. */
-  function enqueueTool(convId: string, tool: { id: string; name: string; input: unknown }): Promise<void> {
+  function enqueueTool(
+    convId: string,
+    tool: { id: string; name: string; input: unknown }
+  ): Promise<void> {
     const prev = execChains.get(convId) ?? Promise.resolve()
     const next = prev.catch(() => {}).then(() => executeToolInner(convId, tool))
     execChains.set(convId, next)
@@ -729,7 +767,9 @@ export const useAiStore = create<AiState>((set, get) => {
       case 'done':
         requestConv.delete(requestId)
         patchConversation(convId, (c) =>
-          c.activeRequestId === requestId ? { ...c, streaming: false, activeRequestId: undefined } : c
+          c.activeRequestId === requestId
+            ? { ...c, streaming: false, activeRequestId: undefined }
+            : c
         )
         // If the finished turn contained tool calls that are already all
         // resolved (fast auto-approve path), continue the loop now.
@@ -750,7 +790,7 @@ export const useAiStore = create<AiState>((set, get) => {
   }
 
   window.zarya.ai.onStream(handleStreamEvent)
-  window.zarya.claudeCode.onStream(handleClaudeEvent)
+  window.zarya.agent.onStream(handleAgentEvent)
 
   return {
     conversations: [],
@@ -766,7 +806,8 @@ export const useAiStore = create<AiState>((set, get) => {
       // populated on cold start even before any session init or if no
       // conversation had messages worth persisting.
       if (saved?.claudeStatus) useUiStore.getState().set({ claudeStatus: saved.claudeStatus })
-      if (saved?.claudeModels?.length) useUiStore.getState().set({ claudeModels: saved.claudeModels })
+      if (saved?.claudeModels?.length)
+        useUiStore.getState().set({ claudeModels: saved.claudeModels })
       if (!saved?.conversations?.length) return
       const conversations: Conversation[] = saved.conversations.map((p) => ({
         id: p.id,
@@ -776,7 +817,10 @@ export const useAiStore = create<AiState>((set, get) => {
         engine: p.engine,
         claudeSessionId: p.claudeSessionId,
         cwd: p.cwd,
-        agentMode: p.engine === 'claude-code',
+        // Any non-builtin engine drives its own agentic tool loop. A conv written
+        // by a newer build with an unknown engine still lands here as an agent
+        // conv (graceful) rather than crashing hydrate.
+        agentMode: p.engine !== 'builtin',
         streaming: false,
         pendingTools: [],
         pendingContext: [],
@@ -805,8 +849,8 @@ export const useAiStore = create<AiState>((set, get) => {
         sessionId: opts?.sessionId,
         engine: opts?.engine ?? 'builtin',
         cwd,
-        // Claude Code has its own agentic tool loop — agent mode is implicit.
-        agentMode: opts?.engine === 'claude-code',
+        // A native agent engine drives its own agentic tool loop — agent mode implicit.
+        agentMode: (opts?.engine ?? 'builtin') !== 'builtin',
         streaming: false,
         pendingTools: [],
         pendingContext: [],
@@ -836,7 +880,8 @@ export const useAiStore = create<AiState>((set, get) => {
           requestConv.delete(conv.activeRequestId)
         }
         const conversations = s.conversations.filter((c) => c.id !== id)
-        const activeId = s.activeId === id ? (conversations[conversations.length - 1]?.id ?? null) : s.activeId
+        const activeId =
+          s.activeId === id ? (conversations[conversations.length - 1]?.id ?? null) : s.activeId
         return { conversations, activeId }
       })
     },
@@ -867,14 +912,20 @@ export const useAiStore = create<AiState>((set, get) => {
         messages: [...c.messages, { role: 'user', content: parts }],
         pendingContext: [],
         error: undefined,
-        title: c.messages.length === 0 && c.title === 'Новая беседа' ? deriveTitle(trimmed || conv.pendingContext[0]?.label || '') : c.title
+        title:
+          c.messages.length === 0 && c.title === 'Новая беседа'
+            ? deriveTitle(trimmed || conv.pendingContext[0]?.label || '')
+            : c.title
       }))
       // Keep this the active conversation for its terminal (feed follows it).
       if (conv.sessionId) {
         const sid = conv.sessionId
-        set((s) => ({ activeBySession: { ...s.activeBySession, [sid]: conv.id }, activeId: conv.id }))
+        set((s) => ({
+          activeBySession: { ...s.activeBySession, [sid]: conv.id },
+          activeId: conv.id
+        }))
       }
-      if (conv.engine === 'claude-code') dispatchClaude(conv.id)
+      if (conv.engine !== 'builtin') dispatchAgent(conv.id)
       else await dispatchChat(conv.id)
     },
 
@@ -886,8 +937,8 @@ export const useAiStore = create<AiState>((set, get) => {
       // discarded rather than re-triggering the loop.
       bumpEpoch(conv.id)
       execChains.delete(conv.id)
-      if (conv.engine === 'claude-code') {
-        window.zarya.claudeCode.interrupt(conv.id)
+      if (conv.engine !== 'builtin') {
+        window.zarya.agent.interrupt(conv.engine, conv.id)
       } else if (conv.activeRequestId) {
         window.zarya.ai.abort(conv.activeRequestId)
         requestConv.delete(conv.activeRequestId)
@@ -907,14 +958,14 @@ export const useAiStore = create<AiState>((set, get) => {
         ? conv.pendingTools.find((t) => t.id === toolId)
         : conv.pendingTools.find((t) => !t.settled)
       if (!tool || tool.settled) return
-      // Claude Code: the SDK owns execution — just resolve the permission gate.
+      // Native agent: the driver owns execution — just resolve the permission gate.
       // Mark settled (hide buttons); the tool_result event removes it later.
-      if (conv.engine === 'claude-code') {
+      if (conv.engine !== 'builtin') {
         patchConversation(conv.id, (c) => ({
           ...c,
           pendingTools: c.pendingTools.map((t) => (t.id === tool.id ? { ...t, settled: true } : t))
         }))
-        window.zarya.claudeCode.permission(conv.id, tool.id, { behavior: 'allow' })
+        window.zarya.agent.permission(conv.engine, conv.id, tool.id, { behavior: 'allow' })
         return
       }
       patchConversation(conv.id, (c) => ({
@@ -931,13 +982,13 @@ export const useAiStore = create<AiState>((set, get) => {
         ? conv.pendingTools.find((t) => t.id === toolId)
         : conv.pendingTools.find((t) => !t.settled)
       if (!tool || tool.settled) return
-      // Claude Code: resolve the gate as denied; the SDK emits the tool_result.
-      if (conv.engine === 'claude-code') {
+      // Native agent: resolve the gate as denied; the driver emits the tool_result.
+      if (conv.engine !== 'builtin') {
         patchConversation(conv.id, (c) => ({
           ...c,
           pendingTools: c.pendingTools.filter((t) => t.id !== tool.id)
         }))
-        window.zarya.claudeCode.permission(conv.id, tool.id, {
+        window.zarya.agent.permission(conv.engine, conv.id, tool.id, {
           behavior: 'deny',
           message: 'Пользователь отклонил выполнение'
         })
@@ -1021,17 +1072,22 @@ export const useAiStore = create<AiState>((set, get) => {
           ? [...c.messages, { role: 'user', content: [{ type: 'text', text: `➤ ${chosen}` }] }]
           : c.messages
       }))
-      window.zarya.claudeCode.permission(conv.id, toolId, {
-        behavior: 'allow',
-        updatedInput: { questions: tool.questions ?? [], answers }
-      })
+      // Generic structured-answer path; the driver maps {answers} to its wire.
+      if (conv.engine !== 'builtin') {
+        window.zarya.agent.question(conv.engine, conv.id, toolId, { answers })
+      }
     },
 
     attachBlockContext: (block, conversationId) => {
       const conv = resolveConv(conversationId)
       if (!conv) return
       const label = `Блок: ${truncateText(block.command || 'команда', 34)}`
-      const status = block.exitCode === undefined ? 'выполняется' : block.exitCode === 0 ? 'успех' : `код ${block.exitCode}`
+      const status =
+        block.exitCode === undefined
+          ? 'выполняется'
+          : block.exitCode === 0
+            ? 'успех'
+            : `код ${block.exitCode}`
       const content = [
         `$ ${block.command || '(команда неизвестна)'}`,
         `cwd: ${block.cwd || '—'}`,
@@ -1090,19 +1146,94 @@ onBus('terminal:focus', ({ sessionId }) => {
 
 // QA hooks: let the offscreen harness drive an agent turn and read back the
 // active conversation (verifies the native Claude Code path end-to-end).
-;(window as unknown as {
-  __zaryaAskAgent?: (text: string, engine?: 'builtin' | 'claude-code') => void
-  __zaryaDumpConv?: () => unknown
-}).__zaryaAskAgent = (text, engine = 'builtin') => {
+;(
+  window as unknown as {
+    __zaryaAskAgent?: (text: string, engine?: 'builtin' | AgentEngine) => void
+    __zaryaDumpConv?: () => unknown
+  }
+).__zaryaAskAgent = (text, engine = 'builtin') => {
   const store = useAiStore.getState()
   const sid = useSessionsStore.getState().activeSessionId() ?? undefined
   const id = store.newConversation({ sessionId: sid, engine })
   store.setActiveConversation(id)
   void store.send(text, { conversationId: id })
 }
-;(window as unknown as { __zaryaConvFor?: (sessionId: string) => unknown }).__zaryaConvFor = (sessionId) => {
+// Ф5: start an agent turn on a SPECIFIC engine and return its conversation id,
+// so the concurrent harness can drive two engines in one terminal and read each
+// conversation back by id (proving events never cross between them).
+;(
+  window as unknown as { __zaryaStartAgent?: (engine: AgentEngine, text: string) => string }
+).__zaryaStartAgent = (engine, text) => {
+  const store = useAiStore.getState()
+  const sid = useSessionsStore.getState().activeSessionId() ?? undefined
+  const id = store.newConversation({ sessionId: sid, engine })
+  store.setActiveConversation(id)
+  void store.send(text, { conversationId: id })
+  return id
+}
+// Ф4: force the resume path — create a conversation that already carries a
+// prior session id (as a restored one would), so dispatch sends opts.resume and
+// the driver goes through thread/resume instead of thread/start.
+;(
+  window as unknown as {
+    __zaryaResumeAgent?: (engine: AgentEngine, sessionId: string, text: string) => string
+  }
+).__zaryaResumeAgent = (engine, sessionId, text) => {
+  const store = useAiStore.getState()
+  const sid = useSessionsStore.getState().activeSessionId() ?? undefined
+  const id = store.newConversation({ sessionId: sid, engine })
+  useAiStore.setState((s) => ({
+    conversations: s.conversations.map((c) => (c.id === id ? { ...c, claudeSessionId: sessionId } : c))
+  }))
+  store.setActiveConversation(id)
+  void store.send(text, { conversationId: id })
+  return id
+}
+;(window as unknown as { __zaryaListModels?: (engine: AgentEngine) => Promise<unknown> }).__zaryaListModels = (
+  engine
+) => window.zarya.agent.listModels(engine)
+;(window as unknown as { __zaryaConvById?: (id: string) => unknown }).__zaryaConvById = (id) => {
+  const c = useAiStore.getState().conversations.find((x) => x.id === id)
+  return c
+    ? {
+        id: c.id,
+        engine: c.engine,
+        streaming: c.streaming,
+        error: c.error,
+        sessionId: c.claudeSessionId,
+        text: c.messages
+          .flatMap((m) => m.content)
+          .filter((p) => p.type === 'text')
+          .map((p) => (p as { text: string }).text)
+          .join('\n'),
+        pendingTools: c.pendingTools.map((t) => ({
+          id: t.id,
+          kind: t.kind,
+          name: t.name,
+          settled: t.settled
+        })),
+        msgs: c.messages.length
+      }
+    : null
+}
+;(window as unknown as { __zaryaConvFor?: (sessionId: string) => unknown }).__zaryaConvFor = (
+  sessionId
+) => {
   const c = convForSession(useAiStore.getState(), sessionId)
-  return c ? { id: c.id, engine: c.engine, sessionId: c.sessionId, cwd: c.cwd, claudeSessionId: c.claudeSessionId, msgs: c.messages.length, firstUser: c.messages.find((m) => m.role === 'user')?.content?.find((p) => p.type === 'text')?.text?.slice(0, 50) } : null
+  return c
+    ? {
+        id: c.id,
+        engine: c.engine,
+        sessionId: c.sessionId,
+        cwd: c.cwd,
+        claudeSessionId: c.claudeSessionId,
+        msgs: c.messages.length,
+        firstUser: c.messages
+          .find((m) => m.role === 'user')
+          ?.content?.find((p) => p.type === 'text')
+          ?.text?.slice(0, 50)
+      }
+    : null
 }
 ;(window as unknown as { __zaryaFollowUp?: (text: string) => void }).__zaryaFollowUp = (text) => {
   const sid = useSessionsStore.getState().activeSessionId()
@@ -1111,7 +1242,16 @@ onBus('terminal:focus', ({ sessionId }) => {
 }
 ;(window as unknown as { __zaryaDumpConv?: () => unknown }).__zaryaDumpConv = () => {
   const c = useAiStore.getState().activeConversation()
-  return c ? { engine: c.engine, streaming: c.streaming, error: c.error, messages: c.messages, pendingTools: c.pendingTools, queued: c.queued } : null
+  return c
+    ? {
+        engine: c.engine,
+        streaming: c.streaming,
+        error: c.error,
+        messages: c.messages,
+        pendingTools: c.pendingTools,
+        queued: c.queued
+      }
+    : null
 }
 ;(window as unknown as { __zaryaQueue?: (t: string) => void }).__zaryaQueue = (t) => {
   const c = useAiStore.getState().activeConversation()
@@ -1121,19 +1261,20 @@ onBus('terminal:focus', ({ sessionId }) => {
   const cur = getSettings().ai
   void useSettingsStore.getState().update({ ai: { ...cur, claudeBypass: on } })
   const c = useAiStore.getState().activeConversation()
-  if (c?.engine === 'claude-code') window.zarya.claudeCode.setBypass(c.id, on)
+  if (c && c.engine !== 'builtin') window.zarya.agent.setBypass(c.engine, c.id, on)
 }
-;(window as unknown as { __zaryaApplyModelLive?: (model: string) => void }).__zaryaApplyModelLive = (
-  model
-) => {
-  const cur = getSettings().ai
-  void useSettingsStore.getState().update({ ai: { ...cur, claudeModel: model } })
-  const c = useAiStore.getState().activeConversation()
-  if (c?.engine === 'claude-code') window.zarya.claudeCode.setModel(c.id, model || undefined)
-}
-;(window as unknown as {
-  __zaryaSetClaudeCfg?: (model?: string, effort?: string, bypass?: boolean) => void
-}).__zaryaSetClaudeCfg = (model, effort, bypass) => {
+;(window as unknown as { __zaryaApplyModelLive?: (model: string) => void }).__zaryaApplyModelLive =
+  (model) => {
+    const cur = getSettings().ai
+    void useSettingsStore.getState().update({ ai: { ...cur, claudeModel: model } })
+    const c = useAiStore.getState().activeConversation()
+    if (c && c.engine !== 'builtin') window.zarya.agent.setModel(c.engine, c.id, model || undefined)
+  }
+;(
+  window as unknown as {
+    __zaryaSetClaudeCfg?: (model?: string, effort?: string, bypass?: boolean) => void
+  }
+).__zaryaSetClaudeCfg = (model, effort, bypass) => {
   const cur = getSettings().ai
   void useSettingsStore.getState().update({
     ai: {
@@ -1149,7 +1290,18 @@ onBus('terminal:focus', ({ sessionId }) => {
   const t = c?.pendingTools.find((x) => !x.settled)
   if (c && t) void useAiStore.getState().approveTool(c.id, t.id)
 }
-;(window as unknown as { __zaryaAnswerFirst?: (label: string) => void }).__zaryaAnswerFirst = (label) => {
+;(window as unknown as { __zaryaDenyFirst?: () => void }).__zaryaDenyFirst = () => {
+  const c = useAiStore.getState().activeConversation()
+  const t = c?.pendingTools.find((x) => !x.settled)
+  if (c && t) useAiStore.getState().denyTool(c.id, t.id)
+}
+;(window as unknown as { __zaryaAbort?: () => void }).__zaryaAbort = () => {
+  const c = useAiStore.getState().activeConversation()
+  if (c) useAiStore.getState().abort(c.id)
+}
+;(window as unknown as { __zaryaAnswerFirst?: (label: string) => void }).__zaryaAnswerFirst = (
+  label
+) => {
   const c = useAiStore.getState().activeConversation()
   const t = c?.pendingTools.find((x) => x.kind === 'question' && !x.settled)
   if (c && t && t.questions?.[0]) {
@@ -1170,9 +1322,11 @@ registerAiBridge({
             title: `Разбор: ${truncateText(block.command || 'команда', 28)}`
           })
     useAiStore.getState().attachBlockContext(block, convId)
-    void useAiStore.getState().send(question ?? 'Объясни результат команды и предложи исправление', {
-      conversationId: convId
-    })
+    void useAiStore
+      .getState()
+      .send(question ?? 'Объясни результат команды и предложи исправление', {
+        conversationId: convId
+      })
   },
 
   openCommandBar: (sessionId) => {

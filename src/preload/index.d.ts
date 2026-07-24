@@ -1,4 +1,12 @@
 import type {
+  AgentCapabilities,
+  AgentEngine,
+  AgentModelInfo,
+  AgentPermissionDecision,
+  AgentQuestionAnswer,
+  AgentSessionInfo,
+  AgentStartOpts,
+  AgentStreamEvent,
   AiChatRequest,
   AiCli,
   AiConversationsState,
@@ -75,6 +83,39 @@ export interface ZaryaApi {
     onStream(cb: (requestId: string, ev: AiStreamEvent) => void): Unsub
     listOllamaModels(baseUrl: string): Promise<string[]>
   }
+  /** Generic native-agent transport — every call carries `engine` (registry key). */
+  agent: {
+    capabilities(): Promise<Record<AgentEngine, AgentCapabilities>>
+    start(engine: AgentEngine, requestId: string, opts: AgentStartOpts): void
+    input(engine: AgentEngine, requestId: string, text: string): void
+    interrupt(engine: AgentEngine, requestId: string): void
+    permission(
+      engine: AgentEngine,
+      requestId: string,
+      toolUseId: string,
+      decision: AgentPermissionDecision
+    ): void
+    question(
+      engine: AgentEngine,
+      requestId: string,
+      toolUseId: string,
+      answer: AgentQuestionAnswer
+    ): void
+    onStream(cb: (requestId: string, engine: AgentEngine, ev: AgentStreamEvent) => void): Unsub
+    listSessions(engine: AgentEngine, cwd: string | undefined): Promise<AgentSessionInfo[]>
+    sessionMessages(
+      engine: AgentEngine,
+      sessionId: string,
+      cwd: string | undefined
+    ): Promise<AiMessage[]>
+    setModel(engine: AgentEngine, requestId: string, model: string | undefined): void
+    setBypass(engine: AgentEngine, requestId: string, bypass: boolean): void
+    setEffort(engine: AgentEngine, requestId: string, effort: string | undefined): void
+    setVendorFlag(engine: AgentEngine, requestId: string, key: string, value: unknown): void
+    listModels(engine: AgentEngine): Promise<AgentModelInfo[]>
+    debugFlags(engine: AgentEngine, requestId?: string): Promise<Record<string, unknown>>
+  }
+  /** Back-compat shim over `agent` with engine 'claude-code'. Removed after inc-9 Ф3. */
   claudeCode: {
     start(requestId: string, opts: ClaudeStartOpts): void
     input(requestId: string, text: string): void

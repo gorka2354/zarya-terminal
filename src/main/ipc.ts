@@ -1,11 +1,13 @@
 import { BrowserWindow, app, dialog, ipcMain, shell } from 'electron'
 import { CH } from '@shared/ipc'
 import type {
+  AgentEngine,
+  AgentPermissionDecision,
+  AgentQuestionAnswer,
+  AgentStartOpts,
   AiChatRequest,
   AiConversationsState,
   AiProviderKind,
-  ClaudePermissionDecision,
-  ClaudeStartOpts,
   HistoryEntry,
   PtySpawnRequest,
   SessionSnapshot,
@@ -15,7 +17,7 @@ import type {
   WorkspaceState
 } from '@shared/types'
 import type { AiProxy } from './aiProxy'
-import type { ClaudeCodeDriver } from './claudeCodeDriver'
+import type { AgentDriver } from './agentDriver'
 import * as fsService from './fsService'
 import * as gitService from './gitService'
 import type { HistoryStore } from './historyStore'
@@ -34,7 +36,8 @@ export interface IpcContext {
   historyStore: HistoryStore
   workflowStore: WorkflowStore
   aiProxy: AiProxy
-  claudeCodeDriver: ClaudeCodeDriver
+  /** Registry of native agent drivers, keyed by engine. */
+  agentRegistry: Map<AgentEngine, AgentDriver>
   requestQuitConfirmed: () => void
 }
 
@@ -47,8 +50,9 @@ export function registerIpc(ctx: IpcContext): void {
     historyStore,
     workflowStore,
     aiProxy,
-    claudeCodeDriver
+    agentRegistry
   } = ctx
+  const driverFor = (engine: AgentEngine): AgentDriver | undefined => agentRegistry.get(engine)
 
   // ------------------------------------------------------------------- pty
   ipcMain.handle(CH.ptySpawn, async (_e, req: PtySpawnRequest) => {
@@ -132,43 +136,79 @@ export function registerIpc(ctx: IpcContext): void {
   ipcMain.on(CH.aiAbort, (_e, requestId: string) => aiProxy.abort(requestId))
   ipcMain.handle(CH.aiOllamaModels, (_e, baseUrl: string) => aiProxy.listOllamaModels(baseUrl))
 
-  // ------------------------------------------------------- claude code driver
-  ipcMain.on(CH.claudeCodeStart, (_e, requestId: string, opts: ClaudeStartOpts) => {
-    void claudeCodeDriver.start(requestId, opts)
+  // ------------------------------------------------- native agent drivers (registry)
+  // Every renderer->main call carries `engine` first; we look the driver up in the
+  // registry and route. Optional methods are guarded (`?.`) so a driver lacking a
+  // capability is a safe no-op rather than a crash.
+  // A driver may declare a `probe()` (is its backend installed?). We cache the
+  // result per engine and only advertise engines that probe OK, so an engine
+  // whose CLI isn't installed (e.g. Codex on a machine without it) never shows a
+  // dead chip — the renderer gates UI on the engines present in this map.
+  const probeCache = new Map<AgentEngine, Promise<boolean>>()
+  const isAvailable = (engine: AgentEngine, d: AgentDriver): Promise<boolean> => {
+    if (!d.probe) return Promise.resolve(true)
+    let p = probeCache.get(engine)
+    if (!p) {
+      p = d.probe().catch(() => false)
+      probeCache.set(engine, p)
+    }
+    return p
+  }
+  ipcMain.handle(CH.agentCapabilities, async () => {
+    const entries = await Promise.all(
+      [...agentRegistry].map(
+        async ([engine, d]) =>
+          [engine, (await isAvailable(engine, d)) ? d.capabilities : null] as const
+      )
+    )
+    return Object.fromEntries(entries.filter(([, c]) => c != null))
   })
-  ipcMain.on(CH.claudeCodeInput, (_e, requestId: string, text: string) => {
-    claudeCodeDriver.input(requestId, text)
+  ipcMain.on(CH.agentStart, (_e, engine: AgentEngine, requestId: string, opts: AgentStartOpts) => {
+    void driverFor(engine)?.start(requestId, opts)
   })
-  ipcMain.on(CH.claudeCodeInterrupt, (_e, requestId: string) => {
-    claudeCodeDriver.interrupt(requestId)
+  ipcMain.on(CH.agentInput, (_e, engine: AgentEngine, requestId: string, text: string) => {
+    driverFor(engine)?.input(requestId, text)
+  })
+  ipcMain.on(CH.agentInterrupt, (_e, engine: AgentEngine, requestId: string) => {
+    driverFor(engine)?.interrupt(requestId)
   })
   ipcMain.on(
-    CH.claudeCodePermission,
-    (_e, requestId: string, toolUseId: string, decision: ClaudePermissionDecision) => {
-      claudeCodeDriver.resolvePermission(requestId, toolUseId, decision)
+    CH.agentPermission,
+    (_e, engine: AgentEngine, requestId: string, toolUseId: string, decision: AgentPermissionDecision) => {
+      driverFor(engine)?.resolvePermission(requestId, toolUseId, decision)
     }
   )
-  ipcMain.handle(CH.claudeCodeListSessions, (_e, cwd: string | undefined) =>
-    claudeCodeDriver.listSessions(cwd)
+  ipcMain.on(
+    CH.agentQuestion,
+    (_e, engine: AgentEngine, requestId: string, toolUseId: string, answer: AgentQuestionAnswer) => {
+      driverFor(engine)?.resolveQuestion?.(requestId, toolUseId, answer)
+    }
   )
-  ipcMain.handle(CH.claudeCodeSessionMessages, (_e, sessionId: string, cwd: string | undefined) =>
-    claudeCodeDriver.loadSessionMessages(sessionId, cwd)
+  ipcMain.handle(CH.agentListSessions, (_e, engine: AgentEngine, cwd: string | undefined) =>
+    driverFor(engine)?.listSessions?.(cwd) ?? []
   )
-  ipcMain.on(CH.claudeCodeSetModel, (_e, requestId: string, model: string | undefined) =>
-    claudeCodeDriver.setModel(requestId, model)
+  ipcMain.handle(
+    CH.agentSessionMessages,
+    (_e, engine: AgentEngine, sessionId: string, cwd: string | undefined) =>
+      driverFor(engine)?.loadSessionMessages?.(sessionId, cwd) ?? []
   )
-  ipcMain.on(CH.claudeCodeSetBypass, (_e, requestId: string, bypass: boolean) =>
-    claudeCodeDriver.setBypass(requestId, bypass)
+  ipcMain.on(CH.agentSetModel, (_e, engine: AgentEngine, requestId: string, model: string | undefined) =>
+    driverFor(engine)?.setModel?.(requestId, model)
   )
-  ipcMain.on(CH.claudeCodeSetEffort, (_e, requestId: string, effort: string | undefined) =>
-    claudeCodeDriver.setEffort(requestId, effort)
+  ipcMain.on(CH.agentSetBypass, (_e, engine: AgentEngine, requestId: string, bypass: boolean) =>
+    driverFor(engine)?.setBypass?.(requestId, bypass)
   )
-  ipcMain.on(CH.claudeCodeSetUltracode, (_e, requestId: string, on: boolean) =>
-    claudeCodeDriver.setUltracode(requestId, on)
+  ipcMain.on(CH.agentSetEffort, (_e, engine: AgentEngine, requestId: string, effort: string | undefined) =>
+    driverFor(engine)?.setEffort?.(requestId, effort)
   )
-  ipcMain.handle(CH.claudeCodeListModels, () => claudeCodeDriver.listModels())
-  ipcMain.handle(CH.claudeCodeDebugFlags, (_e, requestId?: string) =>
-    claudeCodeDriver.debugFlags(requestId)
+  ipcMain.on(
+    CH.agentSetVendorFlag,
+    (_e, engine: AgentEngine, requestId: string, key: string, value: unknown) =>
+      driverFor(engine)?.setVendorFlag?.(requestId, key, value)
+  )
+  ipcMain.handle(CH.agentListModels, (_e, engine: AgentEngine) => driverFor(engine)?.listModels?.() ?? [])
+  ipcMain.handle(CH.agentDebugFlags, (_e, engine: AgentEngine, requestId?: string) =>
+    driverFor(engine)?.debugFlags?.(requestId) ?? {}
   )
 
   // --------------------------------------------------------------- fs / git

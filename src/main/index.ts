@@ -1,8 +1,13 @@
 import { BrowserWindow, app, shell } from 'electron'
 import { join } from 'path'
 import { CH } from '@shared/ipc'
+import type { AgentEngine } from '@shared/types'
+import type { AgentDriver } from './agentDriver'
 import { AiProxy } from './aiProxy'
+import { AcpDriver, ACP_CAPABILITIES, parseAcpArgs } from './acpDriver'
 import { ClaudeCodeDriver } from './claudeCodeDriver'
+import { CodexDriver } from './codexDriver'
+import { FakeAgentDriver } from './fakeAgentDriver'
 import { HistoryStore } from './historyStore'
 import { registerIpc } from './ipc'
 import { PtyManager } from './ptyManager'
@@ -28,6 +33,98 @@ const workflowStore = new WorkflowStore()
 const ptyManager = new PtyManager(() => mainWindow)
 const aiProxy = new AiProxy(() => mainWindow)
 const claudeCodeDriver = new ClaudeCodeDriver(() => mainWindow)
+// Registry of native agent drivers, keyed by engine. Codex/Gemini drivers
+// (inc-10/11) register here alongside Claude; the IPC layer routes by engine.
+const codexDriver = new CodexDriver(() => mainWindow)
+// ACP drivers (inc-11/12). One engine-parameterized AcpDriver class backs
+// Gemini, Kimi and Qwen — they all speak the Agent Client Protocol, differing
+// only by binary/args. probe() hides a chip unless its CLI is installed;
+// ZARYA_<ENGINE>_BIN/ARGS override the binary for the mock harness.
+function acpEngine(
+  engine: AgentEngine,
+  defBin: string,
+  defArgs: string[],
+  envPrefix: string,
+  installHint: string
+): AcpDriver {
+  return new AcpDriver(
+    engine,
+    {
+      bin: process.env[`ZARYA_${envPrefix}_BIN`] || defBin,
+      args: parseAcpArgs(process.env[`ZARYA_${envPrefix}_ARGS`], defArgs),
+      capabilities: ACP_CAPABILITIES,
+      installHint
+    },
+    () => mainWindow
+  )
+}
+const geminiDriver = acpEngine(
+  'gemini',
+  'gemini',
+  ['--acp'],
+  'GEMINI',
+  'Gemini CLI не найден. Установи `npm i -g @google/gemini-cli`, затем войди в аккаунт.'
+)
+const kimiDriver = acpEngine(
+  'kimi',
+  'kimi',
+  ['acp'],
+  'KIMI',
+  'Kimi CLI не найден. Установи Kimi Code CLI (`kimi`) и выполни `kimi /login`.'
+)
+const qwenDriver = acpEngine(
+  'qwen',
+  'qwen',
+  ['--acp'],
+  'QWEN',
+  'Qwen Code не найден. Установи `npm i -g @qwen-code/qwen-code`, затем войди в аккаунт.'
+)
+const agentRegistry = new Map<AgentEngine, AgentDriver>([
+  ['claude-code', claudeCodeDriver],
+  ['codex', codexDriver],
+  ['gemini', geminiDriver],
+  ['kimi', kimiDriver],
+  ['qwen', qwenDriver]
+])
+// QA-only (Ф5): register two scripted drivers with DISTINCT capability profiles
+// so the harness can prove the abstraction against non-Claude engines — codex
+// (no structured questions, no usage gauge) and gemini (has questions, no
+// effort). Gated on ZARYA_FAKE_AGENT so it never ships in real runs.
+if (process.env.ZARYA_FAKE_AGENT) {
+  agentRegistry.set(
+    'codex',
+    new FakeAgentDriver(
+      'codex',
+      {
+        models: true,
+        modelsWithoutSession: true,
+        effort: true,
+        bypass: true,
+        resumableSessions: true,
+        usage: false,
+        structuredQuestions: false
+      },
+      () => mainWindow
+    )
+  )
+  agentRegistry.set(
+    'gemini',
+    new FakeAgentDriver(
+      'gemini',
+      {
+        models: true,
+        modelsWithoutSession: true,
+        effort: false,
+        bypass: true,
+        resumableSessions: true,
+        usage: false,
+        structuredQuestions: true
+      },
+      () => mainWindow
+    )
+  )
+}
+const killAllAgents = (): void => agentRegistry.forEach((d) => d.killAll())
 
 function createWindow(): void {
   const settings = settingsStore.get()
@@ -130,7 +227,7 @@ function createWindow(): void {
   // respawns sessions — orphaned ptys from the previous page must not linger.
   mainWindow.webContents.on('did-navigate', () => {
     ptyManager.killAll()
-    claudeCodeDriver.killAll()
+    killAllAgents()
   })
 
   if (process.env.ELECTRON_RENDERER_URL) {
@@ -171,7 +268,7 @@ if (!gotLock) {
       historyStore,
       workflowStore,
       aiProxy,
-      claudeCodeDriver,
+      agentRegistry,
       requestQuitConfirmed: () => {
         if (quitTimer) clearTimeout(quitTimer)
         quitConfirmed = true
@@ -193,12 +290,13 @@ if (!gotLock) {
 
   app.on('window-all-closed', () => {
     ptyManager.killAll()
-    claudeCodeDriver.killAll()
+    killAllAgents()
     app.quit()
   })
 
   app.on('before-quit', () => {
     ptyManager.killAll()
+    killAllAgents() // else the agent's child subprocess is orphaned on quit
     // Flush any settings edit made within the last debounce window (250ms)
     // so it isn't lost on quit.
     settingsStore.flush()

@@ -4,6 +4,9 @@ import { homedir } from 'os'
 import { join } from 'path'
 import { CH } from '@shared/ipc'
 import type {
+  AgentCapabilities,
+  AgentEngine,
+  AgentQuestionAnswer,
   AiContentPart,
   AiMessage,
   ClaudeCliQuestion,
@@ -12,6 +15,7 @@ import type {
   ClaudeStartOpts,
   ClaudeStreamEvent
 } from '@shared/types'
+import type { AgentDriver } from './agentDriver'
 // Types only (erased at runtime) — safe to import statically from the ESM-only
 // package; the runtime value is loaded via a dynamic import below.
 import type {
@@ -231,6 +235,8 @@ interface Session {
   abort: AbortController
   /** toolUseID -> resolver for a canUseTool call awaiting the user's decision. */
   perms: Map<string, (r: PermissionResult | null) => void>
+  /** toolUseID -> the AskUserQuestion questions, so resolveQuestion rebuilds the answer envelope. */
+  pendingQuestions: Map<string, ClaudeCliQuestion[]>
   /** Bypass ('без спроса'): auto-approve ordinary tools in canUseTool (live-toggleable). */
   bypass: boolean
   /** Effort override for this session, so init reports the effective value. */
@@ -243,7 +249,19 @@ interface Session {
  * so no API key is needed. Tool permissions and AskUserQuestion prompts are
  * surfaced to the renderer via `canUseTool` and resolved by a UI click.
  */
-export class ClaudeCodeDriver {
+export class ClaudeCodeDriver implements AgentDriver {
+  readonly engine: AgentEngine = 'claude-code'
+  /** Claude Code supports the full control surface (see AgentCapabilities). */
+  readonly capabilities: AgentCapabilities = {
+    models: true,
+    modelsWithoutSession: false, // supportedModels() needs a live session
+    effort: true,
+    bypass: true,
+    resumableSessions: true,
+    usage: true,
+    structuredQuestions: true,
+    vendorFlags: [{ key: 'ultracode', label: 'ULTRACODE', desc: 'xhigh + оркестрация воркфлоу' }]
+  }
   private sessions = new Map<string, Session>()
   private getWindow: () => BrowserWindow | null
   private usageTimer?: ReturnType<typeof setInterval>
@@ -289,7 +307,9 @@ export class ClaudeCodeDriver {
   }
 
   private emit(requestId: string, ev: ClaudeStreamEvent): void {
-    this.getWindow()?.webContents.send(CH.claudeCodeStream, requestId, ev)
+    // Generic agent stream — carries `engine` so the renderer routes without a
+    // per-vendor channel. The claudeCode.* preload shim filters to this engine.
+    this.getWindow()?.webContents.send(CH.agentStream, requestId, this.engine, ev)
   }
 
   async start(requestId: string, opts: ClaudeStartOpts): Promise<void> {
@@ -318,6 +338,10 @@ export class ClaudeCodeDriver {
     const abort = new AbortController()
     const input = createInputQueue()
     const perms = new Map<string, (r: PermissionResult | null) => void>()
+    // The extracted questions per AskUserQuestion toolUseId, so resolveQuestion
+    // can rebuild the Claude answer envelope ({questions, answers}) from the
+    // generic AgentQuestionAnswer the renderer sends.
+    const pendingQuestions = new Map<string, ClaudeCliQuestion[]>()
 
     const canUseTool: CanUseTool = async (toolName, toolInput, ctx) =>
       new Promise<PermissionResult | null>((resolve) => {
@@ -332,6 +356,7 @@ export class ClaudeCodeDriver {
           return
         }
         perms.set(ctx.toolUseID, resolve)
+        if (isQuestion) pendingQuestions.set(ctx.toolUseID, extractQuestions(toolInput) ?? [])
         this.emit(requestId, {
           type: 'permission',
           toolUseId: ctx.toolUseID,
@@ -396,6 +421,7 @@ export class ClaudeCodeDriver {
       input,
       abort,
       perms,
+      pendingQuestions,
       bypass: !!opts.bypass,
       effort: effortOverride
     }
@@ -615,6 +641,11 @@ export class ClaudeCodeDriver {
     this.recordFlag(requestId, payload)
   }
 
+  /** Generic vendor-flag setter (AgentDriver). Claude's only vendor flag is 'ultracode'. */
+  setVendorFlag(requestId: string, key: string, value: unknown): void {
+    if (key === 'ultracode') this.setUltracode(requestId, !!value)
+  }
+
   /** Toggle bypass ('без спроса') live — flips the canUseTool auto-allow flag. */
   setBypass(requestId: string, bypass: boolean): void {
     // No SDK call (bypass is a renderer-side auto-allow in canUseTool), so record
@@ -639,6 +670,22 @@ export class ClaudeCodeDriver {
         ? { behavior: 'allow', updatedInput: decision.updatedInput }
         : { behavior: 'deny', message: decision.message }
     )
+  }
+
+  /**
+   * Answer a structured AskUserQuestion (AgentDriver generic path). Maps the
+   * driver-agnostic {answers} onto Claude's wire shape ({questions, answers} as
+   * the allowed tool's updatedInput), pulling the original questions we stored
+   * when the prompt was emitted.
+   */
+  resolveQuestion(requestId: string, toolUseId: string, answer: AgentQuestionAnswer): void {
+    const session = this.sessions.get(requestId)
+    const questions = session?.pendingQuestions.get(toolUseId) ?? []
+    session?.pendingQuestions.delete(toolUseId)
+    this.resolvePermission(requestId, toolUseId, {
+      behavior: 'allow',
+      updatedInput: { questions, answers: answer.answers }
+    })
   }
 
   interrupt(requestId: string): void {

@@ -1,7 +1,7 @@
 {
   "name": "zarya-terminal",
   "productName": "Zarya",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Zarya — AI-native terminal with IDE superpowers. A new dawn for your terminal.",
   "main": "./out/main/index.js",
   "author": "gorka2354",
@@ -22,6 +22,10 @@
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "test": "vitest run",
     "test:watch": "vitest",
+    "qa:fake-agents": "node scripts/qa-fake-agents.mjs",
+    "qa:codex": "npm run build && node scripts/qa-codex-driver.mjs && node scripts/qa-codex-graceful.mjs",
+    "qa:acp": "npm run build && node scripts/qa-acp-driver.mjs && node scripts/qa-acp-graceful.mjs",
+    "qa:agent": "npm run build && node scripts/lp-logic-test.mjs && node scripts/bypass-question-test.mjs && node scripts/lp-live-test.mjs && node scripts/qa-fake-agents.mjs && node scripts/qa-codex-driver.mjs && node scripts/qa-codex-graceful.mjs && node scripts/qa-acp-driver.mjs && node scripts/qa-acp-graceful.mjs",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
     "pack": "npm run build && electron-builder --dir",
     "dist": "npm run build && electron-builder"
