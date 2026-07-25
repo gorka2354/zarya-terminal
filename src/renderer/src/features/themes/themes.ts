@@ -14,16 +14,21 @@ export const zaryaCosmos: ThemeDef = {
   id: 'zarya-cosmos',
   name: 'Заря · Космос',
   type: 'dark',
+  // Neutral graphite, not navy. The surfaces keep the original luminance steps
+  // (panel < bg < elev1 < elev2) so depth reads the same, but the blue cast is
+  // gone — the only colour in the chrome is the red/brass accent, which is what
+  // the identity actually rests on. A 1–2 point warm bias keeps the greys from
+  // going clinical next to the brass.
   ui: {
-    bg: '#0a0e1a',
-    bgElev1: '#10162a',
-    bgElev2: '#192244',
-    panel: '#080b16',
+    bg: '#0f0f0e',
+    bgElev1: '#171716',
+    bgElev2: '#242322',
+    panel: '#0a0a09',
     border: 'rgba(224, 177, 90, 0.16)',
     borderStrong: 'rgba(224, 177, 90, 0.34)',
     fg: '#e9e4d6',
     fgDim: '#a8a18b',
-    fgFaint: '#5c6180',
+    fgFaint: '#6a6a66',
     accent: '#e2231a',
     accent2: '#e0b15a',
     accentGradient: 'linear-gradient(120deg, #e2231a 0%, #f0662e 52%, #e0b15a 100%)',
@@ -32,11 +37,14 @@ export const zaryaCosmos: ThemeDef = {
     warn: '#e0b15a'
   },
   terminal: {
-    background: '#0a0e1a',
+    background: '#0f0f0e',
     foreground: '#e4dfd0',
     cursor: '#e0b15a',
     selectionBackground: '#e2231a44',
-    black: '#141a2e',
+    // ANSI black/brightBlack are the terminal's own greys — neutralized to match
+    // the chrome. The other ANSI slots stay true to their names: programs rely
+    // on blue being blue.
+    black: '#1b1b1a',
     red: '#e2231a',
     green: '#6fbf8e',
     yellow: '#e0b15a',
@@ -44,7 +52,7 @@ export const zaryaCosmos: ThemeDef = {
     magenta: '#c77dff',
     cyan: '#4fd6d6',
     white: '#d7d2c2',
-    brightBlack: '#4a5170',
+    brightBlack: '#565654',
     brightRed: '#ff5a4a',
     brightGreen: '#8fe0ac',
     brightYellow: '#f5ce7a',

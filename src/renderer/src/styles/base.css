@@ -26,22 +26,22 @@
 
 :root {
   /* palette defaults (Заря · Космос) — overwritten by applyTheme() */
-  --bg: #0a0e1a;
-  --bg-elev1: #10162a;
-  --bg-elev2: #192244;
-  --panel: #080b16;
+  --bg: #0f0f0e;
+  --bg-elev1: #171716;
+  --bg-elev2: #242322;
+  --panel: #0a0a09;
   --border: rgba(224, 177, 90, 0.16);
   --border-strong: rgba(224, 177, 90, 0.34);
   --fg: #e9e4d6;
   --fg-dim: #a8a18b;
-  --fg-faint: #5c6180;
+  --fg-faint: #6a6a66;
   --accent: #e2231a;
   --accent-2: #e0b15a;
   --accent-grad: linear-gradient(120deg, #e2231a 0%, #f0662e 52%, #e0b15a 100%);
   --danger: #f0453a;
   --success: #5fb88a;
   --warn: #e0b15a;
-  --term-bg: #0a0e1a;
+  --term-bg: #0f0f0e;
 
   /* layout — constructivist: sharp geometry, minimal rounding */
   --titlebar-h: 40px;

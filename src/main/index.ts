@@ -142,7 +142,9 @@ function createWindow(): void {
     minHeight: 560,
     frame: false,
     show: false,
-    backgroundColor: useAcrylic ? undefined : '#0b0f1a',
+    // Matches the default theme's bg so the window never flashes a colour the
+    // app doesn't use before the renderer paints.
+    backgroundColor: useAcrylic ? undefined : '#0f0f0e',
     ...(useAcrylic ? { backgroundMaterial: 'acrylic' as const } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
