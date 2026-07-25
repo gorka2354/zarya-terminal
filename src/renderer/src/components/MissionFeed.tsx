@@ -32,7 +32,6 @@ export function MissionFeed({ sessionId }: { sessionId: string }): React.JSX.Ele
   const cwd = useSessionsStore((s) => s.sessions[sessionId]?.cwd ?? '')
   // Each terminal shows its OWN agent conversation (bound by sessionId).
   const conv = useAiStore((s) => convForSession(s, sessionId))
-  const searchOpen = useUiStore((s) => s.searchOpenFor === sessionId)
   const [branch, setBranch] = useState('')
   const [liveTail, setLiveTail] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -185,29 +184,6 @@ export function MissionFeed({ sessionId }: { sessionId: string }): React.JSX.Ele
           onClick={openCliMenu}
         >
           <Icon name="bolt" size={13} />
-        </button>
-        <button
-          className="zy-mf-head-btn"
-          title="Интерактивный терминал — набирать напрямую, запускать claude / vim / ssh (Ctrl+`)"
-          onClick={() => useUiStore.getState().set({ rawTerminal: true })}
-        >
-          <Icon name="terminal" size={13} />
-        </button>
-        <button
-          className="zy-mf-head-btn"
-          title="Разделить вправо"
-          onClick={() => void useSessionsStore.getState().splitActive('row')}
-        >
-          <Icon name="split-h" size={13} />
-        </button>
-        <button
-          className={`zy-mf-head-btn${searchOpen ? ' zy-mf-head-btn--on' : ''}`}
-          title="Найти в терминале"
-          onClick={() =>
-            useUiStore.getState().set({ searchOpenFor: searchOpen ? null : sessionId })
-          }
-        >
-          <Icon name="search" size={13} />
         </button>
       </div>
 
