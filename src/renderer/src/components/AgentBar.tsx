@@ -149,6 +149,7 @@ export function AgentBar(): React.JSX.Element {
   const effortIdx = EFFORTS.indexOf(effort)
   const mode = useUiStore((s) => s.barMode)
   const claudeStatus = useUiStore((s) => s.claudeStatus)
+  const agentContext = useUiStore((s) => s.agentContext)
   const ultracode = useUiStore((s) => s.ultracode)
   const bypass = useSettingsStore((s) => s.settings.ai.claudeBypass)
   const agentCaps = useUiStore((s) => s.agentCaps)
@@ -441,12 +442,12 @@ export function AgentBar(): React.JSX.Element {
               : '∞ без лимита · локальный борт'}
           </span>
         )}
-        {claudeStatus.usage?.contextPct != null && (
+        {agentContext.pct != null && (
           <span
             className="zy-agentbar-fuel-ctx"
-            title={`Контекст беседы: ${fmtTokens(claudeStatus.usage.contextTokens)} из ${fmtTokens(claudeStatus.usage.contextWindow)} токенов заполнено`}
+            title={`Контекст беседы: ${fmtTokens(agentContext.tokens)} из ${fmtTokens(agentContext.window)} токенов заполнено`}
           >
-            · контекст {Math.round(claudeStatus.usage.contextPct)}%
+            · контекст {Math.round(agentContext.pct)}%
           </span>
         )}
         <span className="zy-agentbar-fuel-spacer" />

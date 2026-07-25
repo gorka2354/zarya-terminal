@@ -207,10 +207,27 @@
   align-items: center;
   gap: 8px;
   margin-bottom: 8px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  /* Highlight the user's turn so it doesn't get lost in the feed (like the shell
+     echo in cmd) — a subtle gold-tinted band, not a heavy grey box. */
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent-2) 7%, var(--bg-elev1));
 }
 .zy-mf-user-text {
   color: var(--fg);
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+/* Right-aligned send time (like a chat bubble timestamp). */
+.zy-mf-user-time {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-family: var(--font-tech);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--fg-faint);
 }
 .zy-mf-answer {
   color: var(--fg-dim);

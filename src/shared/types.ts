@@ -235,6 +235,9 @@ export type AiContentPart =
 export interface AiMessage {
   role: 'user' | 'assistant'
   content: AiContentPart[]
+  /** When the message was created (ms epoch) — shown as a right-aligned time in
+   *  the feed for user turns. Optional: older/persisted messages may lack it. */
+  ts?: number
 }
 
 export interface AiToolDef {

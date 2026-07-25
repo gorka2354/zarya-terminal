@@ -265,6 +265,7 @@ export class ClaudeCodeDriver implements AgentDriver {
   private sessions = new Map<string, Session>()
   private getWindow: () => BrowserWindow | null
   private usageTimer?: ReturnType<typeof setInterval>
+  private ambientTimer?: ReturnType<typeof setInterval>
   /**
    * The exact flag payloads last handed to the SDK per session, for QA to verify
    * that model / effort / ultracode / bypass changes actually reach the live
@@ -585,6 +586,74 @@ export class ClaudeCodeDriver implements AgentDriver {
     } catch {
       // Experimental API — best-effort, ignore failures.
     }
+  }
+
+  private standaloneUsageBusy = false
+  /**
+   * Fetch /usage WITHOUT an active conversation, via a throwaway idle query, so
+   * the fuel gauge is accurate at startup and on demand (before the first
+   * prompt). Broadcast under requestId '__usage__' — the renderer applies usage
+   * to the ambient Claude status ahead of its conv-existence gate. Best-effort:
+   * fails silently for API-key/3P sessions where rate limits don't apply.
+   */
+  async fetchUsageStandalone(): Promise<void> {
+    if (this.standaloneUsageBusy) return
+    // A live session's poll already covers this — don't spawn a second process.
+    if (this.sessions.size > 0) return
+    this.standaloneUsageBusy = true
+    let input: ReturnType<typeof createInputQueue> | undefined
+    const abort = new AbortController()
+    try {
+      const sdk = await loadSdk('@anthropic-ai/claude-agent-sdk')
+      input = createInputQueue()
+      const claudeExe = packagedClaudeExe()
+      const query = sdk.query({
+        prompt: input.iterable,
+        options: {
+          abortController: abort,
+          permissionMode: 'default',
+          includePartialMessages: false,
+          stderr: () => {},
+          ...(claudeExe ? { pathToClaudeCodeExecutable: claudeExe } : {})
+        }
+      }) as unknown as {
+        usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET?: () => Promise<unknown>
+      }
+      const fn = query.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET
+      if (typeof fn === 'function') {
+        const resp = await fn.call(query)
+        const usage = usageFromResponse(resp)
+        if (usage.fiveHourPct !== undefined || usage.sevenDayPct !== undefined || usage.subscriptionType) {
+          this.emit('__usage__', { type: 'usage', usage })
+        }
+      }
+    } catch {
+      // experimental / offline / API-key session — best-effort.
+    } finally {
+      try {
+        input?.close()
+      } catch {
+        /* ignore */
+      }
+      try {
+        abort.abort()
+      } catch {
+        /* ignore */
+      }
+      this.standaloneUsageBusy = false
+    }
+  }
+
+  /**
+   * Background usage polling so the fuel gauge is fresh from app boot — before
+   * any prompt — and stays current ~once a minute. Fires once immediately, then
+   * on an interval; each tick no-ops when a live session's own poll already
+   * covers usage (so it never spawns a second process while you're working).
+   */
+  startAmbientUsagePoll(): void {
+    if (this.ambientTimer) return
+    void this.fetchUsageStandalone()
+    this.ambientTimer = setInterval(() => void this.fetchUsageStandalone(), 60_000)
   }
 
   /** Enqueue a follow-up user turn on an existing session. */

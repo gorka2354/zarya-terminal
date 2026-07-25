@@ -535,13 +535,47 @@ export const useAiStore = create<AiState>((set, get) => {
 
   /** Map a native agent driver event onto the shared Conversation shape. */
   function handleAgentEvent(requestId: string, engine: AgentEngine, ev: AgentStreamEvent): void {
+    // The fuel-gauge / model-catalog UI slots are Claude-specific until per-engine
+    // ambient status lands; gate status writes so a future Codex/Gemini 'result'
+    // can't clobber the Claude readout. The turn/tool branches below are generic.
+    const isClaudeStatus = engine === 'claude-code'
+
+    // usage + models are AMBIENT status, not bound to a conversation — apply them
+    // before the conv-existence gate so the standalone usage poll (which runs with
+    // no active conversation, e.g. before the first prompt) still updates the gauge.
+    if (ev.type === 'usage') {
+      const u = ev.usage
+      // Context-window fill is UNIVERSAL — every engine reports it, so it updates
+      // regardless of which engine is active.
+      if (u.contextPct != null || u.contextTokens != null || u.contextWindow != null) {
+        useUiStore.getState().set({
+          agentContext: { pct: u.contextPct, tokens: u.contextTokens, window: u.contextWindow, engine }
+        })
+      }
+      // Subscription fuel (5h/7d windows) is Claude-only.
+      if (
+        isClaudeStatus &&
+        (u.subscriptionType ||
+          u.fiveHourPct != null ||
+          u.sevenDayPct != null ||
+          u.fiveHourResetsAt != null ||
+          u.sevenDayResetsAt != null)
+      ) {
+        const cur = useUiStore.getState().claudeStatus
+        useUiStore.getState().set({ claudeStatus: { ...cur, usage: { ...cur.usage, ...u } } })
+      }
+      return
+    }
+    if (isClaudeStatus && ev.type === 'models') {
+      useUiStore.getState().set({ claudeModels: ev.models })
+      // Persist so the launch pad (incl. Fable / any future model) is populated on
+      // the next cold start without a live session.
+      scheduleSave()
+      return
+    }
+
     const convId = requestId // driver key === conversation id
     if (!get().conversations.some((c) => c.id === convId)) return
-    // The fuel-gauge / model-catalog UI slots are Claude-specific until per-engine
-    // ambient status lands (Ф4); gate status writes so a future Codex/Gemini
-    // 'result' can't clobber the Claude readout. The turn/tool branches below are
-    // fully generic and apply to every engine.
-    const isClaudeStatus = engine === 'claude-code'
 
     switch (ev.type) {
       case 'init':
@@ -554,25 +588,6 @@ export const useAiStore = create<AiState>((set, get) => {
               effort: ev.effort
             }
           })
-        break
-
-      case 'usage':
-        if (isClaudeStatus)
-          useUiStore.getState().set({
-            claudeStatus: {
-              ...useUiStore.getState().claudeStatus,
-              usage: { ...useUiStore.getState().claudeStatus.usage, ...ev.usage }
-            }
-          })
-        break
-
-      case 'models':
-        if (isClaudeStatus) {
-          useUiStore.getState().set({ claudeModels: ev.models })
-          // Persist the fresh catalog so the launch pad (incl. Fable / any future
-          // model) is populated on the next cold start without a live session.
-          scheduleSave()
-        }
         break
 
       case 'assistant':
@@ -909,7 +924,7 @@ export const useAiStore = create<AiState>((set, get) => {
 
       patchConversation(conv.id, (c) => ({
         ...c,
-        messages: [...c.messages, { role: 'user', content: parts }],
+        messages: [...c.messages, { role: 'user', content: parts, ts: Date.now() }],
         pendingContext: [],
         error: undefined,
         title:

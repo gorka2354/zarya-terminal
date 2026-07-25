@@ -283,6 +283,11 @@ if (!gotLock) {
 
     createWindow()
 
+    // Keep the fuel gauge honest from boot: poll /usage in the background (a
+    // throwaway idle session when no chat is live) instead of only after the
+    // first prompt. No-ops on API-key sessions where rate limits don't apply.
+    claudeCodeDriver.startAmbientUsagePoll()
+
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow()
     })

@@ -27,6 +27,12 @@ import './missionfeed.css'
 // value every render → infinite re-render loop (React #185).
 const NO_BLOCKS: BlockRecord[] = []
 
+/** HH:MM for the right-aligned send time on a user turn. */
+function fmtClock(ts: number): string {
+  const d = new Date(ts)
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
 export function MissionFeed({ sessionId }: { sessionId: string }): React.JSX.Element {
   const blocks = useBlocksStore((s) => s.bySession[sessionId] ?? NO_BLOCKS)
   const cwd = useSessionsStore((s) => s.sessions[sessionId]?.cwd ?? '')
@@ -358,6 +364,7 @@ function AgentMessage({
         <span className="zy-mf-cwd">{cwd}</span>
         <span className="zy-mf-chev"><PixelIcon name="chevron-right" /></span>
         <span className="zy-mf-user-text">{text}</span>
+        {msg.ts != null && <span className="zy-mf-user-time">{fmtClock(msg.ts)}</span>}
       </div>
     )
   }

@@ -30,6 +30,9 @@ interface UiState {
   agentCaps: Partial<Record<AgentEngine, AgentCapabilities>>
   /** Live Claude Code account status for the fuel gauge (model, effort, limits). */
   claudeStatus: { model?: string; effort?: string; usage?: ClaudeUsage }
+  /** Context-window fill of the active engine's last turn — UNIVERSAL (Claude,
+   *  Codex, ACP all report it), unlike the Claude-only subscription fuel. */
+  agentContext: { pct?: number; tokens?: number; window?: number; engine?: AgentEngine }
   /** Dynamic model catalog from the SDK (future-proof — no hardcoded list). */
   claudeModels: ClaudeModelInfo[]
   /** Ultracode session mode (xhigh + workflow orchestration). Session-scoped, default off. */
@@ -60,6 +63,7 @@ export const useUiStore = create<UiState>((set, get) => ({
   barMode: 'shell',
   agentCaps: {},
   claudeStatus: {},
+  agentContext: {},
   claudeModels: [],
   ultracode: false,
   historyOverlayOpen: false,

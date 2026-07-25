@@ -357,7 +357,22 @@ export class AcpDriver implements AgentDriver {
         }
         break
       }
-      // agent_thought_chunk / plan / usage_update: not surfaced in the MVP.
+      case 'usage_update': {
+        // Universal context-window fill: used tokens vs the window size.
+        const uu = update as { used?: number; size?: number }
+        if (uu.size && uu.size > 0 && uu.used != null) {
+          this.emit(requestId, {
+            type: 'usage',
+            usage: {
+              contextTokens: uu.used,
+              contextWindow: uu.size,
+              contextPct: Math.min(100, (uu.used / uu.size) * 100)
+            }
+          })
+        }
+        break
+      }
+      // agent_thought_chunk / plan: not surfaced in the MVP.
     }
   }
 

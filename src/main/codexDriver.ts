@@ -284,8 +284,33 @@ export class CodexDriver implements AgentDriver {
         })
         break
       }
-      // turn/started, item/started, item/agentMessage/delta, tokenUsage:
-      // not surfaced in the Ф2 MVP (assistant is emitted whole on item/completed).
+      case CODEX_NOTIFY.tokenUsage: {
+        // Universal context-window fill: last turn's tokens vs the model window.
+        const tu = (
+          params as {
+            tokenUsage?: {
+              last?: { totalTokens?: number }
+              total?: { totalTokens?: number }
+              modelContextWindow?: number | null
+            }
+          }
+        ).tokenUsage
+        const window = tu?.modelContextWindow ?? 0
+        const tokens = tu?.last?.totalTokens ?? tu?.total?.totalTokens ?? 0
+        if (window > 0 && tokens > 0) {
+          this.emit(requestId, {
+            type: 'usage',
+            usage: {
+              contextTokens: tokens,
+              contextWindow: window,
+              contextPct: Math.min(100, (tokens / window) * 100)
+            }
+          })
+        }
+        break
+      }
+      // turn/started, item/started, item/agentMessage/delta:
+      // not surfaced (assistant is emitted whole on item/completed).
     }
   }
 
