@@ -34,12 +34,25 @@ function Global:__Zarya-ExitCode {
 function Global:__Zarya-CwdSeq {
     $loc = $ExecutionContext.SessionState.Path.CurrentLocation
     if ($loc.Provider.Name -ne 'FileSystem') { return '' }
-    $p = $loc.ProviderPath -replace '\\', '/'
+    $native = $loc.ProviderPath
+    $p = $native -replace '\\', '/'
     if ($p -notmatch '^/') { $p = '/' + $p }
     # OSC 7 wants a file:// URL; keep it simple and percent-encode spaces only —
     # the terminal side decodes with decodeURI and tolerates unencoded unicode.
     $p = $p -replace ' ', '%20'
-    return "$Global:__ZaryaEsc]7;file://localhost$p$Global:__ZaryaBel"
+    $out = "$Global:__ZaryaEsc]7;file://localhost$p$Global:__ZaryaBel"
+    # SECURITY: the cwd is a trust boundary — it becomes the agent's working
+    # directory and the root its filesystem access is confined to. OSC 7 above
+    # can be forged by ANY program's output, so also report it on the private
+    # nonced channel; the terminal prefers that one and ignores un-nonced cwd
+    # reports whenever this integration is active. The nonce never reaches
+    # child processes (removed from the environment on load).
+    $nonce = $Global:__ZaryaState.Nonce
+    if ($nonce) {
+        $b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($native))
+        $out += "$Global:__ZaryaEsc]6973;C;$b64;$nonce$Global:__ZaryaBel"
+    }
+    return $out
 }
 
 # Preserve a user-defined prompt if one exists.

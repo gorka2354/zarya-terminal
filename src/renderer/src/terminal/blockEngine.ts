@@ -7,6 +7,7 @@ import { useSessionsStore } from '@/state/sessionsStore'
 import { getSettings } from '@/state/settingsStore'
 import { formatDuration } from '@/lib/ansi'
 import { pushRecentCommand } from './historyCache'
+import { cwdReportVerdict } from './cwdTrust'
 
 const OUTPUT_CAP = 100_000
 const OUTPUT_LINES_CAP = 600
@@ -103,7 +104,35 @@ export class BlockEngine {
     return useSessionsStore.getState().sessions[this.sessionId]?.nonce
   }
 
-  private setCwd(path: string): void {
+  /**
+   * SECURITY: the cwd is a trust boundary, not just a breadcrumb — it is handed
+   * to the agent as its working directory and becomes the root the ACP
+   * filesystem proxy confines reads/writes to. OSC 7 / 9;9 / 1337 / 633;P are
+   * plain output, so ANY program (or a `cat` of a crafted file) could forge one
+   * and silently move that root somewhere the attacker prepared.
+   *
+   * Our shell integration therefore also reports cwd on the private nonced
+   * channel (OSC 6973;C), and the nonce never reaches child processes. Once we
+   * have seen ONE valid nonced report we know the integration is live and every
+   * un-nonced report after it is a forgery — so we drop those.
+   *
+   * The "once seen" latch matters: a session always carries a nonce, but not
+   * every shell runs our integration (cmd.exe and custom profiles have none).
+   * Demanding the nonce unconditionally would freeze cwd tracking there
+   * completely — a silent regression, caught by scripts/qa-cwd-spoof.mjs.
+   * The integration reports cwd from the very first prompt, i.e. before any
+   * command could print anything, so the latch closes before output exists.
+   */
+  private trustedCwdSeen = false
+
+  private setCwd(path: string, nonce?: string): void {
+    const verdict = cwdReportVerdict({
+      expectedNonce: this.expectedNonce(),
+      nonce,
+      trustedSeen: this.trustedCwdSeen
+    })
+    if (verdict.trusted) this.trustedCwdSeen = true
+    if (!verdict.accept) return
     if (!path || path === this.cwd) return
     this.cwd = path
     emitBus('terminal:cwd-changed', { sessionId: this.sessionId, cwd: path })
@@ -154,8 +183,9 @@ export class BlockEngine {
   }
 
   private handle6973(data: string): void {
-    // E;<base64 command>;<nonce>
-    if (!data.startsWith('E;')) return
+    // E;<base64 command>;<nonce>  |  C;<base64 cwd>;<nonce>
+    const kind = data.startsWith('E;') ? 'cmd' : data.startsWith('C;') ? 'cwd' : undefined
+    if (!kind) return
     const [b64, nonce] = data.slice(2).split(';')
     let text = ''
     try {
@@ -164,7 +194,8 @@ export class BlockEngine {
     } catch {
       return
     }
-    this.setCommandText(text, nonce)
+    if (kind === 'cwd') this.setCwd(text, nonce)
+    else this.setCommandText(text, nonce)
   }
 
   private setCommandText(text: string, nonce?: string): void {

@@ -18,6 +18,15 @@ typeset -g __zarya_b=$'\e]133;B\a'
 __zarya_cwd() {
   local p="${PWD// /%20}"
   printf '\e]7;file://localhost%s\a' "$p"
+  # SECURITY: cwd is a trust boundary (it becomes the agent's working directory
+  # and the root its filesystem access is confined to), and OSC 7 above can be
+  # forged by any program's output. Report it again on the private nonced
+  # channel — the terminal prefers that one and ignores un-nonced cwd reports
+  # while this integration is active. The nonce is never exported.
+  if [[ -n "$__zarya_nonce" ]]; then
+    printf '\e]6973;C;%s;%s\a' \
+      "$(printf '%s' "$PWD" | base64 | tr -d '\n')" "$__zarya_nonce"
+  fi
 }
 
 __zarya_precmd() {

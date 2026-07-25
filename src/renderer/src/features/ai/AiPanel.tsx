@@ -10,6 +10,7 @@ import { getTerminal } from '@/terminal/terminalRegistry'
 import './ai.css'
 import { renderMarkdown } from './markdown'
 import { useAiStore } from './aiStore'
+import { gateLabel, orphanGates } from './gates'
 
 const EXAMPLES = ['Объясни последнюю ошибку', 'Найди большие файлы', 'Что съедает порт 3000?']
 
@@ -322,6 +323,27 @@ export default function AiPanel(): React.JSX.Element {
             )
           })
         )}
+        {/*
+          Gates raised as a bare `permission` event, with no `tool_use` block to
+          hang a card on — every engine except Claude Code (Codex, Gemini, Kimi,
+          Qwen). They used to be invisible here while the keyboard shortcut still
+          approved them, so the user could confirm a command they never saw.
+        */}
+        {conv &&
+          orphanGates(conv).map((t) => (
+            <div key={t.id} className="zy-ai-row zy-ai-row--assistant">
+              <ToolCard
+                command={gateLabel(t)}
+                resolved={false}
+                denied={false}
+                awaitingDecision
+                executing={false}
+                isAuto={false}
+                onApprove={() => void useAiStore.getState().approveTool(conv.id, t.id)}
+                onDeny={() => useAiStore.getState().denyTool(conv.id, t.id)}
+              />
+            </div>
+          ))}
         {showThinking && (
           <div className="zy-ai-row zy-ai-row--assistant">
             <div className="zy-ai-thinking">

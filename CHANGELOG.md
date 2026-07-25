@@ -3,7 +3,13 @@
 All notable changes to Zarya are documented here. This project uses
 [Semantic Versioning](https://semver.org/).
 
-## Unreleased
+## 0.5.1 — «Часовой» (2026-07-25)
+
+A security + freshness release. An adversarial audit of the whole attack surface
+(process spawning, the Electron/IPC boundary, approval gates, secrets, supply
+chain) turned up four ways untrusted content could act with the app's authority
+— all closed here. Separately, newly released Claude models now appear on their
+own, without rebuilding or restarting Zarya.
 
 ### Security
 
@@ -28,6 +34,22 @@ Electron/IPC boundary, approval gates, secrets, supply chain).
   RCE в обход всех гейтов. Теперь разрешён ровно наш документ, а ссылки из ленты
   уходят во внешний браузер (`src/main/index.ts`,
   `src/renderer/src/components/MissionFeed.tsx`).
+- **Гейт одобрения больше не бывает невидимым.** Карточка с командой рисовалась
+  только из блоков `tool_use`, которые шлёт один Claude Code. У Codex, Gemini,
+  Kimi и Qwen запрос прилетал голым событием — карточки не было **нигде**, но
+  Enter его исправно одобрял. То есть пользователь подтверждал команду, которую
+  не видел. Теперь любой запрос без описания получает свою карточку в ленте и в
+  панели (`src/renderer/src/features/ai/gates.ts`).
+- **Рабочий каталог сессии больше не подделывается выводом терминала.** Каталог
+  отслеживался по OSC 7 / 9;9 / 1337 / 633;P — а это обычный вывод, который
+  может напечатать любая программа. Каталог при этом становится рабочим
+  каталогом агента и корнем, которым ограничен его доступ к файлам, так что
+  подделка молча расширяла песочницу. Интеграция оболочки теперь сообщает
+  каталог по приватному каналу с посессионным nonce (в дочерние процессы он не
+  попадает), и после первого доверенного сообщения все неподписанные
+  игнорируются. Оболочки без интеграции (cmd.exe, свои профили) работают как
+  раньше — защита включается сама, без настроек
+  (`src/renderer/src/terminal/cwdTrust.ts`).
 - **Dev-сервер сверяется по origin, а не по префиксу строки** — префиксная
   проверка принимала `http://localhost:5920@evil.com/` за свой origin.
 

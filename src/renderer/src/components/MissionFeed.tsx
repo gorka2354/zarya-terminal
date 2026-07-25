@@ -6,6 +6,7 @@ import { useBlocksStore } from '@/state/blocksStore'
 import { useSessionsStore } from '@/state/sessionsStore'
 import { useUiStore } from '@/state/uiStore'
 import { convForSession, useAiStore, type Conversation } from '@/features/ai/aiStore'
+import { orphanGates } from '@/features/ai/gates'
 import { renderMarkdown } from '@/features/ai/markdown'
 import { getTerminal } from '@/terminal/terminalRegistry'
 import { Icon } from './Icon'
@@ -342,6 +343,16 @@ function AgentSection({ conv, cwd }: { conv: Conversation; cwd: string }): React
       {conv.messages.map((m, i) => (
         <AgentMessage key={i} msg={m} conv={conv} cwd={cwd} />
       ))}
+      {/*
+        Gates that no message describes. Claude Code announces a tool as a
+        `tool_use` block, so its card is rendered inside the message above —
+        but Codex and the ACP engines only raise a `permission` event. Those
+        gates used to be INVISIBLE while Enter still approved them, i.e. a
+        blind "yes" to a command the user never saw. Render them here.
+      */}
+      {orphanGates(conv).map((t) => (
+        <ToolCard key={t.id} conv={conv} id={t.id} name={t.name} input={t.input} title={t.title} />
+      ))}
       {conv.streaming && conv.messages[conv.messages.length - 1]?.role === 'user' && (
         <div className="zy-mf-typing">
           <span className="zy-mf-spinner" />
@@ -393,7 +404,7 @@ function AgentMessage({
           ) : null
         }
         if (p.type === 'tool_use') {
-          return <ToolCard key={i} conv={conv} tool={p} />
+          return <ToolCard key={i} conv={conv} id={p.id} name={p.name} input={p.input} />
         }
         return null
       })}
@@ -413,27 +424,41 @@ function findToolResult(
   return undefined
 }
 
+/**
+ * One tool gate. Driven by (id, name, input) rather than by a `tool_use` block,
+ * because only the Claude Code driver emits those: Codex and the ACP engines
+ * (Gemini/Kimi/Qwen) announce a pending permission as a bare event, so their
+ * gates had NO card at all — yet Enter still approved them. Same card now
+ * renders for every engine.
+ */
 function ToolCard({
   conv,
-  tool
+  id,
+  name,
+  input: rawInput,
+  title
 }: {
   conv: Conversation
-  tool: Extract<AiContentPart, { type: 'tool_use' }>
+  id: string
+  name: string
+  input: unknown
+  /** Driver-supplied human title (ACP/Codex), preferred over a synthesized one. */
+  title?: string
 }): React.JSX.Element {
-  const pending = conv.pendingTools.find((t) => t.id === tool.id)
-  const result = findToolResult(conv, tool.id)
-  const input = tool.input as { command?: string; file_path?: string; path?: string } | null
+  const pending = conv.pendingTools.find((t) => t.id === id)
+  const result = findToolResult(conv, id)
+  const input = rawInput as { command?: string; file_path?: string; path?: string } | null
   const cmd =
     typeof input?.command === 'string'
       ? input.command
       : typeof input?.file_path === 'string'
-        ? `${tool.name} · ${input.file_path}`
+        ? `${name} · ${input.file_path}`
         : typeof input?.path === 'string'
-          ? `${tool.name} · ${input.path}`
-          : tool.name
+          ? `${name} · ${input.path}`
+          : (title ?? name)
   const store = useAiStore.getState()
 
-  const verb = toolVerb(tool.name)
+  const verb = toolVerb(name)
   // Collapse long / multi-line commands to a single line (CLI-style), expand on click.
   const [expanded, setExpanded] = useState(false)
   const firstLine = cmd.split('\n')[0]
@@ -461,10 +486,10 @@ function ToolCard({
   } else if (pending && !pending.settled) {
     body = (
       <div className="zy-mf-tool-actions">
-        <button className="zy-mf-btn-run" onClick={() => void store.approveTool(conv.id, tool.id)}>
+        <button className="zy-mf-btn-run" onClick={() => void store.approveTool(conv.id, id)}>
           ВЫПОЛНИТЬ
         </button>
-        <button className="zy-mf-btn-deny" onClick={() => store.denyTool(conv.id, tool.id)}>
+        <button className="zy-mf-btn-deny" onClick={() => store.denyTool(conv.id, id)}>
           ОТКЛОНИТЬ
         </button>
         <span className="zy-mf-tool-kbd">Enter · Esc</span>
