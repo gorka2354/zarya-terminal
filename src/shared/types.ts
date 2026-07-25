@@ -352,6 +352,11 @@ export interface AgentUsage {
   fiveHourResetsAt?: number
   sevenDayPct?: number
   sevenDayResetsAt?: number
+  /** Context-window fill of the last turn: how much of the model's context is
+   *  used (0-100), plus the raw tokens/window for a detailed readout. */
+  contextPct?: number
+  contextTokens?: number
+  contextWindow?: number
 }
 
 /**

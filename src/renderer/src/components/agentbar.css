@@ -44,6 +44,15 @@
   color: var(--accent-2);
   flex-shrink: 0;
 }
+/* Context-window fill — a neutral readout next to the gold subscription fuel. */
+.zy-agentbar-fuel-ctx {
+  font-family: var(--font-tech);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: var(--fg-dim);
+  flex-shrink: 0;
+  margin-left: 8px;
+}
 .zy-agentbar-fuel-spacer {
   flex: 1;
 }

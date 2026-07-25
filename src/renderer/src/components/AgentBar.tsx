@@ -106,11 +106,17 @@ function prettyModel(id: string): string {
 function resetLabel(ts?: number): string {
   if (!ts) return ''
   const mins = Math.round((ts - Date.now()) / 60000)
-  if (mins <= 0) return 'скоро'
-  if (mins < 60) return `${mins}м`
+  if (mins <= 1) return 'минуту'
+  if (mins < 60) return `${mins} мин`
   const h = Math.floor(mins / 60)
   const m = mins % 60
-  return m ? `${h}ч ${m}м` : `${h}ч`
+  return m ? `${h} ч ${m} мин` : `${h} ч`
+}
+
+/** Compact token count for the context readout tooltip (45 231 → "45K"). */
+function fmtTokens(n?: number): string {
+  if (n == null) return '—'
+  return n >= 1000 ? `${Math.round(n / 1000)}K` : String(n)
 }
 
 /**
@@ -435,6 +441,14 @@ export function AgentBar(): React.JSX.Element {
               : '∞ без лимита · локальный борт'}
           </span>
         )}
+        {claudeStatus.usage?.contextPct != null && (
+          <span
+            className="zy-agentbar-fuel-ctx"
+            title={`Контекст беседы: ${fmtTokens(claudeStatus.usage.contextTokens)} из ${fmtTokens(claudeStatus.usage.contextWindow)} токенов заполнено`}
+          >
+            · контекст {Math.round(claudeStatus.usage.contextPct)}%
+          </span>
+        )}
         <span className="zy-agentbar-fuel-spacer" />
         {showModel && (claudeStatus.model || claudeStatus.effort || ultracode) && (
           <span className="zy-agentbar-fuel-model">
@@ -469,13 +483,13 @@ export function AgentBar(): React.JSX.Element {
             className={`zy-agentbar-bypass${bypass ? ' zy-agentbar-bypass--on' : ''}`}
             title={
               bypass
-                ? '⚠ БЕЗ СПРОСА — агент выполняет все инструменты сам, без подтверждений (кроме вопросов AskUserQuestion). Клик: вернуть подтверждения'
-                : 'Агент спрашивает подтверждение перед инструментами. Клик: отключить подтверждения (выполнять без спроса)'
+                ? '⚠ АВТОПИЛОТ — борт выполняет все инструменты сам, без подтверждений (кроме вопросов AskUserQuestion). Клик: вернуть ручное управление'
+                : 'Ручное управление — борт спрашивает подтверждение перед инструментами. Клик: включить автопилот (выполнять без подтверждений)'
             }
             onClick={toggleBypass}
           >
             <span className="zy-agentbar-bypass-dot" />
-            {bypass ? '⚠ БЕЗ СПРОСА' : 'СПРАШИВАЕТ'}
+            {bypass ? '⚠ АВТОПИЛОТ' : 'РУЧНОЙ'}
           </button>
         )}
         <input

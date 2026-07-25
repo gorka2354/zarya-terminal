@@ -459,12 +459,22 @@ export class ClaudeCodeDriver implements AgentDriver {
             const info = (msg as { rate_limit_info?: { utilization?: number; resetsAt?: number; rateLimitType?: string } })
               .rate_limit_info
             if (info?.utilization !== undefined) {
+              // SDKRateLimitInfo.utilization is already a 0-100 percentage (same
+              // scale as the /usage endpoint) — no ×100. resetsAt is a Unix
+              // timestamp; normalize seconds → ms so the countdown is correct.
+              const pct = info.utilization
+              const resetsMs =
+                info.resetsAt != null
+                  ? info.resetsAt < 1e12
+                    ? info.resetsAt * 1000
+                    : info.resetsAt
+                  : undefined
               const isWeekly = (info.rateLimitType ?? '').startsWith('seven_day')
               this.emit(requestId, {
                 type: 'usage',
                 usage: isWeekly
-                  ? { sevenDayPct: info.utilization * 100, sevenDayResetsAt: info.resetsAt }
-                  : { fiveHourPct: info.utilization * 100, fiveHourResetsAt: info.resetsAt }
+                  ? { sevenDayPct: pct, sevenDayResetsAt: resetsMs }
+                  : { fiveHourPct: pct, fiveHourResetsAt: resetsMs }
               })
             }
             break
@@ -497,7 +507,9 @@ export class ClaudeCodeDriver implements AgentDriver {
             break
           }
 
-          case 'result':
+          case 'result': {
+            const modelUsage = (msg as { modelUsage?: Record<string, { contextWindow?: number }> })
+              .modelUsage ?? {}
             this.emit(requestId, {
               type: 'result',
               isError: msg.is_error,
@@ -505,13 +517,37 @@ export class ClaudeCodeDriver implements AgentDriver {
               costUsd: 'total_cost_usd' in msg ? msg.total_cost_usd : undefined,
               numTurns: 'num_turns' in msg ? msg.num_turns : undefined,
               sessionId: msg.session_id,
-              models: Object.keys(
-                (msg as { modelUsage?: Record<string, unknown> }).modelUsage ?? {}
-              )
+              models: Object.keys(modelUsage)
             })
+            // Context-window fill: this turn's context tokens (fresh input + both
+            // cache tiers) against the model's window, so the gauge reads how full
+            // the conversation context is.
+            const u = (msg as {
+              usage?: {
+                input_tokens?: number
+                cache_read_input_tokens?: number
+                cache_creation_input_tokens?: number
+              }
+            }).usage
+            const ctxWindow = Math.max(0, ...Object.values(modelUsage).map((m) => m?.contextWindow ?? 0))
+            const ctxTokens =
+              (u?.input_tokens ?? 0) +
+              (u?.cache_read_input_tokens ?? 0) +
+              (u?.cache_creation_input_tokens ?? 0)
+            if (ctxWindow > 0 && ctxTokens > 0) {
+              this.emit(requestId, {
+                type: 'usage',
+                usage: {
+                  contextTokens: ctxTokens,
+                  contextWindow: ctxWindow,
+                  contextPct: Math.min(100, (ctxTokens / ctxWindow) * 100)
+                }
+              })
+            }
             // Refresh the subscription usage gauge after each completed turn.
             void this.fetchUsage(requestId, session)
             break
+          }
 
           default:
             // partial-assistant / status / hook / task / etc. — ignored for now
