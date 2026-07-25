@@ -14,6 +14,7 @@ import { getTheme, toXtermTheme } from '@/features/themes/themes'
 import { shouldBypassTerminal } from '@/features/palette/keybindings'
 import { openFileInEditor } from '@/features/editor/editorBridge'
 import { BlockEngine } from './blockEngine'
+import { terminalOptionsFrom, applyTerminalOptions } from './terminalOptions'
 import { registerTerminal, takePendingRestore, getTerminal } from './terminalRegistry'
 import { findPathsInLine, resolveAgainstCwd } from './termLinks'
 import { suggestFor } from './historyCache'
@@ -55,12 +56,7 @@ export function XtermView({ sessionId, active, visible }: Props): React.JSX.Elem
     const theme = getTheme(s.appearance.themeId)
     const term = new Terminal({
       allowProposedApi: true,
-      fontFamily: s.appearance.fontFamily,
-      fontSize: s.appearance.fontSize,
-      lineHeight: s.appearance.lineHeight,
-      cursorStyle: s.appearance.cursorStyle,
-      cursorBlink: s.appearance.cursorBlink,
-      scrollback: s.terminal.scrollback,
+      ...terminalOptionsFrom(s.appearance, s.terminal.scrollback),
       theme: toXtermTheme(theme),
       fontWeightBold: '600',
       minimumContrastRatio: 1,
@@ -377,12 +373,7 @@ export function XtermView({ sessionId, active, visible }: Props): React.JSX.Elem
     if (!handle) return
     const t = handle.term
     const a = settings.appearance
-    t.options.fontFamily = a.fontFamily
-    t.options.fontSize = a.fontSize
-    t.options.lineHeight = a.lineHeight
-    t.options.cursorStyle = a.cursorStyle
-    t.options.cursorBlink = a.cursorBlink
-    t.options.scrollback = settings.terminal.scrollback
+    applyTerminalOptions(t, a, settings.terminal.scrollback)
     t.options.theme = toXtermTheme(getTheme(a.themeId))
     handle.fit()
   }, [sessionId, settings])

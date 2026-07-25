@@ -3,6 +3,58 @@
 All notable changes to Zarya are documented here. This project uses
 [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+### Fixed
+
+- **New Claude models no longer stay invisible.** The model catalog is served by
+  the `claude` binary, not by Zarya — so a model released after the build (Opus 5)
+  never appeared in the launch console. Three causes, all fixed: the catalog was
+  only re-fetched when the cached list was *empty*, `listModels()` returned nothing
+  without a live session, and the shipped binary lagged the user's own CLI
+  (`src/main/claudeCodeDriver.ts`, `src/renderer/src/components/LaunchPad.tsx`).
+- **Fallback model list no longer claims a stale version.** The emergency catalog
+  pinned `claude-opus-4-8`, so offline it announced "Opus 4.8" while the CLI would
+  actually run Opus 5. Floating aliases are now version-free; the live catalog
+  supplies the exact version.
+- **Model identity is version-aware.** `sameModel` compared families only, so
+  `claude-opus-4-8[1m]` and `claude-opus-5[1m]` were "the same model": a pin left
+  over from a previous generation lit up the NEW row while the OLD id was still
+  what got launched. Versions (and the 1M variant) must now agree; a pin no
+  longer in the catalog surfaces as its own row instead of silently borrowing
+  someone else's (`src/renderer/src/features/ai/modelMatch.ts`).
+- **Unpinned model now highlights its row.** The resolve ran over the raw
+  catalog, where the account `default` entry (a pointer at another model) is
+  matched first and then filtered out of the rendered list — so with no explicit
+  pin *no* row was marked active even though a model was plainly running.
+- **A model picked while another tab was focused now reaches a running session.**
+  Follow-up turns re-synced only bypass and dropped `model`/`effort`/`ultracode`,
+  so a background session kept its start-time model for the rest of its life.
+- **A hung CLI can no longer freeze the catalog until restart.** The session-less
+  probe had no deadline: an unresponsive child left the promise pending forever,
+  leaking the process and latching the in-flight guards (catalog and fuel poll
+  dead until the app restarted). It now races a 20s timeout and always settles.
+
+### Added
+
+- **Newest-binary preference** — Zarya now runs the user's own (self-updating)
+  `claude` CLI when it is strictly newer than the bundled one on the same major
+  version, so newly released models appear **without rebuilding or restarting**
+  the app. Guard rails: never downgrades, never crosses a major version, and
+  `ZARYA_CLAUDE_BIN` overrides everything (`src/main/claudeExe.ts`).
+- **Session-less catalog + usage fetch** — a throwaway idle query backs both the
+  model catalog and the fuel gauge, so both are correct before the first prompt.
+- **QA:** `npm run qa:models` — proves the console shows a *dynamic* catalog with
+  no live session, and reports whether the bundled binary has fallen behind the
+  system one (`scripts/qa-claude-catalog.mjs`, `scripts/qa-model-refresh.mjs`).
+  Unit coverage for the binary-choice policy and the terminal-settings mapping
+  (`tests/claudeExe.test.ts`, `tests/terminalOptions.test.ts`) — 109 tests.
+
+### Changed
+
+- Bundled Claude Agent SDK `0.3.217` → `0.3.220` (ships CLI 2.1.220, which knows
+  Opus 5).
+
 ## 0.5.0 — «Созвездие» (2026-07-24)
 
 A multi-agent release. Zarya is no longer tied to a single AI backend: a driver

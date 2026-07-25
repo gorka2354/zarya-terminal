@@ -30,18 +30,28 @@ try {
   await page.waitForTimeout(2200)
 
   const state = () => page.evaluate(() => window.__zaryaLaunchPadState?.())
-  // Neuter the live catalog fetch so the fallback path is deterministic when we
-  // want it; tests that want the dynamic catalog inject it explicitly.
-  await page.evaluate(() => { window.zarya.claudeCode.listModels = async () => [] })
-  const reopen = async (cfg) => {
+
+  // Opening the console refetches the REAL catalog (main falls back to a
+  // session-less probe), which would overwrite anything we inject. window.zarya
+  // is a frozen contextBridge object, so it can't be stubbed from here — instead
+  // we (1) warm main's catalog cache once, so every later fetch resolves within
+  // a tick, and (2) inject each case's catalog AFTER the console is open, i.e.
+  // after that fetch has already landed.
+  await page.evaluate(() => window.__zaryaSetUi?.({ barMode: 'claude-code', launchPadOpen: true }))
+  await page.waitForTimeout(5000)
+  await page.evaluate(() => window.__zaryaSetUi?.({ launchPadOpen: false }))
+  await page.waitForTimeout(150)
+
+  const DEFAULT_UI = { claudeModels: CATALOG, claudeStatus: { model: 'claude-fable-5', effort: 'high' } }
+  const reopen = async (cfg, ui = DEFAULT_UI) => {
     await page.evaluate((c) => window.__zaryaSetClaudeCfg?.(c.model, c.effort), cfg || { model: '', effort: 'high' })
     await page.evaluate(() => window.__zaryaSetUi?.({ launchPadOpen: false }))
     await page.waitForTimeout(120)
     await page.evaluate(() => window.__zaryaSetUi?.({ launchPadOpen: true }))
+    await page.waitForTimeout(250) // let the open's refetch land first
+    await page.evaluate((u) => window.__zaryaSetUi?.(u), ui)
     await page.waitForTimeout(200)
   }
-
-  await page.evaluate((cat) => window.__zaryaSetUi?.({ barMode: 'claude-code', claudeModels: cat, claudeStatus: { model: 'claude-fable-5', effort: 'high' } }), CATALOG)
 
   // ---- 1. DYNAMIC CATALOG: rows, Fable present, versions, default filtered ----
   console.log('\n[1] Динамический каталог — модели, версии, Fable, БЕЗ строки дефолта')
@@ -113,17 +123,16 @@ try {
 
   // ---- 6. A/B: FALLBACK catalog (empty dynamic) still has Fable ----
   console.log('\n[6] A/B: пустой каталог → fallback, Fable всё равно есть (регресс Image #34)')
-  await page.evaluate(() => window.__zaryaSetUi?.({ claudeModels: [] }))
-  await reopen({ model: '', effort: 'high' })
+  await reopen({ model: '', effort: 'high' }, { claudeModels: [], claudeStatus: { model: 'claude-fable-5', effort: 'high' } })
   s = await state()
   ok('каталог помечен fallback', s.catalogSource === 'fallback', s.catalogSource)
   ok('Fable ЕСТЬ в fallback', s.rows.map((r) => r.title).includes('Fable 5'), s.rows.map((r) => r.title))
-  ok('fallback: Opus/Sonnet/Haiku на месте', ['Opus 4.8', 'Sonnet 5', 'Haiku 4.5'].every((t) => s.rows.map((r) => r.title).includes(t)), s.rows.map((r) => r.title))
+  // The fallback deliberately carries NO version for floating aliases — offline
+  // we cannot know which generation 'opus[1m]' resolves to, and claiming one
+  // (it used to say "Opus 4.8") is how the console lied after Opus 5 shipped.
+  ok('fallback: Opus/Sonnet/Haiku на месте, БЕЗ выдуманной версии', ['Opus', 'Sonnet', 'Haiku'].every((t) => s.rows.map((r) => r.title).includes(t)), s.rows.map((r) => r.title))
   ok('fallback: нет строки дефолта', !s.rows.map((r) => r.title).includes('ПО УМОЛЧАНИЮ'))
   ok('fallback: "" резолвит Fable в выбранную', s.rows.find((r) => r.title === 'Fable 5')?.selected === true, s.rows)
-
-  // restore dynamic catalog for the rest
-  await page.evaluate((cat) => window.__zaryaSetUi?.({ claudeModels: cat }), CATALOG)
 
   // ---- 7. BOUNDARY: unknown pinned model gets its own row ----
   console.log('\n[7] Граница: неизвестная закреплённая модель показывается своей строкой')
@@ -136,8 +145,7 @@ try {
   // ---- 8. BOUNDARY: future model version parses generically ----
   console.log('\n[8] Граница: будущая версия модели парсится без правок кода')
   const future = [{ value: 'sonnet', resolvedModel: 'claude-sonnet-6-2', displayName: 'Sonnet', description: 'next', supportsEffort: true, supportedEffortLevels: ['low', 'high', 'max'] }]
-  await page.evaluate((cat) => window.__zaryaSetUi?.({ claudeModels: cat, claudeStatus: { model: 'claude-sonnet-6-2' } }), future)
-  await reopen({ model: '', effort: 'high' })
+  await reopen({ model: '', effort: 'high' }, { claudeModels: future, claudeStatus: { model: 'claude-sonnet-6-2' } })
   s = await state()
   ok('claude-sonnet-6-2 → "Sonnet 6.2"', s.rows.some((r) => r.title === 'Sonnet 6.2'), s.rows.map((r) => r.title))
   ok('"" резолвит running Sonnet 6.2 в выбранную', s.rows.find((r) => r.title === 'Sonnet 6.2')?.selected === true, s.rows)
@@ -150,8 +158,7 @@ try {
     { value: 'sonnet', resolvedModel: 'claude-sonnet-5', displayName: 'Sonnet', description: 's', supportsEffort: true, supportedEffortLevels: ['low', 'medium', 'high', 'xhigh', 'max'] },
     { value: 'sonnet[1m]', resolvedModel: 'claude-sonnet-5[1m]', displayName: 'Sonnet', description: 's1m', supportsEffort: true, supportedEffortLevels: ['high', 'max'] }
   ]
-  await page.evaluate((cat) => window.__zaryaSetUi?.({ claudeModels: cat, claudeStatus: { model: 'claude-sonnet-5' } }), variants)
-  await reopen({ model: 'sonnet[1m]', effort: 'high' })
+  await reopen({ model: 'sonnet[1m]', effort: 'high' }, { claudeModels: variants, claudeStatus: { model: 'claude-sonnet-5' } })
   s = await state()
   const selCount = s.rows.filter((r) => r.selected).length
   const actCount = s.rows.filter((r) => r.active).length

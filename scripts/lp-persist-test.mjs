@@ -58,7 +58,11 @@ try {
     const titles = (s?.rows || []).map((r) => r.title)
     ok('пад на холодном старте помечен dynamic (не fallback)', s?.catalogSource === 'dynamic', s?.catalogSource)
     ok('пад показывает Fable 5 без сессии', titles.includes('Fable 5'), titles)
-    ok('пад показывает версии (Opus 4.8 / Sonnet 5)', ['Opus 4.8', 'Sonnet 5'].every((t) => titles.includes(t)), titles)
+    // Assert versions are PRESENT, not which ones — pinning "Opus 4.8" here
+    // meant the gate had to be edited on every Claude release (and it silently
+    // encoded the stale-catalog bug this suite exists to catch).
+    ok('каждая строка версионирована (Opus N / Sonnet N)', titles.length > 0 && titles.every((t) => /\d/.test(t)), titles)
+    ok('Opus и Sonnet присутствуют', ['Opus', 'Sonnet'].every((f) => titles.some((t) => t.startsWith(f))), titles)
     await app.close()
   }
 

@@ -5,6 +5,13 @@ import { useSettingsStore } from '@/state/settingsStore'
 import { useUiStore } from '@/state/uiStore'
 import { useSessionsStore } from '@/state/sessionsStore'
 import { convForSession, useAiStore } from '@/features/ai/aiStore'
+import {
+  famOf,
+  parseVersion,
+  resolveRowValue,
+  sameModel,
+  shownRows
+} from '@/features/ai/modelMatch'
 import './launchpad.css'
 
 const EFFORTS: AiEffort[] = ['low', 'medium', 'high', 'max']
@@ -21,11 +28,22 @@ const ACCOUNTS: Array<{ tag: string; provider: AiProviderKind; full: string }> =
  * (no live session ever + nothing cached). Mirrors the real live probe so Fable
  * is present offline and every row carries a version + tagline immediately.
  */
+/**
+ * Emergency catalog, shown only when the live one is unreachable (offline, or
+ * the CLI never answered). Deliberately version-FREE: these are floating
+ * aliases whose resolved model changes under us on every Claude release —
+ * pinning 'claude-opus-4-8' here made the console claim "Opus 4.8" while the
+ * CLI actually ran Opus 5. Without a pin the row honestly reads "Opus", and the
+ * live catalog (which does carry resolvedModel) supplies the exact version.
+ */
 const CLAUDE_MODEL_FALLBACK: ClaudeModelInfo[] = [
-  { value: 'opus[1m]', resolvedModel: 'claude-opus-4-8[1m]', displayName: 'Opus', description: 'Opus 4.8 · 1M контекст', supportsEffort: true, supportedEffortLevels: ['low', 'medium', 'high', 'xhigh', 'max'] },
-  { value: 'claude-fable-5[1m]', resolvedModel: 'claude-fable-5', displayName: 'Fable', description: 'Fable 5 · максимум', supportsEffort: true, supportedEffortLevels: ['low', 'medium', 'high', 'xhigh', 'max'] },
-  { value: 'sonnet', resolvedModel: 'claude-sonnet-5', displayName: 'Sonnet', description: 'Sonnet 5 · рутина', supportsEffort: true, supportedEffortLevels: ['low', 'medium', 'high', 'xhigh', 'max'] },
-  { value: 'haiku', resolvedModel: 'claude-haiku-4-5-20251001', displayName: 'Haiku', description: 'Haiku 4.5 · быстро' }
+  { value: 'opus[1m]', displayName: 'Opus', description: '1M контекст', supportsEffort: true, supportedEffortLevels: ['low', 'medium', 'high', 'xhigh', 'max'] },
+  // No floating 'fable' alias is published — its own id already names the
+  // version, so this one row is version-qualified by nature (and mirrors the
+  // live catalog, where the [1m] value resolves to the plain id).
+  { value: 'claude-fable-5[1m]', resolvedModel: 'claude-fable-5', displayName: 'Fable', description: '1M контекст', supportsEffort: true, supportedEffortLevels: ['low', 'medium', 'high', 'xhigh', 'max'] },
+  { value: 'sonnet', displayName: 'Sonnet', description: '', supportsEffort: true, supportedEffortLevels: ['low', 'medium', 'high', 'xhigh', 'max'] },
+  { value: 'haiku', displayName: 'Haiku', description: '' }
 ]
 
 /** Russian labels for Claude effort levels (display copy, not fetched). */
@@ -45,38 +63,8 @@ const FAMILY_TAGLINE: Record<string, string> = {
   haiku: 'Самая быстрая, короткие ответы'
 }
 
-/** Family word from any model id/alias/resolved id ('claude-opus-4-8[1m]' -> 'opus'). */
-function famOf(id: string): string {
-  return id
-    .replace(/^claude-/, '')
-    .replace(/\[1m\]/i, '')
-    .split(/[-\s]/)[0]
-    .toLowerCase()
-}
-
-/**
- * Parse a version-qualified display name out of a model id: 'claude-opus-4-8[1m]'
- * -> { name: 'Opus 4.8', ctx: true }; 'sonnet' -> { name: 'Sonnet' }. Future-proof:
- * a new 'claude-sonnet-6-2' becomes 'Sonnet 6.2' with no code change.
- */
-function parseVersion(id: string): { name: string; ctx: boolean } {
-  const ctx = /\[1m\]/i.test(id)
-  const s = id
-    .replace(/^claude-/, '')
-    .replace(/\[1m\]$/i, '')
-    .replace(/-\d{6,}$/, '') // trailing date stamp (haiku)
-  const parts = s.split('-')
-  const fam = parts[0].charAt(0).toUpperCase() + parts[0].slice(1)
-  const nums = parts.slice(1).filter((p) => /^\d+$/.test(p))
-  return { name: nums.length ? `${fam} ${nums.join('.')}` : fam, ctx }
-}
-
-/** Two ids refer to the same Claude model (matches alias/legacy/resolved by family). */
-function sameModel(a: string, b: string): boolean {
-  if (a === b) return true
-  if (!a || !b) return false
-  return famOf(a) === famOf(b)
-}
+// Model-identity rules (version-aware matching, row resolution) live in
+// features/ai/modelMatch so they can be unit-tested away from the component.
 
 /**
  * Whether a model has no effort setting. Trust explicit SDK data first
@@ -148,10 +136,13 @@ export function LaunchPad(): React.JSX.Element | null {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
-  // Fetch the dynamic model catalog when opening in Claude mode (if not already
-  // delivered by a session's init / restored from the persisted cache).
+  // Refresh the dynamic model catalog every time the console opens in Claude
+  // mode, so a newly released model appears without an app restart. The cached
+  // / restored list still renders instantly; this overwrites it once the fresh
+  // catalog arrives (main falls back to a standalone fetch when no session is
+  // live). An empty result is ignored, so we never blank out a good cache.
   useEffect(() => {
-    if (open && claudeMode && useUiStore.getState().claudeModels.length === 0) {
+    if (open && claudeMode) {
       void window.zarya.claudeCode.listModels().then((list) => {
         if (list.length) useUiStore.getState().set({ claudeModels: list })
       })
@@ -187,22 +178,14 @@ export function LaunchPad(): React.JSX.Element | null {
       // No separate ПО УМОЛЧАНИЮ row: an empty pin ('' = no override) resolves to
       // whichever catalog row matches the model actually running, so the markers
       // land on a real row (e.g. Fable) instead of a redundant default entry.
-      // Resolve to a SINGLE row value — exact match wins over family, so two
-      // same-family variants (sonnet + sonnet[1m]) never both light up.
-      const resolveRow = (v: string): string => {
-        const val = v || (catalog.find((m) => sameModel(m.resolvedModel || m.value, runningId))?.value ?? '')
-        if (!val) return ''
-        return (
-          catalog.find((m) => m.value === val)?.value ??
-          catalog.find((m) => sameModel(m.value, val))?.value ??
-          val
-        )
-      }
-      const selRow = resolveRow(model)
-      const actRow = resolveRow(committed)
+      // Resolve against the RENDERED rows only — resolving against the raw
+      // catalog could land on the 'default' entry, which is filtered out below,
+      // leaving every row dark while a model was plainly running.
+      const shown = shownRows(catalog)
+      const selRow = resolveRowValue(shown, model, runningId)
+      const actRow = resolveRowValue(shown, committed, runningId)
       const out: Row[] = []
-      for (const info of catalog) {
-        if (info.value === '' || famOf(info.value) === 'default') continue
+      for (const info of shown) {
         const ver = parseVersion(info.resolvedModel || info.value)
         const fam = famOf(info.value)
         out.push({
@@ -252,9 +235,12 @@ export function LaunchPad(): React.JSX.Element | null {
   const claudeEfforts = useMemo<string[]>(() => {
     const catalog = claudeModels.length ? claudeModels : CLAUDE_MODEL_FALLBACK
     const runningId = claudeStatus.model || ''
-    const val = model || (catalog.find((m) => sameModel(m.resolvedModel || m.value, runningId))?.value ?? '')
+    // Same rendered-rows resolve as the model list, so the chips always belong
+    // to the row the user sees highlighted (never the hidden 'default' entry).
+    const shown = shownRows(catalog)
+    const val = resolveRowValue(shown, model, runningId)
     if (!val) return ['low', 'medium', 'high', 'xhigh', 'max']
-    const info = catalog.find((m) => m.value === val) ?? catalog.find((m) => sameModel(m.value, val))
+    const info = shown.find((m) => m.value === val) ?? shown.find((m) => sameModel(m.value, val))
     if (info && effortOffFor(info)) return []
     return info?.supportedEffortLevels ?? ['low', 'medium', 'high', 'xhigh', 'max']
   }, [claudeModels, model, claudeStatus.model])

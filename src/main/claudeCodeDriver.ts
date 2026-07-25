@@ -16,6 +16,12 @@ import type {
   ClaudeStreamEvent
 } from '@shared/types'
 import type { AgentDriver } from './agentDriver'
+import {
+  bundledPkgName,
+  claudeExeName,
+  resolveClaudeExe,
+  type ExePick
+} from './claudeExe'
 // Types only (erased at runtime) — safe to import statically from the ESM-only
 // package; the runtime value is loaded via a dynamic import below.
 import type {
@@ -38,29 +44,72 @@ const loadSdk = new Function('m', 'return import(m)') as (
 ) => Promise<typeof import('@anthropic-ai/claude-agent-sdk')>
 
 /**
- * When packaged, the SDK resolves its bundled native binary to a path INSIDE
- * app.asar (which the OS can't exec — "exists but failed to launch"). The
- * binary is asar-unpacked, so point the SDK at the real on-disk copy. In dev
- * (unpacked) the SDK auto-resolves correctly, so return undefined.
+ * Path to the binary Zarya ships. When packaged, the SDK would resolve it to a
+ * path INSIDE app.asar (which the OS can't exec — "exists but failed to
+ * launch"); it is asar-unpacked, so point at the real on-disk copy. In dev it
+ * sits in node_modules.
  */
-function packagedClaudeExe(): string | undefined {
-  if (!app.isPackaged) return undefined
-  const pkg =
-    process.platform === 'win32'
-      ? 'claude-agent-sdk-win32-x64'
-      : process.platform === 'darwin'
-        ? `claude-agent-sdk-darwin-${process.arch}`
-        : `claude-agent-sdk-linux-${process.arch}`
-  const exe = process.platform === 'win32' ? 'claude.exe' : 'claude'
-  const p = join(
-    process.resourcesPath,
-    'app.asar.unpacked',
-    'node_modules',
-    '@anthropic-ai',
-    pkg,
-    exe
-  )
-  return existsSync(p) ? p : undefined
+function bundledClaudePath(): string | undefined {
+  const pkg = bundledPkgName(process.platform, process.arch)
+  const exe = claudeExeName(process.platform)
+  const roots = app.isPackaged
+    ? [join(process.resourcesPath, 'app.asar.unpacked', 'node_modules')]
+    : [join(app.getAppPath(), 'node_modules'), join(process.cwd(), 'node_modules')]
+  for (const root of roots) {
+    const p = join(root, '@anthropic-ai', pkg, exe)
+    if (existsSync(p)) return p
+  }
+  return undefined
+}
+
+/**
+ * How long a binary choice is trusted before we re-probe. The chosen PATH is
+ * stable across CLI self-updates (the file is replaced in place), so this only
+ * matters for the rarer flip — the user's CLI overtaking the bundled one while
+ * Zarya is open. Re-checking costs two `--version` spawns at most twice an
+ * hour, and only when a session starts or the launch console is opened.
+ */
+const EXE_RECHECK_MS = 30 * 60_000
+
+/** Hard deadline for a session-less control request (catalog / usage probe). */
+const IDLE_QUERY_TIMEOUT_MS = 20_000
+
+/**
+ * How long a freshly fetched model catalog is reused. Long enough that opening
+ * and closing the launch console repeatedly costs one CLI spawn, short enough
+ * that a model released (or a CLI updated) mid-session shows up on its own.
+ */
+const MODELS_CACHE_MS = 5 * 60_000
+
+/**
+ * Which `claude` to run. Prefers the user's own (self-updating) CLI when it is
+ * strictly newer on the same major, so newly released models show up without
+ * rebuilding Zarya — see claudeExe.ts for the policy. Cached with a TTL so a
+ * mid-session CLI update is picked up without restarting the app.
+ */
+let claudeExePromise: Promise<ExePick> | undefined
+let claudeExeAt = 0
+function claudeExe(): Promise<ExePick> {
+  const now = Date.now()
+  if (!claudeExePromise || now - claudeExeAt > EXE_RECHECK_MS) {
+    claudeExeAt = now
+    const pending = resolveClaudeExe({
+      bundledPath: bundledClaudePath(),
+      platform: process.platform,
+      env: process.env,
+      home: homedir()
+    }).then((pick) => {
+      if (process.env.ZARYA_DEBUG) {
+        console.error('[claude-code] binary:', pick.reason, pick.path ?? '(sdk default)')
+      }
+      return pick
+    })
+    // Keep serving the previous answer if a re-probe fails, so a transient
+    // spawn hiccup can never downgrade a working choice to 'sdk-default'.
+    const prev = claudeExePromise
+    claudeExePromise = prev ? pending.catch(() => prev) : pending
+  }
+  return claudeExePromise
 }
 
 /** An async message queue feeding query()'s streaming-input iterable. */
@@ -211,6 +260,22 @@ function usageFromResponse(resp: unknown): import('@shared/types').ClaudeUsage {
   }
 }
 
+/** Normalize the SDK's supportedModels() rows into our ClaudeModelInfo shape. */
+function mapModelList(
+  list: Array<Record<string, unknown>>
+): import('@shared/types').ClaudeModelInfo[] {
+  return list.map((m) => ({
+    value: String(m.value ?? ''),
+    resolvedModel: typeof m.resolvedModel === 'string' ? m.resolvedModel : undefined,
+    displayName: String(m.displayName ?? m.value ?? ''),
+    description: typeof m.description === 'string' ? m.description : undefined,
+    supportsEffort: typeof m.supportsEffort === 'boolean' ? m.supportsEffort : undefined,
+    supportedEffortLevels: Array.isArray(m.supportedEffortLevels)
+      ? (m.supportedEffortLevels as import('@shared/types').ClaudeEffortLevel[])
+      : undefined
+  }))
+}
+
 /** Extract the AskUserQuestion prompts from a tool input, if shaped like one. */
 function extractQuestions(input: unknown): ClaudeCliQuestion[] | undefined {
   const qs = (input as { questions?: unknown })?.questions
@@ -241,6 +306,10 @@ interface Session {
   bypass: boolean
   /** Effort override for this session, so init reports the effective value. */
   effort?: string
+  /** Model + ultracode this session is currently running, so a follow-up turn
+   *  can tell an actual change from a no-op and re-apply only what moved. */
+  model?: string
+  ultracode?: boolean
 }
 
 /**
@@ -321,6 +390,26 @@ export class ClaudeCodeDriver implements AgentDriver {
       // passes the live setting every turn) so a background session can't keep a
       // stale bypass flag that contradicts what the chip shows.
       existing.bypass = !!opts.bypass
+      // The renderer sends the committed model/effort/ultracode with EVERY
+      // turn. Applying the ones that actually changed is what lets a pick made
+      // while another tab was focused reach this session — the launch console's
+      // live setters only address the active conversation, so without this a
+      // background session kept its start-time model for the rest of its life.
+      const ultra = !!opts.ultracode
+      if (ultra !== !!existing.ultracode) {
+        this.setUltracode(requestId, ultra)
+        existing.ultracode = ultra
+        // Ultracode owns effortLevel (pins xhigh on, clears it off).
+        existing.effort = ultra ? 'xhigh' : undefined
+      }
+      if (!ultra && opts.effort !== existing.effort) {
+        this.setEffort(requestId, opts.effort)
+        existing.effort = opts.effort
+      }
+      if (opts.model !== existing.model) {
+        this.setModel(requestId, opts.model)
+        existing.model = opts.model
+      }
       existing.input.push(userMessage(opts.prompt))
       return
     }
@@ -372,7 +461,7 @@ export class ClaudeCodeDriver implements AgentDriver {
         })
       })
 
-    const claudeExe = packagedClaudeExe()
+    const exePath = (await claudeExe()).path
     const options: Options = {
       cwd: opts.cwd,
       abortController: abort,
@@ -393,7 +482,7 @@ export class ClaudeCodeDriver implements AgentDriver {
         // events. Opt in with ZARYA_DEBUG=1 when debugging the subprocess.
         if (process.env.ZARYA_DEBUG) console.error('[claude-code]', data.trim())
       },
-      ...(claudeExe ? { pathToClaudeCodeExecutable: claudeExe } : {}),
+      ...(exePath ? { pathToClaudeCodeExecutable: exePath } : {}),
       ...(opts.model ? { model: opts.model } : {}),
       ...(opts.effort ? { effort: opts.effort as Options['effort'] } : {}),
       // Ultracode is a flag-settings toggle (xhigh + workflow orchestration).
@@ -424,7 +513,9 @@ export class ClaudeCodeDriver implements AgentDriver {
       perms,
       pendingQuestions,
       bypass: !!opts.bypass,
-      effort: effortOverride
+      effort: effortOverride,
+      model: opts.model,
+      ultracode: !!opts.ultracode
     }
     this.sessions.set(requestId, session)
 
@@ -590,23 +681,19 @@ export class ClaudeCodeDriver implements AgentDriver {
 
   private standaloneUsageBusy = false
   /**
-   * Fetch /usage WITHOUT an active conversation, via a throwaway idle query, so
-   * the fuel gauge is accurate at startup and on demand (before the first
-   * prompt). Broadcast under requestId '__usage__' — the renderer applies usage
-   * to the ambient Claude status ahead of its conv-existence gate. Best-effort:
-   * fails silently for API-key/3P sessions where rate limits don't apply.
+   * Run a callback against a throwaway idle Agent-SDK query (no prompt pushed),
+   * then tear it down. Backs the standalone usage/model fetchers so the fuel
+   * gauge and model catalog are fresh before any session exists. Best-effort:
+   * returns undefined on any failure (experimental API / offline / API-key).
    */
-  async fetchUsageStandalone(): Promise<void> {
-    if (this.standaloneUsageBusy) return
-    // A live session's poll already covers this — don't spawn a second process.
-    if (this.sessions.size > 0) return
-    this.standaloneUsageBusy = true
+  private async withIdleQuery<T>(use: (query: unknown) => Promise<T>): Promise<T | undefined> {
     let input: ReturnType<typeof createInputQueue> | undefined
+    let timer: NodeJS.Timeout | undefined
     const abort = new AbortController()
     try {
       const sdk = await loadSdk('@anthropic-ai/claude-agent-sdk')
       input = createInputQueue()
-      const claudeExe = packagedClaudeExe()
+      const exePath = (await claudeExe()).path
       const query = sdk.query({
         prompt: input.iterable,
         options: {
@@ -614,22 +701,25 @@ export class ClaudeCodeDriver implements AgentDriver {
           permissionMode: 'default',
           includePartialMessages: false,
           stderr: () => {},
-          ...(claudeExe ? { pathToClaudeCodeExecutable: claudeExe } : {})
+          ...(exePath ? { pathToClaudeCodeExecutable: exePath } : {})
         }
-      }) as unknown as {
-        usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET?: () => Promise<unknown>
-      }
-      const fn = query.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET
-      if (typeof fn === 'function') {
-        const resp = await fn.call(query)
-        const usage = usageFromResponse(resp)
-        if (usage.fiveHourPct !== undefined || usage.sevenDayPct !== undefined || usage.subscriptionType) {
-          this.emit('__usage__', { type: 'usage', usage })
-        }
-      }
+      })
+      // The SDK's control requests (supportedModels/usage) have NO deadline of
+      // their own: a child that starts but never answers would leave this await
+      // pending forever — the process would never be aborted and the callers'
+      // in-flight guards would latch, freezing the catalog and the fuel poll
+      // until the app restarts. Race a timeout so this ALWAYS settles and the
+      // finally below actually runs.
+      return await Promise.race([
+        use(query),
+        new Promise<undefined>((res) => {
+          timer = setTimeout(() => res(undefined), IDLE_QUERY_TIMEOUT_MS)
+        })
+      ])
     } catch {
-      // experimental / offline / API-key session — best-effort.
+      return undefined
     } finally {
+      if (timer) clearTimeout(timer)
       try {
         input?.close()
       } catch {
@@ -640,6 +730,38 @@ export class ClaudeCodeDriver implements AgentDriver {
       } catch {
         /* ignore */
       }
+    }
+  }
+
+  /**
+   * Fetch /usage WITHOUT an active conversation, so the fuel gauge is accurate
+   * at startup and on demand (before the first prompt). Broadcast under
+   * requestId '__usage__' — the renderer applies usage to the ambient Claude
+   * status ahead of its conv-existence gate. Best-effort: fails silently for
+   * API-key/3P sessions where rate limits don't apply.
+   */
+  async fetchUsageStandalone(): Promise<void> {
+    if (this.standaloneUsageBusy) return
+    // A live session's poll already covers this — don't spawn a second process.
+    if (this.sessions.size > 0) return
+    this.standaloneUsageBusy = true
+    try {
+      await this.withIdleQuery(async (query) => {
+        const q = query as {
+          usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET?: () => Promise<unknown>
+        }
+        const fn = q.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET
+        if (typeof fn !== 'function') return
+        const usage = usageFromResponse(await fn.call(q))
+        if (
+          usage.fiveHourPct !== undefined ||
+          usage.sevenDayPct !== undefined ||
+          usage.subscriptionType
+        ) {
+          this.emit('__usage__', { type: 'usage', usage })
+        }
+      })
+    } finally {
       this.standaloneUsageBusy = false
     }
   }
@@ -668,44 +790,65 @@ export class ClaudeCodeDriver implements AgentDriver {
         supportedModels?: () => Promise<Array<Record<string, unknown>>>
       }
       const list = (await q.supportedModels?.()) ?? []
-      const models = list.map((m) => ({
-        value: String(m.value ?? ''),
-        resolvedModel: typeof m.resolvedModel === 'string' ? m.resolvedModel : undefined,
-        displayName: String(m.displayName ?? m.value ?? ''),
-        description: typeof m.description === 'string' ? m.description : undefined,
-        supportsEffort: typeof m.supportsEffort === 'boolean' ? m.supportsEffort : undefined,
-        supportedEffortLevels: Array.isArray(m.supportedEffortLevels)
-          ? (m.supportedEffortLevels as import('@shared/types').ClaudeEffortLevel[])
-          : undefined
-      }))
+      const models = mapModelList(list)
       if (models.length) this.emit(requestId, { type: 'models', models })
     } catch {
       // supported-models unavailable — the renderer keeps its fallback list.
     }
   }
 
-  /** On-demand model catalog (any live session; renderer falls back to cache). */
+  /**
+   * On-demand model catalog for the launch console.
+   *
+   * Deliberately does NOT trust a live session: the SDK's supportedModels() is
+   * `(await this.initialization).models` — a snapshot frozen when that session
+   * started, so for anyone mid-conversation it can never surface a model
+   * released since, which is exactly the bug this path exists to fix. Always
+   * ask a fresh process (cached briefly), and fall back to the session snapshot
+   * only if that yields nothing. Renderer keeps its own cache if both fail.
+   */
   async listModels(): Promise<import('@shared/types').ClaudeModelInfo[]> {
+    const fresh = await this.fetchModelsStandalone()
+    if (fresh.length) return fresh
     const entry = this.sessions.entries().next().value
     if (!entry) return []
     try {
       const q = entry[1].query as unknown as {
         supportedModels?: () => Promise<Array<Record<string, unknown>>>
       }
-      const list = (await q.supportedModels?.()) ?? []
-      return list.map((m) => ({
-        value: String(m.value ?? ''),
-        resolvedModel: typeof m.resolvedModel === 'string' ? m.resolvedModel : undefined,
-        displayName: String(m.displayName ?? m.value ?? ''),
-        description: typeof m.description === 'string' ? m.description : undefined,
-        supportsEffort: typeof m.supportsEffort === 'boolean' ? m.supportsEffort : undefined,
-        supportedEffortLevels: Array.isArray(m.supportedEffortLevels)
-          ? (m.supportedEffortLevels as import('@shared/types').ClaudeEffortLevel[])
-          : undefined
-      }))
+      return mapModelList((await q.supportedModels?.()) ?? [])
     } catch {
       return []
     }
+  }
+
+  /**
+   * Fetch the model catalog with a throwaway idle query (no live session
+   * needed). Guarded so overlapping launch-console opens never spawn a second
+   * process; concurrent callers await the same in-flight fetch, and a recent
+   * result is reused so repeated opens don't respawn the CLI.
+   */
+  private modelsStandalonePromise?: Promise<import('@shared/types').ClaudeModelInfo[]>
+  private modelsCache?: { at: number; list: import('@shared/types').ClaudeModelInfo[] }
+  private fetchModelsStandalone(): Promise<import('@shared/types').ClaudeModelInfo[]> {
+    const cached = this.modelsCache
+    if (cached && Date.now() - cached.at < MODELS_CACHE_MS) return Promise.resolve(cached.list)
+    if (this.modelsStandalonePromise) return this.modelsStandalonePromise
+    const run = this.withIdleQuery(async (query) => {
+      const q = query as { supportedModels?: () => Promise<Array<Record<string, unknown>>> }
+      return mapModelList((await q.supportedModels?.()) ?? [])
+    }).then((r) => {
+      const list = r ?? []
+      // Only a non-empty answer is worth caching — an offline blip must not
+      // pin an empty catalog for the next five minutes.
+      if (list.length) this.modelsCache = { at: Date.now(), list }
+      return list
+    })
+    this.modelsStandalonePromise = run
+    void run.finally(() => {
+      this.modelsStandalonePromise = undefined
+    })
+    return run
   }
 
   /** Change the model for a live session (streaming input mode). */

@@ -23,6 +23,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "qa:fake-agents": "node scripts/qa-fake-agents.mjs",
+    "qa:models": "npm run build && node scripts/qa-claude-catalog.mjs && node scripts/qa-model-refresh.mjs",
     "qa:codex": "npm run build && node scripts/qa-codex-driver.mjs && node scripts/qa-codex-graceful.mjs",
     "qa:acp": "npm run build && node scripts/qa-acp-driver.mjs && node scripts/qa-acp-graceful.mjs",
     "qa:agent": "npm run build && node scripts/lp-logic-test.mjs && node scripts/bypass-question-test.mjs && node scripts/lp-live-test.mjs && node scripts/qa-fake-agents.mjs && node scripts/qa-codex-driver.mjs && node scripts/qa-codex-graceful.mjs && node scripts/qa-acp-driver.mjs && node scripts/qa-acp-graceful.mjs",
@@ -31,7 +32,7 @@
     "dist": "npm run build && electron-builder"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.3.217",
+    "@anthropic-ai/claude-agent-sdk": "0.3.220",
     "@fontsource/handjet": "^5.3.0",
     "@fontsource/oswald": "^5.3.0",
     "@fontsource/pixelify-sans": "^5.3.0",
