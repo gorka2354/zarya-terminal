@@ -347,7 +347,6 @@
   border: 1px solid color-mix(in srgb, var(--accent-2) 45%, transparent);
   background: var(--accent);
   color: #fff5e8;
-  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.28);
 }
 .zy-ai-tool-btn--approve:hover {
   filter: brightness(1.1);
@@ -591,7 +590,6 @@
   background: var(--accent);
   border-color: var(--accent-2);
   color: #fff5e8;
-  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.28);
 }
 .zy-ai-textarea {
   flex: 1;
@@ -646,7 +644,6 @@
 .zy-ai-send {
   background: var(--accent);
   color: #fff5e8;
-  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.28);
 }
 .zy-ai-send:hover {
   filter: brightness(1.1);
@@ -660,7 +657,6 @@
 .zy-ai-stop {
   background: var(--danger);
   color: #fff5e8;
-  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.28);
 }
 .zy-ai-stop:hover {
   filter: brightness(1.1);

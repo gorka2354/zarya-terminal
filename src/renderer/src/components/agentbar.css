@@ -1,4 +1,7 @@
-/* Unified ask-agent bar at the bottom of the terminal column. */
+/* Unified ask-agent bar at the bottom of the terminal column.
+   Hairline frames (A) + a pixel-tick accent on the active engine chip (B).
+   Handjet (--font-tech) is kept for telemetry/readouts only; chip labels use the
+   clean UI voice. The fuel gauge + effort bars stay pixel — they ARE measurement. */
 .zy-agentbar {
   flex-shrink: 0;
   display: flex;
@@ -60,7 +63,8 @@
   flex-shrink: 0;
 }
 
-/* Pixel fuel gauge — 10 cells draining as the subscription window fills. */
+/* Pixel fuel gauge — 10 cells draining as the subscription window fills.
+   Kept pixel on purpose: this is a readout, not chrome. */
 .zy-fuel-gauge {
   display: inline-flex;
   gap: 2px;
@@ -95,7 +99,7 @@
   width: 34px;
   height: 34px;
   border: 1px solid var(--border-strong);
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -106,43 +110,59 @@
   flex: 1;
   min-width: 0;
   height: 34px;
-  padding: 0 10px;
-  /* Pixel input frame (Aseprite 9-slice, PX=2). */
-  border: 4px solid transparent;
-  border-image: url(../assets/pixel-frame-dark.png) 2 / 4px / 0 round;
+  padding: 0 11px;
+  /* Hairline frame — crisp 1px; the accent lives in the focus state, not a
+     hand-drawn PNG border. */
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
   background: var(--bg);
   color: var(--fg);
   font-family: var(--font-mono);
   font-size: 12.5px;
   outline: none;
-  image-rendering: pixelated;
-}
-:root[data-theme-type='light'] .zy-agentbar-input {
-  border-image-source: url(../assets/pixel-frame-light.png);
+  transition:
+    border-color 0.12s ease,
+    box-shadow 0.12s ease;
 }
 .zy-agentbar-input:focus {
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent);
+  border-color: var(--accent-2);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-2) 15%, transparent);
 }
-/* Effort (тяга) indicator — 4 mini bars + label, opens the launch pad. */
-.zy-agentbar-effort {
+
+/* Shared chip skeleton — hairline, clean UI label, no PNG frame. */
+.zy-agentbar-effort,
+.zy-agentbar-mode,
+.zy-agentbar-bypass,
+.zy-agentbar-model {
   flex-shrink: 0;
   height: 34px;
-  padding: 0 8px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  border: 4px solid transparent;
-  border-image: url(../assets/pixel-frame-dark.png) 2 / 4px / 0 round;
-  image-rendering: pixelated;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
   background: var(--bg);
   cursor: pointer;
+  white-space: nowrap;
+  transition:
+    border-color 0.12s ease,
+    background 0.12s ease;
+}
+.zy-agentbar-effort:hover,
+.zy-agentbar-mode:hover,
+.zy-agentbar-bypass:hover,
+.zy-agentbar-model:hover {
+  border-color: var(--border-strong);
+}
+
+/* Effort (тяга) indicator — 4 mini bars + label, opens the launch pad. Bars are
+   a readout, so the label keeps the Handjet telemetry voice. */
+.zy-agentbar-effort {
+  padding: 0 9px;
   font-family: var(--font-tech);
   font-size: 13px;
   letter-spacing: 0.04em;
   color: var(--fg-dim);
-}
-:root[data-theme-type='light'] .zy-agentbar-effort {
-  border-image-source: url(../assets/pixel-frame-light.png);
 }
 .zy-agentbar-effort-bars {
   display: inline-flex;
@@ -167,27 +187,38 @@
   color: var(--accent);
 }
 
-/* Bar mode chip — Терминал / Zarya / Claude Code (Enter targets the mode). */
+/* Bar mode chip — Терминал / Zarya / native engines. The label is UI voice
+   (uppercase, tracked) — clean, not the pixel Handjet. A selected native engine
+   earns a small pixel-tick accent + tint: the pixel becomes a rare mark, not a
+   frame around everything. */
 .zy-agentbar-mode {
-  flex-shrink: 0;
-  height: 34px;
+  position: relative;
   padding: 0 11px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border: 4px solid transparent;
-  border-image: url(../assets/pixel-frame-dark.png) 2 / 4px / 0 round;
-  image-rendering: pixelated;
-  background: var(--bg);
-  cursor: pointer;
-  font-family: var(--font-tech);
-  font-size: 12px;
-  letter-spacing: 0.06em;
+  font-family: var(--font-ui);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
   color: var(--fg-dim);
-  white-space: nowrap;
 }
-:root[data-theme-type='light'] .zy-agentbar-mode {
-  border-image-source: url(../assets/pixel-frame-light.png);
+.zy-agentbar-mode:not(.zy-agentbar-mode--shell) {
+  padding-left: 15px;
+  border-color: var(--border-strong);
+}
+/* Pixel-tick: a 3px plus-shaped mark drawn from box-shadow, crisp at 1×. Always
+   the signature gold so it reads on any chip colour (incl. the red Claude tint). */
+.zy-agentbar-mode:not(.zy-agentbar-mode--shell)::before {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 50%;
+  width: 3px;
+  height: 3px;
+  background: var(--accent-2);
+  box-shadow:
+    0 -3px 0 var(--accent-2),
+    0 3px 0 var(--accent-2);
+  transform: translateY(-50%);
 }
 .zy-agentbar-mode--zarya {
   color: var(--accent-2);
@@ -199,25 +230,13 @@
 
 /* Bypass-permissions toggle (--dangerously-skip-permissions). */
 .zy-agentbar-bypass {
-  flex-shrink: 0;
-  height: 34px;
   padding: 0 10px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border: 4px solid transparent;
-  border-image: url(../assets/pixel-frame-dark.png) 2 / 4px / 0 round;
-  image-rendering: pixelated;
-  background: var(--bg);
-  cursor: pointer;
-  font-family: var(--font-tech);
-  font-size: 11px;
-  letter-spacing: 0.06em;
+  font-family: var(--font-ui);
+  font-weight: 600;
+  font-size: 10px;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
   color: var(--fg-faint);
-  white-space: nowrap;
-}
-:root[data-theme-type='light'] .zy-agentbar-bypass {
-  border-image-source: url(../assets/pixel-frame-light.png);
 }
 .zy-agentbar-bypass-dot {
   width: 8px;
@@ -228,28 +247,17 @@
 }
 .zy-agentbar-bypass--on {
   color: var(--danger);
-  background: color-mix(in srgb, var(--danger) 12%, var(--bg));
+  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+  background: color-mix(in srgb, var(--danger) 10%, var(--bg));
 }
 .zy-agentbar-bypass--on .zy-agentbar-bypass-dot {
   background: var(--danger);
   box-shadow: 0 0 6px color-mix(in srgb, var(--danger) 80%, transparent);
 }
 
+/* Model chip — the model id is data, so its name keeps the Handjet readout voice. */
 .zy-agentbar-model {
-  flex-shrink: 0;
-  height: 34px;
-  padding: 0 8px;
-  border: 4px solid transparent;
-  border-image: url(../assets/pixel-frame-dark.png) 2 / 4px / 0 round;
-  image-rendering: pixelated;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: var(--bg);
-}
-:root[data-theme-type='light'] .zy-agentbar-model {
-  border-image-source: url(../assets/pixel-frame-light.png);
+  padding: 0 9px;
 }
 .zy-agentbar-model:active {
   transform: translateY(1px);
@@ -283,14 +291,16 @@
   width: 36px;
   height: 34px;
   border: 1px solid color-mix(in srgb, var(--accent-2) 40%, transparent);
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   background: var(--accent);
   color: #fff5e8;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.28);
+  transition:
+    filter 0.12s ease,
+    transform 0.05s ease;
 }
 .zy-agentbar-send:hover {
   filter: brightness(1.1);

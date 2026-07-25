@@ -117,7 +117,7 @@ export default function SettingsView(): React.JSX.Element | null {
             <div className="zy-settings-nav-group" />
             {visibleTabs.filter((t) => t.group === 'meta').map(renderNavItem)}
           </div>
-          <div className="zy-settings-nav-footer">ЗАРЯ v0.4 · ОРБИТА</div>
+          <div className="zy-settings-nav-footer">ЗАРЯ v0.5 · СОЗВЕЗДИЕ</div>
         </nav>
         <div className="zy-settings-content">
           <header className="zy-settings-content-header">

@@ -222,24 +222,20 @@ body {
 
 .zy-input {
   width: 100%;
-  padding: 6px 9px;
-  /* Pixel input frame (Aseprite 9-slice, PX=2) — a slightly hand-drawn border
-     instead of the 1px line. Themed via two colour variants (dark / light). */
-  border: 4px solid transparent;
-  border-image: url(../assets/pixel-frame-dark.png) 2 / 4px / 0 round;
-  border-radius: 0;
+  padding: 7px 10px;
+  /* Hairline frame — crisp 1px instead of the old 4px hand-drawn pixel PNG.
+     Pixel character now lives in accents (focus, active chips), not the border. */
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
   background: var(--bg);
   color: var(--fg);
   font-family: inherit;
   font-size: 13px;
   outline: none;
-  image-rendering: pixelated;
 }
 .zy-input:focus {
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent);
-}
-:root[data-theme-type='light'] .zy-input {
-  border-image-source: url(../assets/pixel-frame-light.png);
+  border-color: var(--accent-2);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-2) 16%, transparent);
 }
 .zy-input--mono {
   font-family: var(--font-mono);
@@ -1381,9 +1377,9 @@ body {
   height: 28px;
   padding: 0 9px;
   margin-right: 2px;
-  border: 4px solid transparent;
-  border-image: url(../assets/pixel-frame-dark.png) 2 / 4px / 0 round;
-  border-radius: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  border-radius: var(--radius-sm);
   image-rendering: pixelated;
   background: transparent;
   color: var(--fg-dim);
@@ -1395,9 +1391,6 @@ body {
   align-items: center;
   gap: 6px;
   -webkit-app-region: no-drag;
-}
-:root[data-theme-type='light'] .zy-theme-btn {
-  border-image-source: url(../assets/pixel-frame-light.png);
 }
 .zy-theme-btn:hover {
   color: var(--fg);
