@@ -1,5 +1,6 @@
 import { BrowserWindow, app, shell } from 'electron'
 import { join } from 'path'
+import { pathToFileURL } from 'url'
 import { CH } from '@shared/ipc'
 import type { AgentEngine } from '@shared/types'
 import type { AgentDriver } from './agentDriver'
@@ -210,10 +211,29 @@ function createWindow(): void {
   // system browser instead (Electron security checklist #13). No in-app flow
   // navigates the top frame today — this is a preventive guard against a future
   // stray location assignment or an anchor that slips past the click handlers.
+  // Our own renderer document, as an exact URL. `file://` as a whole is NOT our
+  // origin: accepting any file: URL let a single relative link in agent-rendered
+  // markdown (e.g. <a href="payload.html">, resolved against our own file: URL)
+  // navigate the top frame to an attacker-supplied local page — which then runs
+  // with the full preload API (pty.write, fs, agent control), i.e. RCE past every
+  // approval gate. DOMPurify strips `file:` hrefs but not relative ones, so the
+  // block has to live here, at the navigation boundary.
+  const appFileUrl = pathToFileURL(join(__dirname, '../renderer/index.html')).href
   const isOwnOrigin = (url: string): boolean => {
     const dev = process.env.ELECTRON_RENDERER_URL
-    if (dev && url.startsWith(dev)) return true
-    return url.startsWith('file://')
+    if (dev) {
+      // Dev server: compare parsed origins, never a bare prefix — the prefix
+      // form accepted 'http://localhost:5920@evil.com/' as our own.
+      try {
+        return new URL(url).origin === new URL(dev).origin
+      } catch {
+        return false
+      }
+    }
+    // Production: only the exact document we loaded (query/hash allowed, so a
+    // reload with '?x' or an in-page anchor still passes).
+    const bare = url.split(/[?#]/)[0]
+    return bare === appFileUrl
   }
   const guardNavigation = (e: Electron.Event, url: string): void => {
     if (isOwnOrigin(url)) return

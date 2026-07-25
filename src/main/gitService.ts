@@ -1,10 +1,80 @@
 import { execFile } from 'child_process'
-import { promises as fs } from 'fs'
-import { join } from 'path'
+import { existsSync, promises as fs } from 'fs'
+import { isAbsolute, join } from 'path'
 import { promisify } from 'util'
 import type { GitDiff, GitStatus } from '@shared/types'
 
 const execFileAsync = promisify(execFile)
+
+/**
+ * SECURITY: never spawn git by its bare name.
+ *
+ * On Windows libuv resolves a bare program name against the CHILD process's cwd
+ * BEFORE consulting PATH — and our cwd here is whatever folder the user merely
+ * opened. A `git.exe` dropped into a repo, a zip or a shared folder would then
+ * execute inside our main process the moment the git panel polls (it polls
+ * automatically on cwd change and after every finished command), with no
+ * approval gate and no trace in the UI. Verified empirically on Win11/Node 20:
+ * a planted binary won over the real git, and NoDefaultCurrentDirectoryInExePath
+ * does NOT prevent it. Same class of bug as the .git/config hardening below —
+ * a malicious folder must not be able to run code just by being opened.
+ *
+ * So: resolve ONE absolute path from trusted locations, cache it, and if that
+ * fails refuse to run git at all rather than falling back to the bare name.
+ */
+export function gitExeCandidates(
+  platform: string,
+  env: Record<string, string | undefined>
+): string[] {
+  if (platform === 'win32') {
+    const roots = [
+      env.ProgramFiles,
+      env['ProgramFiles(x86)'],
+      env.ProgramW6432,
+      env.LOCALAPPDATA ? join(env.LOCALAPPDATA, 'Programs') : undefined
+    ]
+    return roots.filter((r): r is string => !!r).map((r) => join(r, 'Git', 'cmd', 'git.exe'))
+  }
+  return ['/usr/bin/git', '/usr/local/bin/git', '/opt/homebrew/bin/git']
+}
+
+/**
+ * Ask the OS where git lives — running the lookup tool by absolute path AND
+ * from a trusted cwd, so the lookup itself can't be hijacked the same way
+ * (`where` searches the current directory before PATH).
+ */
+function whichGit(): Promise<string | undefined> {
+  const win = process.platform === 'win32'
+  const sysRoot = process.env.SystemRoot || 'C:\\Windows'
+  const tool = win ? join(sysRoot, 'System32', 'where.exe') : '/usr/bin/which'
+  const safeCwd = win ? sysRoot : '/'
+  return new Promise((resolve) => {
+    try {
+      execFile(tool, ['git'], { cwd: safeCwd, timeout: 5000, windowsHide: true }, (err, stdout) => {
+        if (err) return resolve(undefined)
+        const first = String(stdout)
+          .split(/\r?\n/)
+          .map((s) => s.trim())
+          .filter(Boolean)[0]
+        resolve(first && isAbsolute(first) && existsSync(first) ? first : undefined)
+      })
+    } catch {
+      resolve(undefined)
+    }
+  })
+}
+
+/** Absolute path to git, resolved once per app run. undefined → git disabled. */
+let gitExePromise: Promise<string | undefined> | undefined
+function gitExe(): Promise<string | undefined> {
+  if (!gitExePromise) {
+    gitExePromise = (async () => {
+      const fixed = gitExeCandidates(process.platform, process.env).find((p) => existsSync(p))
+      return fixed ?? (await whichGit())
+    })()
+  }
+  return gitExePromise
+}
 
 /**
  * Security: these read-only status/diff commands auto-run against ANY folder the
@@ -28,7 +98,11 @@ const GIT_HARDEN = [
 ]
 
 async function git(cwd: string, args: string[]): Promise<string> {
-  const { stdout } = await execFileAsync('git', [...GIT_HARDEN, ...args], {
+  const exe = await gitExe()
+  // No trusted git → no git features. Never fall back to the bare name: that is
+  // exactly the hijackable path this resolution exists to avoid.
+  if (!exe) throw new Error('git не найден в доверенных путях')
+  const { stdout } = await execFileAsync(exe, [...GIT_HARDEN, ...args], {
     cwd,
     timeout: 5000,
     maxBuffer: 10 * 1024 * 1024,

@@ -5,6 +5,32 @@ All notable changes to Zarya are documented here. This project uses
 
 ## Unreleased
 
+### Security
+
+Found by an adversarial audit of the whole attack surface (process spawning,
+Electron/IPC boundary, approval gates, secrets, supply chain).
+
+- **Опасная папка больше не выполняет код просто от того, что её открыли.**
+  `git` запускался по голому имени, а рабочим каталогом был любой каталог,
+  который пользователь открыл. На Windows libuv резолвит имя программы из cwd
+  дочернего процесса **раньше PATH**, поэтому `git.exe`, положенный в репозиторий,
+  zip или расшаренную папку, выполнялся в main-процессе — без гейта одобрения и
+  без следа в интерфейсе, автоматически при первом же опросе git-панели.
+  Воспроизведено экспериментально; `NoDefaultCurrentDirectoryInExePath` не
+  спасает. Теперь путь к git резолвится один раз из доверенных мест, а если
+  доверенный git не найден — git-функции просто выключаются, без отката на
+  голое имя (`src/main/gitService.ts`, `tests/gitExe.test.ts`).
+- **Ссылка в ответе агента больше не может увести окно на произвольный `file://`.**
+  Навигационный гейт считал своим origin любой `file:` URL, а лента ответов не
+  перехватывала клики по ссылкам — относительная ссылка в markdown резолвилась
+  относительно нашего же документа и загружала подсунутую локальную страницу с
+  полным доступом к preload-API (pty.write, файлы, управление агентом), то есть
+  RCE в обход всех гейтов. Теперь разрешён ровно наш документ, а ссылки из ленты
+  уходят во внешний браузер (`src/main/index.ts`,
+  `src/renderer/src/components/MissionFeed.tsx`).
+- **Dev-сервер сверяется по origin, а не по префиксу строки** — префиксная
+  проверка принимала `http://localhost:5920@evil.com/` за свой origin.
+
 ### Fixed
 
 - **New Claude models no longer stay invisible.** The model catalog is served by

@@ -20,6 +20,7 @@ import { getSettings, useSettingsStore } from '@/state/settingsStore'
 import { useSessionsStore } from '@/state/sessionsStore'
 import { useUiStore } from '@/state/uiStore'
 import { registerAiBridge } from './aiBridge'
+import { sameModel } from './modelMatch'
 
 /**
  * AI chat store: multiple conversations, streaming assistant text, and an
@@ -653,14 +654,12 @@ export const useAiStore = create<AiState>((set, get) => {
           // Don't clobber a model the user just switched TO mid-turn: the finished
           // turn ran the OLD model, but a live setModel already re-pinned the next
           // one. Only correct when the committed pin still matches what ran.
+          // Version-aware: a family-only compare treated 'claude-opus-4-8' and
+          // 'claude-opus-5' as the same pin, so a genuine generation switch was
+          // indistinguishable from a mid-turn one. A floating alias ('opus[1m]')
+          // still matches whatever it resolves to — that is not a switch.
           const pin = getSettings().ai.claudeModel
-          const famOf = (id: string): string =>
-            (id || '')
-              .replace(/^claude-/, '')
-              .replace(/\[1m\]/i, '')
-              .split(/[-\s]/)[0]
-              .toLowerCase()
-          const pinMatches = !pin || famOf(pin) === famOf(ran[0])
+          const pinMatches = !pin || sameModel(pin, ran[0])
           if (pinMatches && st.model !== ran[0]) {
             useUiStore.getState().set({ claudeStatus: { ...st, model: ran[0] } })
           }

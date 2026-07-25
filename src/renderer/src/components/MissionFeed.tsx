@@ -141,8 +141,20 @@ export function MissionFeed({ sessionId }: { sessionId: string }): React.JSX.Ele
   // Patch-card action buttons (Скопировать / Вставить / Выполнить), wired via
   // event delegation exactly like the AI panel.
   const onFeedClick = (e: React.MouseEvent): void => {
-    const btn = (e.target as HTMLElement).closest<HTMLElement>('[data-code-action]')
-    if (!btn) return
+    const target = e.target as HTMLElement
+    const btn = target.closest<HTMLElement>('[data-code-action]')
+    if (!btn) {
+      // Links in agent-rendered markdown must leave the app, never navigate the
+      // top frame: a RELATIVE href resolves against our own file: URL and would
+      // load an attacker-supplied local page with the full preload API. Main
+      // blocks that too, but intercepting here is what makes real links work.
+      const link = target.closest<HTMLAnchorElement>('a[href]')
+      if (link) {
+        e.preventDefault()
+        window.zarya.app.openExternal(link.getAttribute('href') ?? '')
+      }
+      return
+    }
     const wrapper = btn.closest<HTMLElement>('.zy-md-code')
     const encoded = wrapper?.getAttribute('data-code') ?? ''
     const code = encoded ? decodeURIComponent(encoded) : ''
