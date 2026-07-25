@@ -346,31 +346,23 @@ export function LaunchPad(): React.JSX.Element | null {
     } else {
       void useSettingsStore.getState().update({ ai: { provider, model, effort } as never })
     }
-    // Settings apply instantly; keep the console open through the full
-    // countdown (3·2·1·ПОЕХАЛИ) + liftoff drawn on the canvas, then close.
-    window.setTimeout(close, 3000)
+    // Settings apply instantly; a brief pixel spark confirms the change, then
+    // the console closes — no long countdown/liftoff.
+    window.setTimeout(close, 450)
   }
 
   return (
     <div className="zy-lp-backdrop" onMouseDown={close}>
       <div className="zy-launchpad" onMouseDown={(e) => e.stopPropagation()}>
-        <div className={`zy-lp-console${launching ? ' zy-lp-console--launching' : ' zy-lp-console--idle'}`}>
-          {launching ? (
-            <>
-              <PadScene launching={launching} rocketType={rocketType} effortIdx={effortIdx} />
-              <span className="zy-lp-console-title">ПУСКОВОЙ КОМПЛЕКС</span>
-              <span ref={clockRef} className="zy-lp-clock" />
-              <span className="zy-lp-scan" />
-            </>
-          ) : (
-            <div className="zy-lp-idle">
-              <IdleRocket type={rocketType} />
-              <div className="zy-lp-idle-meta">
-                <span className="zy-lp-idle-title">ПУСКОВОЙ КОМПЛЕКС</span>
-                <span ref={clockRef} className="zy-lp-idle-clock" />
-              </div>
+        <div className={`zy-lp-console zy-lp-console--idle${launching ? ' zy-lp-console--fired' : ''}`}>
+          <div className="zy-lp-idle">
+            <IdleRocket type={rocketType} />
+            <div className="zy-lp-idle-meta">
+              <span className="zy-lp-idle-title">ПУСКОВОЙ КОМПЛЕКС</span>
+              <span ref={clockRef} className="zy-lp-idle-clock" />
             </div>
-          )}
+            {launching && <span className="zy-lp-spark" aria-hidden />}
+          </div>
         </div>
 
         <div className="zy-lp-body">
@@ -490,29 +482,7 @@ export function LaunchPad(): React.JSX.Element | null {
   )
 }
 
-// 5×7 pixel-font glyphs for the on-canvas countdown (3·2·1·ПОЕХАЛИ!).
-const PXF: Record<string, string[]> = {
-  '1': ['00100', '01100', '00100', '00100', '00100', '00100', '01110'],
-  '2': ['01110', '10001', '00001', '00010', '00100', '01000', '11111'],
-  '3': ['11110', '00001', '00001', '00110', '00001', '00001', '11110'],
-  П: ['11111', '10001', '10001', '10001', '10001', '10001', '10001'],
-  О: ['01110', '10001', '10001', '10001', '10001', '10001', '01110'],
-  Е: ['11111', '10000', '10000', '11110', '10000', '10000', '11111'],
-  Х: ['10001', '10001', '01010', '00100', '01010', '10001', '10001'],
-  А: ['01110', '10001', '10001', '11111', '10001', '10001', '10001'],
-  Л: ['00111', '01001', '01001', '01001', '01001', '01001', '10001'],
-  И: ['10001', '10001', '10011', '10101', '11001', '10001', '10001'],
-  '!': ['00100', '00100', '00100', '00100', '00100', '00000', '00100']
-}
 
-interface Rocket {
-  baseTop: number
-  y: number
-  vy: number
-  thr: number
-  launching: boolean
-  gone: number
-}
 
 // Rocket sprites (11×18) — hand-designed pixel art (generated via the Aseprite/
 // pixelforge pipeline), one per model slot. Palette chars below.
@@ -546,243 +516,4 @@ function IdleRocket({ type }: { type: number }): React.JSX.Element {
       }
   }, [type])
   return <canvas ref={ref} width={11} height={18} className="zy-lp-idle-rocket" />
-}
-
-/**
- * Pixel launch-pad scene (a faithful port of the design's `_drawScene`): a
- * vertical-gradient sky over a planet arc, drifting twinkling stars, a gantry
- * with a blinking beacon, and one of five model-specific pixel rockets whose
- * exhaust flame scales with ТЯГА. Hitting ПУСК plays a canvas countdown
- * (3·2·1·ПОЕХАЛИ!) then the rocket accelerates off-frame, leaving a star-streak
- * trail, and glides back to the pad. Internal buffer 132×48, CSS-upscaled with
- * image-rendering:pixelated for crisp pixel art. Only mounted during launch now.
- */
-function PadScene({
-  launching,
-  rocketType,
-  effortIdx
-}: {
-  launching: boolean
-  rocketType: number
-  effortIdx: number
-}): React.JSX.Element {
-  const ref = useRef<HTMLCanvasElement>(null)
-  const launchRef = useRef(false)
-  const typeRef = useRef(rocketType)
-  const effortRef = useRef(effortIdx)
-  const launchAt = useRef(0)
-  launchRef.current = launching
-  typeRef.current = rocketType
-  effortRef.current = effortIdx
-
-  useEffect(() => {
-    const cv = ref.current
-    const ctx = cv?.getContext('2d')
-    if (!cv || !ctx) return
-    const W = 132
-    const H = 48
-    let raf = 0
-    let last = performance.now()
-    let beacon = 0
-    let sceneLaunched = false
-    const A = '#e2231a'
-    const G = '#e0b15a'
-
-    const stars = Array.from({ length: 24 }, () => ({
-      x: Math.random() * W,
-      y: Math.random() * H,
-      s: Math.random() < 0.22 ? 2 : 1,
-      p: Math.random() * 6
-    }))
-    let streaks: Array<{ x: number; y: number; v: number }> = []
-    const R: Rocket = { baseTop: H - 22, y: H - 22, vy: 0, thr: 0, launching: false, gone: 0 }
-
-    const px = (x: number, y: number, w: number, h: number, c: string): void => {
-      if (w <= 0 || h <= 0) return
-      ctx.fillStyle = c
-      ctx.fillRect(x | 0, y | 0, w, h)
-    }
-
-    const drawPixelText = (
-      text: string,
-      cx: number,
-      cy: number,
-      ps: number,
-      main: string,
-      shadow: string,
-      alpha: number
-    ): void => {
-      const gw = 5
-      const gh = 7
-      const sp = 1
-      const total = text.length * (gw + sp) * ps - sp * ps
-      let x = Math.round(cx - total / 2)
-      const y = Math.round(cy - (gh * ps) / 2)
-      ctx.globalAlpha = alpha
-      for (const ch of text) {
-        const g = PXF[ch]
-        if (g) {
-          for (let r = 0; r < gh; r++)
-            for (let c = 0; c < gw; c++)
-              if (g[r][c] === '1') {
-                ctx.fillStyle = shadow
-                ctx.fillRect(x + c * ps + 1, y + r * ps + 2, ps, ps)
-              }
-          for (let r = 0; r < gh; r++)
-            for (let c = 0; c < gw; c++)
-              if (g[r][c] === '1') {
-                ctx.fillStyle = main
-                ctx.fillRect(x + c * ps, y + r * ps, ps, ps)
-              }
-        }
-        x += (gw + sp) * ps
-      }
-      ctx.globalAlpha = 1
-    }
-
-    const draw = (now: number): void => {
-      const dt = Math.min(48, now - last)
-      last = now
-      beacon += dt
-
-      // sky + planet arc
-      const g = ctx.createLinearGradient(0, 0, 0, H)
-      g.addColorStop(0, '#05070f')
-      g.addColorStop(1, '#0a1024')
-      ctx.fillStyle = g
-      ctx.fillRect(0, 0, W, H)
-      ctx.fillStyle = '#0c1a38'
-      ctx.beginPath()
-      ctx.arc(W * 0.5, H + 52, 72, Math.PI, 2 * Math.PI)
-      ctx.fill()
-      ctx.strokeStyle = 'rgba(90,140,220,.45)'
-      ctx.lineWidth = 1
-      ctx.beginPath()
-      ctx.arc(W * 0.5, H + 52, 72, Math.PI, 2 * Math.PI)
-      ctx.stroke()
-
-      // twinkling drifting stars
-      for (const st of stars) {
-        st.p += dt * 0.004
-        st.y += dt * 0.004
-        if (st.y > H) st.y = 0
-        ctx.globalAlpha = 0.3 + 0.55 * (0.5 + 0.5 * Math.sin(st.p))
-        px(st.x, st.y, st.s, st.s, '#f0ecd8')
-      }
-      ctx.globalAlpha = 1
-
-      // gantry + blinking beacon
-      px(W - 18, H - 26, 2, 26, '#33405f')
-      px(W - 24, H - 24, 6, 1, '#33405f')
-      px(W - 24, H - 16, 6, 1, '#33405f')
-      px(W - 26, H - 8, 10, 1, '#33405f')
-      if (beacon % 1400 < 700) {
-        ctx.globalAlpha = 0.9
-        px(W - 18, H - 28, 2, 2, A)
-        ctx.globalAlpha = 1
-      }
-
-      // countdown → liftoff trigger
-      let cd: string | null = null
-      if (launchRef.current) {
-        if (!launchAt.current) launchAt.current = now
-        const el = now - launchAt.current
-        cd = el < 650 ? '3' : el < 1300 ? '2' : el < 1900 ? '1' : el < 3000 ? 'ПОЕХАЛИ!' : null
-        if (el >= 1900 && !sceneLaunched) {
-          sceneLaunched = true
-          R.launching = true
-          R.gone = 0
-          R.vy = 0
-        }
-      } else {
-        launchAt.current = 0
-        sceneLaunched = false
-      }
-
-      // rocket physics
-      if (R.launching) {
-        R.thr = Math.min(1, R.thr + dt * 0.0018)
-        if (R.thr > 0.5) {
-          R.vy -= dt * 0.02
-          R.y += R.vy
-        }
-        if (R.y < -16) {
-          R.launching = false
-          R.gone = now
-        }
-        if (Math.random() < 0.7) streaks.push({ x: Math.random() * W, y: -2, v: 2 + Math.random() * 3 })
-      } else {
-        const eb = [0.14, 0.34, 0.58, 0.92][effortRef.current] ?? 0.34
-        R.thr += (eb - R.thr) * 0.12
-        if (R.gone) {
-          if (now - R.gone > 700) {
-            R.y = -16
-            R.gone = 0
-          }
-        }
-        R.y += (R.baseTop - R.y) * 0.14
-        R.vy = 0
-      }
-
-      // star-streak trail
-      ctx.globalAlpha = 0.85
-      for (let i = streaks.length - 1; i >= 0; i--) {
-        const s = streaks[i]
-        s.y += s.v * dt * 0.16
-        px(s.x, s.y, 1, 3, '#f0ecd8')
-        if (s.y > H + 4) streaks.splice(i, 1)
-      }
-      ctx.globalAlpha = 1
-
-      // launch pad base
-      px(Math.round(W * 0.42) - 4, H - 7, 8, 2, '#3a4560')
-
-      // rocket sprite (hand-drawn pixel art, one per model) + thrust plume
-      if (R.y > -16) {
-        const g = ROCKETS[typeRef.current % ROCKETS.length]
-        const thr = R.thr
-        const cx = Math.round(W * 0.42)
-        const jitter = thr > 0.2 && !R.launching ? Math.round((Math.random() - 0.5) * thr * 2) : 0
-        const rx = cx - 5 + jitter // sprite is 11 wide, centre col = 5
-        const ry = Math.round(R.y) - 4
-        // extra exhaust plume during thrust, below the sprite's own flame
-        if (thr > 0.14) {
-          const L = Math.round(thr * 16) + (Math.random() < 0.5 ? 1 : 0)
-          px(cx - 1 + jitter, ry + 18, 2, L, '#fff2c0')
-          px(cx - 2 + jitter, ry + 18, 4, Math.max(1, L - 3), G)
-          px(cx - 1 + jitter, ry + 19, 2, L + 2, A)
-          if (thr > 0.62) {
-            const sc = Math.max(2, Math.round(L * 0.5))
-            px(cx - 3 + jitter, ry + 19, 1, sc, G)
-            px(cx + 2 + jitter, ry + 19, 1, sc, G)
-          }
-        }
-        // blit the sprite
-        for (let r = 0; r < g.length; r++) {
-          const row = g[r]
-          for (let c = 0; c < row.length; c++) {
-            const col = ROCKET_PAL[row[c]]
-            if (col) px(rx + c, ry + r, 1, 1, col)
-          }
-        }
-      }
-
-      // CRT scanline dim
-      ctx.globalAlpha = 0.06
-      for (let y = 0; y < H; y += 2) px(0, y, W, 1, '#000')
-      ctx.globalAlpha = 1
-
-      // countdown glyph
-      if (cd) {
-        const big = cd.length <= 2
-        const ps = big ? 4 : 2
-        drawPixelText(cd, W / 2, H / 2, ps, G, A, 1)
-      }
-
-      raf = requestAnimationFrame(draw)
-    }
-    raf = requestAnimationFrame(draw)
-    return () => cancelAnimationFrame(raf)
-  }, [])
-  return <canvas ref={ref} width={132} height={48} className="zy-lp-canvas" />
 }

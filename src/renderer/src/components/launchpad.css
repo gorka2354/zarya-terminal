@@ -85,6 +85,53 @@
   color: var(--accent-2);
   text-shadow: 0 0 8px color-mix(in srgb, var(--accent-2) 55%, transparent);
 }
+
+/* ПУСК feedback — a brief pixel spark + jolt, replacing the 3s countdown/liftoff. */
+.zy-lp-console--fired {
+  animation: zy-lp-jolt 0.4s ease-out;
+}
+@keyframes zy-lp-jolt {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  35% {
+    transform: translateY(-2px);
+  }
+}
+.zy-lp-spark {
+  position: absolute;
+  left: 23px;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  transform: translate(-50%, -50%);
+  background: var(--accent-2);
+  image-rendering: pixelated;
+  box-shadow:
+    0 -7px 0 var(--accent-2),
+    0 7px 0 var(--accent-2),
+    -7px 0 0 var(--accent),
+    7px 0 0 var(--accent),
+    0 -13px 0 color-mix(in srgb, var(--accent-2) 55%, transparent),
+    0 13px 0 color-mix(in srgb, var(--accent-2) 55%, transparent);
+  animation: zy-lp-spark 0.42s steps(5) forwards;
+  pointer-events: none;
+}
+@keyframes zy-lp-spark {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.3);
+  }
+  35% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(2);
+  }
+}
 .zy-lp-console-title {
   position: absolute;
   top: 6px;
