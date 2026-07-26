@@ -1,4 +1,5 @@
 import { BrowserWindow, app, dialog, ipcMain, shell } from 'electron'
+import { existsSync } from 'fs'
 import { CH } from '@shared/ipc'
 import type {
   AgentEngine,
@@ -24,8 +25,15 @@ import type { HistoryStore } from './historyStore'
 import type { PtyManager } from './ptyManager'
 import type { SessionStore } from './sessionStore'
 import type { SettingsStore } from './settingsStore'
+import type { SttService } from './sttService'
 import { detectAiClis } from './aiClis'
 import { detectShells, resolveProfile } from './shellProfiles'
+import {
+  describeProfile,
+  newlyExecutable,
+  sanitizeProfile,
+  sanitizeProfiles
+} from './shellProfileGuard'
 import type { WorkflowStore } from './workflowStore'
 
 export interface IpcContext {
@@ -38,6 +46,8 @@ export interface IpcContext {
   aiProxy: AiProxy
   /** Registry of native agent drivers, keyed by engine. */
   agentRegistry: Map<AgentEngine, AgentDriver>
+  /** Local speech-to-text (dictation into the bar). */
+  stt: SttService
   requestQuitConfirmed: () => void
 }
 
@@ -54,6 +64,67 @@ export function registerIpc(ctx: IpcContext): void {
   } = ctx
   const driverFor = (engine: AgentEngine): AgentDriver | undefined => agentRegistry.get(engine)
 
+  /**
+   * SECURITY: `terminal.customProfiles` names programs the app will spawn, and
+   * this channel is reachable from the renderer — so a compromised renderer could
+   * otherwise register a profile and have its binary launched on every later
+   * start. That converts a transient compromise into persistence.
+   *
+   * Two rules. Structurally invalid entries are dropped (see shellProfileGuard).
+   * Anything that would newly EXECUTE something — a new profile, or an edit to a
+   * path/argv/env/integration — additionally requires the user to confirm, with
+   * the path and argv shown verbatim. Declining leaves the stored profiles
+   * untouched; it never half-applies. Renames and icon changes don't prompt.
+   */
+  /** How many profiles the confirmation dialog spells out before summarising. */
+  const SHOWN_PROFILES = 5
+
+  async function guardProfilePatch(patch: Partial<Settings>): Promise<Partial<Settings>> {
+    const terminalPatch = patch.terminal as Partial<Settings['terminal']> | undefined
+    if (terminalPatch?.customProfiles === undefined) return patch
+
+    const prev = settingsStore.get().terminal.customProfiles
+    const next = sanitizeProfiles(terminalPatch.customProfiles, existsSync)
+    const withProfiles = (profiles: typeof prev): Partial<Settings> => ({
+      ...patch,
+      terminal: { ...terminalPatch, customProfiles: profiles } as Settings['terminal']
+    })
+
+    const fresh = newlyExecutable(prev, next)
+    if (fresh.length === 0) return withProfiles(next)
+
+    const win = getWindow()
+    const opts = {
+      type: 'warning' as const,
+      buttons: ['Отклонить', 'Добавить профиль'],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+      title: 'Заря — новый профиль терминала',
+      message:
+        fresh.length === 1
+          ? 'Приложение просит добавить профиль терминала'
+          : `Приложение просит добавить профили терминала (${fresh.length})`,
+      // Native dialogs don't scroll: show a handful and say how many more there
+      // are, rather than emitting a wall of text whose tail is unreachable.
+      detail:
+        `Профиль запускает указанную программу при каждом открытии терминала — и остаётся после перезапуска.\n\n` +
+        fresh.slice(0, SHOWN_PROFILES).map(describeProfile).join('\n\n') +
+        (fresh.length > SHOWN_PROFILES
+          ? `\n\n…и ещё ${fresh.length - SHOWN_PROFILES} — будут добавлены все.`
+          : '') +
+        `\n\nЕсли вы этого не делали, отклоните.`
+    }
+    const { response } = win
+      ? await dialog.showMessageBox(win, opts)
+      : await dialog.showMessageBox(opts)
+    // Fail closed: anything other than an explicit "add" keeps the old list.
+    // Re-read it after the await — the snapshot taken before the dialog opened
+    // may be stale if another settings:set landed meanwhile, and writing it back
+    // would silently undo that one (mergeDeep replaces arrays wholesale).
+    return withProfiles(response === 1 ? next : settingsStore.get().terminal.customProfiles)
+  }
+
   // ------------------------------------------------------------------- pty
   ipcMain.handle(CH.ptySpawn, async (_e, req: PtySpawnRequest) => {
     const settings = settingsStore.get()
@@ -62,7 +133,14 @@ export function registerIpc(ctx: IpcContext): void {
       settings.terminal.customProfiles
     )
     if (!profile) return { ok: false, error: 'Не найден ни один shell.' }
-    return ptyManager.spawn(req, profile)
+    // Defence in depth: the settings file is also editable by hand (and by
+    // anything running as the user), so validate again at the point of spawn
+    // rather than trusting that everything stored went through the gate above.
+    // Detected profiles are re-checked too — they are cheap to validate and a
+    // bad one would be just as executable.
+    const safe = sanitizeProfile({ ...profile, detected: false }, existsSync)
+    if (!safe) return { ok: false, error: 'Профиль терминала отклонён проверкой безопасности.' }
+    return ptyManager.spawn(req, { ...safe, detected: profile.detected })
   })
   ipcMain.on(CH.ptyWrite, (_e, sessionId: string, data: string) => {
     ptyManager.write(sessionId, data)
@@ -99,11 +177,43 @@ export function registerIpc(ctx: IpcContext): void {
 
   // -------------------------------------------------------------- settings
   ipcMain.handle(CH.settingsGet, () => settingsStore.get())
-  ipcMain.handle(CH.settingsSet, (_e, patch: Partial<Settings>) => settingsStore.set(patch))
+  ipcMain.handle(CH.settingsSet, async (_e, patch: Partial<Settings>) =>
+    settingsStore.set(await guardProfilePatch(patch))
+  )
   ipcMain.handle(CH.settingsSetSecret, (_e, provider: AiProviderKind, key: string) =>
     settingsStore.setSecret(provider, key)
   )
   ipcMain.handle(CH.settingsProviderStatus, () => settingsStore.providerStatus())
+
+  // ------------------------------------------------------------------- stt
+  ipcMain.handle(CH.sttState, () => ctx.stt.state())
+  ipcMain.handle(CH.sttEnsureModel, async () => {
+    try {
+      await ctx.stt.ensureModel((p) => getWindow()?.webContents.send(CH.sttProgress, p))
+      getWindow()?.webContents.send(CH.sttProgress, null)
+      return { ok: true }
+    } catch (e) {
+      getWindow()?.webContents.send(CH.sttProgress, null)
+      return { ok: false, error: e instanceof Error ? e.message : String(e) }
+    }
+  })
+  ipcMain.handle(CH.sttTranscribe, async (_e, samples: unknown, sampleRate: unknown) => {
+    // Bound what the renderer can hand us: a 5-minute utterance at 48 kHz is
+    // already far past dictation, and an unbounded buffer is an easy way to
+    // exhaust memory in the main process.
+    const MAX_SAMPLES = 48000 * 300
+    const rate = typeof sampleRate === 'number' && sampleRate >= 8000 && sampleRate <= 192000 ? sampleRate : 0
+    if (!rate) return { ok: false, error: 'Некорректная частота дискретизации' }
+    if (!(samples instanceof Float32Array) || samples.length === 0)
+      return { ok: false, error: 'Пустая запись' }
+    if (samples.length > MAX_SAMPLES) return { ok: false, error: 'Запись слишком длинная' }
+    try {
+      const text = await ctx.stt.transcribe(samples, rate)
+      return { ok: true, text }
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : String(e) }
+    }
+  })
 
   // ---------------------------------------------------------------- shells
   ipcMain.handle(CH.shellsDetect, async () => {

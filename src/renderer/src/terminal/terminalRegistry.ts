@@ -91,3 +91,12 @@ export function takePendingRestore(sessionId: string): string | undefined {
 export function peekPendingRestore(sessionId: string): string | undefined {
   return pendingRestore.get(sessionId)
 }
+
+// QA hook: the live xterm option bag of the first registered terminal, so a
+// harness can verify that a settings change actually reached the terminal.
+;(window as unknown as { __zaryaTermOptions?: () => unknown }).__zaryaTermOptions = () => {
+  const first = handles.values().next().value as TermHandle | undefined
+  if (!first) return null
+  const o = first.term.options
+  return { fontSize: o.fontSize, fontFamily: o.fontFamily, lineHeight: o.lineHeight }
+}

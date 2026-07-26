@@ -58,7 +58,13 @@ export const ACP_CAPABILITIES: AgentCapabilities = {
   models: false,
   modelsWithoutSession: false,
   effort: false,
-  bypass: true,
+  // bypass:false — this driver has no bypass to offer: `setBypass()` is a no-op
+  // and every tool call goes through session/request_permission unconditionally
+  // (see handlePermissionRequest). Advertising it drew a live «АВТОПИЛОТ» toggle
+  // the user could switch on for Gemini/Kimi/Qwen while nothing changed — the bar
+  // claiming one gate policy while the driver ran another. Declaring it false
+  // makes the bar show the truth: this engine always asks.
+  bypass: false,
   resumableSessions: true,
   usage: false,
   structuredQuestions: false

@@ -114,20 +114,30 @@ function claudeExe(): Promise<ExePick> {
 
 /** An async message queue feeding query()'s streaming-input iterable. */
 function createInputQueue(): {
-  push: (m: SDKUserMessage) => void
+  push: (m: SDKUserMessage) => boolean
   close: () => void
+  isClosed: () => boolean
   iterable: AsyncIterable<SDKUserMessage>
 } {
   const buffer: SDKUserMessage[] = []
   let pending: ((r: IteratorResult<SDKUserMessage>) => void) | null = null
   let closed = false
   return {
+    /**
+     * Returns false when the queue is already closed — nobody will ever read it
+     * again. Silently buffering into a dead queue lost the user's message: the
+     * UI had already switched to «working», the prompt went nowhere, and the
+     * only visible trace was an unrelated «process exited» banner.
+     */
     push(m) {
+      if (closed) return false
       if (pending) {
         pending({ value: m, done: false })
         pending = null
       } else buffer.push(m)
+      return true
     },
+    isClosed: () => closed,
     close() {
       closed = true
       if (pending) {
@@ -310,6 +320,8 @@ interface Session {
    *  can tell an actual change from a no-op and re-apply only what moved. */
   model?: string
   ultracode?: boolean
+  /** The user pressed Esc: a subsequent process exit is expected, not a failure. */
+  interrupted?: boolean
 }
 
 /**
@@ -384,8 +396,14 @@ export class ClaudeCodeDriver implements AgentDriver {
 
   async start(requestId: string, opts: ClaudeStartOpts): Promise<void> {
     // A follow-up turn on an existing live session just enqueues the message.
+    // Unless that session is on its way out: an interrupt closes the input queue
+    // and the process exits asynchronously, so for a moment a dead session is
+    // still in the map. Sending into it lost the prompt without a word — drop
+    // the entry and fall through to spawning a fresh session instead.
     const existing = this.sessions.get(requestId)
-    if (existing) {
+    if (existing?.input.isClosed()) {
+      this.sessions.delete(requestId)
+    } else if (existing) {
       // Re-sync the per-session bypass to the current global (dispatchClaude
       // passes the live setting every turn) so a background session can't keep a
       // stale bypass flag that contradicts what the chip shows.
@@ -410,7 +428,19 @@ export class ClaudeCodeDriver implements AgentDriver {
         this.setModel(requestId, opts.model)
         existing.model = opts.model
       }
-      existing.input.push(userMessage(opts.prompt))
+      // A new turn means the session is being used again: clear the «the user
+      // interrupted» flag, or one Esc would silence every later failure for the
+      // rest of this conversation and the UI would wait forever.
+      existing.interrupted = false
+      // Last line of defence: if the queue closed between the check above and
+      // here, don't pretend the turn started.
+      if (!existing.input.push(userMessage(opts.prompt))) {
+        this.sessions.delete(requestId)
+        this.emit(requestId, {
+          type: 'error',
+          message: 'Сессия завершилась — сообщение не отправлено, повторите'
+        })
+      }
       return
     }
 
@@ -600,6 +630,9 @@ export class ClaudeCodeDriver implements AgentDriver {
           }
 
           case 'result': {
+            // The turn finished on its own, so the session is healthy again: a
+            // later crash must be reported, not swallowed as «that Esc earlier».
+            session.interrupted = false
             const modelUsage = (msg as { modelUsage?: Record<string, { contextWindow?: number }> })
               .modelUsage ?? {}
             this.emit(requestId, {
@@ -647,7 +680,9 @@ export class ClaudeCodeDriver implements AgentDriver {
         }
       }
     } catch (e) {
-      if (!session.abort.signal.aborted) {
+      // A process that exits because the user pressed Esc is not an error to
+      // report — it is the thing they just asked for.
+      if (!session.abort.signal.aborted && !session.interrupted) {
         this.emit(requestId, {
           type: 'error',
           message: e instanceof Error ? e.message : String(e)
@@ -939,8 +974,24 @@ export class ClaudeCodeDriver implements AgentDriver {
   interrupt(requestId: string): void {
     const session = this.sessions.get(requestId)
     if (!session) return
-    session.query.interrupt?.().catch(() => session.abort.abort())
-    session.input.close()
+    // Interrupt the TURN, not the session. Closing the input queue here ended
+    // the whole stream-input, so the child exited and the user's own Esc came
+    // back as «Claude Code process exited with code 1» — their cancellation
+    // reported as a failure. Codex and the ACP engines already cancel just the
+    // turn and keep the session alive; this makes Esc mean the same everywhere.
+    // The queue only closes if interrupt() itself is unavailable or fails, in
+    // which case aborting is the only way to stop the turn.
+    session.interrupted = true
+    const q = session.query.interrupt?.()
+    if (q) {
+      q.catch(() => {
+        session.abort.abort()
+        session.input.close()
+      })
+    } else {
+      session.abort.abort()
+      session.input.close()
+    }
   }
 
   /** List past Claude Code sessions for a folder (for the resume picker). */

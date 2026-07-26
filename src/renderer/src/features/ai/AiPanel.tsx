@@ -10,7 +10,7 @@ import { getTerminal } from '@/terminal/terminalRegistry'
 import './ai.css'
 import { renderMarkdown } from './markdown'
 import { useAiStore } from './aiStore'
-import { gateLabel, orphanGates } from './gates'
+import { gateLabel, orphanGates, toolLabel } from './gates'
 
 const EXAMPLES = ['Объясни последнюю ошибку', 'Найди большие файлы', 'Что съедает порт 3000?']
 
@@ -297,8 +297,14 @@ export default function AiPanel(): React.JSX.Element {
                     const pendingTool = conv.pendingTools.find((t) => t.id === p.id)
                     const settled = pendingTool?.settled
                     const isAuto = pendingTool?.autoApproved
-                    const input = p.input as { command?: string; reason?: string } | null
-                    const command = input?.command ?? ''
+                    const input = p.input as { reason?: string } | null
+                    // Same label logic as the mission feed, from the gate when there
+                    // is one (it carries displayName). Reading only `command` left
+                    // every non-Bash gate (Edit/Write/Read/WebFetch) showing «—» —
+                    // an approval prompt describing nothing.
+                    const command = pendingTool
+                      ? gateLabel(pendingTool)
+                      : toolLabel(p.name, p.input)
                     const reason = input?.reason
                     const denied = result?.isError && result.content === 'Пользователь отклонил выполнение'
                     return (
@@ -471,7 +477,9 @@ function ToolCard(props: {
   const [expanded, setExpanded] = useState(false)
 
   return (
-    <div className={`zy-ai-tool ${resolved && !denied ? 'zy-ai-tool--done' : ''} ${denied ? 'zy-ai-tool--denied' : ''}`}>
+    <div
+      className={`zy-ai-tool ${awaitingDecision ? 'zy-ai-tool--gate' : ''} ${resolved && !denied ? 'zy-ai-tool--done' : ''} ${denied ? 'zy-ai-tool--denied' : ''}`}
+    >
       <div className="zy-ai-tool-head">
         <Icon name="run" size={11} className="zy-ai-tool-icon" />
         <code className="zy-ai-tool-cmd">{command || '—'}</code>

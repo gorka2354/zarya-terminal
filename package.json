@@ -1,7 +1,7 @@
 {
   "name": "zarya-terminal",
   "productName": "Zarya",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Zarya — AI-native terminal with IDE superpowers. A new dawn for your terminal.",
   "main": "./out/main/index.js",
   "author": "gorka2354",
@@ -12,7 +12,7 @@
     "url": "https://github.com/gorka2354/zarya-terminal.git"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.19.0"
   },
   "scripts": {
     "dev": "electron-vite dev",
@@ -51,17 +51,17 @@
     "monaco-editor": "^0.56.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
+    "sherpa-onnx-node": "^1.13.4",
     "zod": "^4.4.3",
     "zustand": "^5.0.14"
   },
   "devDependencies": {
-    "@resvg/resvg-js": "^2.6.2",
     "@types/node": "^22.20.1",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^4.7.0",
     "electron": "^43.1.1",
-    "electron-builder": "^24.13.3",
+    "electron-builder": "^26.15.3",
     "electron-vite": "^3.1.0",
     "playwright": "^1.61.1",
     "png-to-ico": "^3.0.2",

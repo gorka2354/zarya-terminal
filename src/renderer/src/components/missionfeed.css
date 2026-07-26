@@ -72,10 +72,17 @@
   flex: 1;
   min-height: 0;
   overflow: hidden auto;
-  padding: 12px 16px;
+  /* Line height and padding follow their settings too — sizing only xterm made
+     all three dials look broken while the blocks feed is what's on screen. */
+  padding: var(--term-padding, 14px);
   font-family: var(--font-mono);
-  font-size: 12.5px;
-  line-height: 1.65;
+  /* Terminal zoom: «Размер шрифта» from Settings drives the feed, because the
+     feed IS what the user reads — xterm renders offscreen in blocks mode, so
+     sizing only it made the setting look broken. Everything that scales does so
+     in em from this base; chrome (labels, badges, buttons) stays in px on
+     purpose, the way a terminal's own UI doesn't grow with its text. */
+  font-size: var(--term-font-size, 14px);
+  line-height: var(--term-line-height, 1.55);
   color: var(--fg);
   /* The agent/command text must be selectable & copyable (global body sets none). */
   user-select: text;
@@ -215,6 +222,7 @@
   background: color-mix(in srgb, var(--accent-2) 7%, var(--bg-elev1));
 }
 .zy-mf-user-text {
+  font-size: 0.97em;
   color: var(--fg);
   flex: 1;
   min-width: 0;
@@ -229,21 +237,25 @@
   letter-spacing: 0.06em;
   color: var(--fg-faint);
 }
-.zy-mf-answer {
+.zy-mf-answer.zy-md {
   color: var(--fg-dim);
   padding-left: 16px;
   margin-bottom: 10px;
   font-family: var(--font-ui);
-  font-size: 12.5px;
-  line-height: 1.55;
+  /* Optically matched to the mono user turn: PT Sans reads smaller than
+     JetBrains Mono at the same px, so the two looked like different sizes. */
+  font-size: 1.06em;
+  /* Follows «Межстрочный интервал» like the rest of the feed, with a touch
+     more air because prose is denser than command output. */
+  line-height: calc(var(--term-line-height, 1.55) * 1.08);
 }
-.zy-mf-answer :is(p, ul, ol) {
+.zy-mf-answer.zy-md :is(p, ul, ol) {
   margin: 0 0 6px;
 }
-.zy-mf-answer strong {
+.zy-mf-answer.zy-md strong {
   color: var(--fg);
 }
-.zy-mf-answer code {
+.zy-mf-answer.zy-md code {
   font-family: var(--font-mono);
   color: var(--zy-cyan);
 }
@@ -301,7 +313,7 @@
 }
 .zy-mf-tool-cmd {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 0.86em;
   color: var(--fg);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -315,6 +327,27 @@
   color: var(--fg-faint);
   flex-shrink: 0;
 }
+/* Header of a pinned card: the command itself moved to the block below, so the
+   head carries the intent instead ("агент хочет изменить файл"). */
+.zy-mf-tool-ask {
+  font-family: var(--font-tech);
+  font-size: 12px;
+  color: var(--fg-dim);
+  min-width: 0;
+}
+/* Line count of a pinned-open command. */
+.zy-mf-tool-lines {
+  margin-left: auto;
+  flex-shrink: 0;
+  padding: 0 5px;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-radius: 3px;
+  font-family: var(--font-tech);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  white-space: nowrap;
+}
 .zy-mf-tool-full {
   margin: 6px 0 0;
   padding: 8px 10px;
@@ -323,12 +356,21 @@
   background: var(--bg);
   border-radius: 3px;
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: 0.82em;
   line-height: 1.5;
   color: var(--fg-dim);
   white-space: pre-wrap;
   word-break: break-word;
   user-select: text;
+}
+/* A gate awaiting a decision may not hide any of itself — not behind a fold, and
+   not behind an inner scrollbar either: the approve button sits right below, so a
+   clipped tail would be approved unread. The feed's own scroll carries it. */
+.zy-mf-tool-full--pinned {
+  max-height: none;
+  overflow: visible;
+  color: var(--fg);
+  border-left: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
 }
 .zy-mf-tool-note {
   margin-left: auto;
@@ -549,4 +591,17 @@
   overflow: hidden;
   z-index: 1;
   display: flex;
+}
+/* An interrupted turn: no answer will arrive, but the agent still sees it when
+   the session resumes — say both things rather than leaving it looking normal. */
+.zy-mf-user-cut {
+  flex-shrink: 0;
+  padding: 0 5px;
+  border: 1px solid color-mix(in srgb, var(--warn, var(--accent-2)) 40%, transparent);
+  border-radius: 3px;
+  font-family: var(--font-tech);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--warn, var(--accent-2));
+  white-space: nowrap;
 }

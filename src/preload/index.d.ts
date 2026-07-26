@@ -153,6 +153,21 @@ export interface ZaryaApi {
     save(wf: WorkflowDef): Promise<void>
     delete(id: string): Promise<void>
   }
+  /** Local dictation — audio never leaves the machine. */
+  stt: {
+    state(): Promise<{
+      modelReady: boolean
+      engineReady: boolean
+      downloading: { file: string; received: number; total: number } | null
+      error?: string
+    }>
+    ensureModel(): Promise<{ ok: boolean; error?: string }>
+    onProgress(cb: (p: { file: string; received: number; total: number } | null) => void): Unsub
+    transcribe(
+      samples: Float32Array,
+      sampleRate: number
+    ): Promise<{ ok: boolean; text?: string; error?: string }>
+  }
   app: {
     info(): Promise<AppInfo>
     windowCommand(cmd: WindowCommand): void

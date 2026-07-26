@@ -7,6 +7,7 @@
  */
 import { PixelText, PixelIcon, type PixelIconName } from './PixelIcon'
 import pixelIconData from './pixelIcons.json'
+import logoZarya from '@/assets/logo-zarya-48.png'
 
 // Names available as small (≤8-tall) pixel glyphs — routed through PixelIcon so
 // the whole UI shares one pixel look at the consistent PX. Larger 16×16 names
@@ -283,6 +284,46 @@ export function Icon({ name, size = 16, className, strokeWidth = 1.6, title }: P
  * a legacy emoji string (rendered as-is for backward compat with old sessions).
  */
 const SHELL_CODES = new Set(['PS', 'CMD', 'SH', 'WSL', 'ZSH', 'FSH', 'PWSH', '>_'])
+
+/**
+ * Agent monogram — the bar's engine chip, icon-only.
+ *
+ * Same idea as {@link ShellGlyph}: a pixel monogram rather than a vendor logo.
+ * Deliberately not the real Claude/OpenAI/Google marks — they are someone else's
+ * trademarks, and they would look foreign next to a pixel-art interface. Two
+ * letters keep the engines distinguishable at a glance, which one abstract glyph
+ * each would not.
+ */
+const ENGINE_ICON: Record<string, PixelIconName> = {
+  'claude-code': 'claude' as PixelIconName,
+  codex: 'codex' as PixelIconName,
+  gemini: 'gemini' as PixelIconName,
+  kimi: 'kimi' as PixelIconName,
+  qwen: 'qwen' as PixelIconName
+}
+
+export function EngineGlyph({ engine, size = 15 }: { engine: string; size?: number }): React.JSX.Element {
+  // The shell isn't an agent — it keeps the terminal glyph it always had.
+  if (engine === 'shell') return <Icon name="terminal" size={size} />
+  // Zarya's own agent gets Zarya's own mark.
+  if (engine === 'zarya' || engine === 'builtin')
+    return (
+      <img
+        src={logoZarya}
+        width={size}
+        height={size}
+        style={{ imageRendering: 'pixelated', display: 'block' }}
+        alt=""
+      />
+    )
+  const icon = ENGINE_ICON[engine]
+  if (!icon) return <Icon name="bolt" size={size} />
+  return (
+    <span className="zy-engine-mono" data-engine={engine}>
+      <PixelIcon name={icon} />
+    </span>
+  )
+}
 
 export function ShellGlyph({ code, size = 15 }: { code: string; size?: number }): React.JSX.Element {
   const up = code.toUpperCase()

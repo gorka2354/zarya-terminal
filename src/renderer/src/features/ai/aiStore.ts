@@ -20,7 +20,9 @@ import { getSettings, useSettingsStore } from '@/state/settingsStore'
 import { useSessionsStore } from '@/state/sessionsStore'
 import { useUiStore } from '@/state/uiStore'
 import { registerAiBridge } from './aiBridge'
+import { gateLabel } from './gates'
 import { sameModel } from './modelMatch'
+import { nativeGateOpts } from './startOpts'
 
 /**
  * AI chat store: multiple conversations, streaming assistant text, and an
@@ -92,6 +94,12 @@ export interface Conversation {
   engine: 'builtin' | AgentEngine
   /** Claude Code session id (from init/result) for resume / continuity. */
   claudeSessionId?: string
+  /**
+   * Indices of user turns that were interrupted with Esc. They look exactly
+   * like ordinary turns otherwise — no answer ever arrives — and the agent
+   * still sees them on resume, so the feed says so out loud.
+   */
+  interrupted?: number[]
   /** Working directory the conversation was opened in (folder the AI worked in). */
   cwd?: string
   agentMode: boolean
@@ -422,6 +430,7 @@ function persistConversations(state: AiState): Promise<void> {
       engine: c.engine,
       sessionId: c.sessionId,
       claudeSessionId: c.claudeSessionId,
+      interrupted: c.interrupted,
       cwd: c.cwd,
       messages: c.messages,
       createdAt: c.createdAt
@@ -521,8 +530,10 @@ export const useAiStore = create<AiState>((set, get) => {
     window.zarya.agent.start(engine, convId, {
       prompt,
       cwd: cwd || conv.cwd,
-      permissionMode: settings.ai.autoApprove ? 'acceptEdits' : 'default',
-      bypass: settings.ai.claudeBypass,
+      // SECURITY: permissionMode is always 'default' and gate-weakening comes only
+      // from АВТОПИЛОТ — see nativeGateOpts, which owns that invariant and is
+      // guarded by tests/startOpts.test.ts.
+      ...nativeGateOpts(settings.ai),
       ultracode: useUiStore.getState().ultracode,
       model: settings.ai.claudeModel || undefined,
       // Ultracode forces xhigh; otherwise use the user's effort override.
@@ -830,6 +841,7 @@ export const useAiStore = create<AiState>((set, get) => {
         sessionId: p.sessionId,
         engine: p.engine,
         claudeSessionId: p.claudeSessionId,
+        interrupted: p.interrupted,
         cwd: p.cwd,
         // Any non-builtin engine drives its own agentic tool loop. A conv written
         // by a newer build with an unknown engine still lands here as an agent
@@ -957,11 +969,34 @@ export const useAiStore = create<AiState>((set, get) => {
         window.zarya.ai.abort(conv.activeRequestId)
         requestConv.delete(conv.activeRequestId)
       }
+      // Mark the turn that was cut off. It stays in the transcript — and stays
+      // in the agent's context on resume — so leaving it indistinguishable from
+      // an answered turn is what made «я отменил, но он всё равно это видел»
+      // surprising.
+      // tool_result хранится тем же role:'user' и в ленте невидим — пометка на
+      // нём просто не рисуется. Ищем последний ход, который лента реально
+      // показывает (условие зеркалит MissionFeed).
+      const isVisibleUserTurn = (m: AiMessage): boolean =>
+        m.role === 'user' &&
+        m.content.some(
+          (p) => p.type === 'text' && !p.text.startsWith('[Контекст:') && !!p.text.trim()
+        )
+      let lastUser = -1
+      for (let i = conv.messages.length - 1; i >= 0; i--) {
+        if (isVisibleUserTurn(conv.messages[i])) {
+          lastUser = i
+          break
+        }
+      }
       patchConversation(conv.id, (c) => ({
         ...c,
         streaming: false,
         activeRequestId: undefined,
-        pendingTools: []
+        pendingTools: [],
+        interrupted:
+          lastUser >= 0 && !(c.interrupted ?? []).includes(lastUser)
+            ? [...(c.interrupted ?? []), lastUser]
+            : c.interrupted
       }))
     },
 
@@ -1224,7 +1259,13 @@ onBus('terminal:focus', ({ sessionId }) => {
           id: t.id,
           kind: t.kind,
           name: t.name,
-          settled: t.settled
+          settled: t.settled,
+          // `label` is what the approval card actually shows. A harness that only
+          // saw id/name could not tell a gate describing its files from one
+          // reading a bare «ApplyPatch» — the exact defect this dump must catch.
+          label: gateLabel(t),
+          input: t.input,
+          displayName: t.displayName
         })),
         msgs: c.messages.length
       }

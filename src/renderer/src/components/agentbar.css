@@ -6,24 +6,47 @@
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
+  /* Anchor for the usage panel, which opens above the bar. The z-index is not
+     decoration: `backdrop-filter` below makes this element a stacking context,
+     and the mission feed sits at z-index 2 — without this the panel renders
+     UNDERNEATH the feed and is invisible while being perfectly present in the
+     DOM. */
+  position: relative;
+  z-index: 10;
   border-top: 1px solid var(--border);
   background: color-mix(in srgb, var(--panel) 88%, transparent);
   backdrop-filter: blur(2px);
 }
 
+/* The fuel strip is a row of independent controls now, not one giant button:
+   the gauge opens the usage panel, the model chip and «пульт» open the launch
+   pad. Nested buttons are invalid HTML, hence the wrapper is a plain div. */
 .zy-agentbar-fuel {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 4px 12px 5px;
-  border: none;
   border-bottom: 1px solid var(--border);
   background: transparent;
-  cursor: pointer;
   text-align: left;
   width: 100%;
 }
-.zy-agentbar-fuel:hover {
+.zy-agentbar-fuel-main,
+.zy-agentbar-fuel-model,
+.zy-agentbar-fuel-pult {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 6px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.zy-agentbar-fuel-main:hover,
+.zy-agentbar-fuel-model:hover,
+.zy-agentbar-fuel-pult:hover {
   background: var(--bg-elev1);
 }
 .zy-agentbar-fuel-icon {
@@ -118,8 +141,14 @@
 .zy-agentbar-input {
   flex: 1;
   min-width: 0;
-  height: 34px;
-  padding: 0 11px;
+  /* A textarea, not an input: agent prompts are routinely multi-line
+     (Shift+Enter / Ctrl+Enter). Height is driven from JS to fit the content. */
+  min-height: 34px;
+  max-height: 160px;
+  padding: 8px 11px;
+  resize: none;
+  overflow-y: auto;
+  line-height: 1.35;
   /* Hairline frame — crisp 1px; the accent lives in the focus state, not a
      hand-drawn PNG border. */
   border: 1px solid var(--border-strong);
@@ -254,6 +283,11 @@
   background: var(--success);
   flex-shrink: 0;
 }
+/* Engine that cannot bypass at all (ACP): a truthful read-out, not a control. */
+.zy-agentbar-bypass--locked {
+  cursor: default;
+  opacity: 0.75;
+}
 .zy-agentbar-bypass--on {
   color: var(--danger);
   border-color: color-mix(in srgb, var(--danger) 40%, transparent);
@@ -316,4 +350,168 @@
 }
 .zy-agentbar-send:active {
   transform: translateY(1px);
+}
+
+/* usage panel ---------------------------------------------------------- */
+/* Opens above the bar: one line per limit, each with its own gauge, value and
+   reset time. Deliberately not shown all at once in the bar itself — four
+   readings on one line is what made the old strip unreadable. */
+.zy-usage-panel {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 12px;
+  z-index: 40;
+  min-width: 320px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elev1);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
+}
+.zy-usage-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-family: var(--font-ui);
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--fg-faint);
+}
+.zy-usage-sub {
+  margin-left: auto;
+  font-family: var(--font-tech);
+  letter-spacing: 0.06em;
+  color: var(--accent-2);
+  text-transform: none;
+}
+.zy-usage-row {
+  display: grid;
+  grid-template-columns: 68px auto 38px 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+}
+.zy-usage-label {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  color: var(--fg-dim);
+  white-space: nowrap;
+}
+.zy-usage-pct {
+  font-family: var(--font-tech);
+  font-size: 12px;
+  color: var(--fg);
+  text-align: right;
+}
+.zy-usage-note {
+  font-family: var(--font-tech);
+  font-size: 11px;
+  color: var(--fg-faint);
+  white-space: nowrap;
+}
+.zy-usage-empty {
+  font-family: var(--font-tech);
+  font-size: 11.5px;
+  color: var(--fg-faint);
+}
+
+/* icon-only chips ------------------------------------------------------ */
+/* Engine and gate are permanent fixtures; spelling them out in caps ate the
+   row. Labels moved to tooltips — but the gate keeps its colour, because
+   «will I be asked?» has to be readable without hovering. */
+.zy-agentbar-mode--icon,
+.zy-agentbar-bypass--icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  width: 34px;
+  padding: 0;
+}
+/* The pixel-tick accent marks the ACTIVE engine on a TEXT chip; on an icon chip
+   it lands on top of the glyph. Matching :not() specificity on purpose —
+   a plain `.zy-agentbar-mode--icon::before` loses to the rule above and the tick
+   stays, overlapping the icon. */
+.zy-agentbar-mode--icon:not(.zy-agentbar-mode--shell)::before {
+  content: none;
+}
+.zy-agentbar-mode--icon:not(.zy-agentbar-mode--shell) {
+  padding-left: 0;
+}
+/* The badge inside an icon chip is the chip — no second frame around the glyph. */
+.zy-agentbar-mode--icon .zy-engine-mono {
+  border: none;
+  background: transparent;
+  height: auto;
+  padding: 0;
+}
+.zy-agentbar-bypass--icon .zy-agentbar-bypass-dot {
+  display: none;
+}
+
+/* dictation ------------------------------------------------------------ */
+.zy-agentbar-mic {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--fg-faint);
+  cursor: pointer;
+  transition:
+    border-color 0.12s ease,
+    background 0.12s ease,
+    color 0.12s ease;
+}
+.zy-agentbar-mic:hover {
+  border-color: var(--border-strong);
+  color: var(--fg-dim);
+}
+/* Recording is a state the user must never be in unknowingly — the button
+   itself turns into the indicator and pulses. */
+.zy-agentbar-mic--rec {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 55%, transparent);
+  background: color-mix(in srgb, var(--danger) 12%, var(--bg));
+  animation: zy-mic-pulse 1.4s ease-in-out infinite;
+}
+@keyframes zy-mic-pulse {
+  50% {
+    border-color: color-mix(in srgb, var(--danger) 90%, transparent);
+  }
+}
+.zy-agentbar-mic--busy {
+  color: var(--accent-2);
+  border-color: color-mix(in srgb, var(--accent-2) 45%, transparent);
+}
+/* Level meter — same pixel cells as the fuel gauge, so it reads as measurement
+   in the same language rather than a new visual idea. */
+.zy-mic-meter {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 14px;
+}
+.zy-mic-cell {
+  width: 3px;
+  height: 100%;
+  background: color-mix(in srgb, var(--danger) 25%, transparent);
+}
+.zy-mic-cell--on {
+  background: var(--danger);
+}
+/* Progress line for the one-time model download (and dictation errors). */
+.zy-agentbar-voicenote {
+  flex-shrink: 0;
+  font-family: var(--font-tech);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--accent-2);
+  white-space: nowrap;
 }
