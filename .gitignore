@@ -25,3 +25,15 @@ coverage/
 
 # local QA captures
 shots/
+.playwright-mcp/
+
+# Local-only notes and agent config. These were covered by a global gitignore
+# only, so a single `git add -A` on another machine would have published them —
+# increments and plans routinely contain personal context, and ui-shot.mjs
+# hardcodes a home directory path.
+inc/
+plan/
+план/
+CLAUDE.md
+.claude/
+scripts/ui-shot.mjs
