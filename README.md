@@ -5,7 +5,7 @@
 **Космический CLI-агент. A new dawn for your terminal.**
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-e2231a.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.5.1%20%C2%AB%D0%A7%D0%B0%D1%81%D0%BE%D0%B2%D0%BE%D0%B9%C2%BB-e0b15a.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.5.2%20%C2%AB%D0%A8%D0%BB%D1%8E%D0%B7%C2%BB-e0b15a.svg)](CHANGELOG.md)
 [![Electron](https://img.shields.io/badge/Electron-43-4fd6d6.svg)](https://www.electronjs.org/)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-5fb88a.svg)](#install)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-e0b15a.svg)](CONTRIBUTING.md)
@@ -28,6 +28,11 @@ optional built-in editor. 100% on your machine, no account, no telemetry.
   key**.
 - **🚀 Пусковой комплекс** — a cosmic launch console for picking the model and
   reasoning effort, with every current Claude version, live-switchable mid-session.
+- **🎙 Диктовка — offline speech-to-text** — hold `Ctrl+Shift+Space`, speak, and the
+  text lands in the input. Runs entirely on your machine ([sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx)
+  + [GigaAM](https://github.com/salute-developers/GigaAM), strong on Russian): no
+  network, no cloud key, and the audio is never written to disk. Recognised text is
+  **inserted, not sent** — you read it before Enter.
 - **▚ Command blocks** — every command becomes a navigable block with output, exit
   code and duration, on the open OSC 133 standard.
 - **💾 Persistent sessions** — scrollback, blocks and agent conversations survive a
@@ -86,11 +91,26 @@ SDK, so the pad is future-proof — the next model Anthropic ships just shows up
 ## The rest
 
 ### Ask-agent bar & modes
-One input under the terminal, Warp-style: **Enter runs a shell command** by default.
-A chip switches the bar between **Терминал** and **Claude Code**, and it auto-follows —
-launching an interactive CLI (`claude`, `vim`, `ssh`, a TUI) flips into raw-terminal
-mode automatically. Message queueing, `↑/↓` input history, `Esc` to interrupt and
-approve/deny keys are all there.
+One input under the terminal, Warp-style: **Enter runs a shell command** by default,
+`Shift+Enter` / `Ctrl+Enter` add a line. A chip switches the bar between **Терминал**
+and the agents, and it auto-follows — launching an interactive CLI (`claude`, `vim`,
+`ssh`, a TUI) flips into raw-terminal mode automatically. Message queueing, `↑/↓`
+input history, `Esc` to interrupt and approve/deny keys are all there.
+
+The bar carries one figure of your limits — whichever window is closest to running
+out — and opens the rest on click: a line per limit with its own gauge and reset time.
+Engine and permission mode are icons; their labels live in tooltips, but the gate
+**keeps its colour**, because «will I be asked?» must be readable without hovering.
+
+### Диктовка (voice input)
+Click the microphone or hold `Ctrl+Shift+Space`. Click-mode stops itself after a
+second and a half of silence; `Esc` cancels. While recording, the button **is** the
+indicator — it pulses and shows the input level, because a microphone must never be
+open without you knowing.
+
+The model (~225 MB) is downloaded on first use with a checksum check, not bundled,
+and cached under your user data. Everything after that is local: no request leaves
+the machine, and the audio exists only in memory while you speak.
 
 ### Blocks
 Every command becomes a distinct, navigable block — command, output, exit code and
@@ -149,6 +169,7 @@ Remappable in Центр управления → Клавиши (`Ctrl+,`). Ful
 | Toggle sidebar | `Ctrl+B` | | New terminal in folder | `Ctrl+Shift+O` |
 | New / close tab | `Ctrl+Shift+T` / `Ctrl+Shift+W` | | Split right / down | `Ctrl+Shift+D` / `Ctrl+Shift+S` |
 | Previous / next block | `Ctrl+↑` / `Ctrl+↓` | | Find in terminal | `Ctrl+Shift+F` |
+| Dictate (hold) | `Ctrl+Shift+Space` | | New line in the bar | `Shift+Enter` |
 
 ## Install
 
@@ -188,6 +209,7 @@ flowchart LR
         SESS[SessionStore + safeStorage]
         AI[AiProxy]
         FS[fsService / gitService]
+        STT[SttService · sherpa-onnx]
     end
     subgraph Bridge["Preload"]
         API["window.zarya (typed IPC)"]
@@ -203,6 +225,7 @@ flowchart LR
     SESS <--> API
     AI <--> API
     FS <--> API
+    STT <--> API
     API <--> FEED
     FEED --> BE
     UI --> FEED
@@ -233,6 +256,15 @@ Details: [docs/shell-integration.md](docs/shell-integration.md).
 - **Untrusted repos** — the auto-run `git status`/diff neutralizes exec-capable
   repo-local config (`core.fsmonitor`, hooks, …) so opening a malicious folder can't run
   code in the main process.
+- **Approval gates you can actually read.** One switch per engine weakens a gate and
+  the bar always shows which; every request gets a card, and while it waits for your
+  answer the command is pinned open — no fold, no ellipsis, no inner scrollbar.
+- **Voice stays on the machine.** Recognition is local; the microphone opens only on an
+  explicit action, is visibly indicated while open, and closes with the take. Browser
+  permissions are an explicit allow-list (microphone + clipboard, this window only).
+- **Terminal profiles** — a stored profile is a program the app will launch, so adding
+  or editing one needs your confirmation, with the path, arguments and environment
+  shown.
 - Terminal scrollback, history and conversations are stored **in cleartext** by design
   (only keys are encrypted) — see [SECURITY.md](SECURITY.md) for the threat model and how
   to disable persistence on shared machines.
