@@ -59,3 +59,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 export function getSettings(): Settings {
   return useSettingsStore.getState().settings
 }
+
+// QA hooks (same pattern as __zaryaSetUi / __zaryaNewTerminal): let a harness
+// read and drive settings without clicking through the UI.
+;(window as unknown as { __zaryaSettings?: () => Settings }).__zaryaSettings = () =>
+  useSettingsStore.getState().settings
+;(window as unknown as { __zaryaSetFontSize?: (v: number) => void }).__zaryaSetFontSize = (v) =>
+  void useSettingsStore.getState().update({ appearance: { fontSize: v } as never })

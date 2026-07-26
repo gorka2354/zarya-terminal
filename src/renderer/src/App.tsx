@@ -60,6 +60,17 @@ export default function App(): React.JSX.Element {
   useEffect(() => {
     applyTheme(getTheme(themeId))
   }, [themeId])
+
+  // «Размер шрифта» has to reach what the user is actually looking at. It used
+  // to be handed to xterm only — but xterm renders offscreen while the mission
+  // feed is on screen, so changing it appeared to do nothing at all. Publishing
+  // it as a CSS variable lets the feed scale its terminal text with the same
+  // dial. Chrome/UI labels deliberately stay fixed: this is a terminal zoom, not
+  // an application zoom.
+  const fontSize = useSettingsStore((s) => s.settings.appearance.fontSize)
+  useEffect(() => {
+    document.documentElement.style.setProperty('--term-font-size', `${fontSize}px`)
+  }, [fontSize])
   useEffect(() => {
     window.zarya.app.setOpacity(opacity)
   }, [opacity])

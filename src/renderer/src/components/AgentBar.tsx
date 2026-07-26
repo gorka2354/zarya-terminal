@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { AgentEngine, AiEffort, ClaudeCliQuestion } from '@shared/types'
+import type { AgentEngine, AgentUsage, AiEffort, ClaudeCliQuestion } from '@shared/types'
 import { EFFORT_TUNING } from '@shared/defaults'
 import { useSessionsStore } from '@/state/sessionsStore'
 import { useSettingsStore } from '@/state/settingsStore'
@@ -7,7 +7,8 @@ import { useUiStore } from '@/state/uiStore'
 import { getTerminal } from '@/terminal/terminalRegistry'
 import { convForSession, useAiStore } from '@/features/ai/aiStore'
 import { nextGate } from '@/features/ai/gates'
-import { Icon } from './Icon'
+import { Icon, EngineGlyph } from './Icon'
+import { PixelIcon } from './PixelIcon'
 import { ClaudeQuestionBar } from './ClaudeQuestionBar'
 import { launchClaudeNative } from './AiCliLauncher'
 import './agentbar.css'
@@ -111,6 +112,13 @@ function resetLabel(ts?: number): string {
   if (mins < 60) return `${mins} мин`
   const h = Math.floor(mins / 60)
   const m = mins % 60
+  // The weekly window resets days out, and «через 96 ч» is not how anyone reads
+  // that — count in days once it stops being an afternoon away.
+  if (h >= 24) {
+    const d = Math.round(h / 24)
+    const tail = d % 10 === 1 && d % 100 !== 11 ? 'день' : d % 10 >= 2 && d % 10 <= 4 && (d % 100 < 10 || d % 100 >= 20) ? 'дня' : 'дней'
+    return `${d} ${tail}`
+  }
   return m ? `${h} ч ${m} мин` : `${h} ч`
 }
 
@@ -138,6 +146,112 @@ function FuelGauge({ used }: { used: number }): React.JSX.Element {
   )
 }
 
+/** One readout in the usage panel: label, its own bar, value and reset time. */
+function UsageRow({
+  label,
+  pct,
+  note
+}: {
+  label: string
+  pct: number
+  note?: string
+}): React.JSX.Element {
+  return (
+    <div className="zy-usage-row">
+      <span className="zy-usage-label">{label}</span>
+      <FuelGauge used={pct} />
+      <span className="zy-usage-pct">{Math.round(pct)}%</span>
+      {note ? <span className="zy-usage-note">{note}</span> : null}
+    </div>
+  )
+}
+
+/**
+ * The limits, one per line — the shape the Claude app uses, and the reason the
+ * bar itself carries a single figure. Four readings queued on one line («5ч 14%
+ * · сброс через 3 ч 2 мин · 7дн 18% · контекст 32%») parse as noise; stacked and
+ * labelled, each is legible at a glance.
+ *
+ * Engines without a subscription gauge (Codex, the ACP ones) still get the
+ * context row — it is universal — instead of an empty panel.
+ */
+function UsagePanel({
+  usage,
+  context,
+  onClose
+}: {
+  usage?: AgentUsage
+  context: { pct?: number; tokens?: number; window?: number }
+  onClose: () => void
+}): React.JSX.Element {
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const onDown = (e: MouseEvent): void => {
+      if (!ref.current?.contains(e.target as Node)) onClose()
+    }
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') onClose()
+    }
+    // Deferred: the click that opened the panel is still travelling.
+    const t = setTimeout(() => document.addEventListener('mousedown', onDown), 0)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      clearTimeout(t)
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [onClose])
+
+  const rows: React.JSX.Element[] = []
+  if (usage?.fiveHourPct != null)
+    rows.push(
+      <UsageRow
+        key="5h"
+        label="5 часов"
+        pct={usage.fiveHourPct}
+        note={usage.fiveHourResetsAt ? `сброс через ${resetLabel(usage.fiveHourResetsAt)}` : undefined}
+      />
+    )
+  if (usage?.sevenDayPct != null)
+    rows.push(
+      <UsageRow
+        key="7d"
+        label="7 дней"
+        pct={usage.sevenDayPct}
+        note={usage.sevenDayResetsAt ? `сброс через ${resetLabel(usage.sevenDayResetsAt)}` : undefined}
+      />
+    )
+  if (context.pct != null)
+    rows.push(
+      <UsageRow
+        key="ctx"
+        label="Контекст"
+        pct={context.pct}
+        note={
+          context.tokens != null && context.window != null
+            ? `${fmtTokens(context.tokens)} из ${fmtTokens(context.window)} токенов`
+            : undefined
+        }
+      />
+    )
+
+  return (
+    <div className="zy-usage-panel" ref={ref}>
+      <div className="zy-usage-head">
+        <span>РАСХОД</span>
+        {usage?.subscriptionType ? <span className="zy-usage-sub">{usage.subscriptionType}</span> : null}
+      </div>
+      {rows.length ? (
+        rows
+      ) : (
+        <div className="zy-usage-empty">
+          Данных пока нет — появятся после первого ответа агента.
+        </div>
+      )}
+    </div>
+  )
+}
+
 /**
  * Bottom bar with an explicit mode chip: «Терминал» runs commands in the shell
  * (Warp-style), «Zarya» / «Claude Code» send your text to that agent on Enter.
@@ -160,6 +274,7 @@ export function AgentBar(): React.JSX.Element {
   const activeEngine: AgentEngine | null = mode !== 'shell' && mode !== 'zarya' ? mode : null
   const caps = activeEngine ? agentCaps[activeEngine] : null
   const [text, setText] = useState('')
+  const [usageOpen, setUsageOpen] = useState(false)
   // -1 = not browsing history; otherwise index into barHistory.
   const [histIdx, setHistIdx] = useState(-1)
   const draftRef = useRef('')
@@ -391,12 +506,26 @@ export function AgentBar(): React.JSX.Element {
       )
   }
 
+
   const isShell = mode === 'shell'
   const isAgent = activeEngine !== null // a native agent mode is selected
   // Conditional controls driven by the engine's declared capabilities, not by
   // `=== 'claude-code'`. An engine without usage/models hides those.
   const showFuel = !!caps?.usage
   const showModel = !!caps?.models
+
+  // The headline figure is whichever window is closest to running out — that is
+  // the one worth a permanent place in the bar. The others are one click away.
+  const lead = ((): { short: string; label: string; pct: number } | null => {
+    if (!showFuel) return null
+    const u = claudeStatus.usage
+    const five = u?.fiveHourPct
+    const seven = u?.sevenDayPct
+    if (five == null && seven == null) return null
+    if (seven != null && (five == null || seven > five))
+      return { short: '7дн', label: 'Недельный лимит', pct: seven }
+    return { short: '5ч', label: 'Пятичасовой лимит', pct: five as number }
+  })()
 
   // SECURITY: the chip is the one place that answers «will I be asked?», so it
   // is shown in EVERY agent mode and reads the switch that actually governs the
@@ -439,75 +568,77 @@ export function AgentBar(): React.JSX.Element {
 
   return (
     <div className="zy-agentbar">
-      <button
-        className="zy-agentbar-fuel"
-        title={
-          showFuel
-            ? `Топливо: подписка ${claudeStatus.usage?.subscriptionType ?? 'Claude'}. 5ч и 7дн окна лимита · модель ${claudeStatus.model ?? '—'}${claudeStatus.effort ? ` · тяга ${claudeStatus.effort}` : ''}`
-            : 'Топливо · пусковой комплекс'
-        }
-        onClick={openLaunchPad}
-      >
-        <span className="zy-agentbar-fuel-icon">
-          <svg
-            width="10"
-            height="10"
-            viewBox="0 0 16 16"
-            shapeRendering="crispEdges"
-            fill="var(--accent-2)"
-          >
-            <rect x="4" y="2" width="6" height="2" />
-            <rect x="4" y="4" width="6" height="9" />
-            <rect x="10" y="5" width="3" height="2" />
-            <rect x="12" y="6" width="1" height="4" />
-          </svg>
-        </span>
-        <span className="zy-agentbar-fuel-tag">ТОПЛИВО</span>
-        {showFuel && claudeStatus.usage?.fiveHourPct != null ? (
-          <>
-            <FuelGauge used={claudeStatus.usage.fiveHourPct} />
+      {usageOpen && (
+        <UsagePanel
+          usage={showFuel ? claudeStatus.usage : undefined}
+          context={agentContext}
+          onClose={() => setUsageOpen(false)}
+        />
+      )}
+      {/* One headline figure, not four readings queued on a single line. The rest
+          opens on demand — see UsagePanel. */}
+      <div className="zy-agentbar-fuel">
+        <button
+          className="zy-agentbar-fuel-main"
+          title={
+            lead
+              ? `${lead.label}: израсходовано ${Math.round(lead.pct)}%. Нажми — все лимиты`
+              : 'Лимиты и контекст беседы'
+          }
+          aria-expanded={usageOpen}
+          onClick={() => setUsageOpen((v) => !v)}
+        >
+          <span className="zy-agentbar-fuel-icon">
+            <svg
+              width="10"
+              height="10"
+              viewBox="0 0 16 16"
+              shapeRendering="crispEdges"
+              fill="var(--accent-2)"
+            >
+              <rect x="4" y="2" width="6" height="2" />
+              <rect x="4" y="4" width="6" height="9" />
+              <rect x="10" y="5" width="3" height="2" />
+              <rect x="12" y="6" width="1" height="4" />
+            </svg>
+          </span>
+          {lead ? (
+            <>
+              <FuelGauge used={lead.pct} />
+              <span className="zy-agentbar-fuel-val">
+                {lead.short} {Math.round(lead.pct)}%
+              </span>
+            </>
+          ) : (
             <span className="zy-agentbar-fuel-val">
-              5ч {Math.round(claudeStatus.usage.fiveHourPct)}%
-              {claudeStatus.usage.fiveHourResetsAt
-                ? ` · сброс через ${resetLabel(claudeStatus.usage.fiveHourResetsAt)}`
-                : ''}
-              {claudeStatus.usage.sevenDayPct != null
-                ? ` · 7дн ${Math.round(claudeStatus.usage.sevenDayPct)}%`
-                : ''}
+              {showFuel ? 'борт заправлен' : '∞ без лимита · локальный борт'}
             </span>
-          </>
-        ) : (
-          <span className="zy-agentbar-fuel-val">
-            {showFuel
-              ? `подписка ${claudeStatus.usage?.subscriptionType ?? 'Max'} · борт заправлен`
-              : '∞ без лимита · локальный борт'}
-          </span>
-        )}
-        {agentContext.pct != null && (
-          <span
-            className="zy-agentbar-fuel-ctx"
-            title={`Контекст беседы: ${fmtTokens(agentContext.tokens)} из ${fmtTokens(agentContext.window)} токенов заполнено`}
-          >
-            · контекст {Math.round(agentContext.pct)}%
-          </span>
-        )}
+          )}
+          <Icon name={usageOpen ? 'chevron-down' : 'chevron-up'} size={10} />
+        </button>
         <span className="zy-agentbar-fuel-spacer" />
         {showModel && (claudeStatus.model || claudeStatus.effort || ultracode) && (
-          <span className="zy-agentbar-fuel-model">
+          <button className="zy-agentbar-fuel-model" onClick={openLaunchPad} title="Двигатель и тяга">
             {claudeStatus.model ? prettyModel(claudeStatus.model) : ''}
             {ultracode
               ? ' · ⚡ULTRACODE'
               : claudeStatus.effort
                 ? ` · ${claudeStatus.effort.toUpperCase()}`
                 : ''}
-          </span>
+          </button>
         )}
-        <span className="zy-agentbar-fuel-pult">пульт ▴</span>
-      </button>
+        <button className="zy-agentbar-fuel-pult" onClick={openLaunchPad} title="Пусковой комплекс">
+          пульт ▴
+        </button>
+      </div>
 
       <div className="zy-agentbar-row">
+        {/* Icon-only chips: the engine and the gate are permanent fixtures, and
+            spelling them out in full caps ate the bar. The label lives in the
+            tooltip; the gate additionally keeps its colour, because «will I be
+            asked?» must stay readable without hovering. */}
         <button
-          className={`zy-agentbar-mode zy-agentbar-mode--${mode}`}
+          className={`zy-agentbar-mode zy-agentbar-mode--icon zy-agentbar-mode--${mode}`}
           title={
             isShell
               ? 'Режим: Терминал — Enter выполнит команду. Нажми, чтобы говорить с агентом'
@@ -515,24 +646,24 @@ export function AgentBar(): React.JSX.Element {
                 ? `Режим: ${MODE_LABEL[mode]} (нативно) — Enter отправит запрос. Нажми — сменить режим`
                 : 'Режим: Zarya (свой ключ) — Enter отправит запрос. Нажми — сменить режим'
           }
+          aria-label={`Режим: ${MODE_LABEL[mode]}`}
           onClick={cycleMode}
         >
-          <Icon name={isShell ? 'terminal' : 'bolt'} size={13} />
-          {MODE_LABEL[mode]}
+          <EngineGlyph engine={mode} size={14} />
         </button>
         {!isShell && (
           <button
-            className={`zy-agentbar-bypass${gateOff ? ' zy-agentbar-bypass--on' : ''}${
-              canToggleGate ? '' : ' zy-agentbar-bypass--locked'
-            }`}
+            className={`zy-agentbar-bypass zy-agentbar-bypass--icon${
+              gateOff ? ' zy-agentbar-bypass--on' : ''
+            }${canToggleGate ? '' : ' zy-agentbar-bypass--locked'}`}
             title={gateTitle}
+            aria-label={gateOff ? 'Автопилот включён' : 'Ручное управление'}
             disabled={!canToggleGate}
             onClick={
               canToggleGate ? (isBuiltinMode ? toggleAutoApprove : toggleBypass) : undefined
             }
           >
-            <span className="zy-agentbar-bypass-dot" />
-            {gateOff ? '⚠ АВТОПИЛОТ' : 'РУЧНОЙ'}
+            {gateOff ? <Icon name="bolt" size={13} /> : <PixelIcon name="lock" />}
           </button>
         )}
         <input

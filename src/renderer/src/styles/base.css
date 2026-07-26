@@ -951,6 +951,11 @@ body {
 
 /* ============================================================ statusbar */
 
+/* Status bar — cwd and branch. Deliberately quiet, but in the SAME language as
+   the agent bar above it: telemetry voice (Handjet) for readouts and the shared
+   2px chip radius, instead of the 5px pill + default font it used to carry.
+   Two neighbouring strips with two different chip geometries read as an
+   accident, which is exactly how it looked. */
 .zy-statusbar {
   display: flex;
   align-items: center;
@@ -958,7 +963,9 @@ body {
   padding: 0 10px;
   background: var(--panel);
   border-top: 1px solid var(--border);
-  font-size: 11.5px;
+  font-family: var(--font-tech);
+  font-size: 12px;
+  letter-spacing: 0.04em;
   color: var(--fg-dim);
 }
 .zy-status-item {
@@ -966,7 +973,7 @@ body {
   align-items: center;
   gap: 5px;
   padding: 2px 8px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   cursor: default;
   white-space: nowrap;
 }
@@ -1153,6 +1160,47 @@ body {
 }
 .zy-shell-mono svg {
   display: block;
+}
+
+/* Agent monogram — same badge geometry as the shell one, so the bar reads as a
+   single family of chips. Colour per engine, muted enough not to shout. */
+.zy-engine-mono {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  height: 16px;
+  padding: 0 3px;
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  line-height: 1;
+}
+.zy-engine-mono svg {
+  display: block;
+}
+/* Claude's own warm orange rather than the theme red — on the red-tinted active
+   chip a red glyph on red reads as a smudge. */
+.zy-engine-mono[data-engine='claude-code'] {
+  color: #ff9d5c;
+  background: rgba(255, 157, 92, 0.1);
+}
+.zy-engine-mono[data-engine='codex'] {
+  color: #8fd6a0;
+  background: rgba(143, 214, 160, 0.1);
+}
+.zy-engine-mono[data-engine='gemini'] {
+  color: #6ca8ff;
+  background: rgba(108, 168, 255, 0.1);
+}
+.zy-engine-mono[data-engine='kimi'] {
+  color: #c79bff;
+  background: rgba(199, 155, 255, 0.1);
+}
+.zy-engine-mono[data-engine='qwen'] {
+  color: #ff9bc4;
+  background: rgba(255, 155, 196, 0.1);
 }
 .zy-shell-mono[data-shell='PS'],
 .zy-shell-mono[data-shell='PWSH'] {
