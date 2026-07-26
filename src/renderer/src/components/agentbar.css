@@ -141,8 +141,14 @@
 .zy-agentbar-input {
   flex: 1;
   min-width: 0;
-  height: 34px;
-  padding: 0 11px;
+  /* A textarea, not an input: agent prompts are routinely multi-line
+     (Shift+Enter / Ctrl+Enter). Height is driven from JS to fit the content. */
+  min-height: 34px;
+  max-height: 160px;
+  padding: 8px 11px;
+  resize: none;
+  overflow-y: auto;
+  line-height: 1.35;
   /* Hairline frame — crisp 1px; the accent lives in the focus state, not a
      hand-drawn PNG border. */
   border: 1px solid var(--border-strong);
@@ -443,4 +449,69 @@
 }
 .zy-agentbar-bypass--icon .zy-agentbar-bypass-dot {
   display: none;
+}
+
+/* dictation ------------------------------------------------------------ */
+.zy-agentbar-mic {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--fg-faint);
+  cursor: pointer;
+  transition:
+    border-color 0.12s ease,
+    background 0.12s ease,
+    color 0.12s ease;
+}
+.zy-agentbar-mic:hover {
+  border-color: var(--border-strong);
+  color: var(--fg-dim);
+}
+/* Recording is a state the user must never be in unknowingly — the button
+   itself turns into the indicator and pulses. */
+.zy-agentbar-mic--rec {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 55%, transparent);
+  background: color-mix(in srgb, var(--danger) 12%, var(--bg));
+  animation: zy-mic-pulse 1.4s ease-in-out infinite;
+}
+@keyframes zy-mic-pulse {
+  50% {
+    border-color: color-mix(in srgb, var(--danger) 90%, transparent);
+  }
+}
+.zy-agentbar-mic--busy {
+  color: var(--accent-2);
+  border-color: color-mix(in srgb, var(--accent-2) 45%, transparent);
+}
+/* Level meter — same pixel cells as the fuel gauge, so it reads as measurement
+   in the same language rather than a new visual idea. */
+.zy-mic-meter {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 14px;
+}
+.zy-mic-cell {
+  width: 3px;
+  height: 100%;
+  background: color-mix(in srgb, var(--danger) 25%, transparent);
+}
+.zy-mic-cell--on {
+  background: var(--danger);
+}
+/* Progress line for the one-time model download (and dictation errors). */
+.zy-agentbar-voicenote {
+  flex-shrink: 0;
+  font-family: var(--font-tech);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--accent-2);
+  white-space: nowrap;
 }

@@ -25,6 +25,7 @@ import type { HistoryStore } from './historyStore'
 import type { PtyManager } from './ptyManager'
 import type { SessionStore } from './sessionStore'
 import type { SettingsStore } from './settingsStore'
+import type { SttService } from './sttService'
 import { detectAiClis } from './aiClis'
 import { detectShells, resolveProfile } from './shellProfiles'
 import {
@@ -45,6 +46,8 @@ export interface IpcContext {
   aiProxy: AiProxy
   /** Registry of native agent drivers, keyed by engine. */
   agentRegistry: Map<AgentEngine, AgentDriver>
+  /** Local speech-to-text (dictation into the bar). */
+  stt: SttService
   requestQuitConfirmed: () => void
 }
 
@@ -181,6 +184,36 @@ export function registerIpc(ctx: IpcContext): void {
     settingsStore.setSecret(provider, key)
   )
   ipcMain.handle(CH.settingsProviderStatus, () => settingsStore.providerStatus())
+
+  // ------------------------------------------------------------------- stt
+  ipcMain.handle(CH.sttState, () => ctx.stt.state())
+  ipcMain.handle(CH.sttEnsureModel, async () => {
+    try {
+      await ctx.stt.ensureModel((p) => getWindow()?.webContents.send(CH.sttProgress, p))
+      getWindow()?.webContents.send(CH.sttProgress, null)
+      return { ok: true }
+    } catch (e) {
+      getWindow()?.webContents.send(CH.sttProgress, null)
+      return { ok: false, error: e instanceof Error ? e.message : String(e) }
+    }
+  })
+  ipcMain.handle(CH.sttTranscribe, async (_e, samples: unknown, sampleRate: unknown) => {
+    // Bound what the renderer can hand us: a 5-minute utterance at 48 kHz is
+    // already far past dictation, and an unbounded buffer is an easy way to
+    // exhaust memory in the main process.
+    const MAX_SAMPLES = 48000 * 300
+    const rate = typeof sampleRate === 'number' && sampleRate >= 8000 && sampleRate <= 192000 ? sampleRate : 0
+    if (!rate) return { ok: false, error: 'Некорректная частота дискретизации' }
+    if (!(samples instanceof Float32Array) || samples.length === 0)
+      return { ok: false, error: 'Пустая запись' }
+    if (samples.length > MAX_SAMPLES) return { ok: false, error: 'Запись слишком длинная' }
+    try {
+      const text = await ctx.stt.transcribe(samples, rate)
+      return { ok: true, text }
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : String(e) }
+    }
+  })
 
   // ---------------------------------------------------------------- shells
   ipcMain.handle(CH.shellsDetect, async () => {

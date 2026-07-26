@@ -79,6 +79,12 @@ export const CH = {
   workflowsSave: 'workflows:save',
   workflowsDelete: 'workflows:delete',
 
+  // speech-to-text (local dictation)
+  sttState: 'stt:state',
+  sttEnsureModel: 'stt:ensure-model',
+  sttProgress: 'stt:progress', // main -> renderer
+  sttTranscribe: 'stt:transcribe',
+
   // app / window
   appInfo: 'app:info',
   windowCommand: 'window:command',

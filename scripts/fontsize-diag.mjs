@@ -55,6 +55,10 @@ try {
       const el = document.querySelector('.zy-mf-scroll')
       return el ? getComputedStyle(el).fontSize : null
     })(),
+    answerPx: (() => {
+      const el = document.querySelector('.zy-mf-answer')
+      return el ? getComputedStyle(el).fontSize : null
+    })(),
     outPx: (() => {
       const el = document.querySelector('.zy-mf-out') || document.querySelector('.zy-mf-answer')
       return el ? getComputedStyle(el).fontSize : null

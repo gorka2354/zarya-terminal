@@ -108,6 +108,9 @@
   width: 100%;
   padding-left: 16px;
   font-family: var(--font-body);
+  /* The side panel is chrome, not the terminal — it keeps a fixed size now that
+     .zy-md inherits instead of setting its own. */
+  font-size: 12.5px;
   color: var(--fg-dim);
 }
 .zy-ai-answer .zy-md {
@@ -160,7 +163,11 @@
 
 /* markdown content inside assistant bubbles */
 .zy-md {
-  font-size: 12.5px;
+  /* Inherit, don't dictate: the same markdown block renders inside the mission
+     feed (where «Размер шрифта» drives the base) and inside the side panel. A
+     hard 12.5px here silently overrode the feed's scale — the user's own turn
+     grew with the setting while the agent's answer stayed small. */
+  font-size: inherit;
   line-height: 1.55;
 }
 .zy-md p {

@@ -1,4 +1,4 @@
-import { BrowserWindow, app, shell } from 'electron'
+import { BrowserWindow, app, shell, session } from 'electron'
 import { join } from 'path'
 import { pathToFileURL } from 'url'
 import { CH } from '@shared/ipc'
@@ -13,6 +13,7 @@ import { HistoryStore } from './historyStore'
 import { registerIpc } from './ipc'
 import { PtyManager } from './ptyManager'
 import { SessionStore } from './sessionStore'
+import { SttService } from './sttService'
 import { SettingsStore } from './settingsStore'
 import { WorkflowStore, builtinResourcesDir } from './workflowStore'
 
@@ -29,6 +30,7 @@ let quitTimer: NodeJS.Timeout | null = null
 
 const settingsStore = new SettingsStore()
 const sessionStore = new SessionStore()
+const sttService = new SttService()
 const historyStore = new HistoryStore()
 const workflowStore = new WorkflowStore()
 const ptyManager = new PtyManager(() => mainWindow)
@@ -291,6 +293,7 @@ if (!gotLock) {
       workflowStore,
       aiProxy,
       agentRegistry,
+      stt: sttService,
       requestQuitConfirmed: () => {
         if (quitTimer) clearTimeout(quitTimer)
         quitConfirmed = true
@@ -301,6 +304,21 @@ if (!gotLock) {
 
     settingsStore.onChange((s) => {
       mainWindow?.webContents.send(CH.settingsChanged, s)
+    })
+
+    // SECURITY: without a handler Electron GRANTS permission requests by
+    // default. Dictation adds a microphone to an app that already has a
+    // terminal and a file tree, so the surface gets an explicit allow-list:
+    // media and clipboard (the app pastes into terminals), for OUR window only —
+    // everything else is denied.
+    session.defaultSession.setPermissionRequestHandler((wc, permission, callback) => {
+      const ours = !!mainWindow && wc === mainWindow.webContents
+      const allowed = permission === 'media' || permission === 'clipboard-read' || permission === 'clipboard-sanitized-write'
+      callback(ours && allowed)
+    })
+    session.defaultSession.setPermissionCheckHandler((wc, permission) => {
+      const ours = !!mainWindow && wc === mainWindow.webContents
+      return ours && (permission === 'media' || permission === 'clipboard-read' || permission === 'clipboard-sanitized-write')
     })
 
     createWindow()

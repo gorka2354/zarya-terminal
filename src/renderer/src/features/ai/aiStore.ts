@@ -94,6 +94,12 @@ export interface Conversation {
   engine: 'builtin' | AgentEngine
   /** Claude Code session id (from init/result) for resume / continuity. */
   claudeSessionId?: string
+  /**
+   * Indices of user turns that were interrupted with Esc. They look exactly
+   * like ordinary turns otherwise — no answer ever arrives — and the agent
+   * still sees them on resume, so the feed says so out loud.
+   */
+  interrupted?: number[]
   /** Working directory the conversation was opened in (folder the AI worked in). */
   cwd?: string
   agentMode: boolean
@@ -961,11 +967,20 @@ export const useAiStore = create<AiState>((set, get) => {
         window.zarya.ai.abort(conv.activeRequestId)
         requestConv.delete(conv.activeRequestId)
       }
+      // Mark the turn that was cut off. It stays in the transcript — and stays
+      // in the agent's context on resume — so leaving it indistinguishable from
+      // an answered turn is what made «я отменил, но он всё равно это видел»
+      // surprising.
+      const lastUser = conv.messages.map((m) => m.role).lastIndexOf('user')
       patchConversation(conv.id, (c) => ({
         ...c,
         streaming: false,
         activeRequestId: undefined,
-        pendingTools: []
+        pendingTools: [],
+        interrupted:
+          lastUser >= 0 && !(c.interrupted ?? []).includes(lastUser)
+            ? [...(c.interrupted ?? []), lastUser]
+            : c.interrupted
       }))
     },
 

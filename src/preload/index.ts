@@ -174,6 +174,22 @@ const api = {
     save: (wf: WorkflowDef) => ipcRenderer.invoke(CH.workflowsSave, wf),
     delete: (id: string) => ipcRenderer.invoke(CH.workflowsDelete, id)
   },
+  stt: {
+    state: () => ipcRenderer.invoke(CH.sttState),
+    ensureModel: () => ipcRenderer.invoke(CH.sttEnsureModel),
+    onProgress: (cb: (p: { file: string; received: number; total: number } | null) => void) =>
+      on(CH.sttProgress, cb),
+    /**
+     * One utterance, mono float PCM in [-1, 1]. Transferred as a plain array
+     * buffer over IPC; nothing is written to disk on either side.
+     */
+    transcribe: (samples: Float32Array, sampleRate: number) =>
+      ipcRenderer.invoke(CH.sttTranscribe, samples, sampleRate) as Promise<{
+        ok: boolean
+        text?: string
+        error?: string
+      }>
+  },
   app: {
     info: () => ipcRenderer.invoke(CH.appInfo),
     windowCommand: (cmd: WindowCommand) => ipcRenderer.send(CH.windowCommand, cmd),

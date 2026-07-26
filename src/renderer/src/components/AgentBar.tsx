@@ -9,6 +9,7 @@ import { convForSession, useAiStore } from '@/features/ai/aiStore'
 import { nextGate } from '@/features/ai/gates'
 import { Icon, EngineGlyph } from './Icon'
 import { PixelIcon } from './PixelIcon'
+import { isSilent, startRecording, type Recording } from '@/features/voice/dictation'
 import { ClaudeQuestionBar } from './ClaudeQuestionBar'
 import { launchClaudeNative } from './AiCliLauncher'
 import './agentbar.css'
@@ -275,10 +276,14 @@ export function AgentBar(): React.JSX.Element {
   const caps = activeEngine ? agentCaps[activeEngine] : null
   const [text, setText] = useState('')
   const [usageOpen, setUsageOpen] = useState(false)
+  const [voice, setVoice] = useState<'idle' | 'rec' | 'work' | 'load'>('idle')
+  const [voiceLevel, setVoiceLevel] = useState(0)
+  const [voiceNote, setVoiceNote] = useState('')
+  const recRef = useRef<Recording | null>(null)
   // -1 = not browsing history; otherwise index into barHistory.
   const [histIdx, setHistIdx] = useState(-1)
   const draftRef = useRef('')
-  const ref = useRef<HTMLInputElement>(null)
+  const ref = useRef<HTMLTextAreaElement>(null)
 
   const activeSessionId = useSessionsStore((s) => s.activeSessionId())
   // The conversation belongs to the active terminal — each terminal its own chat.
@@ -429,6 +434,16 @@ export function AgentBar(): React.JSX.Element {
   // CLI-style keys: ↑ first pulls a queued message back to edit, then walks input
   // history (↓ walks forward), like a shell. (Esc is handled globally above.)
   const onNavKey = (e: React.KeyboardEvent): boolean => {
+    // With a multi-line field the arrows belong to the caret first: only step
+    // through history when the text is a single line, or the caret sits at the
+    // very edge of a multi-line one.
+    const el = e.currentTarget as HTMLTextAreaElement
+    const caret = el.selectionStart ?? 0
+    const multiline = text.includes('\n')
+    if (multiline) {
+      if (e.key === 'ArrowUp' && caret > 0) return false
+      if (e.key === 'ArrowDown' && caret < text.length) return false
+    }
     if (e.key === 'ArrowUp') {
       // 1) Recall the pending (queued) message for editing.
       if (!text && histIdx === -1 && activeConv?.queued) {
@@ -492,6 +507,137 @@ export function AgentBar(): React.JSX.Element {
         next ? 'error' : 'success'
       )
   }
+
+  /**
+   * Dictation. The recognized text is INSERTED, never sent: recognition makes
+   * mistakes and this bar runs commands, so the last read belongs to the human.
+   * The mic opens on an explicit action and closes the moment the take ends.
+   */
+  const finishVoice = async (): Promise<void> => {
+    const rec = recRef.current
+    if (!rec) return
+    recRef.current = null
+    setVoiceLevel(0)
+    const { samples, sampleRate } = await rec.stop()
+    if (isSilent(samples)) {
+      setVoice('idle')
+      setVoiceNote('')
+      return
+    }
+    setVoice('work')
+    const res = await window.zarya.stt.transcribe(samples, sampleRate)
+    setVoice('idle')
+    if (!res.ok) {
+      setVoiceNote(res.error ?? 'не распозналось')
+      useUiStore.getState().toast(res.error ?? 'Распознавание не удалось', 'error')
+      return
+    }
+    setVoiceNote('')
+    const said = (res.text ?? '').trim()
+    if (!said) {
+      useUiStore.getState().toast('Ничего не разобрал', 'error')
+      return
+    }
+    setText((t) => (t ? `${t} ${said}` : said))
+    setTimeout(() => ref.current?.focus(), 0)
+  }
+
+  const startVoice = async (): Promise<void> => {
+    if (recRef.current || voice !== 'idle') return
+    const state = await window.zarya.stt.state()
+    if (!state.modelReady) {
+      // First run downloads ~225 MB — say so instead of appearing frozen.
+      setVoice('load')
+      setVoiceNote('загружаю модель…')
+      const r = await window.zarya.stt.ensureModel()
+      setVoice('idle')
+      setVoiceNote('')
+      if (!r?.ok) {
+        useUiStore.getState().toast(r?.error ?? 'Не удалось загрузить модель', 'error')
+        return
+      }
+    }
+    try {
+      recRef.current = await startRecording()
+      setVoice('rec')
+    } catch (e) {
+      useUiStore
+        .getState()
+        .toast(e instanceof Error ? e.message : 'Микрофон недоступен', 'error')
+      setVoice('idle')
+    }
+  }
+
+  const cancelVoice = (): void => {
+    recRef.current?.cancel()
+    recRef.current = null
+    setVoice('idle')
+    setVoiceLevel(0)
+  }
+
+  // Meter + silence auto-stop for the click-to-toggle mode. Not a neural VAD:
+  // it simply ends the take once speech has been heard and then stops.
+  useEffect(() => {
+    if (voice !== 'rec') return
+    let heard = false
+    let quietSince = 0
+    const timer = window.setInterval(() => {
+      const lvl = recRef.current?.level() ?? 0
+      setVoiceLevel(lvl)
+      if (lvl > 0.12) {
+        heard = true
+        quietSince = 0
+      } else if (heard) {
+        quietSince = quietSince || Date.now()
+        if (Date.now() - quietSince > 1500) void finishVoice()
+      }
+    }, 100)
+    return () => clearInterval(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voice])
+
+  // Grow the field with its content instead of scrolling a one-line box —
+  // capped so a pasted wall of text can't eat the window.
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`
+  }, [text])
+
+  // The first dictation downloads ~225 MB. Silence here would read as a frozen
+  // button, so the bar reports progress for as long as it runs.
+  useEffect(() => {
+    return window.zarya.stt.onProgress((p) => {
+      if (!p) {
+        setVoiceNote('')
+        return
+      }
+      const pct = p.total ? Math.floor((p.received / p.total) * 100) : 0
+      setVoiceNote(`модель распознавания… ${pct}%`)
+    })
+  }, [])
+
+  // Push-to-talk: hold the key, speak, release. Ignored while typing in a field.
+  useEffect(() => {
+    const isHotkey = (e: KeyboardEvent): boolean => e.ctrlKey && e.shiftKey && e.code === 'Space'
+    const down = (e: KeyboardEvent): void => {
+      if (!isHotkey(e) || e.repeat) return
+      e.preventDefault()
+      void startVoice()
+    }
+    const up = (e: KeyboardEvent): void => {
+      if (e.code !== 'Space' || !recRef.current) return
+      void finishVoice()
+    }
+    window.addEventListener('keydown', down)
+    window.addEventListener('keyup', up)
+    return () => {
+      window.removeEventListener('keydown', down)
+      window.removeEventListener('keyup', up)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voice])
 
   const toggleAutoApprove = (): void => {
     const next = !autoApprove
@@ -666,9 +812,42 @@ export function AgentBar(): React.JSX.Element {
             {gateOff ? <Icon name="bolt" size={13} /> : <PixelIcon name="lock" />}
           </button>
         )}
-        <input
+        {/* Dictation. While recording the button IS the indicator — the mic is
+            open, and that must be visible without hunting for a status line. */}
+        <button
+          className={`zy-agentbar-mic${voice === 'rec' ? ' zy-agentbar-mic--rec' : ''}${
+            voice === 'work' || voice === 'load' ? ' zy-agentbar-mic--busy' : ''
+          }`}
+          title={
+            voice === 'rec'
+              ? 'Идёт запись — нажми, чтобы закончить (Esc — отменить)'
+              : voice === 'load'
+                ? 'Загружается модель распознавания'
+                : voice === 'work'
+                  ? 'Распознаю…'
+                  : 'Диктовка: нажми или удерживай Ctrl+Shift+Space. Текст попадёт в строку, отправишь сам'
+          }
+          aria-label="Диктовка"
+          onClick={() => (voice === 'rec' ? void finishVoice() : void startVoice())}
+        >
+          {voice === 'rec' ? (
+            <span className="zy-mic-meter" aria-hidden>
+              {Array.from({ length: 4 }, (_, i) => (
+                <span
+                  key={i}
+                  className={`zy-mic-cell${voiceLevel > (i + 1) / 5 ? ' zy-mic-cell--on' : ''}`}
+                />
+              ))}
+            </span>
+          ) : (
+            <PixelIcon name="mic" />
+          )}
+        </button>
+        {voiceNote && <span className="zy-agentbar-voicenote">{voiceNote}</span>}
+        <textarea
           ref={ref}
           className="zy-agentbar-input"
+          rows={1}
           placeholder={
             busyConv && mode !== 'shell'
               ? 'Агент работает — Enter поставит в очередь · Esc прервать · ↑ править'
@@ -681,6 +860,21 @@ export function AgentBar(): React.JSX.Element {
             if (histIdx !== -1 && e.target.value !== barHistory[histIdx]) setHistIdx(-1)
           }}
           onKeyDown={(e) => {
+            // Shift+Enter / Ctrl+Enter insert a line break — a multi-line prompt
+            // is normal for an agent, and a plain <input> could never do it.
+            if (e.key === 'Enter' && (e.shiftKey || e.ctrlKey || e.metaKey)) {
+              e.preventDefault()
+              const el = e.currentTarget
+              const at = el.selectionStart ?? text.length
+              const to = el.selectionEnd ?? at
+              const next = `${text.slice(0, at)}\n${text.slice(to)}`
+              setText(next)
+              // Put the caret after the break, once React has re-rendered.
+              requestAnimationFrame(() => {
+                el.selectionStart = el.selectionEnd = at + 1
+              })
+              return
+            }
             if (onNavKey(e)) return
             if (e.key === 'Enter') {
               e.preventDefault()

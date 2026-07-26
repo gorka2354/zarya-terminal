@@ -239,7 +239,7 @@
   padding-left: 16px;
   margin-bottom: 10px;
   font-family: var(--font-ui);
-  font-size: 0.9em;
+  /* size comes from .zy-md (inherit) so the answer matches the feed base */
   line-height: 1.55;
 }
 .zy-mf-answer :is(p, ul, ol) {
@@ -584,4 +584,17 @@
   overflow: hidden;
   z-index: 1;
   display: flex;
+}
+/* An interrupted turn: no answer will arrive, but the agent still sees it when
+   the session resumes — say both things rather than leaving it looking normal. */
+.zy-mf-user-cut {
+  flex-shrink: 0;
+  padding: 0 5px;
+  border: 1px solid color-mix(in srgb, var(--warn, var(--accent-2)) 40%, transparent);
+  border-radius: 3px;
+  font-family: var(--font-tech);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--warn, var(--accent-2));
+  white-space: nowrap;
 }

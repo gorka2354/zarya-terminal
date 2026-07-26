@@ -373,7 +373,7 @@ function AgentSection({ conv, cwd }: { conv: Conversation; cwd: string }): React
         <span className="zy-mf-divider-line" />
       </div>
       {conv.messages.map((m, i) => (
-        <AgentMessage key={i} msg={m} conv={conv} cwd={cwd} />
+        <AgentMessage key={i} msg={m} conv={conv} cwd={cwd} interrupted={(conv.interrupted ?? []).includes(i)} />
       ))}
       {/*
         Gates that no message describes. Claude Code announces a tool as a
@@ -407,11 +407,14 @@ function AgentSection({ conv, cwd }: { conv: Conversation; cwd: string }): React
 function AgentMessage({
   msg,
   conv,
-  cwd
+  cwd,
+  interrupted
 }: {
   msg: Conversation['messages'][number]
   conv: Conversation
   cwd: string
+  /** This user turn was cut off with Esc — no answer is coming for it. */
+  interrupted?: boolean
 }): React.JSX.Element | null {
   if (msg.role === 'user') {
     const text = msg.content
@@ -427,6 +430,11 @@ function AgentMessage({
         <span className="zy-mf-cwd">{cwd}</span>
         <span className="zy-mf-chev"><PixelIcon name="chevron-right" /></span>
         <span className="zy-mf-user-text">{text}</span>
+        {interrupted && (
+          <span className="zy-mf-user-cut" title="Ход прерван по Esc. Ответа не будет, но агент увидит это сообщение при продолжении беседы">
+            прервано
+          </span>
+        )}
         {msg.ts != null && <span className="zy-mf-user-time">{fmtClock(msg.ts)}</span>}
       </div>
     )
