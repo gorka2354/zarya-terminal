@@ -288,6 +288,8 @@ export interface PersistedConversation {
   /** Working directory the conversation was opened in. */
   cwd?: string
   messages: AiMessage[]
+  /** User turns cut off with Esc — the badge must survive a restart. */
+  interrupted?: number[]
   createdAt: number
 }
 

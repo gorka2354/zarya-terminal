@@ -428,6 +428,10 @@ export class ClaudeCodeDriver implements AgentDriver {
         this.setModel(requestId, opts.model)
         existing.model = opts.model
       }
+      // A new turn means the session is being used again: clear the «the user
+      // interrupted» flag, or one Esc would silence every later failure for the
+      // rest of this conversation and the UI would wait forever.
+      existing.interrupted = false
       // Last line of defence: if the queue closed between the check above and
       // here, don't pretend the turn started.
       if (!existing.input.push(userMessage(opts.prompt))) {
@@ -626,6 +630,9 @@ export class ClaudeCodeDriver implements AgentDriver {
           }
 
           case 'result': {
+            // The turn finished on its own, so the session is healthy again: a
+            // later crash must be reported, not swallowed as «that Esc earlier».
+            session.interrupted = false
             const modelUsage = (msg as { modelUsage?: Record<string, { contextWindow?: number }> })
               .modelUsage ?? {}
             this.emit(requestId, {

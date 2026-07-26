@@ -71,6 +71,8 @@ export class SttService {
   private loading: Promise<void> | null = null
   private downloading: SttProgress | null = null
   private lastError: string | undefined
+  /** In-flight download shared by concurrent ensureModel() callers. */
+  private downloadJob: Promise<void> | null = null
 
   private modelDir(): string {
     return join(app.getPath('userData'), 'models', MODEL.dir)
@@ -109,6 +111,17 @@ export class SttService {
    */
   async ensureModel(onProgress?: (p: SttProgress) => void): Promise<void> {
     if (this.present()) return
+    // Share one download between concurrent callers. Two of them would otherwise
+    // write the same `.part` file at once and produce an interleaved blob that
+    // fails its hash — after a 225 MB wait.
+    if (this.downloadJob) return this.downloadJob
+    this.downloadJob = this.downloadModel(onProgress).finally(() => {
+      this.downloadJob = null
+    })
+    return this.downloadJob
+  }
+
+  private async downloadModel(onProgress?: (p: SttProgress) => void): Promise<void> {
     mkdirSync(this.modelDir(), { recursive: true })
     for (const f of MODEL.files) {
       const dest = this.filePath(f.name)
@@ -145,8 +158,14 @@ export class SttService {
     url: string,
     dest: string,
     expected: number,
-    onChunk: (received: number) => void
+    onChunk: (received: number) => void,
+    hops = 0
   ): Promise<void> {
+    // A redirect loop would otherwise recurse until the stack dies instead of
+    // surfacing an error.
+    if (hops > 5) return Promise.reject(new Error('слишком много перенаправлений'))
+    if (!url.startsWith('https://'))
+      return Promise.reject(new Error('источник модели должен быть https'))
     return new Promise((resolve, reject) => {
       const req = get(url, { headers: { 'user-agent': 'Zarya' } }, (res) => {
         // HuggingFace redirects to a CDN — and the Location can be RELATIVE
@@ -155,7 +174,7 @@ export class SttService {
         if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
           res.resume()
           const next = new URL(res.headers.location, url).toString()
-          this.download(next, dest, expected, onChunk).then(resolve, reject)
+          this.download(next, dest, expected, onChunk, hops + 1).then(resolve, reject)
           return
         }
         if (res.statusCode !== 200) {
@@ -234,7 +253,12 @@ export class SttService {
     }
     const stream = this.recognizer.createStream()
     stream.acceptWaveform({ sampleRate: 16000, samples: pcm })
-    this.recognizer.decode(stream)
+    // decodeAsync, not decode: the synchronous call is a native blocking one and
+    // would freeze the whole main process — ptys, agents, IPC, window controls —
+    // for as long as recognition takes. Fast on 8 cores, tens of seconds on two.
+    const rec = this.recognizer as Recognizer & { decodeAsync?: (s: unknown) => Promise<void> }
+    if (rec.decodeAsync) await rec.decodeAsync(stream)
+    else this.recognizer.decode(stream)
     return (this.recognizer.getResult(stream).text ?? '').trim()
   }
 

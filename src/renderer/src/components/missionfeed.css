@@ -237,7 +237,7 @@
   letter-spacing: 0.06em;
   color: var(--fg-faint);
 }
-.zy-mf-answer {
+.zy-mf-answer.zy-md {
   color: var(--fg-dim);
   padding-left: 16px;
   margin-bottom: 10px;
@@ -249,13 +249,13 @@
      more air because prose is denser than command output. */
   line-height: calc(var(--term-line-height, 1.55) * 1.08);
 }
-.zy-mf-answer :is(p, ul, ol) {
+.zy-mf-answer.zy-md :is(p, ul, ol) {
   margin: 0 0 6px;
 }
-.zy-mf-answer strong {
+.zy-mf-answer.zy-md strong {
   color: var(--fg);
 }
-.zy-mf-answer code {
+.zy-mf-answer.zy-md code {
   font-family: var(--font-mono);
   color: var(--zy-cyan);
 }

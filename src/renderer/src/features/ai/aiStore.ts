@@ -430,6 +430,7 @@ function persistConversations(state: AiState): Promise<void> {
       engine: c.engine,
       sessionId: c.sessionId,
       claudeSessionId: c.claudeSessionId,
+      interrupted: c.interrupted,
       cwd: c.cwd,
       messages: c.messages,
       createdAt: c.createdAt
@@ -840,6 +841,7 @@ export const useAiStore = create<AiState>((set, get) => {
         sessionId: p.sessionId,
         engine: p.engine,
         claudeSessionId: p.claudeSessionId,
+        interrupted: p.interrupted,
         cwd: p.cwd,
         // Any non-builtin engine drives its own agentic tool loop. A conv written
         // by a newer build with an unknown engine still lands here as an agent
@@ -971,7 +973,21 @@ export const useAiStore = create<AiState>((set, get) => {
       // in the agent's context on resume — so leaving it indistinguishable from
       // an answered turn is what made «я отменил, но он всё равно это видел»
       // surprising.
-      const lastUser = conv.messages.map((m) => m.role).lastIndexOf('user')
+      // tool_result хранится тем же role:'user' и в ленте невидим — пометка на
+      // нём просто не рисуется. Ищем последний ход, который лента реально
+      // показывает (условие зеркалит MissionFeed).
+      const isVisibleUserTurn = (m: AiMessage): boolean =>
+        m.role === 'user' &&
+        m.content.some(
+          (p) => p.type === 'text' && !p.text.startsWith('[Контекст:') && !!p.text.trim()
+        )
+      let lastUser = -1
+      for (let i = conv.messages.length - 1; i >= 0; i--) {
+        if (isVisibleUserTurn(conv.messages[i])) {
+          lastUser = i
+          break
+        }
+      }
       patchConversation(conv.id, (c) => ({
         ...c,
         streaming: false,

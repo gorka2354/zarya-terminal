@@ -280,6 +280,10 @@ export function AgentBar(): React.JSX.Element {
   const [voiceLevel, setVoiceLevel] = useState(0)
   const [voiceNote, setVoiceNote] = useState('')
   const recRef = useRef<Recording | null>(null)
+  /** Cancelled while getUserMedia was still resolving. */
+  const voiceCancelled = useRef(false)
+  /** Recording started by holding the key — silence must not end it early. */
+  const pttRef = useRef(false)
   // -1 = not browsing history; otherwise index into barHistory.
   const [histIdx, setHistIdx] = useState(-1)
   const draftRef = useRef('')
@@ -295,6 +299,24 @@ export function AgentBar(): React.JSX.Element {
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (e.key !== 'Escape' && e.key !== 'Enter') return
+      // SECURITY: only a BARE Enter approves a gate. Once the input became a
+      // textarea, Shift/Ctrl+Enter meant «new line» — but this global listener
+      // still saw a plain Enter with the field empty and silently ran the
+      // pending tool. Approving something because the user asked for a line
+      // break is exactly the blind «yes» the gate exists to prevent.
+      if (e.key === 'Enter' && (e.shiftKey || e.ctrlKey || e.metaKey || e.altKey)) return
+      // Esc during dictation cancels the take. The tooltip promised this and
+      // nothing implemented it, so Esc fell through to interrupting the agent.
+      if (e.key === 'Escape' && recRef.current) {
+        e.preventDefault()
+        voiceCancelled.current = true
+        recRef.current.cancel()
+        recRef.current = null
+        setVoice('idle')
+        setVoiceLevel(0)
+        setVoiceNote('')
+        return
+      }
       const ui = useUiStore.getState()
       if (
         ui.paletteOpen ||
@@ -544,21 +566,34 @@ export function AgentBar(): React.JSX.Element {
 
   const startVoice = async (): Promise<void> => {
     if (recRef.current || voice !== 'idle') return
+    // Claim the slot BEFORE the first await. Two entry points can fire almost
+    // together (button click and the push-to-talk key), and both would pass the
+    // guard above while awaiting — opening two microphones and orphaning the
+    // first Recording with the device still live.
+    setVoice('load')
     const state = await window.zarya.stt.state()
     if (!state.modelReady) {
       // First run downloads ~225 MB — say so instead of appearing frozen.
-      setVoice('load')
       setVoiceNote('загружаю модель…')
       const r = await window.zarya.stt.ensureModel()
-      setVoice('idle')
       setVoiceNote('')
       if (!r?.ok) {
+        setVoice('idle')
         useUiStore.getState().toast(r?.error ?? 'Не удалось загрузить модель', 'error')
         return
       }
     }
     try {
-      recRef.current = await startRecording()
+      const rec = await startRecording()
+      // Someone cancelled while getUserMedia was resolving — release the device
+      // instead of leaving it open behind a state that says «idle».
+      if (voiceCancelled.current) {
+        rec.cancel()
+        voiceCancelled.current = false
+        setVoice('idle')
+        return
+      }
+      recRef.current = rec
       setVoice('rec')
     } catch (e) {
       useUiStore
@@ -569,11 +604,26 @@ export function AgentBar(): React.JSX.Element {
   }
 
   const cancelVoice = (): void => {
+    voiceCancelled.current = true
     recRef.current?.cancel()
     recRef.current = null
     setVoice('idle')
     setVoiceLevel(0)
+    setVoiceNote('')
   }
+
+  // The microphone must close itself. The bar unmounts WITHOUT the user doing
+  // anything about dictation — Ctrl+` or a TUI taking over the terminal drops
+  // it — and an abandoned Recording keeps the device open for the life of the
+  // process, with no button left on screen to stop it. Empty deps on purpose:
+  // this must run only on unmount, never when `voice` changes.
+  useEffect(
+    () => () => {
+      recRef.current?.cancel()
+      recRef.current = null
+    },
+    []
+  )
 
   // Meter + silence auto-stop for the click-to-toggle mode. Not a neural VAD:
   // it simply ends the take once speech has been heard and then stops.
@@ -587,7 +637,7 @@ export function AgentBar(): React.JSX.Element {
       if (lvl > 0.12) {
         heard = true
         quietSince = 0
-      } else if (heard) {
+      } else if (heard && !pttRef.current) {
         quietSince = quietSince || Date.now()
         if (Date.now() - quietSince > 1500) void finishVoice()
       }
@@ -624,11 +674,13 @@ export function AgentBar(): React.JSX.Element {
     const down = (e: KeyboardEvent): void => {
       if (!isHotkey(e) || e.repeat) return
       e.preventDefault()
+      pttRef.current = true
       void startVoice()
     }
     const up = (e: KeyboardEvent): void => {
-      if (e.code !== 'Space' || !recRef.current) return
-      void finishVoice()
+      if (e.code !== 'Space') return
+      pttRef.current = false
+      if (recRef.current) void finishVoice()
     }
     window.addEventListener('keydown', down)
     window.addEventListener('keyup', up)
