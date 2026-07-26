@@ -315,6 +315,27 @@
   color: var(--fg-faint);
   flex-shrink: 0;
 }
+/* Header of a pinned card: the command itself moved to the block below, so the
+   head carries the intent instead ("агент хочет изменить файл"). */
+.zy-mf-tool-ask {
+  font-family: var(--font-tech);
+  font-size: 12px;
+  color: var(--fg-dim);
+  min-width: 0;
+}
+/* Line count of a pinned-open command. */
+.zy-mf-tool-lines {
+  margin-left: auto;
+  flex-shrink: 0;
+  padding: 0 5px;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-radius: 3px;
+  font-family: var(--font-tech);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  white-space: nowrap;
+}
 .zy-mf-tool-full {
   margin: 6px 0 0;
   padding: 8px 10px;
@@ -329,6 +350,15 @@
   white-space: pre-wrap;
   word-break: break-word;
   user-select: text;
+}
+/* A gate awaiting a decision may not hide any of itself — not behind a fold, and
+   not behind an inner scrollbar either: the approve button sits right below, so a
+   clipped tail would be approved unread. The feed's own scroll carries it. */
+.zy-mf-tool-full--pinned {
+  max-height: none;
+  overflow: visible;
+  color: var(--fg);
+  border-left: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
 }
 .zy-mf-tool-note {
   margin-left: auto;

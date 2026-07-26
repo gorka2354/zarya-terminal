@@ -20,6 +20,7 @@ const userData = mkdtempSync(join(tmpdir(), 'zarya-codex-'))
 const mockPath = join(root, 'scripts', 'mock-codex-app-server.mjs')
 const pidFile = join(userData, 'codex.pid')
 const approvalLog = join(userData, 'approvals.jsonl')
+const rpcLog = join(userData, 'rpc.jsonl')
 let pass = 0,
   fail = 0
 const ok = (name, cond, extra) => {
@@ -41,7 +42,8 @@ const app = await electron.launch({
     ZARYA_CODEX_BIN: process.execPath,
     ZARYA_CODEX_ARGS: JSON.stringify([mockPath]),
     ZARYA_CODEX_PID_FILE: pidFile,
-    ZARYA_CODEX_APPROVAL_LOG: approvalLog
+    ZARYA_CODEX_APPROVAL_LOG: approvalLog,
+    ZARYA_CODEX_RPC_LOG: rpcLog
   }
 })
 
@@ -67,6 +69,11 @@ async function waitGate(page, id, ms = 8000) {
   return false
 }
 const readApprovals = () => (existsSync(approvalLog) ? readFileSync(approvalLog, 'utf8') : '')
+const readRpc = () =>
+  (existsSync(rpcLog) ? readFileSync(rpcLog, 'utf8') : '')
+    .split('\n')
+    .filter(Boolean)
+    .map((l) => JSON.parse(l))
 
 try {
   const page = await app.firstWindow()
@@ -109,6 +116,49 @@ try {
   ok('ход завершился после approve', !!(ac && !ac.streaming && !ac.error))
   ok('гейт снят (pendingTools пусты)', (ac?.pendingTools || []).length === 0)
   ok('decision:accept доставлен app-server-у', /"decision":"accept"/.test(readApprovals()), readApprovals().slice(-120))
+
+  // ---- 3b. the sandbox is a gate switch too ----
+  // A writable workspace makes `on-request` ask only about things OUTSIDE it, so
+  // codex auto-approves an in-project patch by itself — the gate disappears below
+  // the UI while the chip still reads «РУЧНОЙ». With АВТОПИЛОТ off the thread must
+  // therefore open read-only. Asserted on the wire because no unit test can see it.
+  console.log('\n[3b] Песочница следует АВТОПИЛОТУ: bypass выкл → thread открыт read-only')
+  const starts = readRpc().filter((r) => r.method === 'thread/start' || r.method === 'thread/resume')
+  ok('thread/start вообще был', starts.length > 0, starts.length)
+  ok(
+    'при выключенном АВТОПИЛОТЕ уходит sandbox:readOnly',
+    starts.every((r) => r.sandbox === 'readOnly'),
+    starts.map((r) => r.sandbox)
+  )
+  ok(
+    'thread/resume тоже несёт sandbox (не падает на ~/.codex/config.toml)',
+    readRpc().filter((r) => r.method === 'thread/resume').every((r) => r.sandbox === 'readOnly'),
+    readRpc().filter((r) => r.method === 'thread/resume').map((r) => r.sandbox)
+  )
+  // Per-turn override is sent ONLY on drift: the tagged form replaces the policy
+  // wholesale and would silently drop the user's own [sandbox_workspace_write].
+  ok(
+    'turn/start не шлёт sandboxPolicy, пока чип не разошёлся с тредом',
+    readRpc().filter((r) => r.method === 'turn/start').every((r) => r.sandboxPolicy === null),
+    readRpc().filter((r) => r.method === 'turn/start').map((r) => r.sandboxPolicy)
+  )
+
+  // ---- 3c. a patch gate must name the files ----
+  // Read-only sandboxing routes EVERY in-project edit through this gate, so an
+  // unlabelled one is both frequent and indistinguishable from a patch to a config
+  // outside the project — exactly what trains a blind Enter.
+  console.log('\n[3c] Гейт правки называет файлы (иначе патч в проект = патч в ~/.codex)')
+  const pid2 = await page.evaluate(() => window.__zaryaStartAgent?.('codex', 'сделай патч'))
+  ok('codex поднял гейт правки файлов', await waitGate(page, pid2))
+  const pc = await convById(page, pid2)
+  const gate = (pc?.pendingTools || []).find((t) => !t.settled)
+  // `label` is exactly what the approval card renders (gateLabel), so this asserts
+  // what the user reads — not merely what the driver happened to put in `input`.
+  const label = gate?.label ?? ''
+  ok('карточка называет конкретные пути', /src\/main\/ipc\.ts/.test(label) && /package\.json/.test(label), label.slice(0, 200))
+  ok('это не безликое «Изменение файлов» и не голое имя инструмента', !!label && !/^(Изменение файлов|ApplyPatch)$/.test(label), label)
+  await page.evaluate(() => window.__zaryaDenyFirst?.())
+  await waitDone(page, pid2)
 
   // ---- 4. command-approval DENY ----
   console.log('\n[4] Command-approval: гейт → deny → decision:decline ушёл серверу')

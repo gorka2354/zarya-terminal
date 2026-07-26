@@ -20,7 +20,9 @@ import { getSettings, useSettingsStore } from '@/state/settingsStore'
 import { useSessionsStore } from '@/state/sessionsStore'
 import { useUiStore } from '@/state/uiStore'
 import { registerAiBridge } from './aiBridge'
+import { gateLabel } from './gates'
 import { sameModel } from './modelMatch'
+import { nativeGateOpts } from './startOpts'
 
 /**
  * AI chat store: multiple conversations, streaming assistant text, and an
@@ -521,8 +523,10 @@ export const useAiStore = create<AiState>((set, get) => {
     window.zarya.agent.start(engine, convId, {
       prompt,
       cwd: cwd || conv.cwd,
-      permissionMode: settings.ai.autoApprove ? 'acceptEdits' : 'default',
-      bypass: settings.ai.claudeBypass,
+      // SECURITY: permissionMode is always 'default' and gate-weakening comes only
+      // from АВТОПИЛОТ — see nativeGateOpts, which owns that invariant and is
+      // guarded by tests/startOpts.test.ts.
+      ...nativeGateOpts(settings.ai),
       ultracode: useUiStore.getState().ultracode,
       model: settings.ai.claudeModel || undefined,
       // Ultracode forces xhigh; otherwise use the user's effort override.
@@ -1224,7 +1228,13 @@ onBus('terminal:focus', ({ sessionId }) => {
           id: t.id,
           kind: t.kind,
           name: t.name,
-          settled: t.settled
+          settled: t.settled,
+          // `label` is what the approval card actually shows. A harness that only
+          // saw id/name could not tell a gate describing its files from one
+          // reading a bare «ApplyPatch» — the exact defect this dump must catch.
+          label: gateLabel(t),
+          input: t.input,
+          displayName: t.displayName
         })),
         msgs: c.messages.length
       }

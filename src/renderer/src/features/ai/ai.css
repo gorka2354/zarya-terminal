@@ -310,6 +310,18 @@
   font-size: 12px;
   color: var(--fg);
   word-break: break-all;
+  /* Keep line breaks: a multi-line command collapsed into one run of text reads
+     as a different command than the one that will actually execute. */
+  white-space: pre-wrap;
+  max-height: 240px;
+  overflow: auto;
+}
+/* While the gate awaits a decision the command may not be clipped: the approve
+   button is directly below it, so a tail hidden in a nested scroller would be
+   approved unread. The panel's own scroll carries it instead. */
+.zy-ai-tool--gate .zy-ai-tool-cmd {
+  max-height: none;
+  overflow: visible;
 }
 .zy-ai-tool-kicker {
   margin-left: auto;

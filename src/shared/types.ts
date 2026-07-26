@@ -177,7 +177,13 @@ export interface AiSettings {
   effort: AiEffort
   temperature: number
   maxTokens: number
-  /** Auto-approve agent command execution (dangerous, off by default). */
+  /**
+   * Auto-approve `run_command` for the BUILT-IN Zarya agent (dangerous, off by
+   * default). Scoped to that engine on purpose — it must never be mapped onto a
+   * native driver's {@link AgentPermissionMode}: weakening a native gate is the
+   * job of АВТОПИЛОТ ({@link claudeBypass}) and only of it, so the bar's chip can
+   * always state the truth about whether you will be asked.
+   */
   autoApprove: boolean
   /** How many recent blocks to attach as context automatically. */
   contextBlocks: number
@@ -325,6 +331,12 @@ export interface AgentQuestion {
  * an auto-allow INSIDE canUseTool instead — see claudeCodeDriver. The main
  * process also whitelists this at the trust boundary. Drivers whose backend has
  * no equivalent permission mode ignore it.
+ *
+ * 'acceptEdits' is representable but is NOT wired to any setting: it is the SDK's
+ * "auto-accept file edit operations", i.e. a real gate removal for Write/Edit
+ * below canUseTool, invisible to the app's own approval UI. Zarya sends
+ * 'default' and expresses gate-weakening solely through `bypass`, which the bar
+ * displays. Anything wiring this to a setting must also make the chip say so.
  */
 export type AgentPermissionMode = 'default' | 'acceptEdits' | 'plan'
 

@@ -88,7 +88,13 @@ export type CodexItem =
       exitCode?: number | null
       status?: string
     }
-  | { type: 'fileChange'; id: string; status?: string }
+  | {
+      type: 'fileChange'
+      id: string
+      status?: string
+      /** Paths being patched — the only thing that tells one patch gate from another. */
+      changes?: { path?: string; kind?: string }[]
+    }
   | { type: string; id?: string }
 
 // Notification payloads.
@@ -117,6 +123,8 @@ export interface CodexFileChangeApprovalParams {
   turnId: string
   itemId: string
   reason?: string | null
+  /** Root the approval would grant write access to (usually cwd) — path fallback. */
+  grantRoot?: string | null
 }
 
 /**

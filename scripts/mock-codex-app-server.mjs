@@ -29,6 +29,7 @@ if (process.env.ZARYA_CODEX_PID_FILE) {
 const send = (m) => process.stdout.write(JSON.stringify(m) + '\n')
 const killLog = process.env.ZARYA_CODEX_KILL_LOG
 const approvalLog = process.env.ZARYA_CODEX_APPROVAL_LOG
+const rpcLog = process.env.ZARYA_CODEX_RPC_LOG
 const logKill = () => {
   if (killLog) {
     try {
@@ -69,6 +70,26 @@ rl.on('line', (line) => {
     return
   }
   const { id, method, params } = msg
+
+  // Record the gate-relevant parameters of every request. The sandbox is a gate
+  // switch just as much as approvalPolicy is (a writable workspace makes codex
+  // auto-approve in-project patches), so the harness has to be able to assert on
+  // what was actually sent, not just on the approvals that came back.
+  if (rpcLog && (method === 'thread/start' || method === 'thread/resume' || method === 'turn/start')) {
+    try {
+      appendFileSync(
+        rpcLog,
+        JSON.stringify({
+          method,
+          sandbox: params?.sandbox ?? null,
+          approvalPolicy: params?.approvalPolicy ?? null,
+          sandboxPolicy: params?.sandboxPolicy ?? null
+        }) + '\n'
+      )
+    } catch {
+      /* best-effort */
+    }
+  }
 
   // A client RESPONSE to one of our approval requests ({id, result:{decision}}).
   if (id != null && method === undefined && msg.result !== undefined && approvals.has(id)) {
@@ -204,6 +225,34 @@ function runTurn(tid, turnId, text) {
     at(30, () => process.exit(1))
   } else if (/slow/i.test(text)) {
     // Leave the turn in-flight: no turn/completed until a turn/interrupt arrives.
+  } else if (/patch|патч|правк/i.test(text)) {
+    // File-change gate. The approval request carries no path — the paths arrive
+    // in `item/started`, and the card must name them (otherwise a patch to the
+    // project looks exactly like a patch to a config outside it).
+    const fcItemId = `fc_${++itemSeq}`
+    const aid = ++approvalSeq
+    approvals.set(aid, { threadId: tid, turnId, itemId: fcItemId })
+    at(30, () =>
+      send({
+        method: 'item/started',
+        params: {
+          threadId: tid,
+          turnId,
+          item: {
+            type: 'fileChange',
+            id: fcItemId,
+            changes: [{ path: 'src/main/ipc.ts', kind: 'edit' }, { path: 'package.json' }]
+          }
+        }
+      })
+    )
+    at(35, () =>
+      send({
+        id: aid,
+        method: 'item/fileChange/requestApproval',
+        params: { threadId: tid, turnId, itemId: fcItemId, reason: 'вне песочницы', grantRoot: '/tmp' }
+      })
+    )
   } else if (/tool|run/i.test(text)) {
     // Gate a command via a server-initiated approval request; the turn only
     // completes once the client replies (see finishAfterApproval).

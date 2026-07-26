@@ -254,6 +254,11 @@
   background: var(--success);
   flex-shrink: 0;
 }
+/* Engine that cannot bypass at all (ACP): a truthful read-out, not a control. */
+.zy-agentbar-bypass--locked {
+  cursor: default;
+  opacity: 0.75;
+}
 .zy-agentbar-bypass--on {
   color: var(--danger);
   border-color: color-mix(in srgb, var(--danger) 40%, transparent);

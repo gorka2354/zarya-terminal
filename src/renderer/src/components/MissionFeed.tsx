@@ -6,7 +6,7 @@ import { useBlocksStore } from '@/state/blocksStore'
 import { useSessionsStore } from '@/state/sessionsStore'
 import { useUiStore } from '@/state/uiStore'
 import { convForSession, useAiStore, type Conversation } from '@/features/ai/aiStore'
-import { orphanGates } from '@/features/ai/gates'
+import { gateLabel, gateView, nextGate, orphanGates, toolLabel } from '@/features/ai/gates'
 import { renderMarkdown } from '@/features/ai/markdown'
 import { getTerminal } from '@/terminal/terminalRegistry'
 import { Icon } from './Icon'
@@ -131,13 +131,45 @@ export function MissionFeed({ sessionId }: { sessionId: string }): React.JSX.Ele
     return () => clearTimeout(timer)
   }, [runningId, sessionId])
 
-  // Follow new content only while the user is already near the bottom — so
-  // scrolling up to read during a long turn isn't yanked back down.
   const stickRef = useRef(true)
+  // SECURITY: a gate awaiting a decision is the one thing the feed may yank the
+  // view for. Enter approves it from anywhere on the window, so a card out of
+  // sight would be a blind yes.
+  const waitingGateId = conv ? nextGate(conv)?.id : undefined
+  const waitingCount = conv
+    ? conv.pendingTools.filter((t) => !t.settled && t.kind !== 'question').length
+    : 0
+
+  // Follow new content only while the user is already near the bottom — so
+  // scrolling up to read during a long turn isn't yanked back down. Suspended
+  // entirely while a gate waits: the anchor effect below owns the viewport then,
+  // and a tool_result landing under the card would otherwise scroll the gate that
+  // Enter targets off screen, leaving a different card under the keystroke.
   useEffect(() => {
+    if (waitingGateId) return
     const el = scrollRef.current
     if (el && stickRef.current) el.scrollTop = el.scrollHeight
-  }, [blocks, conv?.messages, liveTail])
+  }, [blocks, conv?.messages, liveTail, waitingGateId])
+
+  // Anchor to the waiting card — NOT to the end of the feed: with parallel tool
+  // calls the bottom card is not the one Enter acts on.
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!waitingGateId) {
+      // Gate cleared — hand following back, judged by the ACTUAL position. Not an
+      // unconditional `true` (someone who scrolled up to read would be yanked
+      // down), and not a bare return either: leaving stick pinned false froze the
+      // feed for the rest of the session, so the output of the command just
+      // approved never came into view.
+      if (el) stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 64
+      return
+    }
+    stickRef.current = false
+    const card = el?.querySelector<HTMLElement>(`[data-gate-id="${CSS.escape(waitingGateId)}"]`)
+    // `block: 'start'` — the head of the command must be on screen, not its tail.
+    if (card) card.scrollIntoView({ block: 'start' })
+    else if (el) el.scrollTop = el.scrollHeight
+  }, [waitingGateId, waitingCount])
 
   // Patch-card action buttons (Скопировать / Вставить / Выполнить), wired via
   // event delegation exactly like the AI panel.
@@ -351,7 +383,15 @@ function AgentSection({ conv, cwd }: { conv: Conversation; cwd: string }): React
         blind "yes" to a command the user never saw. Render them here.
       */}
       {orphanGates(conv).map((t) => (
-        <ToolCard key={t.id} conv={conv} id={t.id} name={t.name} input={t.input} title={t.title} />
+        <ToolCard
+          key={t.id}
+          conv={conv}
+          id={t.id}
+          name={t.name}
+          input={t.input}
+          title={t.title}
+          isNextGate={nextGate(conv)?.id === t.id}
+        />
       ))}
       {conv.streaming && conv.messages[conv.messages.length - 1]?.role === 'user' && (
         <div className="zy-mf-typing">
@@ -404,7 +444,16 @@ function AgentMessage({
           ) : null
         }
         if (p.type === 'tool_use') {
-          return <ToolCard key={i} conv={conv} id={p.id} name={p.name} input={p.input} />
+          return (
+            <ToolCard
+              key={i}
+              conv={conv}
+              id={p.id}
+              name={p.name}
+              input={p.input}
+              isNextGate={nextGate(conv)?.id === p.id}
+            />
+          )
         }
         return null
       })}
@@ -436,7 +485,8 @@ function ToolCard({
   id,
   name,
   input: rawInput,
-  title
+  title,
+  isNextGate
 }: {
   conv: Conversation
   id: string
@@ -444,28 +494,28 @@ function ToolCard({
   input: unknown
   /** Driver-supplied human title (ACP/Codex), preferred over a synthesized one. */
   title?: string
+  /** This is the gate the Enter shortcut would approve (the first unsettled one). */
+  isNextGate?: boolean
 }): React.JSX.Element {
   const pending = conv.pendingTools.find((t) => t.id === id)
   const result = findToolResult(conv, id)
-  const input = rawInput as { command?: string; file_path?: string; path?: string } | null
-  const cmd =
-    typeof input?.command === 'string'
-      ? input.command
-      : typeof input?.file_path === 'string'
-        ? `${name} · ${input.file_path}`
-        : typeof input?.path === 'string'
-          ? `${name} · ${input.path}`
-          : (title ?? name)
+  // Label from the pending gate when there is one: it carries `displayName`, which
+  // is the ONLY human description ACP engines send (their `title` is undefined and
+  // their input has no command/path). Labelling from the props alone decayed those
+  // gates to a bare «Bash» / «Edit» — a card describing nothing, in the surface
+  // that is always on screen.
+  const cmd = pending ? gateLabel(pending) : toolLabel(name, rawInput, title)
   const store = useAiStore.getState()
 
   const verb = toolVerb(name)
-  // Collapse long / multi-line commands to a single line (CLI-style), expand on click.
+  // Long / multi-line commands fold to a single line (CLI-style), expand on click —
+  // EXCEPT while the gate awaits a decision, when the full text is pinned open in a
+  // block of its own (the header line alone is too narrow to be trusted with it).
+  const awaiting = !!pending && !pending.settled && pending.kind !== 'question'
+  const view = gateView(cmd, awaiting)
   const [expanded, setExpanded] = useState(false)
-  const firstLine = cmd.split('\n')[0]
-  const isLong = cmd.includes('\n') || cmd.length > 88
-  const label = isLong
-    ? (firstLine.length > 88 ? firstLine.slice(0, 88) + '…' : firstLine) + (cmd.includes('\n') ? ' ⋯' : '…')
-    : cmd
+  const open = view.mustShowFull || expanded
+  const canFold = view.isLong && !view.mustShowFull
 
   let body: React.JSX.Element
   if (result) {
@@ -492,7 +542,10 @@ function ToolCard({
         <button className="zy-mf-btn-deny" onClick={() => store.denyTool(conv.id, id)}>
           ОТКЛОНИТЬ
         </button>
-        <span className="zy-mf-tool-kbd">Enter · Esc</span>
+        {/* Enter/Esc act on the FIRST unsettled gate, so only that card may claim
+            them — otherwise a second waiting card invites a keystroke that lands
+            somewhere else. */}
+        {isNextGate && <span className="zy-mf-tool-kbd">Enter · Esc</span>}
       </div>
     )
   } else {
@@ -505,23 +558,40 @@ function ToolCard({
   }
 
   return (
-    <div className="zy-mf-tool">
+    <div className="zy-mf-tool" data-gate-id={awaiting ? id : undefined}>
       <div
-        className={`zy-mf-tool-head${isLong ? ' zy-mf-tool-head--clickable' : ''}`}
-        onClick={isLong ? () => setExpanded((v) => !v) : undefined}
+        className={`zy-mf-tool-head${canFold ? ' zy-mf-tool-head--clickable' : ''}`}
+        onClick={canFold ? () => setExpanded((v) => !v) : undefined}
       >
         <svg width="11" height="11" viewBox="0 0 24 24" fill="var(--accent)">
           <path d="M8 5.5l11 6.5-11 6.5z" />
         </svg>
-        <code className="zy-mf-tool-cmd">{expanded ? firstLine : label}</code>
-        {isLong && (
+        {/* While pinned the command lives in the <pre> below — repeating it here
+            would only re-introduce the ellipsised copy the pin exists to avoid. */}
+        {view.mustShowFull ? (
+          <span className="zy-mf-tool-ask">{verb.want}</span>
+        ) : (
+          <code className="zy-mf-tool-cmd">{open ? view.firstLine : view.label}</code>
+        )}
+        {canFold && (
           <span className="zy-mf-tool-expand" title={expanded ? 'Свернуть' : 'Развернуть команду'}>
             <Icon name={expanded ? 'chevron-up' : 'chevron-down'} size={11} />
           </span>
         )}
-        <span className="zy-mf-tool-note">{verb.want}</span>
+        {view.mustShowFull && view.lines > 1 && (
+          <span className="zy-mf-tool-lines" title="Команда показана целиком, без сворачивания">
+            {view.lines} стр.
+          </span>
+        )}
+        {!view.mustShowFull && <span className="zy-mf-tool-note">{verb.want}</span>}
       </div>
-      {expanded && isLong && <pre className="zy-mf-tool-full">{cmd}</pre>}
+      {(view.mustShowFull || (open && view.isLong)) && (
+        <pre
+          className={`zy-mf-tool-full${view.mustShowFull ? ' zy-mf-tool-full--pinned' : ''}`}
+        >
+          {cmd}
+        </pre>
+      )}
       {body}
     </div>
   )

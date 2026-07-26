@@ -54,10 +54,19 @@ interface CodexSession {
   turnId?: string
   /** toolUseId (== approval itemId) -> the JSON-RPC request id we must reply to. */
   approvals: Map<string, number | string>
+  /**
+   * itemId -> paths announced by `item/started`. A patch approval request carries
+   * no path of its own, so without this every file-change gate reads «Изменение
+   * файлов» — a patch inside the project is then indistinguishable from one to a
+   * config outside it.
+   */
+  filePaths: Map<string, string[]>
   model?: string
   effort?: string
   bypass?: boolean
   cwd?: string
+  /** Sandbox the thread was opened with — turn overrides are sent only on a mismatch. */
+  threadSandbox?: 'readOnly' | 'workspaceWrite'
 }
 
 function friendlyError(e: unknown): string {
@@ -252,8 +261,29 @@ export class CodexDriver implements AgentDriver {
     if (!requestId) return
 
     switch (method) {
+      case CODEX_NOTIFY.itemStarted: {
+        // A patch announces its paths here and nowhere else; the approval request
+        // that follows carries only a reason. Remember them so the gate can name
+        // what it is about to change.
+        // Coerce like the branches below: codex-supplied fields are untrusted.
+        const fc = (params as CodexItemNotification).item as {
+          type?: string
+          id?: string
+          changes?: { path?: unknown }[]
+        }
+        const session = this.sessions.get(requestId)
+        if (session && fc?.type === 'fileChange' && fc.id) {
+          const paths = (Array.isArray(fc.changes) ? fc.changes : [])
+            .map((c) => (typeof c?.path === 'string' ? c.path : ''))
+            .filter(Boolean)
+            .slice(0, 10) // cap the label's growth
+          if (paths.length) session.filePaths.set(String(fc.id), paths)
+        }
+        break
+      }
       case CODEX_NOTIFY.itemCompleted: {
         const item = (params as CodexItemNotification).item
+        if (item?.id) this.sessions.get(requestId)?.filePaths.delete(String(item.id))
         if (item?.type === 'agentMessage') {
           // Coerce: codex-supplied fields are untrusted; force a string so a
           // misbehaving server can't inject a non-string into the renderer.
@@ -351,12 +381,24 @@ export class CodexDriver implements AgentDriver {
       })
     } else if (c.method === CODEX_APPROVAL.fileChange) {
       const p = params as CodexFileChangeApprovalParams
+      // SECURITY: name the files. Without a path this card is identical for a
+      // patch to src/ and a patch to ~/.codex/config.toml, and read-only sandboxing
+      // routes every in-project edit through here — so these gates are frequent,
+      // and an unlabelled frequent gate trains a blind Enter. `grantRoot` is only
+      // the root the approval would open up, hence a fallback; say so plainly when
+      // there is nothing at all rather than sounding confident.
+      const paths = session.filePaths.get(toolUseId) ?? []
+      const root = p.grantRoot == null ? '' : String(p.grantRoot)
+      const what = paths.length ? paths.join(', ') : root
+      const label = what ? `Изменение файлов: ${what}` : 'Изменение файлов — путь не указан'
       this.emit(requestId, {
         type: 'permission',
         toolUseId,
         toolName: 'ApplyPatch',
-        input: { reason: p.reason == null ? null : String(p.reason) },
-        displayName: 'Изменение файлов'
+        // `title` (not `path`): the renderer's label reads input.title verbatim,
+        // while a `path` would render as «ApplyPatch · …».
+        input: { reason: p.reason == null ? null : String(p.reason), title: label },
+        displayName: label
       })
     } else {
       // Unknown server request — decline and forget so nothing strands.
@@ -379,6 +421,7 @@ export class CodexDriver implements AgentDriver {
     if (!session) {
       session = {
         approvals: new Map(),
+        filePaths: new Map(),
         model: codexModel(opts.model),
         effort: codexEffort(opts.effort),
         bypass: opts.bypass,
@@ -386,13 +429,25 @@ export class CodexDriver implements AgentDriver {
       }
       this.sessions.set(requestId, session)
       const approvalPolicy = opts.bypass ? 'never' : 'on-request'
+      // SECURITY: the sandbox is a second, quieter gate switch and must follow the
+      // same АВТОПИЛОТ toggle as the approval policy. With a writable workspace,
+      // `on-request` only asks about things OUTSIDE it — a patch inside the open
+      // folder is auto-approved by codex itself (assess_patch_safety) wherever a
+      // platform sandbox exists (macOS/Linux always), so the file changed with no
+      // approval request, no card, and the bar still reading «РУЧНОЙ». Read-only
+      // puts the patch back outside the writable set, so codex asks; after the
+      // user approves, it applies the patch regardless of the sandbox.
+      const sandbox = opts.bypass ? 'workspaceWrite' : 'readOnly'
+      session.threadSandbox = sandbox
       const method = opts.resume ? CODEX_METHOD.threadResume : CODEX_METHOD.threadStart
       const params = opts.resume
-        ? { threadId: opts.resume, cwd: opts.cwd, model: session.model, approvalPolicy }
+        ? // `sandbox` on resume too — omitting it fell back to ~/.codex/config.toml,
+          // i.e. the gate policy of a file Zarya doesn't control.
+          { threadId: opts.resume, cwd: opts.cwd, model: session.model, approvalPolicy, sandbox }
         : {
             cwd: opts.cwd,
             model: session.model,
-            sandbox: 'workspaceWrite',
+            sandbox,
             approvalPolicy,
             ...(session.effort ? { config: { model_reasoning_effort: session.effort } } : {})
           }
@@ -436,13 +491,31 @@ export class CodexDriver implements AgentDriver {
   }
 
   private async startTurn(requestId: string, session: CodexSession, text: string): Promise<void> {
+    const wantSandbox = session.bypass ? 'workspaceWrite' : 'readOnly'
     try {
       const res = (await this.request(CODEX_METHOD.turnStart, {
         threadId: session.threadId,
         input: [{ type: 'text', text }],
         model: session.model,
         effort: session.effort,
-        approvalPolicy: session.bypass ? 'never' : 'on-request'
+        approvalPolicy: session.bypass ? 'never' : 'on-request',
+        // Sent ONLY when the chip has drifted from the sandbox the thread was
+        // opened with: the thread's sandbox is fixed at thread/start, so toggling
+        // АВТОПИЛОТ mid-conversation would otherwise leave the workspace writable
+        // after the chip says it is back on. It is not sent otherwise because this
+        // tagged form REPLACES the policy wholesale — the string `sandbox` of
+        // thread/start lets codex fill in the user's own [sandbox_workspace_write]
+        // (network_access, writable_roots), and re-sending it every turn would
+        // silently drop those. Empty writableRoots is not a narrowing: cwd is
+        // always in the writable set for workspaceWrite.
+        ...(wantSandbox === session.threadSandbox
+          ? {}
+          : {
+              sandboxPolicy:
+                wantSandbox === 'workspaceWrite'
+                  ? { type: 'workspaceWrite', writableRoots: [], networkAccess: false }
+                  : { type: 'readOnly' }
+            })
       })) as CodexTurnStartResponse
       session.turnId = res?.turn?.id
     } catch (e) {

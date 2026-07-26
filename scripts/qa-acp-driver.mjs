@@ -82,7 +82,11 @@ try {
   ok('gemini.effort=false (ACP без тяги)', caps.gemini?.effort === false)
   ok('gemini.usage=false', caps.gemini?.usage === false)
   ok('gemini.models=false (ACP не даёт live-список/переключение)', caps.gemini?.models === false)
-  ok('gemini.bypass/resume=true', !!(caps.gemini?.bypass && caps.gemini?.resumableSessions))
+  // bypass=false is the honest answer: setBypass() is a no-op here and every
+  // tool call goes through session/request_permission, so the bar must not draw
+  // a live «АВТОПИЛОТ» toggle for this engine.
+  ok('gemini.bypass=false (ACP всегда спрашивает)', caps.gemini?.bypass === false)
+  ok('gemini.resume=true', caps.gemini?.resumableSessions === true)
 
   // ---- 2. init + streamed chunks accumulated into one assistant + result ----
   console.log('\n[2] Полный ход: initialize → session/new → session/prompt → chunks → result')

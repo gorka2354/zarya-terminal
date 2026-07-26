@@ -6,6 +6,7 @@ import { useSettingsStore } from '@/state/settingsStore'
 import { useUiStore } from '@/state/uiStore'
 import { getTerminal } from '@/terminal/terminalRegistry'
 import { convForSession, useAiStore } from '@/features/ai/aiStore'
+import { nextGate } from '@/features/ai/gates'
 import { Icon } from './Icon'
 import { ClaudeQuestionBar } from './ClaudeQuestionBar'
 import { launchClaudeNative } from './AiCliLauncher'
@@ -152,6 +153,7 @@ export function AgentBar(): React.JSX.Element {
   const agentContext = useUiStore((s) => s.agentContext)
   const ultracode = useUiStore((s) => s.ultracode)
   const bypass = useSettingsStore((s) => s.settings.ai.claudeBypass)
+  const autoApprove = useSettingsStore((s) => s.settings.ai.autoApprove)
   const agentCaps = useUiStore((s) => s.agentCaps)
   // The native engine the bar currently targets (null in shell/zarya) + its
   // capabilities — the UI gates controls on these, not on `=== 'claude-code'`.
@@ -189,7 +191,7 @@ export function AgentBar(): React.JSX.Element {
       if (!conv) return
       // A tool call awaiting approval: Enter (empty input) approves, Esc denies —
       // CLI-style, no reaching for the mouse. Takes precedence over interrupt.
-      const pendingRun = conv.pendingTools.find((t) => !t.settled && t.kind !== 'question')
+      const pendingRun = nextGate(conv)
       if (pendingRun) {
         if (e.key === 'Escape') {
           e.preventDefault()
@@ -376,13 +378,52 @@ export function AgentBar(): React.JSX.Element {
       )
   }
 
+  const toggleAutoApprove = (): void => {
+    const next = !autoApprove
+    void useSettingsStore.getState().update({ ai: { autoApprove: next } as never })
+    useUiStore
+      .getState()
+      .toast(
+        next
+          ? 'Без подтверждений — борт сам выполняет команды в терминале'
+          : 'Подтверждение команд включено',
+        next ? 'error' : 'success'
+      )
+  }
+
   const isShell = mode === 'shell'
   const isAgent = activeEngine !== null // a native agent mode is selected
   // Conditional controls driven by the engine's declared capabilities, not by
-  // `=== 'claude-code'`. An engine without usage/models/bypass hides those.
+  // `=== 'claude-code'`. An engine without usage/models hides those.
   const showFuel = !!caps?.usage
   const showModel = !!caps?.models
-  const showBypass = !!caps?.bypass
+
+  // SECURITY: the chip is the one place that answers «will I be asked?», so it
+  // is shown in EVERY agent mode and reads the switch that actually governs the
+  // active engine — `ai.autoApprove` for the built-in Zarya agent (it used to
+  // have no indicator at all, so auto-run looked identical to manual), and
+  // АВТОПИЛОТ for native engines. An engine that cannot bypass (ACP: Gemini /
+  // Kimi / Qwen always ask) renders the chip locked on «РУЧНОЙ» instead of an
+  // inviting toggle that silently does nothing.
+  //
+  // `caps === undefined` means «not loaded yet», NOT «cannot bypass»: capabilities
+  // arrive from one async IPC that waits on every driver's probe, and until it
+  // lands a turn still goes out with `bypass: ai.claudeBypass` (dispatchAgent).
+  // Collapsing unknown into false made the chip claim «always asks» while the
+  // driver was auto-allowing — the exact lie it exists to prevent. Lock it only
+  // on an explicit bypass:false.
+  const isBuiltinMode = mode === 'zarya'
+  const canToggleGate = isBuiltinMode || caps?.bypass !== false
+  const gateOff = isBuiltinMode ? autoApprove : bypass && caps?.bypass !== false
+  const gateTitle = isBuiltinMode
+    ? gateOff
+      ? '⚠ АВТОПИЛОТ — борт сам выполняет команды в терминале, без подтверждения. Клик: вернуть ручное управление'
+      : 'Ручное управление — борт спрашивает подтверждение перед каждой командой. Клик: включить автопилот (выполнять без подтверждений)'
+    : !canToggleGate
+      ? `Ручное управление — ${MODE_LABEL[mode]} всегда спрашивает подтверждение перед инструментом; автопилот для этого борта не поддерживается`
+      : gateOff
+        ? '⚠ АВТОПИЛОТ — борт выполняет все инструменты сам, без подтверждений (кроме вопросов AskUserQuestion). Клик: вернуть ручное управление'
+        : 'Ручное управление — борт спрашивает подтверждение перед инструментами. Клик: включить автопилот (выполнять без подтверждений)'
 
   if (question) {
     return (
@@ -479,18 +520,19 @@ export function AgentBar(): React.JSX.Element {
           <Icon name={isShell ? 'terminal' : 'bolt'} size={13} />
           {MODE_LABEL[mode]}
         </button>
-        {showBypass && (
+        {!isShell && (
           <button
-            className={`zy-agentbar-bypass${bypass ? ' zy-agentbar-bypass--on' : ''}`}
-            title={
-              bypass
-                ? '⚠ АВТОПИЛОТ — борт выполняет все инструменты сам, без подтверждений (кроме вопросов AskUserQuestion). Клик: вернуть ручное управление'
-                : 'Ручное управление — борт спрашивает подтверждение перед инструментами. Клик: включить автопилот (выполнять без подтверждений)'
+            className={`zy-agentbar-bypass${gateOff ? ' zy-agentbar-bypass--on' : ''}${
+              canToggleGate ? '' : ' zy-agentbar-bypass--locked'
+            }`}
+            title={gateTitle}
+            disabled={!canToggleGate}
+            onClick={
+              canToggleGate ? (isBuiltinMode ? toggleAutoApprove : toggleBypass) : undefined
             }
-            onClick={toggleBypass}
           >
             <span className="zy-agentbar-bypass-dot" />
-            {bypass ? '⚠ АВТОПИЛОТ' : 'РУЧНОЙ'}
+            {gateOff ? '⚠ АВТОПИЛОТ' : 'РУЧНОЙ'}
           </button>
         )}
         <input
