@@ -1,7 +1,7 @@
 {
   "name": "zarya-terminal",
   "productName": "Zarya",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Zarya — AI-native terminal with IDE superpowers. A new dawn for your terminal.",
   "main": "./out/main/index.js",
   "author": "gorka2354",

@@ -60,6 +60,52 @@ would give any downloaded code.
   fixed, typed `window.zarya` surface exposed by the preload script — there is no
   direct `ipcRenderer`/Node access from application UI code.
 
+## Approval gates
+
+Anything an agent wants to run is gated, and the gate is meant to be *readable* — a
+prompt you approve without seeing is no better than no prompt. Three rules hold:
+
+- **One switch per engine, always displayed.** `autoApprove` (Settings → AI) governs
+  only the built-in Zarya agent; native engines are weakened only by the explicit
+  **АВТОПИЛОТ** chip. Nothing else lowers a gate: `autoApprove` is never translated
+  into a driver permission mode, and the Codex sandbox follows the same chip rather
+  than staying writable underneath it. The bar's chip is shown in every agent mode
+  and reads whichever switch actually governs the active engine, so it cannot state
+  a policy the driver isn't running; an engine with no bypass at all
+  (Gemini/Kimi/Qwen always ask) shows it locked on «РУЧНОЙ».
+- **Every gate has a card, and the card says what it is.** A request that arrives
+  without a `tool_use` block still gets its own card, labelled from whatever the
+  driver actually sent — command, path, or its own description — so a keyboard
+  approval never lands on something invisible or on a bare tool name.
+- **A pending card hides nothing.** While a gate awaits your decision the command is
+  pinned open in a block of its own: no fold, no ellipsis, no inner scrollbar to
+  clip the tail, and a line counter when it is multi-line. The feed scrolls to that
+  card — specifically the one Enter would approve, which with parallel tool calls is
+  not the last one on screen — and only that card shows the «Enter · Esc» hint.
+
+## Terminal profiles
+
+A shell profile is a program the app launches, so `terminal.customProfiles` is
+effectively a list of things that will run on your machine — and the settings
+channel is reachable from the renderer. Left open, a single renderer compromise
+would become **persistent**: a profile survives restart, whereas the compromise
+itself does not.
+
+- **Structural validation.** A stored profile must name an absolute path to an
+  existing file, free of control characters, with bounded argv. It may carry only
+  locale, timezone and proxy variables — an allow list, because the deny list
+  cannot be finished: `PROMPT_COMMAND`, `PS0`, `BASH_FUNC_*`, `PSModulePath`,
+  `HOME` and friends each turn a trusted shell into an execution primitive, and
+  the shell-integration scripts themselves source `$HOME/.bashrc`.
+- **Explicit confirmation.** Validation cannot tell `powershell.exe -c <evil>`
+  from a legitimate profile, so anything that would newly execute — a new
+  profile, or an edited path/argv/env — requires your confirmation, with the
+  path, arguments and environment values shown. Declining leaves the stored list
+  untouched. Renaming a profile does not prompt.
+- **Checked again at spawn.** The settings file is editable by hand, so the
+  profile is re-validated when a terminal actually starts, not merely when it is
+  stored. Auto-detected shells resolve to absolute paths for the same reason.
+
 ## Supported versions
 
 Zarya is pre-1.0. Security fixes land on the latest released version; there is no

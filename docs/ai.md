@@ -106,8 +106,8 @@ isError? }` content parts on the next turn.
 **The safety model is explicit, not implicit:**
 
 ```ts
-autoApprove: boolean  // AiSettings — "Auto-approve agent command execution
-                       //  (dangerous, off by default)"
+autoApprove: boolean  // AiSettings — built-in Zarya agent only
+claudeBypass: boolean // AiSettings — the АВТОПИЛОТ chip, native engines only
 ```
 
 - By default (`autoApprove: false`), any command the assistant wants to run is
@@ -117,6 +117,55 @@ autoApprove: boolean  // AiSettings — "Auto-approve agent command execution
   This is opt-in and explicitly documented as dangerous in the setting itself — only
   enable it for a workflow/model you trust, and prefer leaving it off for anything that
   touches files, git state, or network requests you haven't reviewed.
+
+**Each engine has exactly one gate switch, and the bar always shows which:**
+
+`autoApprove` governs the built-in Zarya agent (your own API key, one `run_command`
+tool) and nothing else. Native engines — Claude Code, Codex, Gemini/Kimi/Qwen — are
+gated by their driver's approval callback, weakened only by the explicit **АВТОПИЛОТ**
+chip (`claudeBypass`), which auto-allows tool calls inside `canUseTool` while
+`AskUserQuestion` still surfaces.
+
+Those two must never be crossed. `autoApprove` used to also be sent to native drivers
+as `permissionMode: 'acceptEdits'` — a real Claude Agent SDK mode meaning *auto-accept
+file edit operations*. Edits then landed below `canUseTool`, invisible to Zarya's own
+approval UI, while АВТОПИЛОТ was off and the chip read «РУЧНОЙ». Zarya now always sends
+`permissionMode: 'default'`; `AgentPermissionMode` still types `'acceptEdits'`, but no
+setting is wired to it (`src/renderer/src/features/ai/aiStore.ts`, `src/shared/types.ts`).
+
+The chip is shown in every agent mode and reads the switch that actually governs the
+active engine, so it cannot report a policy the driver isn't running. An engine that
+has no bypass at all — the ACP engines always ask — renders it locked on «РУЧНОЙ»
+instead of an inviting toggle that does nothing (`src/main/acpDriver.ts`). Until
+capabilities load, the chip reports the setting that will actually be sent rather than
+assuming the engine cannot bypass.
+
+Codex is gated by two knobs, not one: `approvalPolicy` *and* the thread sandbox. A
+writable workspace makes `on-request` ask only about things outside it, so a patch
+inside the open folder was auto-approved by Codex itself. Both now follow АВТОПИЛОТ.
+The thread's sandbox is fixed at `thread/start`, so toggling the chip mid-conversation
+sends a per-turn override — but only when the two have actually drifted apart. That
+override replaces the sandbox policy wholesale, so sending it every turn would quietly
+discard your own `[sandbox_workspace_write]` settings (`network_access`,
+`writable_roots`). One case still does: opening a thread in «РУЧНОЙ» and switching to
+АВТОПИЛОТ mid-conversation runs the rest of it on Zarya's defaults rather than yours —
+start the conversation with the chip already on to keep them (`src/main/codexDriver.ts`).
+
+**An approval card may not hide any part of what it asks you to approve.** Cards fold
+long or multi-line commands to their first line, but that fold is suspended while the
+gate awaits a decision: the command moves into a block of its own, uncut and unclipped,
+with a line counter when it is multi-line. The header line is not trusted with it — it
+shares one flex row with the tool note and ellipsises at roughly half its nominal width.
+
+The feed scrolls to the waiting gate even if you had scrolled away, and specifically to
+the gate Enter would approve — the *first* unsettled one, which with parallel tool calls
+is not the bottom card. That card alone shows the «Enter · Esc» hint
+(`src/renderer/src/features/ai/gates.ts`, `tests/gates.test.ts`).
+
+Gate labels come from one function for every surface. ACP engines send their human
+description only in `displayName` / `input.title`, never in a top-level title, so a
+label synthesized from the tool name alone read «Bash» or «Edit» — a card describing
+nothing, in the surface that is always on screen.
 
 ## Where the assistant is reachable
 
@@ -150,7 +199,8 @@ To limit exposure:
 
 - Lower `contextBlocks` (or set it to 0) to stop automatic block attachment entirely —
   you can still paste specific output manually.
-- Keep `autoApprove` off so nothing runs without your eyes on it first.
+- Keep `autoApprove` (built-in agent) and АВТОПИЛОТ (native engines) off so nothing
+  runs without your eyes on it first — the bar's chip tells you which is in force.
 - Prefer `ollama` with a local model for anything you don't want leaving the machine
   at all — no network call happens outside your own host in that case.
 - Avoid putting secrets in `systemPromptExtra` — it's sent with every request.
