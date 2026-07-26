@@ -4,7 +4,10 @@
   "version": "0.5.2",
   "description": "Zarya — AI-native terminal with IDE superpowers. A new dawn for your terminal.",
   "main": "./out/main/index.js",
-  "author": "gorka2354",
+  "author": {
+    "name": "gorka2354",
+    "email": "99396285+gorka2354@users.noreply.github.com"
+  },
   "license": "MIT",
   "homepage": "https://github.com/gorka2354/zarya-terminal",
   "repository": {

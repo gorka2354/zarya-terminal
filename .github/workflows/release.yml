@@ -46,6 +46,10 @@ jobs:
         run: npm ci
 
       - name: Build app
+        # The renderer bundle is large (Monaco + xterm + the language grammars) and
+        # the macOS arm64 runner OOM-killed rollup at the default heap.
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
         run: npm run build
 
       - name: Package with electron-builder

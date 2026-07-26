@@ -1,6 +1,6 @@
 import { execFile } from 'child_process'
 import { existsSync, promises as fs } from 'fs'
-import { isAbsolute, join } from 'path'
+import { isAbsolute, join, win32 as winPath } from 'path'
 import { promisify } from 'util'
 import type { GitDiff, GitStatus } from '@shared/types'
 
@@ -31,9 +31,14 @@ export function gitExeCandidates(
       env.ProgramFiles,
       env['ProgramFiles(x86)'],
       env.ProgramW6432,
-      env.LOCALAPPDATA ? join(env.LOCALAPPDATA, 'Programs') : undefined
+      env.LOCALAPPDATA ? winPath.join(env.LOCALAPPDATA, 'Programs') : undefined
     ]
-    return roots.filter((r): r is string => !!r).map((r) => join(r, 'Git', 'cmd', 'git.exe'))
+    // win32.join, not the host's join: this function takes the platform as an
+    // argument, so it must produce Windows paths even when it runs on Linux —
+    // otherwise the guard's own test passes only on Windows machines.
+    return roots
+      .filter((r): r is string => !!r)
+      .map((r) => winPath.join(r, 'Git', 'cmd', 'git.exe'))
   }
   return ['/usr/bin/git', '/usr/local/bin/git', '/opt/homebrew/bin/git']
 }
