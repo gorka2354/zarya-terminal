@@ -72,7 +72,9 @@
   flex: 1;
   min-height: 0;
   overflow: hidden auto;
-  padding: 12px 16px;
+  /* Line height and padding follow their settings too — sizing only xterm made
+     all three dials look broken while the blocks feed is what's on screen. */
+  padding: var(--term-padding, 14px);
   font-family: var(--font-mono);
   /* Terminal zoom: «Размер шрифта» from Settings drives the feed, because the
      feed IS what the user reads — xterm renders offscreen in blocks mode, so
@@ -80,7 +82,7 @@
      in em from this base; chrome (labels, badges, buttons) stays in px on
      purpose, the way a terminal's own UI doesn't grow with its text. */
   font-size: var(--term-font-size, 14px);
-  line-height: 1.65;
+  line-height: var(--term-line-height, 1.55);
   color: var(--fg);
   /* The agent/command text must be selectable & copyable (global body sets none). */
   user-select: text;
@@ -220,6 +222,7 @@
   background: color-mix(in srgb, var(--accent-2) 7%, var(--bg-elev1));
 }
 .zy-mf-user-text {
+  font-size: 0.97em;
   color: var(--fg);
   flex: 1;
   min-width: 0;
@@ -239,8 +242,12 @@
   padding-left: 16px;
   margin-bottom: 10px;
   font-family: var(--font-ui);
-  /* size comes from .zy-md (inherit) so the answer matches the feed base */
-  line-height: 1.55;
+  /* Optically matched to the mono user turn: PT Sans reads smaller than
+     JetBrains Mono at the same px, so the two looked like different sizes. */
+  font-size: 1.06em;
+  /* Follows «Межстрочный интервал» like the rest of the feed, with a touch
+     more air because prose is denser than command output. */
+  line-height: calc(var(--term-line-height, 1.55) * 1.08);
 }
 .zy-mf-answer :is(p, ul, ol) {
   margin: 0 0 6px;

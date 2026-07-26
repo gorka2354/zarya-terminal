@@ -68,9 +68,14 @@ export default function App(): React.JSX.Element {
   // dial. Chrome/UI labels deliberately stay fixed: this is a terminal zoom, not
   // an application zoom.
   const fontSize = useSettingsStore((s) => s.settings.appearance.fontSize)
+  const lineHeight = useSettingsStore((s) => s.settings.appearance.lineHeight)
+  const termPadding = useSettingsStore((s) => s.settings.appearance.terminalPadding)
   useEffect(() => {
-    document.documentElement.style.setProperty('--term-font-size', `${fontSize}px`)
-  }, [fontSize])
+    const root = document.documentElement
+    root.style.setProperty('--term-font-size', `${fontSize}px`)
+    root.style.setProperty('--term-line-height', String(lineHeight))
+    root.style.setProperty('--term-padding', `${termPadding}px`)
+  }, [fontSize, lineHeight, termPadding])
   useEffect(() => {
     window.zarya.app.setOpacity(opacity)
   }, [opacity])
