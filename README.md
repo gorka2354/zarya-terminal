@@ -112,6 +112,13 @@ The model (~225 MB) is downloaded on first use with a checksum check, not bundle
 and cached under your user data. Everything after that is local: no request leaves
 the machine, and the audio exists only in memory while you speak.
 
+**Choosing the microphone.** Right-click the mic button (or Settings → Голос) to pick
+the input device; the default follows your OS. The choice is stored with the device
+name as well as its id, because Chromium's per-origin device ids change when a driver
+is reinstalled — so the same headset is re-bound silently instead of dictation quietly
+falling back to the laptop's built-in mic. If the device really is gone, Zarya says so
+and records into the system default rather than failing or pretending.
+
 ### Blocks
 Every command becomes a distinct, navigable block — command, output, exit code and
 duration, shown as an instrument-panel pill (`✓ 0 · 40мс` / `✗ 7 · 3.4с`) — on the open

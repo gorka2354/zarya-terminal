@@ -69,6 +69,7 @@ export type IconName =
   | 'split-v'
   | 'orbit'
   | 'radio'
+  | 'mic'
   | 'bolt'
   | 'edit'
   | 'external'
@@ -244,6 +245,15 @@ const PATHS: Record<IconName, React.ReactNode> = {
     <>
       <circle cx="12" cy="12" r="2" fill="currentColor" stroke="none" />
       <path d="M8.5 8.5a5 5 0 0 0 0 7M15.5 8.5a5 5 0 0 1 0 7M6 6a8 8 0 0 0 0 12M18 6a8 8 0 0 1 0 12" />
+    </>
+  ),
+  // Микрофон — вкладка «Голос» и всё, что про диктовку. На экране обычно виден
+  // не этот контур, а пиксельный глиф того же имени (PIXEL_SMALL выше);
+  // линейный вариант нужен как запасной и для полноты PATHS.
+  mic: (
+    <>
+      <rect x="9" y="3" width="6" height="11" rx="3" />
+      <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3M8.5 21h7" />
     </>
   ),
   bolt: <path d="M13 2.5L5.5 13H11l-1 8.5L18.5 11H13z" fill="currentColor" stroke="none" />,

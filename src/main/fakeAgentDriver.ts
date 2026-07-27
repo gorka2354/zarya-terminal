@@ -101,6 +101,13 @@ export class FakeAgentDriver implements AgentDriver {
           ]
         })
       )
+    } else if (/slow/i.test(opts.prompt)) {
+      // Долгий ход без гейта — чтобы успеть проверить то, что делается ПОКА
+      // агент работает: очередь, Esc, прерывание. На 500мс такие сценарии
+      // превращаются в гонку с самим тестом.
+      this.schedule(requestId, 8000, () =>
+        this.emit(requestId, { type: 'result', isError: false, models: [`${this.engine}-model`] })
+      )
     } else {
       this.schedule(requestId, 500, () =>
         this.emit(requestId, { type: 'result', isError: false, models: [`${this.engine}-model`] })

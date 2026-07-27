@@ -10,6 +10,18 @@ import { nextGate } from '@/features/ai/gates'
 import { Icon, EngineGlyph } from './Icon'
 import { PixelIcon } from './PixelIcon'
 import { isSilent, startRecording, type Recording } from '@/features/voice/dictation'
+import {
+  labelsHidden,
+  listMics,
+  micName,
+  onDeviceChange,
+  pickDeviceId,
+  resolveMic,
+  revealMicLabels,
+  usableMics,
+  type MicDevice
+} from '@/features/voice/devices'
+import { useContextMenu, type MenuItem } from './ContextMenu'
 import { ClaudeQuestionBar } from './ClaudeQuestionBar'
 import { launchClaudeNative } from './AiCliLauncher'
 import './agentbar.css'
@@ -25,6 +37,14 @@ function pushHistory(text: string): void {
   barHistory.push(t)
   if (barHistory.length > 200) barHistory.shift()
 }
+
+/**
+ * Про какие пропавшие микрофоны уже сказали в этом запуске (ключ — сохранённый
+ * deviceId). На уровне модуля, а не в ref: бар перемонтируется (Ctrl+`, TUI), и
+ * счётчик в ref обнулялся бы вместе с ним. Запись снимается, когда устройство
+ * находится снова.
+ */
+const warnedMissingMics = new Set<string>()
 
 type BarMode = 'shell' | 'zarya' | AgentEngine
 const MODE_LABEL: Record<BarMode, string> = {
@@ -282,6 +302,11 @@ export function AgentBar(): React.JSX.Element {
   const recRef = useRef<Recording | null>(null)
   /** Cancelled while getUserMedia was still resolving. */
   const voiceCancelled = useRef(false)
+  /** Бар ещё на экране. Ложь = запись, открывшуюся после ухода, надо закрыть. */
+  const aliveRef = useRef(true)
+  const voiceCfg = useSettingsStore((s) => s.settings.voice)
+  const [mics, setMics] = useState<MicDevice[]>([])
+  const { menu: micMenu, open: openMicMenu } = useContextMenu()
   /** Recording started by holding the key — silence must not end it early. */
   const pttRef = useRef(false)
   // -1 = not browsing history; otherwise index into barHistory.
@@ -352,6 +377,27 @@ export function AgentBar(): React.JSX.Element {
         }
       }
       if (e.key !== 'Escape') return
+      // Esc при непустой очереди забирает СВОЮ приписку обратно в строку и НЕ
+      // трогает агента. Так устроен CLI: в транскриптах пользователя 103 из 103
+      // случаев `queue-operation: remove` идут без `[Request interrupted by
+      // user]` — то есть отмена очереди и прерывание хода там не связаны.
+      // Раньше Заря на Esc прерывала агента, а очередь оставляла — и та уходила
+      // ему сама сразу после конца хода. Ровно наоборот тому, чего от Esc ждут.
+      if (conv.queued) {
+        e.preventDefault()
+        const q = useAiStore.getState().takeQueued(conv.id)
+        if (!q) return
+        setHistIdx(-1)
+        // Приписка была раньше черновика, поэтому встаёт перед ним.
+        setText((prev) => (prev.trim() ? `${q}\n${prev}` : q))
+        requestAnimationFrame(() => {
+          const el = ref.current
+          if (!el) return
+          el.focus()
+          el.selectionStart = el.selectionEnd = el.value.length
+        })
+        return
+      }
       if (!conv.streaming) return
       if (conv.pendingTools.some((t) => t.kind === 'question' && !t.settled)) return
       e.preventDefault()
@@ -571,6 +617,18 @@ export function AgentBar(): React.JSX.Element {
     // guard above while awaiting — opening two microphones and orphaning the
     // first Recording with the device still live.
     setVoice('load')
+    // Флаг описывает ТОЛЬКО эту попытку. Esc во время записи ставит его, когда
+    // никакого startVoice в полёте нет (recRef уже очищен), и он оставался
+    // взведённым до следующего нажатия: та диктовка открывала микрофон и тут же
+    // сама себя отменяла — без записи и без единого слова. Работало лишь третье
+    // нажатие. Сброс идёт там же, где захватывается слот.
+    voiceCancelled.current = false
+    // Настройки читаются из стора, а не из замыкания рендера: push-to-talk
+    // подписан эффектом с deps [voice], а смена микрофона `voice` не меняет —
+    // слушатель горячей клавиши держал startVoice со СТАРЫМ voiceCfg, и первая
+    // же диктовка после переключения шла в прежнее устройство, пока подсказка на
+    // кнопке показывала новое. Ровно та тихая подмена, ради которой всё писалось.
+    const cfg = useSettingsStore.getState().settings.voice
     const state = await window.zarya.stt.state()
     if (!state.modelReady) {
       // First run downloads ~225 MB — say so instead of appearing frozen.
@@ -584,7 +642,53 @@ export function AgentBar(): React.JSX.Element {
       }
     }
     try {
-      const rec = await startRecording()
+      // Какой микрофон открывать, решает resolveMic: сохранённый id, если он на
+      // месте; то же устройство под новым id, если id сменился; системное — если
+      // выбранного больше нет. Список запрашивается перед каждой записью: между
+      // диктовками гарнитуру успевают и отключить, и воткнуть обратно.
+      const devices = await listMics()
+      setMics(devices)
+      const pick = resolveMic(devices, cfg)
+      if (pick.kind === 'relabelled') {
+        // То же устройство под новым id — чиним настройку молча: для человека
+        // ничего не изменилось, он по-прежнему говорит в свою гарнитуру.
+        void useSettingsStore
+          .getState()
+          .update({ voice: { deviceId: pick.deviceId, deviceLabel: pick.label } as never })
+      }
+      if (pick.kind === 'missing') {
+        // Раз за запуск на устройство: списанная гарнитура иначе давала бы
+        // всплывашку на каждую диктовку. Что выбор не найден, всё равно видно —
+        // в подсказке на кнопке и отдельной строкой в настройках.
+        if (!warnedMissingMics.has(cfg.deviceId)) {
+          warnedMissingMics.add(cfg.deviceId)
+          useUiStore
+            .getState()
+            .toast(`Микрофон «${pick.label}» не найден — пишу в системный`, 'error')
+        }
+      } else {
+        // Устройство вернулось — право на предупреждение восстановлено. Без
+        // этого второе исчезновение той же гарнитуры прошло бы молча, и запись
+        // ушла бы в системный микрофон без единого слова.
+        warnedMissingMics.delete(cfg.deviceId)
+      }
+      let lost = false
+      const rec = await startRecording(pickDeviceId(pick), {
+        onDeviceLost: () => {
+          lost = true
+          recRef.current = null
+          setVoice('idle')
+          setVoiceLevel(0)
+          useUiStore.getState().toast('Микрофон отключён — запись прервана', 'error')
+        }
+      })
+      // Бар ушёл с экрана, пока открывался микрофон: его cleanup уже прошёл и
+      // отменять ему было нечего. Закрываем сами — иначе устройство останется
+      // открытым навсегда, а кнопки, которой это можно прекратить, уже нет.
+      if (!aliveRef.current) {
+        rec.cancel()
+        return
+      }
       // Someone cancelled while getUserMedia was resolving — release the device
       // instead of leaving it open behind a state that says «idle».
       if (voiceCancelled.current) {
@@ -593,14 +697,117 @@ export function AgentBar(): React.JSX.Element {
         setVoice('idle')
         return
       }
+      // Устройство успело отвалиться, пока промис резолвился: держать мёртвую
+      // запись в recRef — значит показывать индикатор над закрытым микрофоном.
+      if (lost) {
+        setVoice('idle')
+        return
+      }
+      // Устройство отвалилось между enumerateDevices и getUserMedia.
+      if (rec.fellBackToDefault) {
+        useUiStore
+          .getState()
+          .toast(
+            `Микрофон «${cfg.deviceLabel || 'выбранный'}» недоступен — пишу в системный`,
+            'error'
+          )
+      }
       recRef.current = rec
       setVoice('rec')
     } catch (e) {
-      useUiStore
-        .getState()
-        .toast(e instanceof Error ? e.message : 'Микрофон недоступен', 'error')
+      // Запрет в системных настройках приходит тем же NotAllowedError, что и
+      // отказ на уровне страницы, но чинится он в другом месте — «микрофон
+      // недоступен» отправило бы человека искать поломку не там.
+      const name = e instanceof Error ? e.name : ''
+      const msg =
+        name === 'NotAllowedError'
+          ? 'Доступ к микрофону запрещён — проверь системные настройки приватности'
+          : name === 'NotFoundError'
+            ? 'Микрофон не найден'
+            : e instanceof Error
+              ? e.message
+              : 'Микрофон недоступен'
+      useUiStore.getState().toast(msg, 'error')
       setVoice('idle')
     }
+  }
+
+  /**
+   * Выбор микрофона по правому клику на кнопке — там, где о нём и вспоминают:
+   * когда надиктованное ушло не в ту гарнитуру. То же самое лежит в настройках
+   * («Голос»), но лезть туда посреди работы никто не станет.
+   */
+  const micItems = (devices: MicDevice[], at: { x: number; y: number }): MenuItem[] => {
+    const list = usableMics(devices)
+    // Именно общий помощник, а не своя копия условия: копия разошлась бы с
+    // настройками, и одно и то же состояние читалось бы по-разному в двух местах.
+    const hidden = labelsHidden(devices)
+    const items: MenuItem[] = [
+      {
+        label: 'Системный по умолчанию',
+        hint: voiceCfg.deviceId ? undefined : '✓',
+        onClick: () =>
+          void useSettingsStore
+            .getState()
+            .update({ voice: { deviceId: '', deviceLabel: '' } as never })
+      }
+    ]
+    if (list.length) items.push({ separator: true })
+    list.forEach((d, i) => {
+      const name = micName(d, i)
+      items.push({
+        label: name,
+        hint: d.deviceId === voiceCfg.deviceId ? '✓' : undefined,
+        onClick: () =>
+          void useSettingsStore
+            .getState()
+            .update({ voice: { deviceId: d.deviceId, deviceLabel: d.label } as never })
+      })
+    })
+    // Выбранного устройства нет в списке. Без этой строки меню показывало бы
+    // выбор ненажатым нигде — как будто ничего и не выбрано.
+    if (voiceCfg.deviceId && !list.some((d) => d.deviceId === voiceCfg.deviceId)) {
+      items.push({
+        label: `${voiceCfg.deviceLabel || 'Выбранный микрофон'} · не найден`,
+        hint: '✓',
+        disabled: true
+      })
+    }
+    if (hidden) {
+      // Названия скрыты, пока странице не давали доступ к микрофону (на Windows
+      // не случается — там разрешение уже выдано; ветка для macOS/Linux, где
+      // гейтит ОС). Открывать микрофон ради списка сами не будем — только по
+      // явному нажатию.
+      items.push({ separator: true })
+      items.push({
+        label: 'Показать названия…',
+        hint: 'нужен доступ',
+        onClick: () => {
+          void revealMicLabels()
+            .then((fresh) => {
+              setMics(fresh)
+              openMicMenu(at.x, at.y, micItems(fresh, at))
+            })
+            .catch(() => useUiStore.getState().toast('Доступ к микрофону не выдан', 'error'))
+        }
+      })
+    }
+    if (!list.length) {
+      items.push({ separator: true })
+      items.push({ label: 'Микрофонов не найдено', disabled: true })
+    }
+    if (voice === 'rec') {
+      items.push({ separator: true })
+      items.push({ label: 'Применится со следующей записи', disabled: true })
+    }
+    return items
+  }
+
+  const openMicPicker = (x: number, y: number): void => {
+    void listMics().then((devices) => {
+      setMics(devices)
+      openMicMenu(x, y, micItems(devices, { x, y }))
+    })
   }
 
   const cancelVoice = (): void => {
@@ -612,13 +819,50 @@ export function AgentBar(): React.JSX.Element {
     setVoiceNote('')
   }
 
+  // Список устройств для подсказки на кнопке — чтобы «какой микрофон слушают»
+  // читалось наведением, а не выяснялось по расшифровке. Названия здесь могут
+  // быть пустыми (доступ ещё не выдан) — это нормально, имя берётся из настроек.
+  useEffect(() => {
+    let alive = true
+    const refresh = (): void => {
+      void listMics().then((d) => {
+        if (alive) setMics(d)
+      })
+    }
+    refresh()
+    const off = onDeviceChange(refresh)
+    return () => {
+      alive = false
+      off()
+    }
+  }, [])
+
+  const micLabel = ((): string => {
+    if (!voiceCfg.deviceId) return 'системный'
+    const list = usableMics(mics)
+    const i = list.findIndex((d) => d.deviceId === voiceCfg.deviceId)
+    if (i >= 0) return micName(list[i], i)
+    // Выбранного устройства в списке нет — писать будут в системное. Назвать
+    // здесь одно имя, а записать другое, значит соврать ровно в том месте, куда
+    // человек и смотрит, чтобы это проверить. Пустой список не в счёт: он
+    // означает, что перечисление ещё не вернулось, а не что устройство пропало.
+    const name = voiceCfg.deviceLabel || 'выбранный'
+    return list.length ? `${name} — не найден, пишу в системный` : name
+  })()
+
   // The microphone must close itself. The bar unmounts WITHOUT the user doing
   // anything about dictation — Ctrl+` or a TUI taking over the terminal drops
   // it — and an abandoned Recording keeps the device open for the life of the
   // process, with no button left on screen to stop it. Empty deps on purpose:
   // this must run only on unmount, never when `voice` changes.
+  // Отдельно — размонтирование ПОСРЕДИ открытия микрофона: этот cleanup уже
+  // отработал (recRef пуст, отменять нечего), а getUserMedia ещё в полёте.
+  // Резолв присваивал recRef на мёртвом компоненте — кнопки больше нет, а
+  // устройство остаётся открытым до конца жизни процесса, с горящим индикатором
+  // микрофона в системе. Флаг живёт в ref и переживает cleanup.
   useEffect(
     () => () => {
+      aliveRef.current = false
       recRef.current?.cancel()
       recRef.current = null
     },
@@ -877,10 +1121,15 @@ export function AgentBar(): React.JSX.Element {
                 ? 'Загружается модель распознавания'
                 : voice === 'work'
                   ? 'Распознаю…'
-                  : 'Диктовка: нажми или удерживай Ctrl+Shift+Space. Текст попадёт в строку, отправишь сам'
+                  : `Диктовка: нажми или удерживай Ctrl+Shift+Space. Текст попадёт в строку, отправишь сам\nМикрофон: ${micLabel} · ПКМ — выбрать`
           }
           aria-label="Диктовка"
           onClick={() => (voice === 'rec' ? void finishVoice() : void startVoice())}
+          onContextMenu={(e) => {
+            e.preventDefault()
+            const r = e.currentTarget.getBoundingClientRect()
+            openMicPicker(r.left, r.top - 8)
+          }}
         >
           {voice === 'rec' ? (
             <span className="zy-mic-meter" aria-hidden>
@@ -974,6 +1223,7 @@ export function AgentBar(): React.JSX.Element {
           <Icon name="send" size={16} />
         </button>
       </div>
+      {micMenu}
     </div>
   )
 }

@@ -280,7 +280,7 @@ export function MissionFeed({ sessionId }: { sessionId: string }): React.JSX.Ele
               <div className="zy-mf-queued">
                 <Icon name="chevron-up" size={11} />
                 <span className="zy-mf-queued-text">в очереди: {conv.queued}</span>
-                <span className="zy-mf-queued-hint">↑ править · Esc прервать</span>
+                <span className="zy-mf-queued-hint">↑ или Esc — вернуть в строку</span>
               </div>
             )}
             {/* The prompt line means «your turn». It must not sit under a

@@ -197,6 +197,22 @@ export interface AiSettings {
   claudeBypass: boolean
 }
 
+/** Диктовка: какой микрофон слушать. Распознавание всегда локальное. */
+export interface VoiceSettings {
+  /**
+   * Устройство ввода. '' = системное по умолчанию (следует за настройкой ОС).
+   * Chromium солит deviceId для каждого origin — id переживает перезапуск, но
+   * не переустановку драйвера, поэтому рядом хранится имя (см. deviceLabel).
+   */
+  deviceId: string
+  /**
+   * Имя устройства на момент выбора. Единственный способ узнать «ту же
+   * гарнитуру» после того, как id сменился: по нему выбор чинится молча,
+   * вместо тихого переключения на встроенный микрофон ноутбука.
+   */
+  deviceLabel: string
+}
+
 export interface SessionsSettings {
   restoreOnLaunch: 'workspace' | 'none'
   autosaveSec: number
@@ -215,6 +231,7 @@ export interface Settings {
   terminal: TerminalSettings
   blocks: BlocksSettings
   ai: AiSettings
+  voice: VoiceSettings
   sessions: SessionsSettings
   editor: EditorSettings
   /** actionId -> chord, e.g. "terminal.split-right": "Ctrl+Shift+D". */

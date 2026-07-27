@@ -17,21 +17,70 @@ export interface Recording {
   cancel: () => void
   /** Current input level, 0..1 — drives the on-screen meter. */
   level: () => number
+  /**
+   * Запрошенное устройство не открылось (отключили гарнитуру) и запись идёт в
+   * системное. Молчать здесь нельзя: человек говорит в один микрофон, а пишет
+   * другой, и узнать об этом можно только по качеству расшифровки.
+   */
+  fellBackToDefault: boolean
 }
 
 /** Longest single dictation. The main process enforces its own cap too. */
 const MAX_SECONDS = 120
 
-export async function startRecording(deviceId?: string): Promise<Recording> {
-  const stream = await navigator.mediaDevices.getUserMedia({
-    audio: {
-      ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
-      channelCount: 1,
-      echoCancellation: true,
-      noiseSuppression: true,
-      autoGainControl: true
-    }
-  })
+/** Общая часть запроса — меняется только устройство. */
+const AUDIO_CONSTRAINTS = {
+  channelCount: 1,
+  echoCancellation: true,
+  noiseSuppression: true,
+  autoGainControl: true
+} as const
+
+/**
+ * Устройство пропало — это не отказ в доступе и не поломка. Замерено в этом
+ * Electron (scripts/mic-select-test.mjs): `exact` с несуществующим id даёт
+ * OverconstrainedError. NotFoundError и NotReadableError (устройство занято
+ * другим приложением) перечислены на будущее — они означают ровно то же самое,
+ * и ответ на все три один: писать в системный, но сказать об этом.
+ */
+function isDeviceGone(e: unknown): boolean {
+  const name = e instanceof Error ? e.name : ''
+  return name === 'OverconstrainedError' || name === 'NotFoundError' || name === 'NotReadableError'
+}
+
+export interface RecordingOpts {
+  /**
+   * Устройство исчезло посреди записи (выдернули гарнитуру). Запись уже
+   * остановлена и микрофон отпущен — обработчику остаётся погасить UI и сказать
+   * об этом. Без этого onaudioprocess просто перестаёт приходить: индикатор
+   * продолжает показывать запись, счётчик тишины ждёт «конца фразы», а
+   * распознавать в итоге нечего.
+   */
+  onDeviceLost?: () => void
+}
+
+export async function startRecording(
+  deviceId?: string,
+  opts: RecordingOpts = {}
+): Promise<Recording> {
+  let fellBackToDefault = false
+  let stream: MediaStream
+  try {
+    // `exact`, а не `ideal`, намеренно. С `ideal` Chromium при отсутствии
+    // устройства молча возьмёт любое другое — успех неотличим от подмены, и
+    // сказать о ней стало бы нечем. Ровно эта тихая подмена и есть то, ради
+    // чего писался выбор микрофона. Менять на `ideal` можно только вместе с
+    // другим способом узнать, что открылось не то устройство.
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: { ...(deviceId ? { deviceId: { exact: deviceId } } : {}), ...AUDIO_CONSTRAINTS }
+    })
+  } catch (e) {
+    // Отказ в доступе (NotAllowedError) сюда не попадает: он относится к
+    // микрофону вообще, и повтор без устройства ничего не изменит.
+    if (!deviceId || !isDeviceGone(e)) throw e
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { ...AUDIO_CONSTRAINTS } })
+    fellBackToDefault = true
+  }
 
   const ctx = new AudioContext()
   const source = ctx.createMediaStreamSource(stream)
@@ -72,8 +121,19 @@ export async function startRecording(deviceId?: string): Promise<Recording> {
   node.connect(mute)
   mute.connect(ctx.destination)
 
+  const tracks = stream.getTracks()
+  const onEnded = (): void => {
+    if (stopped) return
+    release()
+    opts.onDeviceLost?.()
+  }
+
   const release = (): void => {
+    // Идемпотентно: release() зовут и обычный стоп, и обрыв устройства, а
+    // повторный ctx.close() отдаёт отклонённый промис, который некому ловить.
+    if (stopped) return
     stopped = true
+    for (const t of tracks) t.removeEventListener('ended', onEnded)
     try {
       node.disconnect()
       mute.disconnect()
@@ -81,11 +141,18 @@ export async function startRecording(deviceId?: string): Promise<Recording> {
     } catch {
       /* already torn down */
     }
-    for (const t of stream.getTracks()) t.stop()
+    for (const t of tracks) t.stop()
     void ctx.close()
   }
 
+  // Трек кончается сам, когда устройство физически пропало. По спеке — да;
+  // проверить это в тестах нечем (синтетическое устройство не выдернуть, а
+  // track.stop() события не даёт), поэтому путь написан по спецификации и на
+  // живом железе не воспроизводился.
+  for (const t of tracks) t.addEventListener('ended', onEnded)
+
   return {
+    fellBackToDefault,
     level: () => Math.min(1, peak * 1.6),
     cancel: release,
     stop: async () => {

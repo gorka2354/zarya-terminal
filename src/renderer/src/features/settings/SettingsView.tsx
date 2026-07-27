@@ -12,17 +12,36 @@ import { Icon, type IconName } from '@/components/Icon'
 import { chordFromEvent, formatChord } from '@/features/palette/keybindings'
 import { getThemes } from '@/features/themes/themes'
 import { setIdeMode } from '@/features/ide/ideMode'
+import {
+  labelsHidden,
+  listMics,
+  micName,
+  onDeviceChange,
+  revealMicLabels,
+  usableMics,
+  type MicDevice
+} from '@/features/voice/devices'
 import { useSettingsStore } from '@/state/settingsStore'
 import { useUiStore } from '@/state/uiStore'
 import './settings.css'
 
-type TabId = 'appearance' | 'terminal' | 'blocks' | 'ai' | 'sessions' | 'editor' | 'keybindings' | 'about'
+type TabId =
+  | 'appearance'
+  | 'terminal'
+  | 'blocks'
+  | 'ai'
+  | 'voice'
+  | 'sessions'
+  | 'editor'
+  | 'keybindings'
+  | 'about'
 
 type TabGroup = 'base' | 'ide' | 'meta'
 const TABS: Array<{ id: TabId; label: string; sub: string; icon: IconName; group: TabGroup }> = [
   { id: 'appearance', label: 'Внешний вид', sub: 'APPEARANCE', icon: 'star', group: 'base' },
   { id: 'terminal', label: 'Терминал', sub: 'TERMINAL', icon: 'terminal', group: 'base' },
   { id: 'blocks', label: 'Блоки', sub: 'BLOCKS', icon: 'split-h', group: 'base' },
+  { id: 'voice', label: 'Голос', sub: 'VOICE', icon: 'mic', group: 'base' },
   { id: 'sessions', label: 'Сессии', sub: 'SESSIONS', icon: 'save', group: 'base' },
   { id: 'keybindings', label: 'Клавиши', sub: 'KEYBINDINGS', icon: 'gear', group: 'base' },
   // IDE superstructure — only shown when the IDE layer is enabled.
@@ -134,6 +153,7 @@ export default function SettingsView(): React.JSX.Element | null {
             {tab === 'terminal' && <TerminalTab />}
             {tab === 'blocks' && <BlocksTab />}
             {tab === 'ai' && <AiTab />}
+            {tab === 'voice' && <VoiceTab />}
             {tab === 'sessions' && <SessionsTab />}
             {tab === 'editor' && <EditorTab />}
             {tab === 'keybindings' && <KeybindingsTab />}
@@ -1091,6 +1111,121 @@ interface KbRow {
   id: string
   title: string
   category: string
+}
+
+/**
+ * Голос — какой микрофон слушает диктовка.
+ *
+ * Названия устройств браузер прячет, пока странице не давали доступ к
+ * микрофону. Молча показать список безымянных строк — значит переложить
+ * угадывание на человека, поэтому это состояние названо прямо и лечится одной
+ * кнопкой; сам микрофон ради списка не открывается. На Windows эта строка не
+ * появляется никогда — доступ там уже выдан нашим же обработчиком разрешений,
+ * — она для macOS/Linux, где гейтит ОС.
+ */
+function VoiceTab(): React.JSX.Element {
+  const voice = useSettingsStore((s) => s.settings.voice)
+  const update = useSettingsStore((s) => s.update)
+  const [mics, setMics] = useState<MicDevice[]>([])
+  const [modelReady, setModelReady] = useState<boolean | null>(null)
+
+  const refresh = useCallback(() => {
+    void listMics().then(setMics)
+  }, [])
+  useEffect(() => {
+    refresh()
+    // Гарнитуру втыкают и вынимают при открытых настройках — список обязан это
+    // отражать, иначе выбирают из устаревшего.
+    return onDeviceChange(refresh)
+  }, [refresh])
+  useEffect(() => {
+    void window.zarya.stt.state().then((s) => setModelReady(s.modelReady))
+  }, [])
+
+  const list = usableMics(mics)
+  const hidden = labelsHidden(mics)
+  const options = [
+    { value: '', label: 'Системный по умолчанию' },
+    ...list.map((d, i) => ({ value: d.deviceId, label: micName(d, i) }))
+  ]
+  // Сохранённого устройства нет в списке: без этой строки <select> показал бы
+  // «Системный по умолчанию» — то есть соврал бы про то, что выбрано.
+  const missing = !!voice.deviceId && !list.some((d) => d.deviceId === voice.deviceId)
+  if (missing) {
+    options.push({
+      value: voice.deviceId,
+      label: `${voice.deviceLabel || 'Выбранный микрофон'} · не найден`
+    })
+  }
+
+  return (
+    <section className="zy-set-section">
+      <div className="zy-section-label">Диктовка</div>
+      <Row
+        title="Микрофон"
+        sub="INPUT DEVICE"
+        desc="«Системный по умолчанию» следует за настройкой ОС."
+      >
+        <SelectField
+          value={voice.deviceId}
+          options={options}
+          onChange={(v) => {
+            const d = list.find((x) => x.deviceId === v)
+            void update({
+              voice: { deviceId: v, deviceLabel: v ? (d?.label ?? voice.deviceLabel) : '' } as never
+            })
+          }}
+        />
+      </Row>
+      {hidden && (
+        <Row
+          title="Названия устройств скрыты"
+          sub="PERMISSION NEEDED"
+          desc="Браузерный слой не показывает названия микрофонов, пока не выдан доступ. Нажми — микрофон включится на мгновение и сразу закроется."
+        >
+          <button
+            type="button"
+            className="zy-btn"
+            onClick={() =>
+              void revealMicLabels()
+                .then(setMics)
+                .catch(() => useUiStore.getState().toast('Доступ к микрофону не выдан', 'error'))
+            }
+          >
+            Показать названия
+          </button>
+        </Row>
+      )}
+      {missing && (
+        <Row
+          title="Выбранное устройство не найдено"
+          sub="DEVICE MISSING"
+          desc="Пока его нет, диктовка пишет в системный микрофон и говорит об этом. Настройка сохранена — устройство подхватится, когда вернётся."
+        >
+          <button
+            type="button"
+            className="zy-btn"
+            onClick={() => void update({ voice: { deviceId: '', deviceLabel: '' } as never })}
+          >
+            Вернуть системный
+          </button>
+        </Row>
+      )}
+      <Row
+        title="Модель распознавания"
+        sub="SPEECH MODEL"
+        desc="GigaAM v3 (русский), работает локально. Скачивается один раз при первой диктовке — ~225 МБ."
+      >
+        <span className="zy-set-hint">
+          {modelReady === null ? '…' : modelReady ? 'загружена' : 'ещё не скачана'}
+        </span>
+      </Row>
+      <div className="zy-item-sub zy-set-footnote">
+        Микрофон открывается только на время диктовки и закрывается сразу после фразы. Звук
+        распознаётся на этой машине и никуда не отправляется.
+      </div>
+    </section>
+  )
 }
 
 function KeybindingsTab(): React.JSX.Element {

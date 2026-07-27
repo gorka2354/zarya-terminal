@@ -1268,6 +1268,18 @@ onBus('terminal:focus', ({ sessionId }) => {
         streaming: c.streaming,
         error: c.error,
         sessionId: c.claudeSessionId,
+        // Очередь — часть наблюдаемого состояния: на ней держится семантика Esc
+        // (забрать приписку обратно, не трогая агента), и проверять её нужно
+        // по конкретной беседе, а не только по активной.
+        queued: c.queued,
+        userTexts: c.messages
+          .filter((m) => m.role === 'user')
+          .map((m) =>
+            m.content
+              .filter((p) => p.type === 'text')
+              .map((p) => (p as { text: string }).text)
+              .join(' ')
+          ),
         text: c.messages
           .flatMap((m) => m.content)
           .filter((p) => p.type === 'text')

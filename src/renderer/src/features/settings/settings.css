@@ -716,3 +716,12 @@
   margin-top: 18px;
   padding: 0 4px;
 }
+
+/* Значение только для чтения в правой колонке строки настроек — состояние,
+   на которое нельзя нажать (например, скачана ли модель распознавания). */
+.zy-set-hint {
+  font-family: var(--font-tech);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  color: var(--fg-faint);
+}

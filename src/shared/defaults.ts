@@ -76,6 +76,13 @@ export const DEFAULT_SETTINGS: Settings = {
     claudeEffort: '',
     claudeBypass: false
   },
+  voice: {
+    // Пусто = системное устройство. Дефолт именно такой, а не «первый в
+    // списке»: пользователь переключает микрофон в ОС и ждёт, что приложение
+    // за этим последует.
+    deviceId: '',
+    deviceLabel: ''
+  },
   sessions: {
     restoreOnLaunch: 'workspace',
     autosaveSec: 20,

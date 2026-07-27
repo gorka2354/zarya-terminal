@@ -29,6 +29,7 @@
     "qa:models": "npm run build && node scripts/qa-claude-catalog.mjs && node scripts/qa-model-refresh.mjs",
     "qa:codex": "npm run build && node scripts/qa-codex-driver.mjs && node scripts/qa-codex-graceful.mjs",
     "qa:acp": "npm run build && node scripts/qa-acp-driver.mjs && node scripts/qa-acp-graceful.mjs",
+    "qa:voice": "npm run build && node scripts/stt-smoke.mjs && node scripts/mic-select-test.mjs",
     "qa:agent": "npm run build && node scripts/lp-logic-test.mjs && node scripts/bypass-question-test.mjs && node scripts/lp-live-test.mjs && node scripts/qa-fake-agents.mjs && node scripts/qa-codex-driver.mjs && node scripts/qa-codex-graceful.mjs && node scripts/qa-acp-driver.mjs && node scripts/qa-acp-graceful.mjs",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
     "pack": "npm run build && electron-builder --dir",
