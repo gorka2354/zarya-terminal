@@ -1,4 +1,5 @@
 import { BrowserWindow, app, dialog, ipcMain, shell } from 'electron'
+import { APP_VERSION } from './appVersion'
 import { existsSync } from 'fs'
 import { CH } from '@shared/ipc'
 import type {
@@ -359,7 +360,7 @@ export function registerIpc(ctx: IpcContext): void {
 
   // ------------------------------------------------------------ app/window
   ipcMain.handle(CH.appInfo, () => ({
-    version: app.getVersion(),
+    version: APP_VERSION,
     platform: process.platform,
     electron: process.versions.electron,
     chrome: process.versions.chrome,

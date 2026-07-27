@@ -1,4 +1,5 @@
 import type { BrowserWindow } from 'electron'
+import { APP_VERSION } from './appVersion'
 import { app } from 'electron'
 import { randomBytes } from 'crypto'
 import { existsSync, promises as fs } from 'fs'
@@ -47,10 +48,10 @@ export class PtyManager {
       ...(process.env as Record<string, string>),
       ...profile.env,
       ZARYA: '1',
-      ZARYA_VERSION: app.getVersion(),
+      ZARYA_VERSION: APP_VERSION,
       ZARYA_NONCE: nonce,
       TERM_PROGRAM: 'Zarya',
-      TERM_PROGRAM_VERSION: app.getVersion(),
+      TERM_PROGRAM_VERSION: APP_VERSION,
       COLORTERM: 'truecolor'
     }
     delete env.ELECTRON_RUN_AS_NODE

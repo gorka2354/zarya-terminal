@@ -15,6 +15,7 @@ import { PtyManager } from './ptyManager'
 import { SessionStore } from './sessionStore'
 import { SttService } from './sttService'
 import { UpdateService } from './updateService'
+import { APP_VERSION } from './appVersion'
 import { SettingsStore } from './settingsStore'
 import { WorkflowStore, builtinResourcesDir } from './workflowStore'
 
@@ -32,7 +33,7 @@ let quitTimer: NodeJS.Timeout | null = null
 const settingsStore = new SettingsStore()
 const sessionStore = new SessionStore()
 const sttService = new SttService()
-const updateService = new UpdateService(app.getVersion())
+const updateService = new UpdateService(APP_VERSION)
 const historyStore = new HistoryStore()
 const workflowStore = new WorkflowStore()
 const ptyManager = new PtyManager(() => mainWindow)
