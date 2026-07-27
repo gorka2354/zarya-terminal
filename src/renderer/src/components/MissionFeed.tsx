@@ -632,10 +632,24 @@ function ToolCard({
       </div>
     )
   } else if (pending && !pending.settled) {
+    // SECURITY: у части ACP-агентов нет разового разрешения — только «всегда».
+    // Раньше кнопка всё равно говорила «ВЫПОЛНИТЬ», а согласие молча действовало
+    // до конца сессии, и агент переставал спрашивать. Кнопка обязана называть
+    // то, что делает: одобрение на один запуск и одобрение навсегда — разные
+    // решения, и выбирать между ними должен человек, а не подстановка драйвера.
+    const always = pending.allowAlwaysOnly === true
     body = (
       <div className="zy-mf-tool-actions">
-        <button className="zy-mf-btn-run" onClick={() => void store.approveTool(conv.id, id)}>
-          ВЫПОЛНИТЬ
+        <button
+          className={`zy-mf-btn-run${always ? ' zy-mf-btn-run--always' : ''}`}
+          title={
+            always
+              ? 'У этого агента нет разового разрешения: согласие действует до конца сессии — он больше не будет спрашивать про это действие'
+              : undefined
+          }
+          onClick={() => void store.approveTool(conv.id, id)}
+        >
+          {always ? 'РАЗРЕШИТЬ ВСЕГДА' : 'ВЫПОЛНИТЬ'}
         </button>
         <button className="zy-mf-btn-deny" onClick={() => store.denyTool(conv.id, id)}>
           ОТКЛОНИТЬ

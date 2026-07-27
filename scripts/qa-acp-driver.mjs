@@ -117,6 +117,28 @@ try {
   ok('ход завершился после deny', !!(dc && !dc.streaming))
   ok('reject-optionId доставлен агенту', /reject-once/.test(readApprovals()), readApprovals().slice(-160))
 
+  // ---- 4b. гейт БЕЗ разового разрешения ----
+  // SECURITY: часть ACP-агентов предлагает только «разрешить всегда». Раньше
+  // драйвер молча подставлял allow_always на обычное «ВЫПОЛНИТЬ» — разовое
+  // согласие превращалось в разрешение на всю сессию, и агент переставал
+  // спрашивать. Ни в интерфейсе, ни в ответе об этом не было ни слова.
+  console.log('\n[4b] Гейт только с allow_always: кнопка называет это вслух, согласие осознанное')
+  const alwaysId = await page.evaluate(() => window.__zaryaStartAgent?.('gemini', 'run a tool please always'))
+  ok('гейт поднят', await waitGate(page, alwaysId))
+  const gate = await page.evaluate((id) => {
+    const c = window.__zaryaConvById?.(id)
+    const t = (c?.pendingTools || []).find((x) => !x.settled)
+    return { allowAlwaysOnly: t?.allowAlwaysOnly, label: document.querySelector('.zy-mf-btn-run')?.textContent?.trim() }
+  }, alwaysId)
+  ok('драйвер пометил гейт как «только всегда»', gate.allowAlwaysOnly === true, gate)
+  ok('кнопка говорит «РАЗРЕШИТЬ ВСЕГДА», а не «ВЫПОЛНИТЬ»', gate.label === 'РАЗРЕШИТЬ ВСЕГДА', gate.label)
+  const before = readApprovals().length
+  await page.evaluate(() => window.__zaryaApproveFirst?.())
+  const alwaysConv = await waitDone(page, alwaysId)
+  ok('ход завершился', !!(alwaysConv && !alwaysConv.streaming && !alwaysConv.error))
+  const after = readApprovals().slice(before)
+  ok('агенту ушёл allow-always, а не отмена', /allow-always/.test(after) && /"outcome":"selected"/.test(after), after.slice(-160))
+
   // ---- 5. resume (session/load) ----
   console.log('\n[5] Resume: беседа с прежним sessionId → session/load (тот же sessionId)')
   const rid = await page.evaluate(() =>

@@ -459,6 +459,12 @@ export type AgentStreamEvent =
       displayName?: string
       /** Present when toolName === 'AskUserQuestion' — the choice widget payload. */
       questions?: AgentQuestion[]
+      /**
+       * Агент предлагает только «разрешить всегда» — разового варианта у этого
+       * гейта нет. Кнопка обязана сказать это словом: одобрение здесь действует
+       * до конца сессии, а не на один запуск.
+       */
+      allowAlwaysOnly?: boolean
     }
   | {
       type: 'result'
@@ -498,7 +504,17 @@ export interface AgentSessionInfo {
 
 /** Renderer -> main decision resolving a pending canUseTool permission (allow/deny a tool). */
 export type AgentPermissionDecision =
-  | { behavior: 'allow'; updatedInput?: Record<string, unknown> }
+  | {
+      behavior: 'allow'
+      updatedInput?: Record<string, unknown>
+      /**
+       * Человек осознанно согласился на постоянное разрешение: ему показали, что
+       * у этого гейта нет разового варианта, и он нажал именно такую кнопку. Без
+       * этого флага драйвер НИКОГДА не выбирает «разрешить всегда» — иначе
+       * разовое «ВЫПОЛНИТЬ» тихо превращалось бы в разрешение на всю сессию.
+       */
+      always?: boolean
+    }
   | { behavior: 'deny'; message: string }
 
 /**

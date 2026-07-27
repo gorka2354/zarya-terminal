@@ -197,10 +197,19 @@ function runPrompt(promptId, params) {
         params: {
           sessionId: sid,
           toolCall: { toolCallId: callId, title: 'Run ls', kind: 'execute' },
-          options: [
-            { optionId: 'allow-once', name: 'Allow once', kind: 'allow_once' },
-            { optionId: 'reject-once', name: 'Reject', kind: 'reject_once' }
-          ]
+          // Часть настоящих ACP-агентов НЕ предлагает разового разрешения —
+          // только «всегда». По ключевому слову в запросе мок воспроизводит
+          // именно этот случай: он и был дырой (разовое «ВЫПОЛНИТЬ» тихо
+          // становилось разрешением на всю сессию).
+          options: /always/i.test(text)
+            ? [
+                { optionId: 'allow-always', name: 'Always allow', kind: 'allow_always' },
+                { optionId: 'reject-always', name: 'Always reject', kind: 'reject_always' }
+              ]
+            : [
+                { optionId: 'allow-once', name: 'Allow once', kind: 'allow_once' },
+                { optionId: 'reject-once', name: 'Reject', kind: 'reject_once' }
+              ]
         }
       })
     })

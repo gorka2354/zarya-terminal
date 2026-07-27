@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { pickOptionId, type AcpPermissionOption } from '../src/main/acpProtocol'
+import { hasAllowOnce, pickOptionId, type AcpPermissionOption } from '../src/main/acpProtocol'
 
 const OPTS: AcpPermissionOption[] = [
   { optionId: 'a1', name: 'Allow once', kind: 'allow_once' },
@@ -22,10 +22,38 @@ describe('pickOptionId', () => {
     expect(pickOptionId(OPTS, false)).toBe('r1')
   })
 
-  it('falls back to always when once is absent', () => {
+  /**
+   * SECURITY: разрешение не повышается само. «ВЫПОЛНИТЬ» означает один запуск;
+   * если у гейта есть только `allow_always`, тихо выбрать его — значит выдать
+   * разрешение на всю сессию за спиной человека, да ещё и заставить агента
+   * перестать спрашивать. Гейт, который отменяет сам себя, хуже отсутствующего:
+   * он оставляет уверенность, что спросят и в следующий раз.
+   */
+  it('НЕ повышает разовое разрешение до постоянного', () => {
     const noOnce = OPTS.filter((o) => !o.kind?.endsWith('_once'))
-    expect(pickOptionId(noOnce, true)).toBe('a2')
+    expect(pickOptionId(noOnce, true)).toBeUndefined()
+  })
+
+  it('выбирает «всегда» только по явному согласию', () => {
+    const noOnce = OPTS.filter((o) => !o.kind?.endsWith('_once'))
+    expect(pickOptionId(noOnce, true, true)).toBe('a2')
+  })
+
+  it('согласие на «всегда» не меняет выбор, когда разовое есть', () => {
+    // Человек согласился на «всегда» — но раз разовый вариант существует, гейт
+    // остаётся разовым: минимальное из достаточного.
+    expect(pickOptionId(OPTS, true, true)).toBe('a1')
+  })
+
+  it('отказ повышается свободно: «всегда отклонять» строже разового', () => {
+    const noOnce = OPTS.filter((o) => !o.kind?.endsWith('_once'))
     expect(pickOptionId(noOnce, false)).toBe('r2')
+  })
+
+  it('hasAllowOnce отличает гейт с разовым разрешением от гейта без него', () => {
+    expect(hasAllowOnce(OPTS)).toBe(true)
+    expect(hasAllowOnce(OPTS.filter((o) => !o.kind?.endsWith('_once')))).toBe(false)
+    expect(hasAllowOnce([])).toBe(false)
   })
 
   it('fails closed: no matching kind → undefined (driver answers cancelled)', () => {

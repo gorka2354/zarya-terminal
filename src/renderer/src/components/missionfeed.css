@@ -675,3 +675,15 @@
   padding-left: 28px;
   font-style: italic;
 }
+
+/* Гейт без разового разрешения: согласие действует до конца сессии. Кнопка
+   отличается от обычной «ВЫПОЛНИТЬ» — предупреждающим цветом, а не только
+   надписью: решение здесь шире, чем кажется на первый взгляд. */
+.zy-mf-btn-run--always {
+  background: color-mix(in srgb, var(--warn) 22%, transparent);
+  border-color: var(--warn);
+  color: var(--warn);
+}
+.zy-mf-btn-run--always:hover {
+  background: color-mix(in srgb, var(--warn) 34%, transparent);
+}

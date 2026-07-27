@@ -107,16 +107,46 @@ export interface AcpFsWriteParams {
 }
 
 /**
+ * Есть ли у гейта разовое разрешение.
+ *
+ * Если агент предлагает только «разрешить всегда», человек обязан это знать ДО
+ * нажатия: одна и та же кнопка означает то разовый запуск, то постоянное
+ * разрешение на всю сессию.
+ */
+export function hasAllowOnce(options: AcpPermissionOption[]): boolean {
+  return !!options?.some((o) => o.kind === 'allow_once')
+}
+
+/**
  * Pick the optionId to answer `session/request_permission`. optionId strings are
- * OPAQUE (must be echoed verbatim), so selection is by `kind`, never by index:
- * allow → an allow_* option (prefer once over always), deny → a reject_*.
+ * OPAQUE (must be echoed verbatim), so selection is by `kind`, never by index.
  * Returns undefined when no matching kind exists — the driver then answers with
  * `{outcome:'cancelled'}` rather than risk selecting the wrong (e.g. an allow_*
  * option for a deny). Fail-closed by construction.
+ *
+ * SECURITY: разрешение НЕ повышается само. Раньше `allow` при отсутствии
+ * `allow_once` молча выбирал `allow_always`: человек нажимал «ВЫПОЛНИТЬ», имея в
+ * виду один запуск, а агент получал постоянное разрешение на всю сессию и
+ * переставал спрашивать. Об этом нигде не говорилось — гейт, который тихо
+ * отменяет сам себя, хуже отсутствующего, потому что создаёт ложную уверенность,
+ * что спросят и в следующий раз.
+ *
+ * Теперь `allow_always` выбирается только когда вызывающий передал
+ * `alwaysAllowed` — то есть человеку показали, что кнопка означает «всегда», и
+ * он нажал именно её.
+ *
+ * Отказ повышается свободно: `reject_always` строже, чем `reject_once`, и
+ * ошибиться в сторону «не запускать» безопасно.
  */
-export function pickOptionId(options: AcpPermissionOption[], allow: boolean): string | undefined {
+export function pickOptionId(
+  options: AcpPermissionOption[],
+  allow: boolean,
+  alwaysAllowed = false
+): string | undefined {
   const want: AcpPermissionKind[] = allow
-    ? ['allow_once', 'allow_always']
+    ? alwaysAllowed
+      ? ['allow_once', 'allow_always']
+      : ['allow_once']
     : ['reject_once', 'reject_always']
   for (const k of want) {
     const m = options?.find((o) => o.kind === k)

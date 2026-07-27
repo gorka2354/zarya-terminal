@@ -18,6 +18,7 @@ import {
   ACP_NOTIFY,
   ACP_PROTOCOL_VERSION,
   ACP_SERVER_REQUEST,
+  hasAllowOnce,
   pickOptionId,
   type AcpContentBlock,
   type AcpFsReadParams,
@@ -483,7 +484,9 @@ export class AcpDriver implements AgentDriver {
         title: String(params!.toolCall.title ?? ''),
         kind: String(params!.toolCall.kind ?? '')
       },
-      displayName: String(params!.toolCall.title ?? 'Действие агента')
+      displayName: String(params!.toolCall.title ?? 'Действие агента'),
+      // Разового разрешения у этого гейта нет — кнопка должна сказать об этом.
+      allowAlwaysOnly: !hasAllowOnce(params!.options ?? [])
     })
   }
 
@@ -588,7 +591,7 @@ export class AcpDriver implements AgentDriver {
     const allow = decision?.behavior === 'allow'
     // optionId is opaque — pick by kind. No matching option → fail closed to
     // cancelled rather than risk echoing the wrong outcome.
-    const optionId = pickOptionId(pending.options, allow)
+    const optionId = pickOptionId(pending.options, allow, decision?.behavior === 'allow' && decision.always === true)
     this.respond(
       pending.jsonRpcId,
       optionId !== undefined

@@ -79,6 +79,12 @@ export interface PendingTool {
   /** Human-readable prompt / short label from the driver (Claude Code). */
   title?: string
   displayName?: string
+  /**
+   * У этого гейта нет разового разрешения — агент предлагает только «всегда».
+   * Кнопка обязана назвать это вслух, иначе одобрение действует до конца сессии,
+   * а человек думает, что разрешил один запуск.
+   */
+  allowAlwaysOnly?: boolean
 }
 
 export interface Conversation {
@@ -638,7 +644,8 @@ export const useAiStore = create<AiState>((set, get) => {
               kind: ev.questions ? 'question' : 'run',
               questions: ev.questions,
               title: ev.title,
-              displayName: ev.displayName
+              displayName: ev.displayName,
+              allowAlwaysOnly: ev.allowAlwaysOnly
             }
           ]
         }))
@@ -1032,7 +1039,14 @@ export const useAiStore = create<AiState>((set, get) => {
           ...c,
           pendingTools: c.pendingTools.map((t) => (t.id === tool.id ? { ...t, settled: true } : t))
         }))
-        window.zarya.agent.permission(conv.engine, conv.id, tool.id, { behavior: 'allow' })
+        // `always` передаётся ровно тогда, когда у гейта нет разового варианта —
+        // и тогда кнопка, которую нажали, называлась «РАЗРЕШИТЬ ВСЕГДА». Без
+        // этого флага драйвер откажется выбирать постоянное разрешение и ответит
+        // «отменено»: молча повысить разовое одобрение до сессионного нельзя.
+        window.zarya.agent.permission(conv.engine, conv.id, tool.id, {
+          behavior: 'allow',
+          always: tool.allowAlwaysOnly === true
+        })
         return
       }
       patchConversation(conv.id, (c) => ({
@@ -1295,7 +1309,10 @@ onBus('terminal:focus', ({ sessionId }) => {
           // reading a bare «ApplyPatch» — the exact defect this dump must catch.
           label: gateLabel(t),
           input: t.input,
-          displayName: t.displayName
+          displayName: t.displayName,
+          // Признак «разрешение только навсегда» — часть наблюдаемого состояния
+          // гейта: от него зависит и надпись на кнопке, и то, что уйдёт агенту.
+          allowAlwaysOnly: t.allowAlwaysOnly
         })),
         msgs: c.messages.length
       }
