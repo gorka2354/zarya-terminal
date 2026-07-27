@@ -62,7 +62,14 @@ jobs:
         shell: bash
         run: |
           cd release
-          shasum -a 256 $(ls *.exe *.dmg *.AppImage *.deb 2>/dev/null) > "SHA256SUMS-${{ matrix.artifact-name }}.txt"
+          # Без списка файлов shasum читал бы stdin и работа висела бы до
+          # таймаута. Пусто здесь — это провал сборки, а не «нечего считать».
+          files=$(ls *.exe *.dmg *.AppImage *.deb 2>/dev/null || true)
+          if [ -z "$files" ]; then
+            echo "не найдено ни одного файла сборки" >&2
+            exit 1
+          fi
+          shasum -a 256 $files > "SHA256SUMS-${{ matrix.artifact-name }}.txt"
           cat "SHA256SUMS-${{ matrix.artifact-name }}.txt"
 
       - name: Upload artifacts
@@ -96,9 +103,15 @@ jobs:
           mkdir -p out
           find dist-artifacts -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*.AppImage' -o -name '*.deb' \) -exec cp {} out/ \;
           # Суммы с трёх раннеров сводятся в один файл — на странице релиза
-          # человеку нужен один список, а не три.
-          cat dist-artifacts/*/SHA256SUMS-*.txt > "out/SHA256SUMS-${GITHUB_REF_NAME#v}.txt"
+          # человеку нужен один список, а не три. Ищем find'ом, а не глобом:
+          # upload-artifact сохраняет каталог `release/` внутри артефакта, и
+          # `dist-artifacts/*/SHA256SUMS-*.txt` ничего бы не нашёл.
+          find dist-artifacts -type f -name 'SHA256SUMS-*.txt' -exec cat {} + \
+            > "out/SHA256SUMS-${GITHUB_REF_NAME#v}.txt"
           ls -la out
+          # Пустой релиз хуже отсутствующего: он выглядит выпущенным.
+          test -s "out/SHA256SUMS-${GITHUB_REF_NAME#v}.txt"
+          test "$(find out -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*.AppImage' -o -name '*.deb' \) | wc -l)" -gt 0
 
       - name: Publish release
         env:

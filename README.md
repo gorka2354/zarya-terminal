@@ -119,6 +119,20 @@ is reinstalled — so the same headset is re-bound silently instead of dictation
 falling back to the laptop's built-in mic. If the device really is gone, Zarya says so
 and records into the system default rather than failing or pretending.
 
+### Обновления (update check)
+Zarya makes **one anonymous GET** to the GitHub releases API at startup — no token,
+no identifiers, no telemetry — and shows a dot in the activity bar when a newer
+version exists. Behind it: a **«Что нового» page** with the release notes, the files
+with their sizes, and the **SHA256** of each so you can verify what you downloaded.
+Turn it off in Settings → О программе.
+
+Zarya never downloads or launches anything on its own. Builds are unsigned, and
+quietly running an unsigned installer would be worse than letting you fetch it
+deliberately. Every URL on that page is **built by the app** from a hardcoded repo
+constant and a validated tag — never taken from the API response — and links inside
+the release notes are rendered inert, because the only legitimate destinations are
+the ones Zarya constructs itself.
+
 ### Blocks
 Every command becomes a distinct, navigable block — command, output, exit code and
 duration, shown as an instrument-panel pill (`✓ 0 · 40мс` / `✗ 7 · 3.4с`) — on the open
