@@ -55,9 +55,58 @@ jobs:
       - name: Package with electron-builder
         run: npx electron-builder --publish never ${{ matrix.builder-flag }}
 
+      # Контрольные суммы считаются на том же раннере, что собрал файлы, — иначе
+      # это просто хеш чего-то, а не подтверждение сборки. Приложение показывает
+      # их на странице «Что нового», чтобы скачанное можно было сверить.
+      - name: Checksums
+        shell: bash
+        run: |
+          cd release
+          shasum -a 256 $(ls *.exe *.dmg *.AppImage *.deb 2>/dev/null) > "SHA256SUMS-${{ matrix.artifact-name }}.txt"
+          cat "SHA256SUMS-${{ matrix.artifact-name }}.txt"
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact-name }}
-          path: ${{ matrix.artifact-glob }}
+          path: |
+            ${{ matrix.artifact-glob }}
+            release/SHA256SUMS-*.txt
           if-no-files-found: error
+
+  # Отдельная работа: страница релиза создаётся ОДИН раз, когда все три сборки
+  # готовы. Раньше её создавали руками — из-за этого тег v0.5.2 остался без
+  # релиза, и проверка обновлений не увидела бы новую версию вовсе.
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist-artifacts
+
+      - name: Collect files
+        run: |
+          mkdir -p out
+          find dist-artifacts -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*.AppImage' -o -name '*.deb' \) -exec cp {} out/ \;
+          # Суммы с трёх раннеров сводятся в один файл — на странице релиза
+          # человеку нужен один список, а не три.
+          cat dist-artifacts/*/SHA256SUMS-*.txt > "out/SHA256SUMS-${GITHUB_REF_NAME#v}.txt"
+          ls -la out
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # --notes-from-tag: описание берётся из аннотации тега, то есть пишется
+          # человеком при выпуске. Именно это тело показывает страница «Что нового».
+          gh release create "$GITHUB_REF_NAME" out/* \
+            --title "Zarya ${GITHUB_REF_NAME#v}" \
+            --notes-from-tag \
+            --verify-tag
