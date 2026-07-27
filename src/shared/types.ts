@@ -213,6 +213,15 @@ export interface VoiceSettings {
   deviceLabel: string
 }
 
+/** Проверка обновлений: один анонимный запрос к GitHub, без телеметрии. */
+export interface UpdateSettings {
+  /**
+   * Проверять при запуске. Включено по умолчанию: терминал, молча пропускающий
+   * security-фиксы, хуже, чем один анонимный GET. Выключается одним щелчком.
+   */
+  check: boolean
+}
+
 export interface SessionsSettings {
   restoreOnLaunch: 'workspace' | 'none'
   autosaveSec: number
@@ -232,6 +241,7 @@ export interface Settings {
   blocks: BlocksSettings
   ai: AiSettings
   voice: VoiceSettings
+  updates: UpdateSettings
   sessions: SessionsSettings
   editor: EditorSettings
   /** actionId -> chord, e.g. "terminal.split-right": "Ctrl+Shift+D". */

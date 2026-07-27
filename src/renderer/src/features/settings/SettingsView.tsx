@@ -21,6 +21,7 @@ import {
   usableMics,
   type MicDevice
 } from '@/features/voice/devices'
+import { useUpdateStore } from '@/features/updates/updateStore'
 import { useSettingsStore } from '@/state/settingsStore'
 import { useUiStore } from '@/state/uiStore'
 import './settings.css'
@@ -1324,6 +1325,60 @@ function KeybindingsTab(): React.JSX.Element {
   )
 }
 
+/**
+ * Обновления в «О программе».
+ *
+ * Статус пишется честно во всех состояниях: «есть новая», «у вас последняя»,
+ * «проверить не удалось» и «проверка выключена». Молчащая строка читалась бы
+ * как «всё в порядке» и в том случае, когда проверка просто не состоялась.
+ */
+function UpdateRows(): React.JSX.Element {
+  const enabled = useSettingsStore((s) => s.settings.updates.check)
+  const update = useSettingsStore((s) => s.update)
+  const state = useUpdateStore((s) => s.state)
+  const check = useUpdateStore((s) => s.check)
+
+  const status = ((): string => {
+    if (!enabled) return 'проверка выключена'
+    if (state?.checking) return 'проверяю…'
+    if (state?.error) return `не удалось проверить: ${state.error}`
+    if (!state?.checkedAt) return 'ещё не проверяли'
+    if (state.updateAvailable && state.latest) return `доступна ${state.latest.version}`
+    return 'у вас последняя версия'
+  })()
+
+  return (
+    <>
+      <Row
+        title="Проверять обновления"
+        sub="UPDATE CHECK"
+        desc="Один анонимный запрос к GitHub при запуске: без токена, без идентификаторов, ничего не скачивается и не запускается само."
+      >
+        <Toggle
+          checked={enabled}
+          onChange={(v) => void update({ updates: { check: v } as never })}
+        />
+      </Row>
+      <Row title="Состояние" sub="STATUS" desc={status}>
+        <div className="zy-inline-group">
+          {state?.updateAvailable && state.latest && (
+            <button
+              type="button"
+              className="zy-btn zy-btn--accent"
+              onClick={() => useUiStore.getState().set({ settingsOpen: false, updateOpen: true })}
+            >
+              Что нового
+            </button>
+          )}
+          <button type="button" className="zy-btn" disabled={state?.checking} onClick={() => void check()}>
+            Проверить
+          </button>
+        </div>
+      </Row>
+    </>
+  )
+}
+
 function AboutTab(): React.JSX.Element {
   const [info, setInfo] = useState<AppInfo | null>(null)
 
@@ -1356,6 +1411,7 @@ function AboutTab(): React.JSX.Element {
           </div>
         </div>
       )}
+      <UpdateRows />
       <div className="zy-about-actions">
         <button
           type="button"

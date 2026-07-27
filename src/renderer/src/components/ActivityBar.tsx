@@ -1,6 +1,7 @@
 import { useUiStore, type SidebarView } from '@/state/uiStore'
 import { useSettingsStore } from '@/state/settingsStore'
 import { toggleIdeMode } from '@/features/ide/ideMode'
+import { hasUpdate, useUpdateStore } from '@/features/updates/updateStore'
 import { PixelIcon, type PixelIconName } from './PixelIcon'
 
 type Item = { view: Exclude<SidebarView, null>; icon: PixelIconName; title: string }
@@ -18,6 +19,7 @@ export function ActivityBar(): React.JSX.Element {
   const sidebarView = useUiStore((s) => s.sidebarView)
   const aiPanelOpen = useUiStore((s) => s.aiPanelOpen)
   const ideMode = useSettingsStore((s) => s.settings.ideMode)
+  const upd = useUpdateStore((s) => s.state)
   const ui = useUiStore.getState()
 
   const btn = (item: Item): React.JSX.Element => (
@@ -53,6 +55,20 @@ export function ActivityBar(): React.JSX.Element {
       >
         <PixelIcon name={ideMode ? 'files' : 'folder'} />
       </button>
+      {/* Кнопка появляется только когда есть что предлагать, и исчезает после
+          обновления. Постоянный «проверить обновления» в панели занимал бы место
+          ради действия, которое нужно раз в месяц; молчаливая точка на шестерне —
+          наоборот, слишком тихо для выхода security-фикса. */}
+      {hasUpdate(upd) && (
+        <button
+          className="zy-activity-btn zy-activity-upd"
+          title={`Доступно обновление ${upd?.latest?.version} — посмотреть, что нового`}
+          onClick={() => ui.set({ updateOpen: true })}
+        >
+          <PixelIcon name="download" />
+          <span className="zy-activity-dot" aria-hidden />
+        </button>
+      )}
       <button
         className="zy-activity-btn"
         title="Настройки (Ctrl+,)"

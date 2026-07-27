@@ -1,3 +1,4 @@
+import type { UpdateState } from '../shared/updates'
 import type {
   AgentCapabilities,
   AgentEngine,
@@ -152,6 +153,12 @@ export interface ZaryaApi {
     list(): Promise<WorkflowDef[]>
     save(wf: WorkflowDef): Promise<void>
     delete(id: string): Promise<void>
+  }
+  /** Проверка обновлений: один анонимный запрос к GitHub, ничего не скачивается сам. */
+  updates: {
+    state(): Promise<UpdateState>
+    check(): Promise<UpdateState>
+    onChange(cb: (s: UpdateState) => void): Unsub
   }
   /** Local dictation — audio never leaves the machine. */
   stt: {

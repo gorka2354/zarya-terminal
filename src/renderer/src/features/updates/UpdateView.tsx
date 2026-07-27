@@ -1,0 +1,190 @@
+import { useEffect } from 'react'
+import {
+  assetUrl,
+  downloadableAssets,
+  releasePageUrl,
+  type ReleaseAsset
+} from '@shared/updates'
+import { renderMarkdown } from '@/features/ai/markdown'
+import { Icon } from '@/components/Icon'
+import { PixelIcon } from '@/components/PixelIcon'
+import { useUiStore } from '@/state/uiStore'
+import { useUpdateStore } from './updateStore'
+import './updates.css'
+
+/**
+ * «Что нового» — отдельная страница, а не всплывашка поверх работы.
+ *
+ * Показывает то, ради чего человек нажал: что изменилось (тело релиза, тот же
+ * markdown-рендер с DOMPurify, что и у ответов агента), чем это скачать и как
+ * убедиться, что скачалось именно оно.
+ *
+ * Приложение ничего не скачивает и не запускает само. Кнопка открывает страницу
+ * релиза во внешнем браузере, а адрес собран НАМИ из константы репозитория и
+ * проверенного тега — не взят из ответа сервера. Подменённый ответ не должен
+ * уметь превратить доверенную кнопку в ссылку куда угодно.
+ */
+function fmtSize(bytes: number): string {
+  if (!bytes) return ''
+  const mb = bytes / 1_000_000
+  return mb >= 1 ? `${mb.toFixed(0)} МБ` : `${Math.max(1, Math.round(bytes / 1000))} КБ`
+}
+
+/**
+ * Ссылки в заметках о релизе обезвреживаются: текст остаётся, адрес показывается
+ * рядом простым текстом, нажать нельзя.
+ *
+ * DOMPurify вырезает скрипты, но обычная ссылка — не скрипт: строка из сети
+ * превращалась в один клик до произвольного адреса, а выглядело это как кнопка
+ * от автора приложения («скачать»). Все законные адреса эта страница строит
+ * сама, из константы репозитория, — значит кликабельные ссылки здесь просто не
+ * нужны, и дешевле убрать целый класс фишинга, чем рассуждать о его вероятности.
+ */
+function defuseLinks(html: string): string {
+  const doc = new DOMParser().parseFromString(html, 'text/html')
+  for (const a of Array.from(doc.querySelectorAll('a'))) {
+    const span = doc.createElement('span')
+    span.className = 'zy-upd-link'
+    const href = a.getAttribute('href') ?? ''
+    span.textContent = href && href !== a.textContent ? `${a.textContent} (${href})` : a.textContent
+    a.replaceWith(span)
+  }
+  return doc.body.innerHTML
+}
+
+function fmtDate(iso: string): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })
+}
+
+export default function UpdateView(): React.JSX.Element | null {
+  const open = useUiStore((s) => s.updateOpen)
+  const state = useUpdateStore((s) => s.state)
+  const check = useUpdateStore((s) => s.check)
+
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        useUiStore.getState().set({ updateOpen: false })
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open])
+
+  if (!open) return null
+  const close = (): void => useUiStore.getState().set({ updateOpen: false })
+  const rel = state?.latest
+  const page = rel ? releasePageUrl(rel.tag) : null
+  const files: ReleaseAsset[] = rel ? downloadableAssets(rel.assets) : []
+
+  return (
+    <div className="zy-overlay-backdrop zy-overlay-backdrop--center" onMouseDown={close}>
+      <div className="zy-upd" onMouseDown={(e) => e.stopPropagation()}>
+        <header className="zy-upd-head">
+          <span className="zy-upd-mark">
+            <PixelIcon name="download" />
+          </span>
+          <div className="zy-upd-title">
+            <div className="zy-upd-name">{rel?.name || (rel ? `Заря ${rel.version}` : 'Обновление')}</div>
+            <div className="zy-upd-sub">
+              {rel ? `ВЕРСИЯ ${rel.version}` : 'UPDATE'}
+              {rel && fmtDate(rel.publishedAt) ? ` · ${fmtDate(rel.publishedAt)}` : ''}
+            </div>
+          </div>
+          <div className="zy-upd-spacer" />
+          <button className="zy-upd-x" onClick={close} title="Закрыть (Esc)">
+            <Icon name="close" size={16} />
+          </button>
+        </header>
+
+        <div className="zy-upd-body">
+          {!rel ? (
+            <div className="zy-upd-empty">
+              {state?.checking ? 'Проверяю…' : state?.error ? `Не удалось проверить: ${state.error}` : 'Пока нечего показать.'}
+            </div>
+          ) : (
+            <>
+              <div className="zy-upd-vers">
+                <span className="zy-upd-vers-cur">у вас {state?.current}</span>
+                <span className="zy-upd-vers-arrow">→</span>
+                <span className="zy-upd-vers-new">{rel.version}</span>
+              </div>
+
+              {rel.body.trim() ? (
+                <div
+                  className="zy-upd-notes zy-md"
+                  dangerouslySetInnerHTML={{ __html: defuseLinks(renderMarkdown(rel.body)) }}
+                />
+              ) : (
+                <div className="zy-upd-empty">Описание релиза пустое.</div>
+              )}
+
+              {files.length > 0 && (
+                <div className="zy-upd-files">
+                  <div className="zy-section-label">Файлы</div>
+                  {files.map((f) => {
+                    const url = assetUrl(rel.tag, f.name)
+                    const sha = rel.sums[f.name]
+                    return (
+                      <div key={f.name} className="zy-upd-file">
+                        <div className="zy-upd-file-main">
+                          <span className="zy-upd-file-name">{f.name}</span>
+                          <span className="zy-upd-file-size">{fmtSize(f.size)}</span>
+                          {url && (
+                            <button
+                              className="zy-btn"
+                              // Адрес виден до нажатия: кнопка ведёт наружу, и
+                              // человек вправе знать куда, не кликая наугад.
+                              data-url={url}
+                              title={`Открыть ${url}`}
+                              onClick={() => window.zarya.app.openExternal(url)}
+                            >
+                              Скачать
+                            </button>
+                          )}
+                        </div>
+                        {/* Хеш рядом с файлом — чтобы «скачайте установщик» не было
+                            просьбой поверить сети на слово. */}
+                        {sha && (
+                          <div className="zy-upd-file-sha" title="SHA256 из файла контрольных сумм релиза">
+                            SHA256 {sha}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        <footer className="zy-upd-foot">
+          <span className="zy-upd-foot-note">
+            Заря ничего не скачивает и не запускает сама — файл открывается в браузере, установка
+            остаётся за вами.
+          </span>
+          <div className="zy-upd-spacer" />
+          <button className="zy-btn" onClick={() => void check()} disabled={state?.checking}>
+            {state?.checking ? 'Проверяю…' : 'Проверить снова'}
+          </button>
+          {page && (
+            <button
+              className="zy-btn zy-btn--accent"
+              data-url={page}
+              title={`Открыть ${page}`}
+              onClick={() => window.zarya.app.openExternal(page)}
+            >
+              Открыть страницу релиза
+            </button>
+          )}
+        </footer>
+      </div>
+    </div>
+  )
+}

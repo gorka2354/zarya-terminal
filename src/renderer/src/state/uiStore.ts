@@ -14,6 +14,8 @@ interface UiState {
   sidebarView: SidebarView
   aiPanelOpen: boolean
   settingsOpen: boolean
+  /** Страница «Что нового» (обновление). */
+  updateOpen: boolean
   paletteOpen: boolean
   quickOpenOpen: boolean
   aiBarOpen: boolean
@@ -55,6 +57,7 @@ export const useUiStore = create<UiState>((set, get) => ({
   sidebarView: 'sessions',
   aiPanelOpen: false,
   settingsOpen: false,
+  updateOpen: false,
   paletteOpen: false,
   quickOpenOpen: false,
   aiBarOpen: false,

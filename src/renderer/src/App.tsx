@@ -22,6 +22,8 @@ import CommandPalette from '@/features/palette/CommandPalette'
 import QuickOpen from '@/features/palette/QuickOpen'
 import { initKeybindings } from '@/features/palette/keybindings'
 import SettingsView from '@/features/settings/SettingsView'
+import UpdateView from '@/features/updates/UpdateView'
+import { useUpdateStore } from '@/features/updates/updateStore'
 import { applyTheme, getTheme } from '@/features/themes/themes'
 import WorkflowsPanel from '@/features/workflows/WorkflowsPanel'
 import { Icon } from '@/components/Icon'
@@ -45,6 +47,8 @@ export default function App(): React.JSX.Element {
       registerCoreActions()
       initKeybindings()
       void seedHistoryCache()
+      // Состояние проверки обновлений считает main; окно только подписывается.
+      useUpdateStore.getState().init()
       window.zarya.app.onMaximized((maximized) => useUiStore.getState().set({ maximized }))
       await useSessionsStore.getState().boot()
       // Restore persisted agent conversations (each bound to its terminal),
@@ -128,6 +132,7 @@ export default function App(): React.JSX.Element {
       <HistoryOverlay />
       <AiCommandBar />
       <SettingsView />
+      <UpdateView />
       <LaunchPad />
       <Toasts />
     </div>

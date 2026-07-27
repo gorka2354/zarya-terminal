@@ -14,6 +14,7 @@ import { registerIpc } from './ipc'
 import { PtyManager } from './ptyManager'
 import { SessionStore } from './sessionStore'
 import { SttService } from './sttService'
+import { UpdateService } from './updateService'
 import { SettingsStore } from './settingsStore'
 import { WorkflowStore, builtinResourcesDir } from './workflowStore'
 
@@ -31,6 +32,7 @@ let quitTimer: NodeJS.Timeout | null = null
 const settingsStore = new SettingsStore()
 const sessionStore = new SessionStore()
 const sttService = new SttService()
+const updateService = new UpdateService(app.getVersion())
 const historyStore = new HistoryStore()
 const workflowStore = new WorkflowStore()
 const ptyManager = new PtyManager(() => mainWindow)
@@ -294,6 +296,7 @@ if (!gotLock) {
       aiProxy,
       agentRegistry,
       stt: sttService,
+      updates: updateService,
       requestQuitConfirmed: () => {
         if (quitTimer) clearTimeout(quitTimer)
         quitConfirmed = true
@@ -301,6 +304,11 @@ if (!gotLock) {
         mainWindow?.destroy()
       }
     })
+
+    // Проверка обновлений — один анонимный запрос при запуске, и только если
+    // это разрешено настройкой. Ошибка сети сюда не всплывает: сервис держит её
+    // в своём состоянии строкой, а не роняет старт приложения.
+    if (settingsStore.get().updates.check) void updateService.check()
 
     settingsStore.onChange((s) => {
       mainWindow?.webContents.send(CH.settingsChanged, s)

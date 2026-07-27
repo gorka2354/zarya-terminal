@@ -83,6 +83,9 @@ export const DEFAULT_SETTINGS: Settings = {
     deviceId: '',
     deviceLabel: ''
   },
+  updates: {
+    check: true
+  },
   sessions: {
     restoreOnLaunch: 'workspace',
     autosaveSec: 20,

@@ -85,6 +85,11 @@ export const CH = {
   sttProgress: 'stt:progress', // main -> renderer
   sttTranscribe: 'stt:transcribe',
 
+  // проверка обновлений
+  updatesState: 'updates:state',
+  updatesCheck: 'updates:check',
+  updatesChanged: 'updates:changed', // main -> renderer
+
   // app / window
   appInfo: 'app:info',
   windowCommand: 'window:command',

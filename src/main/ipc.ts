@@ -26,6 +26,7 @@ import type { PtyManager } from './ptyManager'
 import type { SessionStore } from './sessionStore'
 import type { SettingsStore } from './settingsStore'
 import type { SttService } from './sttService'
+import type { UpdateService } from './updateService'
 import { detectAiClis } from './aiClis'
 import { detectShells, resolveProfile } from './shellProfiles'
 import {
@@ -48,6 +49,7 @@ export interface IpcContext {
   agentRegistry: Map<AgentEngine, AgentDriver>
   /** Local speech-to-text (dictation into the bar). */
   stt: SttService
+  updates: UpdateService
   requestQuitConfirmed: () => void
 }
 
@@ -186,6 +188,12 @@ export function registerIpc(ctx: IpcContext): void {
   ipcMain.handle(CH.settingsProviderStatus, () => settingsStore.providerStatus())
 
   // ------------------------------------------------------------------- stt
+  // Проверка обновлений. Наружу отдаётся только разобранный результат: адреса
+  // рендерер не строит и из ответа сервера не получает (см. @shared/updates).
+  ipcMain.handle(CH.updatesState, () => ctx.updates.get())
+  ipcMain.handle(CH.updatesCheck, () => ctx.updates.check())
+  ctx.updates.onChange((s) => getWindow()?.webContents.send(CH.updatesChanged, s))
+
   ipcMain.handle(CH.sttState, () => ctx.stt.state())
   ipcMain.handle(CH.sttEnsureModel, async () => {
     try {

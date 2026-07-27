@@ -1,0 +1,179 @@
+import { describe, expect, it } from 'vitest'
+import {
+  assetUrl,
+  compareVersions,
+  downloadableAssets,
+  findSumsAsset,
+  isNewer,
+  latestReleaseApiUrl,
+  parseRelease,
+  parseSha256Sums,
+  releasePageUrl
+} from '@shared/updates'
+
+/**
+ * Проверка обновлений — первое место, куда в приложение приезжает контент из
+ * сети. Здесь проверяется главное правило: ни один адрес не берётся из ответа.
+ * Подменённый ответ не должен уметь увести кнопку «Скачать» куда угодно — её
+ * нажмут, потому что показало доверенное приложение.
+ */
+const release = (over: Record<string, unknown> = {}): unknown => ({
+  tag_name: 'v0.5.1',
+  name: 'Zarya 0.5.1 «Часовой»',
+  body: '**Релиз безопасности.**',
+  published_at: '2026-07-25T21:38:46Z',
+  draft: false,
+  prerelease: false,
+  assets: [
+    { name: 'Zarya-Setup-0.5.1-win-x64.exe', size: 188_000_000 },
+    { name: 'SHA256SUMS-0.5.1.txt', size: 200 }
+  ],
+  ...over
+})
+
+describe('compareVersions', () => {
+  it('сравнивает по числам, а не по строкам', () => {
+    // По лексикографике «0.5.10» оказалось бы МЕНЬШЕ «0.5.9», и десятый патч
+    // человек бы не увидел.
+    expect(compareVersions('0.5.10', '0.5.9')).toBe(1)
+    expect(compareVersions('0.5.9', '0.5.10')).toBe(-1)
+    expect(compareVersions('1.0.0', '0.9.9')).toBe(1)
+  })
+
+  it('одинаковые версии равны, ведущая v не мешает', () => {
+    expect(compareVersions('0.5.2', '0.5.2')).toBe(0)
+    expect(compareVersions('v0.5.2', '0.5.2')).toBe(0)
+  })
+
+  it('недостающие части считаются нулями', () => {
+    expect(compareVersions('1.2', '1.2.0')).toBe(0)
+    expect(compareVersions('1.2.1', '1.2')).toBe(1)
+  })
+
+  it('мусор не роняет сравнение', () => {
+    expect(compareVersions('', '0.0.0')).toBe(0)
+    expect(compareVersions('абв', '0.0.1')).toBe(-1)
+  })
+})
+
+describe('isNewer', () => {
+  it('предлагает только то, что действительно новее', () => {
+    expect(isNewer('0.5.1', '0.5.2')).toBe(true)
+    expect(isNewer('0.5.2', '0.5.2')).toBe(false)
+    // Установлена сборка новее опубликованной (так сейчас и есть: тег v0.5.2
+    // запушен, релиз не опубликован) — предлагать «обновиться» назад нельзя.
+    expect(isNewer('0.5.2', '0.5.1')).toBe(false)
+  })
+})
+
+describe('parseRelease', () => {
+  it('разбирает нормальный релиз', () => {
+    const r = parseRelease(release())
+    expect(r).toMatchObject({ version: '0.5.1', tag: 'v0.5.1' })
+    expect(r?.assets.map((a) => a.name)).toEqual([
+      'Zarya-Setup-0.5.1-win-x64.exe',
+      'SHA256SUMS-0.5.1.txt'
+    ])
+  })
+
+  it('пропускает черновик и пререлиз', () => {
+    expect(parseRelease(release({ draft: true }))).toBeNull()
+    expect(parseRelease(release({ prerelease: true }))).toBeNull()
+  })
+
+  it('отвергает тег неизвестной формы', () => {
+    // Из тега строится URL. Всё, что не «vX.Y.Z», до сборки ссылок не доходит.
+    expect(parseRelease(release({ tag_name: 'v1.0.0/../../evil' }))).toBeNull()
+    expect(parseRelease(release({ tag_name: 'latest' }))).toBeNull()
+    expect(parseRelease(release({ tag_name: '' }))).toBeNull()
+    expect(parseRelease(release({ tag_name: 'v1.0.0 ' }))).toMatchObject({ tag: 'v1.0.0' })
+  })
+
+  it('выбрасывает ассеты с опасными именами, оставляя нормальные', () => {
+    const r = parseRelease(
+      release({
+        assets: [
+          { name: '../../../etc/passwd', size: 1 },
+          { name: 'ok-file.exe', size: 2 },
+          { name: 'a/b.exe', size: 3 }
+        ]
+      })
+    )
+    expect(r?.assets.map((a) => a.name)).toEqual(['ok-file.exe'])
+  })
+
+  it('не падает на чужой форме ответа', () => {
+    expect(parseRelease(null)).toBeNull()
+    expect(parseRelease('строка')).toBeNull()
+    expect(parseRelease({})).toBeNull()
+    expect(parseRelease(release({ assets: 'не массив' }))?.assets).toEqual([])
+  })
+
+  it('терпит отсутствие необязательных полей', () => {
+    const r = parseRelease({ tag_name: 'v1.2.3' })
+    expect(r).toMatchObject({ version: '1.2.3', name: '', body: '', publishedAt: '' })
+  })
+})
+
+describe('сборка ссылок', () => {
+  it('страница релиза строится из константы репозитория', () => {
+    expect(releasePageUrl('v0.5.1')).toBe(
+      'https://github.com/gorka2354/zarya-terminal/releases/tag/v0.5.1'
+    )
+  })
+
+  it('ссылка на файл — тоже из константы', () => {
+    expect(assetUrl('v0.5.1', 'Zarya-Setup-0.5.1-win-x64.exe')).toBe(
+      'https://github.com/gorka2354/zarya-terminal/releases/download/v0.5.1/Zarya-Setup-0.5.1-win-x64.exe'
+    )
+  })
+
+  it('кривой тег или имя файла ссылку не дают', () => {
+    expect(releasePageUrl('../../evil')).toBeNull()
+    expect(releasePageUrl('v1.0.0-rc1')).toBeNull()
+    expect(assetUrl('v0.5.1', '../../../evil.exe')).toBeNull()
+    expect(assetUrl('v0.5.1', 'a b.exe')).toBeNull()
+  })
+
+  it('адрес проверки — константа, его нельзя переставить', () => {
+    expect(latestReleaseApiUrl()).toBe(
+      'https://api.github.com/repos/gorka2354/zarya-terminal/releases/latest'
+    )
+  })
+})
+
+describe('parseSha256Sums', () => {
+  const hash = 'f86ebfa0429ced91be6054fc344827e9c6c2572f3c318416cd974b06f66437ec'
+
+  it('разбирает обычный формат', () => {
+    const map = parseSha256Sums(`${hash}  Zarya-Setup-0.5.1-win-x64.exe\n`)
+    expect(map['Zarya-Setup-0.5.1-win-x64.exe']).toBe(hash)
+  })
+
+  it('понимает звёздочку двоичного режима', () => {
+    expect(parseSha256Sums(`${hash} *file.exe`)['file.exe']).toBe(hash)
+  })
+
+  it('пропускает мусорные строки, не падая', () => {
+    const map = parseSha256Sums(`не хеш\n\n${hash}  file.exe\nкороткий1234  x.exe`)
+    expect(Object.keys(map)).toEqual(['file.exe'])
+  })
+
+  it('не берёт имена с путями', () => {
+    expect(parseSha256Sums(`${hash}  ../../evil.exe`)).toEqual({})
+  })
+})
+
+describe('раскладка ассетов', () => {
+  const assets = [
+    { name: 'Zarya-Setup-0.5.1-win-x64.exe', size: 1 },
+    { name: 'SHA256SUMS-0.5.1.txt', size: 2 }
+  ]
+
+  it('файл сумм находится и не предлагается к скачиванию', () => {
+    expect(findSumsAsset(assets)?.name).toBe('SHA256SUMS-0.5.1.txt')
+    expect(downloadableAssets(assets).map((a) => a.name)).toEqual([
+      'Zarya-Setup-0.5.1-win-x64.exe'
+    ])
+  })
+})

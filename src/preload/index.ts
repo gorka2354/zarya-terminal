@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { CH } from '../shared/ipc'
+import type { UpdateState } from '../shared/updates'
 import type {
   AgentEngine,
   AgentPermissionDecision,
@@ -173,6 +174,11 @@ const api = {
     list: () => ipcRenderer.invoke(CH.workflowsList),
     save: (wf: WorkflowDef) => ipcRenderer.invoke(CH.workflowsSave, wf),
     delete: (id: string) => ipcRenderer.invoke(CH.workflowsDelete, id)
+  },
+  updates: {
+    state: () => ipcRenderer.invoke(CH.updatesState),
+    check: () => ipcRenderer.invoke(CH.updatesCheck),
+    onChange: (cb: (s: UpdateState) => void) => on(CH.updatesChanged, cb)
   },
   stt: {
     state: () => ipcRenderer.invoke(CH.sttState),
