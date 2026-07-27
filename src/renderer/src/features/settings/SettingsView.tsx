@@ -13,6 +13,12 @@ import { chordFromEvent, formatChord } from '@/features/palette/keybindings'
 import { getThemes } from '@/features/themes/themes'
 import { setIdeMode } from '@/features/ide/ideMode'
 import {
+  isProtectionRisky,
+  protectionHint,
+  protectionLabel,
+  type SecretProtection
+} from '@shared/secretProtection'
+import {
   labelsHidden,
   listMics,
   micName,
@@ -964,6 +970,15 @@ function ApiKeysBlock(): React.JSX.Element {
     return status.find((s) => s.provider === id)?.hasKey ?? false
   }
 
+  /**
+   * Один зелёный бейдж на все случаи скрывал главное: при недоступном хранилище
+   * ОС ключ пишется открытым текстом. «Сохранён» — это про факт записи, а
+   * человек читал его как «в безопасности».
+   */
+  function protectionOf(id: AiProviderKind): SecretProtection {
+    return status.find((s) => s.provider === id)?.protection ?? 'none'
+  }
+
   async function save(id: AiProviderKind): Promise<void> {
     const key = (inputs[id] ?? '').trim()
     if (!key) return
@@ -999,10 +1014,22 @@ function ApiKeysBlock(): React.JSX.Element {
         <div key={p.id} className="zy-apikey-row">
           <div className="zy-apikey-head">
             <span className="zy-set-row-title">{p.label}</span>
-            <span className={`zy-badge${hasKey(p.id) ? ' zy-badge--ok' : ''}`}>
-              {hasKey(p.id) ? 'Ключ сохранён' : 'Ключ не задан'}
+            <span
+              className={`zy-badge${
+                protectionOf(p.id) === 'os'
+                  ? ' zy-badge--ok'
+                  : isProtectionRisky(protectionOf(p.id))
+                    ? ' zy-badge--warn'
+                    : ''
+              }`}
+              title={protectionHint(protectionOf(p.id))}
+            >
+              {protectionLabel(protectionOf(p.id))}
             </span>
           </div>
+          {isProtectionRisky(protectionOf(p.id)) && (
+            <div className="zy-set-warning">{protectionHint(protectionOf(p.id))}</div>
+          )}
           <div className="zy-apikey-controls">
             <input
               type="password"

@@ -268,6 +268,13 @@ body {
   background: color-mix(in srgb, var(--success) 18%, transparent);
   color: var(--success);
 }
+/* Ключ сохранён, но защищён слабо или не защищён вовсе. Отдельный цвет, а не
+   зелёный: зелёное читается как «вопрос закрыт», и именно так этот бейдж и
+   вводил в заблуждение над ключом, лежащим открытым текстом. */
+.zy-badge--warn {
+  background: color-mix(in srgb, var(--warn) 20%, transparent);
+  color: var(--warn);
+}
 .zy-badge--fail {
   background: color-mix(in srgb, var(--danger) 18%, transparent);
   color: var(--danger);

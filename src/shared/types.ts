@@ -1,3 +1,5 @@
+import type { SecretProtection } from './secretProtection'
+
 /**
  * Shared type contracts between main, preload and renderer.
  * This file is the single source of truth for cross-process data shapes.
@@ -301,6 +303,11 @@ export type AiStreamEvent =
 export interface AiProviderStatus {
   provider: AiProviderKind
   hasKey: boolean
+  /**
+   * Насколько ключ на самом деле защищён. Один зелёный бейдж на все случаи
+   * скрывал, что при недоступном safeStorage ключ пишется открытым текстом.
+   */
+  protection: SecretProtection
 }
 
 /** A conversation persisted to disk (survives restart), bound to a terminal + cwd. */

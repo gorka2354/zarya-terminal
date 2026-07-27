@@ -2,6 +2,7 @@ import { app, safeStorage } from 'electron'
 import { join } from 'path'
 import { readJson, writeJsonAtomic, mergeDeep, debounce } from './jsonStore'
 import { DEFAULT_SETTINGS } from '@shared/defaults'
+import { classifyProtection } from '@shared/secretProtection'
 import type { AiProviderKind, AiProviderStatus, Settings } from '@shared/types'
 
 type Listener = (s: Settings) => void
@@ -85,6 +86,19 @@ export class SettingsStore {
 
   providerStatus(): AiProviderStatus[] {
     const kinds: AiProviderKind[] = ['anthropic', 'openai', 'ollama', 'openai-compat']
-    return kinds.map((provider) => ({ provider, hasKey: !!this.secrets[provider] }))
+    // Защита считается по ДВУМ вещам: как ключ записан (префикс в файле) и что
+    // система умеет сейчас. На Linux без keyring safeStorage «доступен», backend
+    // называется basic_text, и enc: не значит ничего — судить по одному префиксу
+    // означало бы рисовать зелёное поверх открытого текста.
+    const available = safeStorage.isEncryptionAvailable()
+    const backend =
+      process.platform === 'linux' && typeof safeStorage.getSelectedStorageBackend === 'function'
+        ? safeStorage.getSelectedStorageBackend()
+        : undefined
+    return kinds.map((provider) => ({
+      provider,
+      hasKey: !!this.secrets[provider],
+      protection: classifyProtection(this.secrets[provider], available, backend)
+    }))
   }
 }

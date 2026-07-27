@@ -15,12 +15,25 @@ single-maintainer project, not a company with an SLA.
 - **AI provider API keys** are encrypted at rest via Electron's `safeStorage`
   (Windows DPAPI, macOS Keychain, Linux Secret Service) before being written to
   `secrets.json` under the OS `userData` directory. Keys are read and used only in
-  the main process; the renderer never receives raw key material, only a
-  `hasKey: boolean` status per provider. If OS-level encryption is unavailable,
-  Zarya falls back to storing the key base64-encoded rather than refusing to run —
-  that fallback is **not** a security boundary, only a degrade path; a normal
-  desktop session (which has `safeStorage` available) is assumed for real key
-  protection.
+  the main process; the renderer never receives raw key material, only a status
+  per provider (`hasKey` plus how the key is actually protected). If OS-level
+  encryption is unavailable, Zarya falls back to storing the key base64-encoded
+  rather than refusing to run — that fallback is **not** a security boundary, only
+  a degrade path.
+
+  **That degrade is stated in the UI, not hidden.** The badge over each key
+  reports one of three things: *Ключ в хранилище ОС* (green), *Ключ защищён
+  слабо* (amber) or *Ключ открытым текстом* (amber, with an explanation of what
+  to do). Two conditions are judged separately — how the key was written (the
+  `enc:` / `b64:` prefix in `secrets.json`) and what the system can do right now
+  (`safeStorage.isEncryptionAvailable()` and, on Linux, the selected backend).
+  The second matters on its own: on a Linux box with no keyring the backend is
+  `basic_text`, `encryptString` still produces an `enc:` prefix, and nothing is
+  actually protected — so judging by the prefix alone would paint a green badge
+  over plaintext.
+
+  **No telemetry follows from this.** Reporting the protection level is a local
+  UI decision; nothing about your keys leaves the machine.
 - **No telemetry.** Zarya does not phone home, collect analytics, or send crash
   reports anywhere. The only outbound network requests it ever makes are to the AI
   provider endpoint you explicitly configure (and to a self-hosted Ollama/OpenAI
