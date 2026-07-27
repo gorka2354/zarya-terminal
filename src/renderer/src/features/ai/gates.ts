@@ -119,3 +119,19 @@ export function gateView(cmd: string, awaitingDecision: boolean): GateView {
     mustShowFull: awaitingDecision && cmd.trim() !== ''
   }
 }
+
+/**
+ * Is the feed's tail busy — i.e. is the «готов · введите запрос» prompt line a lie?
+ *
+ * The feed used to render that line unconditionally, so it sat directly under
+ * «агент отвечает…»: the same screen claimed the agent was working AND waiting
+ * for input. The line means «your turn», so it may only appear when the turn is
+ * actually the user's: no stream, no tool in flight (settled ones are still
+ * executing until their result lands), no gate awaiting a decision, and no shell
+ * command running in the terminal below.
+ */
+export function feedIsBusy(conv: Conversation | undefined, shellRunning = false): boolean {
+  if (shellRunning) return true
+  if (!conv) return false
+  return conv.streaming || conv.pendingTools.length > 0 || !!conv.queued
+}

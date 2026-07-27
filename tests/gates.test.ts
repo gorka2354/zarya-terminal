@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { GATE_HEAD_CHARS, gateLabel, gateView, orphanGates, toolLabel } from '@/features/ai/gates'
+import {
+  GATE_HEAD_CHARS,
+  feedIsBusy,
+  gateLabel,
+  gateView,
+  orphanGates,
+  toolLabel
+} from '@/features/ai/gates'
 import type { Conversation, PendingTool } from '@/features/ai/aiStore'
 
 /**
@@ -229,5 +236,42 @@ describe('gateView', () => {
     expect(v.isLong).toBe(false)
     expect(v.firstLine).toBe('')
     expect(v.lines).toBe(1)
+  })
+})
+
+/**
+ * The feed printed «готов · введите запрос в строку ниже ↓» unconditionally, so
+ * it sat directly under «агент отвечает…» — one screen claiming the agent was
+ * both working and idle. The prompt line means «your turn».
+ */
+describe('feedIsBusy', () => {
+  it('is busy while the agent streams', () => {
+    expect(feedIsBusy(conv({ streaming: true }))).toBe(true)
+  })
+
+  it('is busy while a gate waits for a decision', () => {
+    expect(feedIsBusy(conv({ pendingTools: [gate()] }))).toBe(true)
+  })
+
+  it('stays busy while an APPROVED tool is still running', () => {
+    // settled = approved, not finished: the tool is removed from pendingTools
+    // only when its result lands. «готов» before that is still a lie.
+    expect(feedIsBusy(conv({ pendingTools: [gate({ settled: true })] }))).toBe(true)
+  })
+
+  it('is busy while a message waits in the queue', () => {
+    expect(feedIsBusy(conv({ queued: 'потом отправь это' }))).toBe(true)
+  })
+
+  it('is busy while a shell command runs in the terminal', () => {
+    expect(feedIsBusy(conv(), true)).toBe(true)
+  })
+
+  it('is idle on a settled conversation — the prompt line may show', () => {
+    expect(feedIsBusy(conv())).toBe(false)
+  })
+
+  it('is idle with no conversation at all', () => {
+    expect(feedIsBusy(undefined)).toBe(false)
   })
 })

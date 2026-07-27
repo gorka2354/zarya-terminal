@@ -6,7 +6,20 @@ import { useBlocksStore } from '@/state/blocksStore'
 import { useSessionsStore } from '@/state/sessionsStore'
 import { useUiStore } from '@/state/uiStore'
 import { convForSession, useAiStore, type Conversation } from '@/features/ai/aiStore'
-import { gateLabel, gateView, nextGate, orphanGates, toolLabel } from '@/features/ai/gates'
+import {
+  feedIsBusy,
+  gateLabel,
+  gateView,
+  nextGate,
+  orphanGates,
+  toolLabel
+} from '@/features/ai/gates'
+import {
+  coveredToolUseIds,
+  fmtElapsed,
+  fmtTokens as fmtWaveTokens,
+  summarizeWave
+} from '@/features/ai/subagents'
 import { renderMarkdown } from '@/features/ai/markdown'
 import { getTerminal } from '@/terminal/terminalRegistry'
 import { Icon } from './Icon'
@@ -131,6 +144,9 @@ export function MissionFeed({ sessionId }: { sessionId: string }): React.JSX.Ele
     return () => clearTimeout(timer)
   }, [runningId, sessionId])
 
+  // «Занят» = агент отвечает, крутится инструмент, ждёт решения по гейту или в
+  // терминале идёт команда. Пока так — строка приглашения молчит.
+  const busy = feedIsBusy(conv, !!runningId)
   const stickRef = useRef(true)
   // SECURITY: a gate awaiting a decision is the one thing the feed may yank the
   // view for. Enter approves it from anywhere on the window, so a card out of
@@ -267,12 +283,18 @@ export function MissionFeed({ sessionId }: { sessionId: string }): React.JSX.Ele
                 <span className="zy-mf-queued-hint">↑ править · Esc прервать</span>
               </div>
             )}
-            <div className="zy-mf-ready">
-              <span className="zy-mf-spark"><PixelIcon name="star" /></span>
-              <span className="zy-mf-cwd">{cwdShort || '~'}</span>
-              <span className="zy-mf-chev"><PixelIcon name="chevron-right" /></span>
-              <span className="zy-mf-ready-text">готов · введите запрос в строку ниже ↓</span>
-            </div>
+            {/* The prompt line means «your turn». It must not sit under a
+                working agent claiming «готов · введите запрос» while the line
+                right above it says the agent is answering — nor while a gate
+                waits for a decision. */}
+            {!busy && (
+              <div className="zy-mf-ready">
+                <span className="zy-mf-spark"><PixelIcon name="star" /></span>
+                <span className="zy-mf-cwd">{cwdShort || '~'}</span>
+                <span className="zy-mf-chev"><PixelIcon name="chevron-right" /></span>
+                <span className="zy-mf-ready-text">готов · введите запрос в строку ниже ↓</span>
+              </div>
+            )}
           </>
         )}
       </div>
@@ -393,6 +415,7 @@ function AgentSection({ conv, cwd }: { conv: Conversation; cwd: string }): React
           isNextGate={nextGate(conv)?.id === t.id}
         />
       ))}
+      <SubagentWave conv={conv} />
       {conv.streaming && conv.messages[conv.messages.length - 1]?.role === 'user' && (
         <div className="zy-mf-typing">
           <span className="zy-mf-spinner" />
@@ -401,6 +424,66 @@ function AgentSection({ conv, cwd }: { conv: Conversation; cwd: string }): React
       )}
       {conv.error && <div className="zy-mf-errbanner">✗ {conv.error}</div>}
     </>
+  )
+}
+
+/**
+ * The subagent wave — one line instead of a stack of identical cards.
+ *
+ * Claude Code spawns these for research and parallel work, and reports each
+ * one's cost itself; every figure here is the SDK's own. Without this the feed
+ * showed N indistinguishable «субагент работает…» spinners and no way to tell
+ * how many there were, how long they had run, or what they cost.
+ */
+function SubagentWave({ conv }: { conv: Conversation }): React.JSX.Element | null {
+  const runs = conv.subagents
+  // Re-render on a timer so the elapsed time ticks between SDK updates.
+  const [, tick] = useState(0)
+  const active = !!runs && Object.keys(runs).length > 0
+  useEffect(() => {
+    if (!active) return
+    const t = window.setInterval(() => tick((v) => v + 1), 1000)
+    return () => clearInterval(t)
+  }, [active])
+  if (!runs || !active) return null
+
+  const w = summarizeWave(runs, Date.now())
+  const allDone = w.done === w.total
+  return (
+    <div className={`zy-mf-wave${allDone ? ' zy-mf-wave--done' : ''}`}>
+      <div className="zy-mf-wave-head">
+        {allDone ? (
+          <Icon name="check" size={12} />
+        ) : (
+          <span className="zy-mf-spinner" aria-hidden />
+        )}
+        <span className="zy-mf-wave-count">
+          {w.done}/{w.total} {w.total === 1 ? 'агент' : 'агентов'}
+        </span>
+        <span className="zy-mf-wave-sep">·</span>
+        <span className="zy-mf-wave-time">{fmtElapsed(w.elapsedMs)}</span>
+        {w.tokens > 0 && (
+          <>
+            <span className="zy-mf-wave-sep">·</span>
+            <span className="zy-mf-wave-tokens" title="Токены, посчитанные самим Claude Code">
+              ↓{fmtWaveTokens(w.tokens)} токенов
+            </span>
+          </>
+        )}
+      </div>
+      {w.running.slice(0, 4).map((r) => (
+        <div key={r.taskId} className="zy-mf-wave-row">
+          <span className="zy-mf-wave-dot" />
+          <span className="zy-mf-wave-what">{r.description ?? r.subagentType ?? 'субагент'}</span>
+          {r.lastTool && <span className="zy-mf-wave-tool">{r.lastTool}</span>}
+        </div>
+      ))}
+      {w.running.length > 4 && (
+        <div className="zy-mf-wave-row zy-mf-wave-row--more">
+          …и ещё {w.running.length - 4}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -439,6 +522,8 @@ function AgentMessage({
       </div>
     )
   }
+  // Built once per message, not once per tool_use block inside it.
+  const covered = coveredToolUseIds(conv.subagents ?? {})
   return (
     <>
       {msg.content.map((p, i) => {
@@ -452,6 +537,11 @@ function AgentMessage({
           ) : null
         }
         if (p.type === 'tool_use') {
+          // A subagent's «Agent» card would say only «субагент работает…» while
+          // the wave line above already names the task, its runtime and its
+          // cost. Showing both is the same information twice, the useless copy
+          // on top.
+          if (covered.has(p.id)) return null
           return (
             <ToolCard
               key={i}

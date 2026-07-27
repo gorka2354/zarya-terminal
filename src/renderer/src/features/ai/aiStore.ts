@@ -21,6 +21,7 @@ import { useSessionsStore } from '@/state/sessionsStore'
 import { useUiStore } from '@/state/uiStore'
 import { registerAiBridge } from './aiBridge'
 import { gateLabel } from './gates'
+import { applySubagentEvent, type SubagentRun } from './subagents'
 import { sameModel } from './modelMatch'
 import { nativeGateOpts } from './startOpts'
 
@@ -100,6 +101,8 @@ export interface Conversation {
    * still sees them on resume, so the feed says so out loud.
    */
   interrupted?: number[]
+  /** Live subagent wave, keyed by task id. Cleared when the turn ends. */
+  subagents?: Record<string, SubagentRun>
   /** Working directory the conversation was opened in (folder the AI worked in). */
   cwd?: string
   agentMode: boolean
@@ -578,6 +581,18 @@ export const useAiStore = create<AiState>((set, get) => {
       }
       return
     }
+    if (ev.type === 'subagent') {
+      // The wave belongs to the conversation, not to the global status: two
+      // terminals can each be running their own research at the same time.
+      const conv = get().conversations.find((c) => c.id === requestId)
+      if (conv) {
+        patchConversation(conv.id, (c) => ({
+          ...c,
+          subagents: applySubagentEvent(c.subagents ?? {}, ev, Date.now())
+        }))
+      }
+      return
+    }
     if (isClaudeStatus && ev.type === 'models') {
       useUiStore.getState().set({ claudeModels: ev.models })
       // Persist so the launch pad (incl. Fable / any future model) is populated on
@@ -655,7 +670,10 @@ export const useAiStore = create<AiState>((set, get) => {
           ...c,
           streaming: false,
           activeRequestId: undefined,
-          claudeSessionId: ev.sessionId ?? c.claudeSessionId
+          claudeSessionId: ev.sessionId ?? c.claudeSessionId,
+          // The wave is a live readout of THIS turn — leaving it on screen after
+          // the turn ends would show a finished count as if it were still work.
+          subagents: undefined
         }))
         // Correct the fuel readout to the model that actually ran this turn.
         // Only when a single model ran (subagents would add extra keys → keep config).

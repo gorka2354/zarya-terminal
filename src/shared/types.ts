@@ -396,6 +396,31 @@ export type AgentStreamEvent =
     }
   | { type: 'usage'; usage: AgentUsage }
   | { type: 'models'; models: AgentModelInfo[] }
+  /**
+   * A subagent's lifecycle. Claude Code spawns these for research/parallel work
+   * and reports their cost itself, so the numbers here are the SDK's own — the
+   * indicator must never invent them.
+   */
+  | {
+      type: 'subagent'
+      /** Stable id of the task (not the tool_use id). */
+      taskId: string
+      /** The `Agent` tool_use this task belongs to, when the SDK reports one. */
+      toolUseId?: string
+      phase: 'started' | 'progress' | 'done'
+      /** Human description; refreshed as the subagent moves on ("Reading package.json"). */
+      description?: string
+      /** e.g. 'general-purpose'. Absent for plain shell tasks. */
+      subagentType?: string
+      /** Tokens the SDK attributes to this subagent so far. */
+      totalTokens?: number
+      /** Tool calls it has made so far. */
+      toolUses?: number
+      /** How long it has been running, per the SDK. */
+      durationMs?: number
+      /** Tool it is running right now. */
+      lastTool?: string
+    }
   | { type: 'assistant'; content: AiContentPart[] }
   | { type: 'tool_result'; toolUseId: string; content: string; isError: boolean }
   | {

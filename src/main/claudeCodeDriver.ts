@@ -322,6 +322,8 @@ interface Session {
   ultracode?: boolean
   /** The user pressed Esc: a subsequent process exit is expected, not a failure. */
   interrupted?: boolean
+  /** Task ids that are plain shell commands, not subagents — filtered from the count. */
+  shellTasks: Set<string>
 }
 
 /**
@@ -545,7 +547,8 @@ export class ClaudeCodeDriver implements AgentDriver {
       bypass: !!opts.bypass,
       effort: effortOverride,
       model: opts.model,
-      ultracode: !!opts.ultracode
+      ultracode: !!opts.ultracode,
+      shellTasks: new Set<string>()
     }
     this.sessions.set(requestId, session)
 
@@ -558,6 +561,57 @@ export class ClaudeCodeDriver implements AgentDriver {
       for await (const msg of session.query as AsyncIterable<SDKMessage>) {
         switch (msg.type) {
           case 'system':
+            // Subagent telemetry. The SDK counts tokens, tool calls and duration
+            // per task itself — we forward its numbers rather than deriving our
+            // own, so the indicator can't drift from reality.
+            //
+            // `local_bash` tasks are ordinary shell commands wearing the same
+            // event shape; counting them as agents would inflate «N of M».
+            if (
+              msg.subtype === 'task_started' ||
+              msg.subtype === 'task_progress' ||
+              msg.subtype === 'task_updated' ||
+              msg.subtype === 'task_notification'
+            ) {
+              const t = msg as unknown as {
+                subtype: string
+                task_id?: string
+                tool_use_id?: string
+                description?: string
+                subagent_type?: string
+                task_type?: string
+                last_tool_name?: string
+                status?: string
+                patch?: { status?: string }
+                usage?: { total_tokens?: number; tool_uses?: number; duration_ms?: number }
+              }
+              const taskId = t.task_id
+              if (taskId) {
+                if (t.subtype === 'task_started' && t.task_type !== 'local_agent') {
+                  // Remember the non-agent ids so their later progress/completion
+                  // events are ignored too.
+                  session.shellTasks.add(taskId)
+                }
+                if (!session.shellTasks.has(taskId)) {
+                  const done =
+                    t.subtype === 'task_notification' ||
+                    (t.subtype === 'task_updated' && t.patch?.status === 'completed')
+                  this.emit(requestId, {
+                    type: 'subagent',
+                    taskId,
+                    toolUseId: t.tool_use_id,
+                    phase: t.subtype === 'task_started' ? 'started' : done ? 'done' : 'progress',
+                    description: t.description,
+                    subagentType: t.subagent_type,
+                    totalTokens: t.usage?.total_tokens,
+                    toolUses: t.usage?.tool_uses,
+                    durationMs: t.usage?.duration_ms,
+                    lastTool: t.last_tool_name
+                  })
+                }
+              }
+              break
+            }
             if (msg.subtype === 'init') {
               this.emit(requestId, {
                 type: 'init',
@@ -603,6 +657,12 @@ export class ClaudeCodeDriver implements AgentDriver {
           }
 
           case 'assistant': {
+            // A subagent's own steps are NOT the main transcript. They arrive
+            // marked with parent_tool_use_id, and dumping them inline made the
+            // feed look like the main agent had run a dozen Globs itself. The
+            // wave line summarises them: how many, how long, what they cost and
+            // which tool each is on right now.
+            if (msg.parent_tool_use_id) break
             const content = mapAssistantContent(
               (msg.message as { content?: unknown }).content
             )
@@ -611,6 +671,8 @@ export class ClaudeCodeDriver implements AgentDriver {
           }
 
           case 'user': {
+            // Same for a subagent's tool results — its card was never rendered.
+            if (msg.parent_tool_use_id) break
             // Only surface tool_result blocks — the user's own prompt is already
             // shown by the renderer (it initiated the turn).
             const content = (msg.message as { content?: unknown }).content
