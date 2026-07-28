@@ -35,7 +35,8 @@
     "pack": "npm run build && electron-builder --dir",
     "dist": "npm run build && electron-builder",
     "qa:updates": "npm run build && node scripts/update-view-test.mjs",
-    "qa:secrets": "npm run build && node scripts/secret-badge-test.mjs"
+    "qa:secrets": "npm run build && node scripts/secret-badge-test.mjs",
+    "qa:ui": "npm run build && node scripts/menu-fit-test.mjs && node scripts/ready-line-test.mjs"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.3.220",

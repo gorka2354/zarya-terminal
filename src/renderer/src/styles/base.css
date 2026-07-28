@@ -1068,6 +1068,14 @@ body {
   position: fixed;
   z-index: 300;
   min-width: 190px;
+  /* Список сессий бывает в два десятка строк. Без потолка меню вырастало выше
+     окна и вылезало за кромку: часть пунктов оказывалась недоступна вообще, ни
+     прокруткой, ни мышью. 60vh — чтобы длинный список ПРОКРУЧИВАЛСЯ, а не
+     проглатывал весь экран ради выбора одной строки. */
+  max-width: min(420px, calc(100vw - 16px));
+  max-height: 60vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: var(--bg-elev1);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
@@ -1085,6 +1093,10 @@ body {
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--fg);
+  /* Заголовок сессии — целая фраза; в узком меню она сворачивалась в три
+     строки, и двадцать пять таких пунктов давали высоту больше экрана. */
+  text-align: left;
+  white-space: nowrap;
   font-size: 12.5px;
   font-family: inherit;
   cursor: pointer;
@@ -1101,7 +1113,15 @@ body {
   background: var(--border);
   margin: 4px 6px;
 }
+/* Подпись обрезается многоточием, а не растягивает меню: длинный заголовок
+   сессии не должен решать, поместится ли список в окно. */
+.zy-context-item > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .zy-context-hint {
+  flex: 0 0 auto;
   font-size: 10.5px;
   color: var(--fg-faint);
 }

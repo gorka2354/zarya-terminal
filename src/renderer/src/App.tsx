@@ -23,6 +23,7 @@ import QuickOpen from '@/features/palette/QuickOpen'
 import { initKeybindings } from '@/features/palette/keybindings'
 import SettingsView from '@/features/settings/SettingsView'
 import UpdateView from '@/features/updates/UpdateView'
+import { useContextMenu, type MenuItem } from '@/components/ContextMenu'
 import { useUpdateStore } from '@/features/updates/updateStore'
 import { applyTheme, getTheme } from '@/features/themes/themes'
 import WorkflowsPanel from '@/features/workflows/WorkflowsPanel'
@@ -36,6 +37,19 @@ import { useAiStore } from '@/features/ai/aiStore'
 
 export default function App(): React.JSX.Element {
   const [booted, setBooted] = useState(false)
+  // QA-хук: открыть контекстное меню с заданными пунктами. Меню — общий
+  // компонент, и его геометрия (влезает ли в окно, прокручивается ли длинный
+  // список) не должна зависеть от того, сколько сессий лежит на конкретной
+  // машине. Безвреден в проде: без вызова ничего не рисует.
+  const { menu: testMenu, open: openTestMenu } = useContextMenu()
+  useEffect(() => {
+    ;(
+      window as unknown as {
+        __zaryaTestMenu?: (items: MenuItem[], at?: { x: number; y: number }) => void
+      }
+    ).__zaryaTestMenu = (items, at) => openTestMenu(at?.x ?? 40, at?.y ?? 60, items)
+  }, [openTestMenu])
+
   const bootStarted = useRef(false)
 
   useEffect(() => {
@@ -133,6 +147,7 @@ export default function App(): React.JSX.Element {
       <AiCommandBar />
       <SettingsView />
       <UpdateView />
+      {testMenu}
       <LaunchPad />
       <Toasts />
     </div>

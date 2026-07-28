@@ -25,7 +25,7 @@ import { getTerminal } from '@/terminal/terminalRegistry'
 import { Icon } from './Icon'
 import { PixelIcon } from './PixelIcon'
 import { AiCliLauncher, launchAiCli } from './AiCliLauncher'
-import { useContextMenu } from './ContextMenu'
+import { useContextMenu, type MenuItem } from './ContextMenu'
 import logoZarya from '@/assets/logo-zarya-64.png'
 import './missionfeed.css'
 
@@ -68,8 +68,12 @@ export function MissionFeed({ sessionId }: { sessionId: string }): React.JSX.Ele
         ])
         return
       }
-      const items = list.slice(0, 25).map((s) => ({
-        label: (s.summary || s.firstPrompt || 'Сессия').slice(0, 46),
+      const SHOWN = 25
+      const items: MenuItem[] = list.slice(0, SHOWN).map((s) => ({
+        // Обрезать заголовок здесь больше не нужно — пункт меню сам укладывается
+        // в одну строку с многоточием. Резать по 46 символам значило бы решать
+        // за вёрстку, сколько влезет, и терять хвост даже в широком окне.
+        label: s.summary || s.firstPrompt || 'Сессия',
         hint: formatRelative(s.lastModified),
         onClick: () => {
           void window.zarya.claudeCode.sessionMessages(s.sessionId, folder).then((messages) => {
@@ -84,6 +88,16 @@ export function MissionFeed({ sessionId }: { sessionId: string }): React.JSX.Ele
           })
         }
       }))
+      // Молчаливое усечение читается как «это весь список»: у папки с активной
+      // работой сессий бывают сотни, и человек уверенно ищет вчерашнюю среди
+      // двадцати пяти самых свежих, не зная, что остальные просто не показаны.
+      if (list.length > SHOWN) {
+        items.push({ separator: true })
+        items.push({
+          label: `…и ещё ${list.length - SHOWN} сессий — показаны самые свежие`,
+          disabled: true
+        })
+      }
       openMenu(r.left, r.bottom + 4, items)
     })
   }

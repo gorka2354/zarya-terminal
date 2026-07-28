@@ -26,21 +26,35 @@ export function ContextMenu({ x, y, items, onClose }: Props): React.JSX.Element 
     if (el) {
       const r = el.getBoundingClientRect()
       setPos({
-        left: Math.min(x, window.innerWidth - r.width - 8),
-        top: Math.min(y, window.innerHeight - r.height - 8)
+        left: Math.max(8, Math.min(x, window.innerWidth - r.width - 8)),
+        // Math.max(8, …) обязателен: у списка из двух десятков сессий высота
+        // больше окна, `innerHeight - height - 8` уходит в минус, и меню
+        // выезжает за ВЕРХНЮЮ кромку — первые пункты просто не увидеть. Высоту
+        // ограничивает CSS (max-height + прокрутка), здесь остаётся не пустить
+        // меню за край.
+        top: Math.max(8, Math.min(y, window.innerHeight - r.height - 8))
       })
     }
     const close = (): void => onClose()
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') onClose()
+      if (e.key !== 'Escape') return
+      // Меню съело клавишу: дальше её пускать нельзя — иначе Esc заодно прервёт
+      // ход агента или уедет в шелл.
+      e.preventDefault()
+      e.stopPropagation()
+      onClose()
     }
     window.addEventListener('mousedown', close)
     window.addEventListener('blur', close)
-    window.addEventListener('keydown', onKey)
+    // Фаза ЗАХВАТА, а не всплытия. xterm вешает свой keydown на textarea в
+    // capture и для Escape зовёт preventDefault + stopPropagation — до window
+    // событие в фазе всплытия не доходит вовсе, и меню, открытое при
+    // сфокусированном терминале, по Esc не закрывалось.
+    window.addEventListener('keydown', onKey, true)
     return () => {
       window.removeEventListener('mousedown', close)
       window.removeEventListener('blur', close)
-      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('keydown', onKey, true)
     }
   }, [x, y, onClose])
 
@@ -64,7 +78,11 @@ export function ContextMenu({ x, y, items, onClose }: Props): React.JSX.Element 
               item.onClick?.()
             }}
           >
-            <span>{item.label}</span>
+            {/* Полный текст в подсказке: пункт укладывается в одну строку с
+                многоточием, и у длинного заголовка сессии обрезанный текст —
+                единственное опознание. Без title его стало бы не прочитать
+                вообще, тогда как до перехода на одну строку он переносился. */}
+            <span title={item.label}>{item.label}</span>
             {item.hint && <span className="zy-context-hint">{item.hint}</span>}
           </button>
         )
