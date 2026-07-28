@@ -162,6 +162,10 @@ export interface ZaryaApi {
   updates: {
     state(): Promise<UpdateState>
     check(): Promise<UpdateState>
+    /** Скачать обновление; прогресс приходит через onChange. */
+    download(): Promise<UpdateState>
+    /** Поставить скачанное и перезапуститься. */
+    install(): Promise<{ ok: boolean; error?: string }>
     onChange(cb: (s: UpdateState) => void): Unsub
   }
   /** Local dictation — audio never leaves the machine. */

@@ -1,4 +1,5 @@
 import { get } from 'https'
+import { autoUpdater } from 'electron-updater'
 import {
   findSumsAsset,
   latestReleaseApiUrl,
@@ -25,14 +26,108 @@ import {
 const MAX_BODY = 512 * 1024
 const TIMEOUT_MS = 8000
 
+/**
+ * Может ли эта сборка поставить обновление сама.
+ *
+ * Windows (NSIS) — да, подпись для этого не требуется: целостность скачанного
+ * проверяется по sha512 из latest.yml. macOS — НЕТ: Squirrel.Mac ставит только
+ * подписанное и нотаризованное, а наши сборки не подписаны, и попытка кончилась
+ * бы невнятной ошибкой вместо честного «поставьте руками». Linux: AppImage
+ * обновляется сам, .deb ставится менеджером пакетов.
+ */
+function canSelfInstall(): boolean {
+  if (process.platform === 'win32') return true
+  if (process.platform === 'linux') return !!process.env.APPIMAGE
+  return false
+}
+
 export class UpdateService {
   private state: UpdateState
   private listeners = new Set<(s: UpdateState) => void>()
   /** Один запрос в полёте: два нажатия «Проверить» не должны идти в сеть дважды. */
   private inFlight: Promise<UpdateState> | null = null
+  /** Вызывается, когда пользователь подтвердил установку: гасит приложение штатно. */
+  private quitForInstall: (() => void) | null = null
 
   constructor(private currentVersion: string) {
-    this.state = { current: currentVersion, updateAvailable: false, checking: false }
+    this.state = {
+      current: currentVersion,
+      updateAvailable: false,
+      checking: false,
+      canInstall: canSelfInstall(),
+      downloaded: false
+    }
+    // Ничего не качаем и не ставим в фоне: обновление начинается только с
+    // явного нажатия. Приложение, которое само меняет свой исполняемый файл,
+    // пока человек работает, — не то, чем должен быть терминал.
+    autoUpdater.autoDownload = false
+    autoUpdater.autoInstallOnAppQuit = false
+    autoUpdater.on('download-progress', (p) => {
+      this.set({
+        downloading: {
+          percent: Math.max(0, Math.min(100, p.percent)),
+          transferred: p.transferred,
+          total: p.total
+        }
+      })
+    })
+    autoUpdater.on('update-downloaded', () => {
+      this.set({ downloading: undefined, downloaded: true, installError: undefined })
+    })
+    autoUpdater.on('error', (e) => {
+      this.set({
+        downloading: undefined,
+        installError: e instanceof Error ? e.message : 'не удалось скачать обновление'
+      })
+    })
+  }
+
+  /** Как гасить приложение перед установкой — задаётся из main. */
+  onQuitForInstall(fn: () => void): void {
+    this.quitForInstall = fn
+  }
+
+  /**
+   * Скачать обновление. Прогресс уезжает в состояние, целостность проверяет сам
+   * electron-updater по sha512 из latest.yml.
+   */
+  async download(): Promise<UpdateState> {
+    if (!this.state.canInstall) {
+      this.set({ installError: 'эта сборка не умеет ставить обновление сама' })
+      return this.state
+    }
+    this.set({ installError: undefined, downloaded: false, downloading: { percent: 0, transferred: 0, total: 0 } })
+    try {
+      await autoUpdater.checkForUpdates()
+      await autoUpdater.downloadUpdate()
+    } catch (e) {
+      this.set({
+        downloading: undefined,
+        installError: e instanceof Error ? e.message : 'не удалось скачать обновление'
+      })
+    }
+    return this.state
+  }
+
+  /**
+   * Поставить и перезапуститься.
+   *
+   * Гасим приложение ТЕМ ЖЕ путём, что и обычное закрытие: рендерер успевает
+   * снять снимки сессий, настройки сбрасываются на диск, агенты и pty убиваются.
+   * Иначе обновление стоило бы человеку открытых терминалов.
+   */
+  install(): { ok: boolean; error?: string } {
+    if (!this.state.downloaded) return { ok: false, error: 'обновление ещё не скачано' }
+    if (!this.quitForInstall) return { ok: false, error: 'нечем завершить приложение' }
+    this.quitForInstall()
+    return { ok: true }
+  }
+
+  /** Запустить установщик — вызывается ПОСЛЕ штатного завершения. */
+  runInstaller(): void {
+    // isSilent: установщик отработает без мастера; isForceRunAfter: приложение
+    // поднимется обратно уже обновлённым.
+    autoUpdater.quitAndInstall(true, true)
   }
 
   get(): UpdateState {

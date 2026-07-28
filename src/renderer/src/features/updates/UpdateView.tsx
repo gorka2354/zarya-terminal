@@ -59,6 +59,54 @@ function fmtDate(iso: string): string {
   return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
+/**
+ * Одна кнопка на весь путь: «Установить» → полоса скачивания → «Перезапустить».
+ *
+ * Приложение не качает и не ставит ничего в фоне. Разница между «нажал кнопку» и
+ * «оно само подменило исполняемый файл, пока ты работал» — принципиальная, тем
+ * более что сборки не подписаны. Зато после нажатия человеку больше делать
+ * нечего: ни браузера, ни мастера установки, ни ручной сверки хеша — её
+ * выполняет обновлятор по sha512 из метаданных релиза.
+ */
+function InstallButton(): React.JSX.Element {
+  const state = useUpdateStore((s) => s.state)
+  const download = useUpdateStore((s) => s.download)
+  const install = useUpdateStore((s) => s.install)
+  const dl = state?.downloading
+
+  if (state?.downloaded) {
+    return (
+      <button
+        className="zy-btn zy-btn--accent"
+        title="Заря закроется, поставит обновление и откроется снова. Открытые сессии сохранятся."
+        onClick={() => void install()}
+      >
+        Перезапустить и установить
+      </button>
+    )
+  }
+  if (dl) {
+    const mb = (n: number): string => (n / 1_000_000).toFixed(0)
+    return (
+      <button className="zy-btn zy-upd-progress" disabled>
+        <span className="zy-upd-progress-fill" style={{ width: `${dl.percent}%` }} />
+        <span className="zy-upd-progress-text">
+          {dl.total ? `${mb(dl.transferred)} / ${mb(dl.total)} МБ` : 'Скачиваю…'}
+        </span>
+      </button>
+    )
+  }
+  return (
+    <button
+      className="zy-btn zy-btn--accent"
+      title="Скачает обновление и проверит его целостность. Установка — по отдельному подтверждению."
+      onClick={() => void download()}
+    >
+      Установить обновление
+    </button>
+  )
+}
+
 export default function UpdateView(): React.JSX.Element | null {
   const open = useUiStore((s) => s.updateOpen)
   const state = useUpdateStore((s) => s.state)
@@ -79,6 +127,7 @@ export default function UpdateView(): React.JSX.Element | null {
   if (!open) return null
   const close = (): void => useUiStore.getState().set({ updateOpen: false })
   const rel = state?.latest
+  const busy = !!state?.downloading
   const page = rel ? releasePageUrl(rel.tag) : null
   const files: ReleaseAsset[] = rel ? downloadableAssets(rel.assets) : []
 
@@ -103,6 +152,9 @@ export default function UpdateView(): React.JSX.Element | null {
         </header>
 
         <div className="zy-upd-body">
+          {state?.installError && (
+            <div className="zy-set-warning">Не удалось обновить: {state.installError}</div>
+          )}
           {!rel ? (
             <div className="zy-upd-empty">
               {state?.checking ? 'Проверяю…' : state?.error ? `Не удалось проверить: ${state.error}` : 'Пока нечего показать.'}
@@ -166,13 +218,15 @@ export default function UpdateView(): React.JSX.Element | null {
 
         <footer className="zy-upd-foot">
           <span className="zy-upd-foot-note">
-            Заря ничего не скачивает и не запускает сама — файл открывается в браузере, установка
-            остаётся за вами.
+            {state?.canInstall
+              ? 'Заря ничего не делает в фоне: скачивание начнётся по нажатию, установка — по подтверждению. Целостность файла проверяется автоматически.'
+              : 'Эта сборка не умеет ставить обновление сама — скачайте файл и запустите установку. Рядом с файлом лежит SHA256 для сверки.'}
           </span>
           <div className="zy-upd-spacer" />
-          <button className="zy-btn" onClick={() => void check()} disabled={state?.checking}>
+          <button className="zy-btn" onClick={() => void check()} disabled={state?.checking || busy}>
             {state?.checking ? 'Проверяю…' : 'Проверить снова'}
           </button>
+          {rel && state?.canInstall && <InstallButton />}
           {page && (
             <button
               className="zy-btn zy-btn--accent"

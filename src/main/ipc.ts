@@ -193,6 +193,8 @@ export function registerIpc(ctx: IpcContext): void {
   // рендерер не строит и из ответа сервера не получает (см. @shared/updates).
   ipcMain.handle(CH.updatesState, () => ctx.updates.get())
   ipcMain.handle(CH.updatesCheck, () => ctx.updates.check())
+  ipcMain.handle(CH.updatesDownload, () => ctx.updates.download())
+  ipcMain.handle(CH.updatesInstall, () => ctx.updates.install())
   ctx.updates.onChange((s) => getWindow()?.webContents.send(CH.updatesChanged, s))
 
   ipcMain.handle(CH.sttState, () => ctx.stt.state())

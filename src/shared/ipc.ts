@@ -91,6 +91,8 @@ export const CH = {
   updatesState: 'updates:state',
   updatesCheck: 'updates:check',
   updatesChanged: 'updates:changed', // main -> renderer
+  updatesDownload: 'updates:download',
+  updatesInstall: 'updates:install',
 
   // app / window
   appInfo: 'app:info',

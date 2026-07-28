@@ -186,3 +186,21 @@
   text-decoration: underline dotted;
   text-underline-offset: 2px;
 }
+
+/* Кнопка-полоса на время скачивания: прогресс внутри самой кнопки, а не
+   отдельной полосой где-то ещё — человек смотрит туда, куда нажал. */
+.zy-upd-progress {
+  position: relative;
+  overflow: hidden;
+  min-width: 190px;
+  cursor: default;
+}
+.zy-upd-progress-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+  transition: width 0.2s ease-out;
+}
+.zy-upd-progress-text {
+  position: relative;
+}

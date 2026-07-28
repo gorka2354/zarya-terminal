@@ -29,6 +29,8 @@ const isolatedInstance = !!userDataOverride
 
 let mainWindow: BrowserWindow | null = null
 let quitConfirmed = false
+/** Пользователь подтвердил установку обновления: после штатного выхода — установщик. */
+let installAfterQuit = false
 let quitTimer: NodeJS.Timeout | null = null
 
 const settingsStore = new SettingsStore()
@@ -303,8 +305,27 @@ if (!gotLock) {
         if (quitTimer) clearTimeout(quitTimer)
         quitConfirmed = true
         settingsStore.flush()
+        if (installAfterQuit) {
+          // Сессии сняты, настройки на диске — теперь можно отдавать управление
+          // установщику. Он погасит процесс сам и поднимет приложение обратно.
+          installAfterQuit = false
+          updateService.runInstaller()
+          return
+        }
         mainWindow?.destroy()
       }
+    })
+
+    // Установка обновления идёт ТЕМ ЖЕ путём, что и обычное закрытие: рендерер
+    // снимает сессии, настройки сбрасываются, pty и агенты гасятся. Обновление
+    // не должно стоить человеку открытых терминалов.
+    updateService.onQuitForInstall(() => {
+      installAfterQuit = true
+      if (quitConfirmed) {
+        updateService.runInstaller()
+        return
+      }
+      mainWindow?.close()
     })
 
     // История: применяем настройки сразу и на каждое изменение. Выключатель

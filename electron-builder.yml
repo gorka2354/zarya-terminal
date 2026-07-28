@@ -38,4 +38,12 @@ linux:
     - AppImage
     - deb
   category: Development
-publish: null
+# Провайдер обновлений. Нужен НЕ ради автопубликации (её делает CI через gh), а
+# ради метаданных: с publish: null electron-builder не генерирует latest.yml, а
+# без него electron-updater не знает ни что качать, ни с каким хешем сверять.
+publish:
+  provider: github
+  owner: gorka2354
+  repo: zarya-terminal
+  # Релиз создаёт CI, сборка ничего никуда не выкладывает сама.
+  releaseType: release

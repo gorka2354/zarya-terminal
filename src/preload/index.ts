@@ -180,6 +180,9 @@ const api = {
   updates: {
     state: () => ipcRenderer.invoke(CH.updatesState),
     check: () => ipcRenderer.invoke(CH.updatesCheck),
+    download: () => ipcRenderer.invoke(CH.updatesDownload),
+    install: () =>
+      ipcRenderer.invoke(CH.updatesInstall) as Promise<{ ok: boolean; error?: string }>,
     onChange: (cb: (s: UpdateState) => void) => on(CH.updatesChanged, cb)
   },
   stt: {

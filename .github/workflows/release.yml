@@ -20,17 +20,23 @@ jobs:
             artifact-name: zarya-windows
             artifact-glob: |
               release/*.exe
+              release/*.blockmap
+              release/latest.yml
           - os: macos-latest
             builder-flag: --mac
             artifact-name: zarya-macos
             artifact-glob: |
               release/*.dmg
+              release/*.blockmap
+              release/latest-mac.yml
           - os: ubuntu-latest
             builder-flag: --linux
             artifact-name: zarya-linux
             artifact-glob: |
               release/*.AppImage
               release/*.deb
+              release/*.blockmap
+              release/latest-linux.yml
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
@@ -64,6 +70,8 @@ jobs:
           cd release
           # Без списка файлов shasum читал бы stdin и работа висела бы до
           # таймаута. Пусто здесь — это провал сборки, а не «нечего считать».
+          # Только дистрибутивы: суммы нужны человеку для сверки скачанного,
+          # а метаданные обновления проверяет сам electron-updater.
           files=$(ls *.exe *.dmg *.AppImage *.deb 2>/dev/null || true)
           if [ -z "$files" ]; then
             echo "не найдено ни одного файла сборки" >&2
@@ -112,6 +120,11 @@ jobs:
         run: |
           mkdir -p out
           find dist-artifacts -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*.AppImage' -o -name '*.deb' \) -exec cp {} out/ \;
+          # Метаданные автообновления: latest*.yml говорит приложению, какая
+          # версия вышла, каким файлом и с каким sha512 — без них electron-updater
+          # не работает вовсе. .blockmap даёт разностное скачивание (качается не
+          # весь установщик, а изменившиеся куски).
+          find dist-artifacts -type f \( -name 'latest*.yml' -o -name '*.blockmap' \) -exec cp {} out/ \;
           # Суммы с трёх раннеров сводятся в один файл — на странице релиза
           # человеку нужен один список, а не три. Ищем find'ом, а не глобом:
           # upload-artifact сохраняет каталог `release/` внутри артефакта, и
@@ -121,6 +134,9 @@ jobs:
           ls -la out
           # Пустой релиз хуже отсутствующего: он выглядит выпущенным.
           test -s "out/SHA256SUMS-${GITHUB_REF_NAME#v}.txt"
+          # Релиз без latest.yml выглядит нормальным, но молча ломает
+          # автообновление у всех, кто уже поставил приложение.
+          test -f out/latest.yml
           test "$(find out -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*.AppImage' -o -name '*.deb' \) | wc -l)" -gt 0
 
       # actions/checkout забирает тег как обычную ссылку, БЕЗ объекта аннотации.

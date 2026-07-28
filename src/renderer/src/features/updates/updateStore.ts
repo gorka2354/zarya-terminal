@@ -11,6 +11,8 @@ interface UpdateStore {
   state: UpdateState | null
   init: () => void
   check: () => Promise<void>
+  download: () => Promise<void>
+  install: () => Promise<{ ok: boolean; error?: string }>
 }
 
 export const useUpdateStore = create<UpdateStore>((set) => ({
@@ -24,7 +26,14 @@ export const useUpdateStore = create<UpdateStore>((set) => ({
   check: async () => {
     const s = await window.zarya.updates.check()
     set({ state: s })
-  }
+  },
+
+  download: async () => {
+    const s = await window.zarya.updates.download()
+    set({ state: s })
+  },
+
+  install: () => window.zarya.updates.install()
 }))
 
 /** Есть ли что показать в индикаторе. */
