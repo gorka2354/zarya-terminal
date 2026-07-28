@@ -123,13 +123,28 @@ jobs:
           test -s "out/SHA256SUMS-${GITHUB_REF_NAME#v}.txt"
           test "$(find out -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*.AppImage' -o -name '*.deb' \) | wc -l)" -gt 0
 
+      # actions/checkout забирает тег как обычную ссылку, БЕЗ объекта аннотации.
+      # Из-за этого `gh --notes-from-tag` молча падал на сообщение коммита, и в
+      # релиз 0.5.4 уехало «chore(release): …» вместо написанного человеком
+      # описания — того самого, что приложение показывает на странице «Что
+      # нового». Дотягиваем аннотированный тег явно.
+      - name: Fetch annotated tag
+        run: git fetch --force origin "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
+
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # --notes-from-tag: описание берётся из аннотации тега, то есть пишется
-          # человеком при выпуске. Именно это тело показывает страница «Что нового».
+          # Описание берётся из аннотации тега — оно пишется при выпуске и
+          # показывается пользователю в приложении. Если аннотации нет, лучше
+          # упасть, чем выпустить релиз с текстом служебного коммита.
+          notes=$(git tag -l --format='%(contents)' "$GITHUB_REF_NAME")
+          if [ -z "${notes// /}" ]; then
+            echo "у тега нет аннотации — описание релиза брать неоткуда" >&2
+            exit 1
+          fi
+          printf '%s\n' "$notes" > release-notes.txt
           gh release create "$GITHUB_REF_NAME" out/* \
             --title "Zarya ${GITHUB_REF_NAME#v}" \
-            --notes-from-tag \
+            --notes-file release-notes.txt \
             --verify-tag
