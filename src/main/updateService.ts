@@ -79,7 +79,8 @@ export class UpdateService {
       updateAvailable: false,
       checking: false,
       canInstall: canSelfInstall(),
-      downloaded: false
+      downloaded: false,
+      platform: process.platform
     }
     // Ничего не качаем и не ставим в фоне: обновление начинается только с
     // явного нажатия. Приложение, которое само меняет свой исполняемый файл,

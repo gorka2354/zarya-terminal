@@ -204,3 +204,23 @@
 .zy-upd-progress-text {
   position: relative;
 }
+
+/* «Сборки для других систем» — раскрывающаяся строка, не кнопка-действие:
+   она ничего не делает с приложением, только показывает остальное. */
+.zy-upd-more {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  padding: 8px 0;
+  border: none;
+  background: transparent;
+  color: var(--fg-faint);
+  font-family: var(--font-tech);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-align: left;
+  cursor: pointer;
+}
+.zy-upd-more:hover {
+  color: var(--fg-dim);
+}

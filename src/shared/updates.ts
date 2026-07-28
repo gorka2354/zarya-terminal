@@ -143,9 +143,51 @@ export function findSumsAsset(assets: ReleaseAsset[]): ReleaseAsset | undefined 
   return assets.find((a) => /^SHA256SUMS/i.test(a.name))
 }
 
-/** Ассеты, которые имеет смысл предлагать к скачиванию (без файла сумм). */
+/**
+ * Служебные файлы релиза — не для человека.
+ *
+ * `latest*.yml` читает обновлятор, `.blockmap` нужен для разностного
+ * скачивания, `SHA256SUMS` показывается рядом с каждым файлом отдельной
+ * строкой. Показывать их в списке «Файлы» значит предлагать скачать килобайт
+ * метаданных наравне со сборкой — список из десяти строк, где полезны две.
+ */
+export function isServiceAsset(name: string): boolean {
+  return /^SHA256SUMS/i.test(name) || /^latest.*\.yml$/i.test(name) || /\.blockmap$/i.test(name)
+}
+
+/** Ассеты, которые имеет смысл предлагать к скачиванию. */
 export function downloadableAssets(assets: ReleaseAsset[]): ReleaseAsset[] {
-  return assets.filter((a) => !/^SHA256SUMS/i.test(a.name))
+  return assets.filter((a) => !isServiceAsset(a.name))
+}
+
+/** Для какой системы этот файл. null — не определяется по имени. */
+export function assetPlatform(name: string): 'win32' | 'darwin' | 'linux' | null {
+  if (/\.exe$/i.test(name)) return 'win32'
+  if (/\.dmg$/i.test(name) || /\.zip$/i.test(name)) return 'darwin'
+  if (/\.AppImage$/i.test(name) || /\.deb$/i.test(name) || /\.rpm$/i.test(name)) return 'linux'
+  return null
+}
+
+/**
+ * Разложить файлы на «для этой системы» и «для остальных».
+ *
+ * Пользователю Windows не нужны dmg, AppImage и deb — это четыре лишние строки
+ * из пяти. Но прятать их совсем нельзя: страница релиза одна на все системы, и
+ * человек может качать для другой машины.
+ */
+export function splitByPlatform(
+  assets: ReleaseAsset[],
+  platform: string
+): { mine: ReleaseAsset[]; others: ReleaseAsset[] } {
+  const mine: ReleaseAsset[] = []
+  const others: ReleaseAsset[] = []
+  for (const a of downloadableAssets(assets)) {
+    const p = assetPlatform(a.name)
+    // Неопознанное имя показываем как своё: лучше лишняя строка, чем спрятанный
+    // файл, который человек ищет.
+    ;(p === null || p === platform ? mine : others).push(a)
+  }
+  return { mine, others }
 }
 
 /** Состояние проверки — то, что видит рендерер. Живёт здесь, а не в main: preload и окно не должны тянуть код main-процесса. */
@@ -177,4 +219,6 @@ export interface UpdateState {
   downloaded: boolean
   /** Скачивание или установка не удались. */
   installError?: string
+  /** На какой системе мы работаем — чтобы показать нужный файл первым. */
+  platform: string
 }

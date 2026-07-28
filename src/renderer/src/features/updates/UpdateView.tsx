@@ -1,8 +1,8 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import {
   assetUrl,
-  downloadableAssets,
   releasePageUrl,
+  splitByPlatform,
   type ReleaseAsset
 } from '@shared/updates'
 import { renderMarkdown } from '@/features/ai/markdown'
@@ -107,6 +107,58 @@ function InstallButton(): React.JSX.Element {
   )
 }
 
+/**
+ * Сборки для других систем — под катом.
+ *
+ * Страница релиза одна на все платформы, и человеку с Windows четыре строки из
+ * пяти не нужны. Но и прятать совсем нельзя: бывает, качают для другой машины.
+ */
+function OtherPlatforms({
+  files,
+  tag,
+  sums
+}: {
+  files: ReleaseAsset[]
+  tag: string
+  sums: Record<string, string>
+}): React.JSX.Element {
+  const [open, setOpen] = useState(false)
+  if (!open) {
+    return (
+      <button className="zy-upd-more" onClick={() => setOpen(true)}>
+        Сборки для других систем ({files.length})
+      </button>
+    )
+  }
+  return (
+    <>
+      {files.map((f) => {
+        const url = assetUrl(tag, f.name)
+        const sha = sums[f.name]
+        return (
+          <div key={f.name} className="zy-upd-file">
+            <div className="zy-upd-file-main">
+              <span className="zy-upd-file-name">{f.name}</span>
+              <span className="zy-upd-file-size">{fmtSize(f.size)}</span>
+              {url && (
+                <button
+                  className="zy-btn"
+                  data-url={url}
+                  title={`Открыть ${url}`}
+                  onClick={() => window.zarya.app.openExternal(url)}
+                >
+                  Скачать
+                </button>
+              )}
+            </div>
+            {sha && <div className="zy-upd-file-sha">SHA256 {sha}</div>}
+          </div>
+        )
+      })}
+    </>
+  )
+}
+
 export default function UpdateView(): React.JSX.Element | null {
   const open = useUiStore((s) => s.updateOpen)
   const state = useUpdateStore((s) => s.state)
@@ -129,7 +181,9 @@ export default function UpdateView(): React.JSX.Element | null {
   const rel = state?.latest
   const busy = !!state?.downloading
   const page = rel ? releasePageUrl(rel.tag) : null
-  const files: ReleaseAsset[] = rel ? downloadableAssets(rel.assets) : []
+  const { mine, others } = rel
+    ? splitByPlatform(rel.assets, state?.platform ?? 'win32')
+    : { mine: [] as ReleaseAsset[], others: [] as ReleaseAsset[] }
 
   return (
     <div className="zy-overlay-backdrop zy-overlay-backdrop--center" onMouseDown={close}>
@@ -176,10 +230,10 @@ export default function UpdateView(): React.JSX.Element | null {
                 <div className="zy-upd-empty">Описание релиза пустое.</div>
               )}
 
-              {files.length > 0 && (
+              {mine.length > 0 && (
                 <div className="zy-upd-files">
                   <div className="zy-section-label">Файлы</div>
-                  {files.map((f) => {
+                  {mine.map((f) => {
                     const url = assetUrl(rel.tag, f.name)
                     const sha = rel.sums[f.name]
                     return (
@@ -210,6 +264,9 @@ export default function UpdateView(): React.JSX.Element | null {
                       </div>
                     )
                   })}
+                  {others.length > 0 && (
+                    <OtherPlatforms files={others} tag={rel.tag} sums={rel.sums} />
+                  )}
                 </div>
               )}
             </>
