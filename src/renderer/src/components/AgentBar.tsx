@@ -199,16 +199,29 @@ function UsageRow({
 function UsagePanel({
   usage,
   context,
-  onClose
+  onClose,
+  anchor
 }: {
   usage?: AgentUsage
   context: { pct?: number; tokens?: number; window?: number }
   onClose: () => void
+  /**
+   * Кнопка, которой панель открывают. Нажатие по ней не считается «щелчком
+   * снаружи»: панель закрывается по mousedown, а кнопка переключается по click,
+   * и без этой оговорки повторное нажатие закрывало панель и тут же открывало
+   * заново — со стороны выглядело как «панель не закрывается, только мигает».
+   */
+  anchor?: HTMLElement | null
 }): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
     const onDown = (e: MouseEvent): void => {
-      if (!ref.current?.contains(e.target as Node)) onClose()
+      const t = e.target as Node
+      if (ref.current?.contains(t)) return
+      // Переключение оставлено обработчику кнопки: он единственный знает, что
+      // значит «нажали ещё раз».
+      if (anchor?.contains(t)) return
+      onClose()
     }
     const onKey = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') onClose()
@@ -221,7 +234,7 @@ function UsagePanel({
       document.removeEventListener('mousedown', onDown)
       document.removeEventListener('keydown', onKey)
     }
-  }, [onClose])
+  }, [onClose, anchor])
 
   const rows: React.JSX.Element[] = []
   if (usage?.fiveHourPct != null)
@@ -296,6 +309,8 @@ export function AgentBar(): React.JSX.Element {
   const caps = activeEngine ? agentCaps[activeEngine] : null
   const [text, setText] = useState('')
   const [usageOpen, setUsageOpen] = useState(false)
+  /** Кнопка топливной строки — она же открывашка панели расхода. */
+  const fuelBtnRef = useRef<HTMLButtonElement>(null)
   const [voice, setVoice] = useState<'idle' | 'rec' | 'work' | 'load'>('idle')
   const [voiceLevel, setVoiceLevel] = useState(0)
   const [voiceNote, setVoiceNote] = useState('')
@@ -1015,12 +1030,14 @@ export function AgentBar(): React.JSX.Element {
           usage={showFuel ? claudeStatus.usage : undefined}
           context={agentContext}
           onClose={() => setUsageOpen(false)}
+          anchor={fuelBtnRef.current}
         />
       )}
       {/* One headline figure, not four readings queued on a single line. The rest
           opens on demand — see UsagePanel. */}
       <div className="zy-agentbar-fuel">
         <button
+          ref={fuelBtnRef}
           className="zy-agentbar-fuel-main"
           title={
             lead

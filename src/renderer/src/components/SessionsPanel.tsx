@@ -101,8 +101,11 @@ export function SessionsPanel(): React.JSX.Element {
         items.push({ label: shortenPath(f, 40), onClick: () => void store.newTab(undefined, f) })
       }
     }
-    const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
-    open(r.left, r.bottom + 4, items)
+    const btn = e.currentTarget as HTMLElement
+    const r = btn.getBoundingClientRect()
+    // Якорь: без него повторное нажатие по той же кнопке закрывало меню по
+    // mousedown и тут же открывало по click.
+    open(r.left, r.bottom + 4, items, btn)
   }
 
   const crewActive = conversations.filter((c) => c.streaming || c.pendingTools.length > 0)

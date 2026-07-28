@@ -59,13 +59,17 @@ export function MissionFeed({ sessionId }: { sessionId: string }): React.JSX.Ele
 
   // Header ↺ button → past Claude Code sessions for THIS folder (resume one).
   const openSessionsMenu = (e: React.MouseEvent): void => {
-    const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    const btn = e.currentTarget as HTMLElement
+    const r = btn.getBoundingClientRect()
     const folder = useSessionsStore.getState().sessions[sessionId]?.cwd
     void window.zarya.claudeCode.listSessions(folder).then((list) => {
       if (!list.length) {
-        openMenu(r.left, r.bottom + 4, [
-          { label: 'Нет прошлых сессий Claude в этой папке', disabled: true }
-        ])
+        openMenu(
+          r.left,
+          r.bottom + 4,
+          [{ label: 'Нет прошлых сессий Claude в этой папке', disabled: true }],
+          btn
+        )
         return
       }
       const SHOWN = 25
@@ -98,13 +102,14 @@ export function MissionFeed({ sessionId }: { sessionId: string }): React.JSX.Ele
           disabled: true
         })
       }
-      openMenu(r.left, r.bottom + 4, items)
+      openMenu(r.left, r.bottom + 4, items, btn)
     })
   }
 
   // Header ⚡ button → dropdown of installed AI CLIs (launch into «Терминал»).
   const openCliMenu = (e: React.MouseEvent): void => {
-    const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    const btn = e.currentTarget as HTMLElement
+    const r = btn.getBoundingClientRect()
     void window.zarya.aiClis.detect().then((clis) => {
       const items = clis.map((c) => ({
         label: c.detected ? c.name : `${c.name} · не установлен`,
@@ -112,7 +117,7 @@ export function MissionFeed({ sessionId }: { sessionId: string }): React.JSX.Ele
         disabled: !c.detected,
         onClick: () => launchAiCli(c)
       }))
-      openMenu(r.left, r.bottom + 4, items)
+      openMenu(r.left, r.bottom + 4, items, btn)
     })
   }
 
