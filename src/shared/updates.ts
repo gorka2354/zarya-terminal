@@ -222,3 +222,32 @@ export interface UpdateState {
   /** На какой системе мы работаем — чтобы показать нужный файл первым. */
   platform: string
 }
+
+/** Версия из имени файла сборки: «Zarya-Setup-0.5.6-win-x64.exe» → «0.5.6». */
+export function versionFromFileName(name: string): string | null {
+  // Разделители у разных упаковщиков разные: NSIS даёт «Zarya-Setup-0.5.6-win»,
+  // а dpkg — «zarya-terminal_0.5.6_amd64». Одна регулярка на оба случая.
+  const m = /[-_](\d+\.\d+\.\d+)(?=[-_.])/.exec(name)
+  return m ? m[1] : null
+}
+
+/**
+ * Какие файлы в кеше обновлятора уже не нужны.
+ *
+ * electron-updater не убирает за собой: после установки в кеше остаются ДВЕ
+ * копии установщика (сам скачанный файл и его копия для запуска) — на нашей
+ * сборке это 365 МБ, и так после каждого обновления. Удалять можно только когда
+ * в кеше нет ничего новее установленной версии: иначе снесём обновление,
+ * которое человек уже скачал, но ещё не поставил, и его придётся качать заново.
+ *
+ * Мелочь вроде .blockmap (сотни килобайт) остаётся — она ускоряет следующее
+ * разностное скачивание.
+ */
+export function staleUpdaterFiles(names: string[], currentVersion: string): string[] {
+  const heavy = names.filter((n) => /\.(exe|dmg|AppImage|deb|zip)$/i.test(n))
+  const pendingNewer = heavy.some((n) => {
+    const v = versionFromFileName(n)
+    return v !== null && compareVersions(v, currentVersion) > 0
+  })
+  return pendingNewer ? [] : heavy
+}

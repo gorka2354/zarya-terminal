@@ -342,6 +342,14 @@ if (!gotLock) {
     // в своём состоянии строкой, а не роняет старт приложения.
     if (settingsStore.get().updates.check) void updateService.check()
 
+    // Убрать за прошлым обновлением. electron-updater оставляет в своём кеше
+    // ДВЕ копии установщика — на нашей сборке это 365 МБ после каждого
+    // обновления. Чистится только то, что старше установленной версии: скачанное
+    // и ещё не поставленное обновление трогать нельзя.
+    void updateService.cleanCache().then((freed) => {
+      if (freed > 0) console.log(`[updates] освобождено ${Math.round(freed / 1e6)} МБ в кеше`)
+    })
+
     settingsStore.onChange((s) => {
       historyStore.configure(s.history)
       mainWindow?.webContents.send(CH.settingsChanged, s)

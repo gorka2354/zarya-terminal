@@ -1,5 +1,11 @@
 import { get } from 'https'
 import { autoUpdater } from 'electron-updater'
+import { readdir, stat, unlink } from 'fs/promises'
+import { homedir } from 'os'
+import { join } from 'path'
+
+/** Каталог кеша обновлятора; значение из app-update.yml (updaterCacheDirName). */
+const UPDATER_CACHE_DIR = 'zarya-terminal-updater'
 import {
   findSumsAsset,
   latestReleaseApiUrl,
@@ -8,6 +14,7 @@ import {
   assetUrl,
   isNewer,
   REPO,
+  staleUpdaterFiles,
   type ReleaseInfo,
   type UpdateState
 } from '@shared/updates'
@@ -111,6 +118,43 @@ export class UpdateService {
         installError: e instanceof Error ? e.message : 'не удалось скачать обновление'
       })
     })
+  }
+
+  /**
+   * Убрать за обновлятором. После установки в его кеше остаются две копии
+   * установщика — на нашей сборке это 365 МБ, и так после каждого обновления.
+   * Приложение, оставляющее за собой по трети гигабайта, — плохой сосед.
+   */
+  async cleanCache(): Promise<number> {
+    // Путь считается ровно так же, как в самом electron-updater
+    // (out/AppAdapter.js: getAppCacheDir) — иначе мы бы чистили не ту папку и
+    // молча ничего не делали. Имя каталога берётся из app-update.yml.
+    const cacheRoot =
+      process.platform === 'win32'
+        ? (process.env.LOCALAPPDATA ?? join(homedir(), 'AppData', 'Local'))
+        : process.platform === 'darwin'
+          ? join(homedir(), 'Library', 'Caches')
+          : (process.env.XDG_CACHE_HOME ?? join(homedir(), '.cache'))
+    const base = join(cacheRoot, UPDATER_CACHE_DIR)
+    let freed = 0
+    try {
+      const entries = await readdir(base, { recursive: true, withFileTypes: true })
+      const files = entries.filter((e) => e.isFile())
+      const stale = new Set(staleUpdaterFiles(files.map((e) => e.name), this.currentVersion))
+      for (const e of files) {
+        if (!stale.has(e.name)) continue
+        const full = join(e.parentPath ?? base, e.name)
+        try {
+          freed += (await stat(full)).size
+          await unlink(full)
+        } catch {
+          /* занят или уже удалён — не беда */
+        }
+      }
+    } catch {
+      /* кеша нет — убирать нечего */
+    }
+    return freed
   }
 
   /** Как гасить приложение перед установкой — задаётся из main. */
