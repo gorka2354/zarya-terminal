@@ -53,7 +53,14 @@ function isTrustedHost(url: string): boolean {
  * обновляется сам, .deb ставится менеджером пакетов.
  */
 function canSelfInstall(): boolean {
-  if (process.platform === 'win32') return true
+  if (process.platform === 'win32') {
+    // Переносимая сборка обновиться НЕ может: electron-builder намеренно не
+    // пишет для неё метаданные (isWriteUpdateInfo: !isPortable), и установщик
+    // поставил бы рядом ВТОРУЮ, обычную копию приложения вместо обновления
+    // запущенного файла. Кнопка «Установить» здесь была бы враньём — переменную
+    // ставит сам portable-лаунчер.
+    return !process.env.PORTABLE_EXECUTABLE_FILE
+  }
   if (process.platform === 'linux') return !!process.env.APPIMAGE
   return false
 }

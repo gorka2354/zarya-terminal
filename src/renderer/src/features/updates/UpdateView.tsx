@@ -220,7 +220,7 @@ export default function UpdateView(): React.JSX.Element | null {
           <span className="zy-upd-foot-note">
             {state?.canInstall
               ? 'Ничего не качается и не ставится в фоне. Целостность проверяется автоматически.'
-              : 'Эта сборка не умеет ставить обновление сама — скачайте файл и запустите установку. Рядом с файлом лежит SHA256 для сверки.'}
+              : 'Эта сборка не умеет обновляться сама (переносимая версия, macOS или .deb) — скачайте файл и запустите установку. Рядом с файлом лежит SHA256 для сверки.'}
           </span>
           <div className="zy-upd-spacer" />
           <button className="zy-btn" onClick={() => void check()} disabled={state?.checking || busy}>
