@@ -19,9 +19,21 @@ import { app } from 'electron'
  * Re-verify when Electron is upgraded.
  */
 
-/** Where the model lives, and what it must hash to. */
+/**
+ * Модель распознавания.
+ *
+ * Взят вариант с пунктуацией. Прежний словарь состоял из 34 токенов — пробел и
+ * 33 строчные русские буквы, и всё: ни цифр, ни латиницы, ни знаков препинания,
+ * ни заглавных. Для диктовки в терминал это не косметика, а потолок: «git
+ * commit», «cd 2», «npm i» физически невыразимы таким словарём. Здесь 257
+ * токенов — включая 54 латинские буквы, 10 цифр и знаки препинания.
+ *
+ * Семейство то же (NeMo CTC), размер тот же (~225 МБ), лицензия MIT — то есть
+ * замена ограничивается константами ниже, распознаватель не трогается.
+ */
 const MODEL = {
-  dir: 'gigaam-v3-ru',
+  dir: 'gigaam-v3-ru-punct',
+  label: 'GigaAM v3 punct (русский, с пунктуацией)',
   /**
    * SECURITY: the source is fixed in code and never taken from the renderer.
    * A settable URL would be a «download anything to anywhere» primitive, and
@@ -30,16 +42,30 @@ const MODEL = {
   files: [
     {
       name: 'model.int8.onnx',
-      url: 'https://huggingface.co/csukuangfj/sherpa-onnx-nemo-ctc-giga-am-v3-russian-2025-12-16/resolve/main/model.int8.onnx',
-      bytes: 224721476,
-      sha256: 'f86ebfa0429ced91be6054fc344827e9c6c2572f3c318416cd974b06f66437ec'
+      url: 'https://huggingface.co/csukuangfj/sherpa-onnx-nemo-ctc-punct-giga-am-v3-russian-2025-12-16/resolve/main/model.int8.onnx',
+      bytes: 224893661,
+      sha256: 'd5fea8df94263c285e54b21e5774b707c707192d3bdbeffd7b1eb07fb6743b35'
     },
     {
       name: 'tokens.txt',
-      url: 'https://huggingface.co/csukuangfj/sherpa-onnx-nemo-ctc-giga-am-v3-russian-2025-12-16/resolve/main/tokens.txt',
-      bytes: 196,
+      url: 'https://huggingface.co/csukuangfj/sherpa-onnx-nemo-ctc-punct-giga-am-v3-russian-2025-12-16/resolve/main/tokens.txt',
+      bytes: 2007,
       sha256: null as string | null // tiny, not LFS-hashed upstream; size-checked
     }
+  ]
+} as const
+
+/**
+ * Модель прежних версий. Она остаётся рабочей: у кого она уже скачана, диктовка
+ * продолжает работать без единого байта из сети. Молча выкачивать 225 МБ на
+ * обновлении приложения — не то, что человек просил, а предложить обновление
+ * словаря явной кнопкой — то.
+ */
+const LEGACY_MODEL = {
+  dir: 'gigaam-v3-ru',
+  files: [
+    { name: 'model.int8.onnx', bytes: 224721476 },
+    { name: 'tokens.txt', bytes: 196 }
   ]
 } as const
 
@@ -50,8 +76,14 @@ export interface SttProgress {
 }
 
 export interface SttState {
-  /** Model files present and verified. */
+  /** Model files present and verified (новая ИЛИ прежняя — распознавание работает). */
   modelReady: boolean
+  /**
+   * Работаем на прежней модели: она без цифр, латиницы и знаков препинания.
+   * Интерфейс обязан это сказать — человек иначе решит, что распознавание
+   * «просто плохое», хотя нужных символов в словаре нет вовсе.
+   */
+  legacyModel: boolean
   /** Recognizer constructed and warm. */
   engineReady: boolean
   downloading: SttProgress | null
@@ -74,18 +106,22 @@ export class SttService {
   /** In-flight download shared by concurrent ensureModel() callers. */
   private downloadJob: Promise<void> | null = null
 
+  private modelsRoot(): string {
+    return join(app.getPath('userData'), 'models')
+  }
+
   private modelDir(): string {
-    return join(app.getPath('userData'), 'models', MODEL.dir)
+    return join(this.modelsRoot(), MODEL.dir)
   }
 
   private filePath(name: string): string {
     return join(this.modelDir(), name)
   }
 
-  /** A file counts as present only at the exact expected size. */
-  private present(): boolean {
-    return MODEL.files.every((f) => {
-      const p = this.filePath(f.name)
+  /** Файл засчитывается только при точном ожидаемом размере. */
+  private filesPresent(dir: string, files: readonly { name: string; bytes: number }[]): boolean {
+    return files.every((f) => {
+      const p = join(dir, f.name)
       if (!existsSync(p)) return false
       try {
         return statSync(p).size === f.bytes
@@ -95,9 +131,26 @@ export class SttService {
     })
   }
 
+  private present(): boolean {
+    return this.filesPresent(this.modelDir(), MODEL.files)
+  }
+
+  /** Скачана прежняя модель — распознавание работает, но словарь урезанный. */
+  private legacyPresent(): boolean {
+    return this.filesPresent(join(this.modelsRoot(), LEGACY_MODEL.dir), LEGACY_MODEL.files)
+  }
+
+  /** Какую модель фактически грузить: новую, если есть, иначе прежнюю. */
+  private activeDir(): string | null {
+    if (this.present()) return this.modelDir()
+    if (this.legacyPresent()) return join(this.modelsRoot(), LEGACY_MODEL.dir)
+    return null
+  }
+
   state(): SttState {
     return {
-      modelReady: this.present(),
+      modelReady: this.present() || this.legacyPresent(),
+      legacyModel: !this.present() && this.legacyPresent(),
       engineReady: !!this.recognizer,
       downloading: this.downloading,
       error: this.lastError
@@ -213,15 +266,16 @@ export class SttService {
     if (this.recognizer) return
     if (this.loading) return this.loading
     this.loading = (async () => {
-      if (!this.present()) throw new Error('Модель распознавания не установлена')
+      const dir = this.activeDir()
+      if (!dir) throw new Error('Модель распознавания не установлена')
       // Required lazily: loading the addon costs memory, and most sessions
       // never dictate anything.
       const sherpa = require('sherpa-onnx-node')
       const config = {
         featConfig: { sampleRate: 16000, featureDim: 80 },
         modelConfig: {
-          nemoCtc: { model: this.filePath('model.int8.onnx') },
-          tokens: this.filePath('tokens.txt'),
+          nemoCtc: { model: join(dir, 'model.int8.onnx') },
+          tokens: join(dir, 'tokens.txt'),
           numThreads: Math.max(1, Math.min(4, (require('os').cpus()?.length ?? 2) - 1)),
           provider: 'cpu',
           debug: false

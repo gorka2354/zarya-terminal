@@ -172,6 +172,8 @@ export interface ZaryaApi {
   stt: {
     state(): Promise<{
       modelReady: boolean
+      /** Работаем на прежней модели: без цифр, латиницы и знаков препинания. */
+      legacyModel?: boolean
       engineReady: boolean
       downloading: { file: string; received: number; total: number } | null
       error?: string

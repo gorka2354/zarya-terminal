@@ -1235,6 +1235,8 @@ function VoiceTab(): React.JSX.Element {
   const update = useSettingsStore((s) => s.update)
   const [mics, setMics] = useState<MicDevice[]>([])
   const [modelReady, setModelReady] = useState<boolean | null>(null)
+  const [legacy, setLegacy] = useState(false)
+  const [busy, setBusy] = useState(false)
 
   const refresh = useCallback(() => {
     void listMics().then(setMics)
@@ -1246,7 +1248,10 @@ function VoiceTab(): React.JSX.Element {
     return onDeviceChange(refresh)
   }, [refresh])
   useEffect(() => {
-    void window.zarya.stt.state().then((s) => setModelReady(s.modelReady))
+    void window.zarya.stt.state().then((s) => {
+      setModelReady(s.modelReady)
+      setLegacy(!!s.legacyModel)
+    })
   }, [])
 
   const list = usableMics(mics)
@@ -1321,12 +1326,41 @@ function VoiceTab(): React.JSX.Element {
       <Row
         title="Модель распознавания"
         sub="SPEECH MODEL"
-        desc="GigaAM v3 (русский), работает локально. Скачивается один раз при первой диктовке — ~225 МБ."
+        desc="GigaAM v3 (русский, MIT), работает локально. Скачивается один раз при первой диктовке — ~225 МБ."
       >
         <span className="zy-set-hint">
-          {modelReady === null ? '…' : modelReady ? 'загружена' : 'ещё не скачана'}
+          {modelReady === null ? '…' : modelReady ? (legacy ? 'прежняя версия' : 'загружена') : 'ещё не скачана'}
         </span>
       </Row>
+      {legacy && (
+        <Row
+          title="Словарь модели устарел"
+          sub="LIMITED VOCABULARY"
+          desc="У скачанной модели в словаре только строчные русские буквы: ни цифр, ни латиницы, ни знаков препинания — «git commit» или «cd 2» она выговорить не может. В новой версии 257 токенов вместо 34. Размер тот же, ~225 МБ."
+        >
+          <button
+            type="button"
+            className="zy-btn zy-btn--accent"
+            disabled={busy}
+            onClick={() => {
+              setBusy(true)
+              void window.zarya.stt
+                .ensureModel()
+                .then((r) => {
+                  if (r?.ok) {
+                    setLegacy(false)
+                    useUiStore.getState().toast('Словарь модели обновлён', 'success')
+                  } else {
+                    useUiStore.getState().toast(r?.error ?? 'Не удалось скачать', 'error')
+                  }
+                })
+                .finally(() => setBusy(false))
+            }}
+          >
+            {busy ? 'Скачиваю…' : 'Обновить словарь'}
+          </button>
+        </Row>
+      )}
       <div className="zy-item-sub zy-set-footnote">
         Микрофон открывается только на время диктовки и закрывается сразу после фразы. Звук
         распознаётся на этой машине и никуда не отправляется.
