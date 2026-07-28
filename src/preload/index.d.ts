@@ -172,13 +172,28 @@ export interface ZaryaApi {
   stt: {
     state(): Promise<{
       modelReady: boolean
-      /** Работаем на прежней модели: без цифр, латиницы и знаков препинания. */
+      /** Работаем на модели прошлых версий: без цифр, латиницы и пунктуации. */
       legacyModel?: boolean
+      /** Что реально загружено в движок. */
+      activeModelId?: string | null
+      /** Список моделей для настроек. */
+      models?: Array<{
+        id: string
+        label: string
+        lang: string
+        license: string
+        note: string
+        bytes: number
+        installed: boolean
+        legacy: boolean
+      }>
       engineReady: boolean
       downloading: { file: string; received: number; total: number } | null
       error?: string
     }>
-    ensureModel(): Promise<{ ok: boolean; error?: string }>
+    ensureModel(id?: string): Promise<{ ok: boolean; error?: string }>
+    /** Убрать скачанную модель с диска. */
+    removeModel(id: string): Promise<{ ok: boolean; error?: string }>
     onProgress(cb: (p: { file: string; received: number; total: number } | null) => void): Unsub
     transcribe(
       samples: Float32Array,

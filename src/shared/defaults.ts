@@ -81,7 +81,8 @@ export const DEFAULT_SETTINGS: Settings = {
     // списке»: пользователь переключает микрофон в ОС и ждёт, что приложение
     // за этим последует.
     deviceId: '',
-    deviceLabel: ''
+    deviceLabel: '',
+    modelId: ''
   },
   updates: {
     check: true

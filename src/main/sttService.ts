@@ -4,6 +4,14 @@ import { readFile } from 'fs/promises'
 import { get } from 'https'
 import { join } from 'path'
 import { app } from 'electron'
+import {
+  DEFAULT_STT_MODEL,
+  findSttModel,
+  resolveSttModel,
+  sttModelBytes,
+  STT_MODELS,
+  type SttModelDef
+} from '@shared/sttModels'
 
 /**
  * Local speech-to-text — dictation into the bar's input.
@@ -19,71 +27,36 @@ import { app } from 'electron'
  * Re-verify when Electron is upgraded.
  */
 
-/**
- * Модель распознавания.
- *
- * Взят вариант с пунктуацией. Прежний словарь состоял из 34 токенов — пробел и
- * 33 строчные русские буквы, и всё: ни цифр, ни латиницы, ни знаков препинания,
- * ни заглавных. Для диктовки в терминал это не косметика, а потолок: «git
- * commit», «cd 2», «npm i» физически невыразимы таким словарём. Здесь 257
- * токенов — включая 54 латинские буквы, 10 цифр и знаки препинания.
- *
- * Семейство то же (NeMo CTC), размер тот же (~225 МБ), лицензия MIT — то есть
- * замена ограничивается константами ниже, распознаватель не трогается.
- */
-const MODEL = {
-  dir: 'gigaam-v3-ru-punct',
-  label: 'GigaAM v3 punct (русский, с пунктуацией)',
-  /**
-   * SECURITY: the source is fixed in code and never taken from the renderer.
-   * A settable URL would be a «download anything to anywhere» primitive, and
-   * the payload here is a file we then hand to a native runtime.
-   */
-  files: [
-    {
-      name: 'model.int8.onnx',
-      url: 'https://huggingface.co/csukuangfj/sherpa-onnx-nemo-ctc-punct-giga-am-v3-russian-2025-12-16/resolve/main/model.int8.onnx',
-      bytes: 224893661,
-      sha256: 'd5fea8df94263c285e54b21e5774b707c707192d3bdbeffd7b1eb07fb6743b35'
-    },
-    {
-      name: 'tokens.txt',
-      url: 'https://huggingface.co/csukuangfj/sherpa-onnx-nemo-ctc-punct-giga-am-v3-russian-2025-12-16/resolve/main/tokens.txt',
-      bytes: 2007,
-      sha256: null as string | null // tiny, not LFS-hashed upstream; size-checked
-    }
-  ]
-} as const
-
-/**
- * Модель прежних версий. Она остаётся рабочей: у кого она уже скачана, диктовка
- * продолжает работать без единого байта из сети. Молча выкачивать 225 МБ на
- * обновлении приложения — не то, что человек просил, а предложить обновление
- * словаря явной кнопкой — то.
- */
-const LEGACY_MODEL = {
-  dir: 'gigaam-v3-ru',
-  files: [
-    { name: 'model.int8.onnx', bytes: 224721476 },
-    { name: 'tokens.txt', bytes: 196 }
-  ]
-} as const
-
 export interface SttProgress {
   file: string
   received: number
   total: number
 }
 
+/** Одна строка списка моделей для настроек. */
+export interface SttModelState {
+  id: string
+  label: string
+  lang: string
+  license: string
+  note: string
+  bytes: number
+  installed: boolean
+  legacy: boolean
+}
+
 export interface SttState {
-  /** Model files present and verified (новая ИЛИ прежняя — распознавание работает). */
+  /** Хоть одна модель скачана — диктовка работает. */
   modelReady: boolean
   /**
-   * Работаем на прежней модели: она без цифр, латиницы и знаков препинания.
-   * Интерфейс обязан это сказать — человек иначе решит, что распознавание
-   * «просто плохое», хотя нужных символов в словаре нет вовсе.
+   * Работаем на модели прошлых версий: она без цифр, латиницы и знаков
+   * препинания. Интерфейс обязан это сказать — иначе человек решит, что
+   * распознавание «просто плохое», хотя нужных символов в словаре нет вовсе.
    */
   legacyModel: boolean
+  /** Что реально загружено в движок сейчас. */
+  activeModelId: string | null
+  models: SttModelState[]
   /** Recognizer constructed and warm. */
   engineReady: boolean
   downloading: SttProgress | null
@@ -100,6 +73,8 @@ type Recognizer = {
 
 export class SttService {
   private recognizer: Recognizer | null = null
+  /** Какая модель выбрана человеком; задаётся из настроек при старте. */
+  private selectedId = ''
   private loading: Promise<void> | null = null
   private downloading: SttProgress | null = null
   private lastError: string | undefined
@@ -110,18 +85,14 @@ export class SttService {
     return join(app.getPath('userData'), 'models')
   }
 
-  private modelDir(): string {
-    return join(this.modelsRoot(), MODEL.dir)
-  }
-
-  private filePath(name: string): string {
-    return join(this.modelDir(), name)
+  private dirOf(m: SttModelDef): string {
+    return join(this.modelsRoot(), m.dir)
   }
 
   /** Файл засчитывается только при точном ожидаемом размере. */
-  private filesPresent(dir: string, files: readonly { name: string; bytes: number }[]): boolean {
-    return files.every((f) => {
-      const p = join(dir, f.name)
+  private installed(m: SttModelDef): boolean {
+    return m.files.every((f) => {
+      const p = join(this.dirOf(m), f.name)
       if (!existsSync(p)) return false
       try {
         return statSync(p).size === f.bytes
@@ -131,29 +102,55 @@ export class SttService {
     })
   }
 
-  private present(): boolean {
-    return this.filesPresent(this.modelDir(), MODEL.files)
+  /** Какая модель выбрана в настройках; пусто до первой настройки. */
+  private wantedId(): string {
+    return this.selectedId || DEFAULT_STT_MODEL
   }
 
-  /** Скачана прежняя модель — распознавание работает, но словарь урезанный. */
-  private legacyPresent(): boolean {
-    return this.filesPresent(join(this.modelsRoot(), LEGACY_MODEL.dir), LEGACY_MODEL.files)
+  /** Что реально грузить с учётом того, что скачано. */
+  private active(): SttModelDef | null {
+    return resolveSttModel(this.wantedId(), (m) => this.installed(m))
   }
 
-  /** Какую модель фактически грузить: новую, если есть, иначе прежнюю. */
-  private activeDir(): string | null {
-    if (this.present()) return this.modelDir()
-    if (this.legacyPresent()) return join(this.modelsRoot(), LEGACY_MODEL.dir)
-    return null
+  /** Выбор модели из настроек. Смена выгружает движок: он держит прежнюю в памяти. */
+  select(id: string): void {
+    if (id === this.selectedId) return
+    this.selectedId = id
+    this.recognizer = null
   }
 
   state(): SttState {
+    const active = this.active()
     return {
-      modelReady: this.present() || this.legacyPresent(),
-      legacyModel: !this.present() && this.legacyPresent(),
+      modelReady: !!active,
+      legacyModel: !!active?.legacy,
+      activeModelId: active?.id ?? null,
+      models: STT_MODELS.filter((m) => !m.legacy || this.installed(m)).map((m) => ({
+        id: m.id,
+        label: m.label,
+        lang: m.lang,
+        license: m.license,
+        note: m.note,
+        bytes: sttModelBytes(m),
+        installed: this.installed(m),
+        legacy: !!m.legacy
+      })),
       engineReady: !!this.recognizer,
       downloading: this.downloading,
       error: this.lastError
+    }
+  }
+
+  /** Убрать скачанную модель с диска — она весит сотни мегабайт. */
+  async removeModel(id: string): Promise<{ ok: boolean; error?: string }> {
+    const m = findSttModel(id)
+    if (!m) return { ok: false, error: 'неизвестная модель' }
+    if (this.active()?.id === id) this.recognizer = null
+    try {
+      rmSync(this.dirOf(m), { recursive: true, force: true })
+      return { ok: true }
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : 'не удалось удалить' }
     }
   }
 
@@ -162,22 +159,30 @@ export class SttService {
    * and only then moved into place — a half-downloaded 225 MB blob must never
    * look like a usable model.
    */
-  async ensureModel(onProgress?: (p: SttProgress) => void): Promise<void> {
-    if (this.present()) return
+  async ensureModel(onProgress?: (p: SttProgress) => void, id?: string): Promise<void> {
+    const m = findSttModel(id ?? this.wantedId())
+    if (!m) throw new Error('неизвестная модель')
+    if (m.legacy) throw new Error('эта модель больше не скачивается')
+    if (this.installed(m)) return
     // Share one download between concurrent callers. Two of them would otherwise
     // write the same `.part` file at once and produce an interleaved blob that
     // fails its hash — after a 225 MB wait.
     if (this.downloadJob) return this.downloadJob
-    this.downloadJob = this.downloadModel(onProgress).finally(() => {
+    this.downloadJob = this.downloadModel(m, onProgress).finally(() => {
       this.downloadJob = null
     })
     return this.downloadJob
   }
 
-  private async downloadModel(onProgress?: (p: SttProgress) => void): Promise<void> {
-    mkdirSync(this.modelDir(), { recursive: true })
-    for (const f of MODEL.files) {
-      const dest = this.filePath(f.name)
+  private async downloadModel(
+    m: SttModelDef,
+    onProgress?: (p: SttProgress) => void
+  ): Promise<void> {
+    const dir = this.dirOf(m)
+    mkdirSync(dir, { recursive: true })
+    for (const f of m.files) {
+      if (!f.url) throw new Error(`${f.name}: у этой модели нет источника`)
+      const dest = join(dir, f.name)
       if (existsSync(dest) && statSync(dest).size === f.bytes) continue
       const tmp = `${dest}.part`
       try {
@@ -266,16 +271,40 @@ export class SttService {
     if (this.recognizer) return
     if (this.loading) return this.loading
     this.loading = (async () => {
-      const dir = this.activeDir()
-      if (!dir) throw new Error('Модель распознавания не установлена')
+      const m = this.active()
+      if (!m) throw new Error('Модель распознавания не установлена')
       // Required lazily: loading the addon costs memory, and most sessions
       // never dictate anything.
       const sherpa = require('sherpa-onnx-node')
+      const dir = this.dirOf(m)
+      const f = (n: string): string => join(dir, n)
+      // У каждого семейства своя форма конфигурации и свой набор файлов: CTC —
+      // один файл, transducer — три, moonshine — четыре. Ключи проверены в
+      // бинарнике аддона, а не взяты из документации.
+      const modelConfig =
+        m.family === 'nemoCtc'
+          ? { nemoCtc: { model: f('model.int8.onnx') } }
+          : m.family === 'transducer'
+            ? {
+                transducer: {
+                  encoder: f('encoder.int8.onnx'),
+                  decoder: f('decoder.onnx'),
+                  joiner: f('joiner.onnx')
+                }
+              }
+            : {
+                moonshine: {
+                  preprocessor: f('preprocess.onnx'),
+                  encoder: f('encode.int8.onnx'),
+                  uncachedDecoder: f('uncached_decode.int8.onnx'),
+                  cachedDecoder: f('cached_decode.int8.onnx')
+                }
+              }
       const config = {
         featConfig: { sampleRate: 16000, featureDim: 80 },
         modelConfig: {
-          nemoCtc: { model: join(dir, 'model.int8.onnx') },
-          tokens: join(dir, 'tokens.txt'),
+          ...modelConfig,
+          tokens: f('tokens.txt'),
           numThreads: Math.max(1, Math.min(4, (require('os').cpus()?.length ?? 2) - 1)),
           provider: 'cpu',
           debug: false

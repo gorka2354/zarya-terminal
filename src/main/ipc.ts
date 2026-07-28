@@ -198,9 +198,10 @@ export function registerIpc(ctx: IpcContext): void {
   ctx.updates.onChange((s) => getWindow()?.webContents.send(CH.updatesChanged, s))
 
   ipcMain.handle(CH.sttState, () => ctx.stt.state())
-  ipcMain.handle(CH.sttEnsureModel, async () => {
+  ipcMain.handle(CH.sttRemoveModel, (_e, id: string) => ctx.stt.removeModel(id))
+  ipcMain.handle(CH.sttEnsureModel, async (_e, id?: string) => {
     try {
-      await ctx.stt.ensureModel((p) => getWindow()?.webContents.send(CH.sttProgress, p))
+      await ctx.stt.ensureModel((p) => getWindow()?.webContents.send(CH.sttProgress, p), id)
       getWindow()?.webContents.send(CH.sttProgress, null)
       return { ok: true }
     } catch (e) {

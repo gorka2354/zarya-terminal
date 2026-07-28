@@ -86,6 +86,7 @@ export const CH = {
   sttEnsureModel: 'stt:ensure-model',
   sttProgress: 'stt:progress', // main -> renderer
   sttTranscribe: 'stt:transcribe',
+  sttRemoveModel: 'stt:remove-model',
 
   // проверка обновлений
   updatesState: 'updates:state',

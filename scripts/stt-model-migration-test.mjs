@@ -31,26 +31,39 @@ const ok = (name, cond, extra) => {
   }
 }
 
-const LEGACY = { dir: 'gigaam-v3-ru', model: 224721476, tokens: 196 }
-const CURRENT = { dir: 'gigaam-v3-ru-punct', model: 224893661, tokens: 2007 }
+const LEGACY = { dir: 'gigaam-v3-ru', files: { 'model.int8.onnx': 224721476, 'tokens.txt': 196 } }
+const CURRENT = {
+  dir: 'gigaam-v3-ru-punct',
+  files: { 'model.int8.onnx': 224893661, 'tokens.txt': 2007 }
+}
+const MOONSHINE = {
+  dir: 'moonshine-tiny-en',
+  files: {
+    'preprocess.onnx': 6800738,
+    'encode.int8.onnx': 18249187,
+    'uncached_decode.int8.onnx': 53216096,
+    'cached_decode.int8.onnx': 45264830,
+    'tokens.txt': 436688
+  }
+}
 
 /** Файлы точного размера — ровно то, что проверяет present(). */
 function placeModel(userData, m) {
   const dir = join(userData, 'models', m.dir)
   mkdirSync(dir, { recursive: true })
-  for (const [name, size] of [
-    ['model.int8.onnx', m.model],
-    ['tokens.txt', m.tokens]
-  ]) {
+  for (const [name, size] of Object.entries(m.files)) {
     const p = join(dir, name)
     writeFileSync(p, '')
     truncateSync(p, size)
   }
 }
 
-async function stateWith(models) {
+async function stateWith(models, settings) {
   const userData = mkdtempSync(join(tmpdir(), 'zarya-stt-'))
   for (const m of models) placeModel(userData, m)
+  if (settings) {
+    writeFileSync(join(userData, 'settings.json'), JSON.stringify(settings), 'utf8')
+  }
   const app = await electron.launch({
     args: [join(root, 'out', 'main', 'index.js')],
     env: { ...process.env, ZARYA_USER_DATA: userData, NODE_ENV: 'production' }
@@ -85,6 +98,39 @@ try {
   const both = await stateWith([LEGACY, CURRENT])
   ok('распознавание доступно', both.modelReady === true, both)
   ok('прежняя не считается активной', both.legacyModel === false, both)
+
+  console.log('\n[5] Английская модель — другое семейство, пять файлов')
+  const moon = await stateWith([MOONSHINE], { voice: { modelId: 'moonshine-tiny-en' } })
+  ok('распознавание доступно', moon.modelReady === true, moon)
+  ok('активна именно она', moon.activeModelId === 'moonshine-tiny-en', moon.activeModelId)
+
+  console.log('\n[6] Выбрана английская, а скачана только русская')
+  // Выбор в настройках не должен ломать диктовку до конца скачивания.
+  const fallback = await stateWith([CURRENT], { voice: { modelId: 'moonshine-tiny-en' } })
+  ok('диктовка не сломалась', fallback.modelReady === true, fallback)
+  ok(
+    'взята скачанная, а не выбранная',
+    fallback.activeModelId === 'gigaam-v3-ru-punct',
+    fallback.activeModelId
+  )
+
+  console.log('\n[7] Список моделей для настроек')
+  const list = await stateWith([CURRENT])
+  const ids = (list.models ?? []).map((m) => m.id)
+  ok(
+    'показаны все скачиваемые',
+    ids.includes('moonshine-tiny-en') && ids.includes('gigaam-v3-ru-rnnt'),
+    ids
+  )
+  ok('прошлая версия скрыта, пока её нет на диске', !ids.includes('gigaam-v3-ru-legacy'), ids)
+  const withLegacy = await stateWith([LEGACY])
+  ok(
+    'и показана, когда она есть',
+    (withLegacy.models ?? []).some((m) => m.id === 'gigaam-v3-ru-legacy')
+  )
+  const moonRow = (list.models ?? []).find((m) => m.id === 'moonshine-tiny-en')
+  // Вес по ОДНОМУ файлу был бы враньём: у moonshine их пять.
+  ok('вес считается по всем файлам', moonRow?.bytes === 123967539, moonRow?.bytes)
 
   console.log(`\n[stt-migration] PASS ${pass} · FAIL ${fail}`)
 } catch (e) {

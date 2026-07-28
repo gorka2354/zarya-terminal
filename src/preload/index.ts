@@ -187,7 +187,8 @@ const api = {
   },
   stt: {
     state: () => ipcRenderer.invoke(CH.sttState),
-    ensureModel: () => ipcRenderer.invoke(CH.sttEnsureModel),
+    ensureModel: (id?: string) => ipcRenderer.invoke(CH.sttEnsureModel, id),
+    removeModel: (id: string) => ipcRenderer.invoke(CH.sttRemoveModel, id),
     onProgress: (cb: (p: { file: string; received: number; total: number } | null) => void) =>
       on(CH.sttProgress, cb),
     /**

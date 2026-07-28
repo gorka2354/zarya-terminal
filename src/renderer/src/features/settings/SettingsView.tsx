@@ -1234,9 +1234,6 @@ function VoiceTab(): React.JSX.Element {
   const voice = useSettingsStore((s) => s.settings.voice)
   const update = useSettingsStore((s) => s.update)
   const [mics, setMics] = useState<MicDevice[]>([])
-  const [modelReady, setModelReady] = useState<boolean | null>(null)
-  const [legacy, setLegacy] = useState(false)
-  const [busy, setBusy] = useState(false)
 
   const refresh = useCallback(() => {
     void listMics().then(setMics)
@@ -1247,12 +1244,6 @@ function VoiceTab(): React.JSX.Element {
     // отражать, иначе выбирают из устаревшего.
     return onDeviceChange(refresh)
   }, [refresh])
-  useEffect(() => {
-    void window.zarya.stt.state().then((s) => {
-      setModelReady(s.modelReady)
-      setLegacy(!!s.legacyModel)
-    })
-  }, [])
 
   const list = usableMics(mics)
   const hidden = labelsHidden(mics)
@@ -1323,49 +1314,123 @@ function VoiceTab(): React.JSX.Element {
           </button>
         </Row>
       )}
-      <Row
-        title="Модель распознавания"
-        sub="SPEECH MODEL"
-        desc="GigaAM v3 (русский, MIT), работает локально. Скачивается один раз при первой диктовке — ~225 МБ."
-      >
-        <span className="zy-set-hint">
-          {modelReady === null ? '…' : modelReady ? (legacy ? 'прежняя версия' : 'загружена') : 'ещё не скачана'}
-        </span>
-      </Row>
-      {legacy && (
-        <Row
-          title="Словарь модели устарел"
-          sub="LIMITED VOCABULARY"
-          desc="У скачанной модели в словаре только строчные русские буквы: ни цифр, ни латиницы, ни знаков препинания — «git commit» или «cd 2» она выговорить не может. В новой версии 257 токенов вместо 34. Размер тот же, ~225 МБ."
-        >
-          <button
-            type="button"
-            className="zy-btn zy-btn--accent"
-            disabled={busy}
-            onClick={() => {
-              setBusy(true)
-              void window.zarya.stt
-                .ensureModel()
-                .then((r) => {
-                  if (r?.ok) {
-                    setLegacy(false)
-                    useUiStore.getState().toast('Словарь модели обновлён', 'success')
-                  } else {
-                    useUiStore.getState().toast(r?.error ?? 'Не удалось скачать', 'error')
-                  }
-                })
-                .finally(() => setBusy(false))
-            }}
-          >
-            {busy ? 'Скачиваю…' : 'Обновить словарь'}
-          </button>
-        </Row>
-      )}
+      <SttModels />
       <div className="zy-item-sub zy-set-footnote">
         Микрофон открывается только на время диктовки и закрывается сразу после фразы. Звук
         распознаётся на этой машине и никуда не отправляется.
       </div>
     </section>
+  )
+}
+
+/**
+ * Список моделей распознавания.
+ *
+ * Каждая строка честно говорит вес и лицензию: 225 МБ — заметная трата, и решать
+ * должен человек, а не приложение за него. Скачанные можно удалить: держать три
+ * модели рядом больше полугигабайта, и незаметно накопить это легко.
+ */
+function SttModels(): React.JSX.Element {
+  const chosen = useSettingsStore((s) => s.settings.voice.modelId)
+  const update = useSettingsStore((s) => s.update)
+  const [st, setSt] = useState<Awaited<ReturnType<typeof window.zarya.stt.state>> | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
+
+  const refresh = useCallback(() => {
+    void window.zarya.stt.state().then(setSt)
+  }, [])
+  useEffect(() => {
+    refresh()
+    // Скачивание идёт в main и длится минуты — состояние надо перечитывать.
+    return window.zarya.stt.onProgress(() => refresh())
+  }, [refresh])
+
+  const mb = (b: number): string => `${Math.round(b / 1_000_000)} МБ`
+  const models = st?.models ?? []
+  const activeId = st?.activeModelId ?? null
+
+  return (
+    <>
+      <div className="zy-section-label">Модель распознавания</div>
+      {models.length === 0 && <div className="zy-set-hint">…</div>}
+      {models.map((m) => {
+        const isChosen = (chosen || activeId) === m.id
+        return (
+          <div key={m.id} className="zy-set-row">
+            <div className="zy-set-row-label">
+              <div className="zy-set-row-title">
+                {m.label}
+                {m.id === activeId && <span className="zy-badge zy-badge--ok">активна</span>}
+                {m.legacy && <span className="zy-badge zy-badge--warn">устарела</span>}
+              </div>
+              <div className="zy-set-row-sub">
+                {m.lang} · {mb(m.bytes)} · {m.license}
+              </div>
+              <div className="zy-item-sub">{m.note}</div>
+            </div>
+            <div className="zy-set-row-control">
+              <div className="zy-inline-group">
+                {!m.installed && !m.legacy && (
+                  <button
+                    type="button"
+                    className="zy-btn zy-btn--accent"
+                    disabled={!!busy}
+                    onClick={() => {
+                      setBusy(m.id)
+                      void window.zarya.stt
+                        .ensureModel(m.id)
+                        .then((r) => {
+                          if (r?.ok) {
+                            void update({ voice: { modelId: m.id } as never })
+                            useUiStore.getState().toast('Модель готова', 'success')
+                          } else {
+                            useUiStore.getState().toast(r?.error ?? 'Не удалось скачать', 'error')
+                          }
+                          refresh()
+                        })
+                        .finally(() => setBusy(null))
+                    }}
+                  >
+                    {busy === m.id ? 'Скачиваю…' : `Скачать ${mb(m.bytes)}`}
+                  </button>
+                )}
+                {m.installed && !isChosen && (
+                  <button
+                    type="button"
+                    className="zy-btn"
+                    onClick={() => {
+                      void update({ voice: { modelId: m.id } as never })
+                      setTimeout(refresh, 200)
+                    }}
+                  >
+                    Выбрать
+                  </button>
+                )}
+                {m.installed && (
+                  <button
+                    type="button"
+                    className="zy-btn zy-btn--danger"
+                    disabled={!!busy}
+                    onClick={() => {
+                      setBusy(m.id)
+                      void window.zarya.stt
+                        .removeModel(m.id)
+                        .then(() => {
+                          useUiStore.getState().toast('Модель удалена')
+                          refresh()
+                        })
+                        .finally(() => setBusy(null))
+                    }}
+                  >
+                    Удалить
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      })}
+    </>
   )
 }
 
