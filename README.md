@@ -5,7 +5,7 @@
 **Космический CLI-агент. A new dawn for your terminal.**
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-e2231a.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.5.4%20%C2%AB%D0%97%D0%B0%D1%82%D0%B2%D0%BE%D1%80%C2%BB-e0b15a.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.5.5%20%C2%AB%D0%A8%D0%B0%D0%B3%C2%BB-e0b15a.svg)](CHANGELOG.md)
 [![Electron](https://img.shields.io/badge/Electron-43-4fd6d6.svg)](https://www.electronjs.org/)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-5fb88a.svg)](#install)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-e0b15a.svg)](CONTRIBUTING.md)
