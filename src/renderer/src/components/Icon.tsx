@@ -23,7 +23,12 @@ const PIXEL_SMALL = new Set(
 const PIXEL_ALIAS: Record<string, string> = {
   sputnik: 'sputnik-sm',
   gear: 'gear-sm',
-  history: 'history-sm'
+  history: 'history-sm',
+  // folder и download выросли до навигационного кегля 16×16 (в панели слева они
+  // стояли вдвое мельче соседей). Встроенным местам нужен прежний мелкий глиф —
+  // иначе значок в строке состояния и в списке сессий раздулся бы вдвое.
+  folder: 'folder-sm',
+  download: 'download-sm'
 }
 
 export type IconName =
