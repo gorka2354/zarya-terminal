@@ -7,6 +7,7 @@ import {
   parseSha256Sums,
   assetUrl,
   isNewer,
+  REPO,
   type ReleaseInfo,
   type UpdateState
 } from '@shared/updates'
@@ -25,6 +26,22 @@ import {
 /** Ответ GitHub на релиз — десятки килобайт. Всё, что больше, читать незачем. */
 const MAX_BODY = 512 * 1024
 const TIMEOUT_MS = 8000
+
+/** Куда вообще разрешено ходить за обновлением — включая цепочку редиректов. */
+const TRUSTED_HOSTS = new Set([
+  'github.com',
+  'api.github.com',
+  'objects.githubusercontent.com',
+  'release-assets.githubusercontent.com',
+  'raw.githubusercontent.com'
+])
+function isTrustedHost(url: string): boolean {
+  try {
+    return TRUSTED_HOSTS.has(new URL(url).hostname)
+  } catch {
+    return false
+  }
+}
 
 /**
  * Может ли эта сборка поставить обновление сама.
@@ -62,6 +79,12 @@ export class UpdateService {
     // пока человек работает, — не то, чем должен быть терминал.
     autoUpdater.autoDownload = false
     autoUpdater.autoInstallOnAppQuit = false
+    // Источник задаётся явно из той же константы REPO, что и все остальные
+    // адреса. По умолчанию electron-updater взял бы его из app-update.yml,
+    // который печётся в сборку отдельным путём: две независимые истины о том,
+    // откуда приходит код, — на одну больше, чем нужно.
+    const [owner, repo] = REPO.split('/')
+    autoUpdater.setFeedURL({ provider: 'github', owner, repo })
     autoUpdater.on('download-progress', (p) => {
       this.set({
         downloading: {
@@ -209,6 +232,11 @@ export class UpdateService {
   private fetchText(url: string, hops = 0): Promise<string> {
     if (hops > 3) return Promise.reject(new Error('слишком много перенаправлений'))
     if (!url.startsWith('https://')) return Promise.reject(new Error('только https'))
+    // Ходим только к GitHub. Раньше редирект мог увести куда угодно: при
+    // TLS-инспекции с локально доверенным корнем (корпоративный прокси,
+    // заражённая машина) подменённый Location увёл бы проверку на чужой хост, и
+    // приложение показало бы его ответ как «описание нового релиза».
+    if (!isTrustedHost(url)) return Promise.reject(new Error('недоверенный источник обновления'))
     return new Promise((resolve, reject) => {
       const req = get(
         url,

@@ -1444,13 +1444,27 @@ function UpdateRows(): React.JSX.Element {
   const state = useUpdateStore((s) => s.state)
   const check = useUpdateStore((s) => s.check)
 
+  /**
+   * «Давно ли проверяли» — не украшение. Подменённый ответ или молчащий прокси
+   * могут бесконечно отвечать «у вас последняя версия», и человек останется на
+   * уязвимой сборке, ничего не заметив. Возраст последней удачной проверки
+   * делает такое молчание видимым.
+   */
+  const ago = ((): string => {
+    if (!state?.checkedAt) return ''
+    const days = Math.floor((Date.now() - state.checkedAt) / 86_400_000)
+    if (days >= 1) return ` · проверяли ${days} дн. назад`
+    const hours = Math.floor((Date.now() - state.checkedAt) / 3_600_000)
+    return hours >= 1 ? ` · проверяли ${hours} ч назад` : ' · проверяли только что'
+  })()
+
   const status = ((): string => {
-    if (!enabled) return 'проверка выключена'
+    if (!enabled) return 'проверка выключена — приложение не узнает о выходе исправлений'
     if (state?.checking) return 'проверяю…'
-    if (state?.error) return `не удалось проверить: ${state.error}`
+    if (state?.error) return `не удалось проверить: ${state.error}${ago}`
     if (!state?.checkedAt) return 'ещё не проверяли'
-    if (state.updateAvailable && state.latest) return `доступна ${state.latest.version}`
-    return 'у вас последняя версия'
+    if (state.updateAvailable && state.latest) return `доступна ${state.latest.version}${ago}`
+    return `у вас последняя версия${ago}`
   })()
 
   return (

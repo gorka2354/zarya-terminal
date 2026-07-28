@@ -219,7 +219,7 @@ export default function UpdateView(): React.JSX.Element | null {
         <footer className="zy-upd-foot">
           <span className="zy-upd-foot-note">
             {state?.canInstall
-              ? 'Заря ничего не делает в фоне: скачивание начнётся по нажатию, установка — по подтверждению. Целостность файла проверяется автоматически.'
+              ? 'Ничего не качается и не ставится в фоне. Целостность проверяется автоматически.'
               : 'Эта сборка не умеет ставить обновление сама — скачайте файл и запустите установку. Рядом с файлом лежит SHA256 для сверки.'}
           </span>
           <div className="zy-upd-spacer" />
@@ -229,7 +229,11 @@ export default function UpdateView(): React.JSX.Element | null {
           {rel && state?.canInstall && <InstallButton />}
           {page && (
             <button
-              className="zy-btn zy-btn--accent"
+              // Акцент достаётся ровно одному действию. Когда приложение умеет
+              // поставить обновление само, главное — «Установить»; страница
+              // релиза становится второстепенной. Когда не умеет (macOS без
+              // подписи), главным становится ручной путь.
+              className={`zy-btn${state?.canInstall ? '' : ' zy-btn--accent'}`}
               data-url={page}
               title={`Открыть ${page}`}
               onClick={() => window.zarya.app.openExternal(page)}
