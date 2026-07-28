@@ -73,6 +73,8 @@ export const CH = {
   // history
   historyAdd: 'history:add',
   historySearch: 'history:search',
+  historyClear: 'history:clear',
+  historyStats: 'history:stats',
 
   // workflows
   workflowsList: 'workflows:list',

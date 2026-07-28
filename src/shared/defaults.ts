@@ -86,6 +86,12 @@ export const DEFAULT_SETTINGS: Settings = {
   updates: {
     check: true
   },
+  history: {
+    // Запись включена: история — рабочий инструмент (Ctrl+R), а не слежка.
+    // Но теперь у неё есть потолок и выключатель.
+    record: true,
+    maxEntries: 20000
+  },
   sessions: {
     restoreOnLaunch: 'workspace',
     autosaveSec: 20,

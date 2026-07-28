@@ -168,7 +168,9 @@ const api = {
   },
   history: {
     add: (entry: HistoryEntry) => ipcRenderer.invoke(CH.historyAdd, entry),
-    search: (query: string, limit?: number) => ipcRenderer.invoke(CH.historySearch, query, limit)
+    search: (query: string, limit?: number) => ipcRenderer.invoke(CH.historySearch, query, limit),
+    clear: () => ipcRenderer.invoke(CH.historyClear),
+    stats: () => ipcRenderer.invoke(CH.historyStats)
   },
   workflows: {
     list: () => ipcRenderer.invoke(CH.workflowsList),

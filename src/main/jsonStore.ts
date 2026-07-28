@@ -1,5 +1,6 @@
 import { promises as fs } from 'fs'
 import { dirname } from 'path'
+import { DIR_MODE, FILE_MODE, hardenFile } from './filePerms'
 
 /** Read a JSON file, returning `fallback` when missing or corrupt. */
 export async function readJson<T>(file: string, fallback: T): Promise<T> {
@@ -22,10 +23,17 @@ export function writeJsonAtomic(file: string, data: unknown): Promise<void> {
   const next = prev
     .catch(() => {})
     .then(async () => {
-      await fs.mkdir(dirname(file), { recursive: true })
+      await fs.mkdir(dirname(file), { recursive: true, mode: DIR_MODE })
       const tmp = `${file}.${process.pid}.tmp`
-      await fs.writeFile(tmp, JSON.stringify(data, null, 2), 'utf8')
+      // Права ставятся на временный файл, а не после переименования: иначе между
+      // созданием и chmod существует окно, в котором содержимое (в том числе
+      // ключи провайдеров) читаемо всем. rename сохраняет права, так что цель
+      // получает их атомарно вместе с содержимым.
+      await fs.writeFile(tmp, JSON.stringify(data, null, 2), { encoding: 'utf8', mode: FILE_MODE })
       await fs.rename(tmp, file)
+      // Если временный файл уже существовал, `mode` при записи не применяется —
+      // подстраховываемся. Заодно это чинит файлы, созданные прошлыми версиями.
+      await hardenFile(file)
     })
   writeQueues.set(file, next)
   return next

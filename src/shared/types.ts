@@ -224,6 +224,21 @@ export interface UpdateSettings {
   check: boolean
 }
 
+/**
+ * История команд («Хроника»). Терминальные команды регулярно содержат секреты —
+ * токены в переменных окружения, ключи в аргументах curl, пароли в строках
+ * подключения. Файл рос бесконечно, отключить его было нельзя, очистить тоже.
+ */
+export interface HistorySettings {
+  /** Записывать ли команды вообще. */
+  record: boolean
+  /**
+   * Сколько последних команд хранить. Ноль — не ограничивать (файл снова растёт
+   * бесконечно, но это уже осознанный выбор, а не молчаливое поведение).
+   */
+  maxEntries: number
+}
+
 export interface SessionsSettings {
   restoreOnLaunch: 'workspace' | 'none'
   autosaveSec: number
@@ -244,6 +259,7 @@ export interface Settings {
   ai: AiSettings
   voice: VoiceSettings
   updates: UpdateSettings
+  history: HistorySettings
   sessions: SessionsSettings
   editor: EditorSettings
   /** actionId -> chord, e.g. "terminal.split-right": "Ctrl+Shift+D". */

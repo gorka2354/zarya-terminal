@@ -15,6 +15,7 @@ import { PtyManager } from './ptyManager'
 import { SessionStore } from './sessionStore'
 import { SttService } from './sttService'
 import { UpdateService } from './updateService'
+import { hardenDir } from './filePerms'
 import { APP_VERSION } from './appVersion'
 import { SettingsStore } from './settingsStore'
 import { WorkflowStore, builtinResourcesDir } from './workflowStore'
@@ -306,12 +307,22 @@ if (!gotLock) {
       }
     })
 
+    // История: применяем настройки сразу и на каждое изменение. Выключатель
+    // должен срабатывать немедленно, а не со следующего запуска.
+    historyStore.configure(settingsStore.get().history)
+
+    // Каталог с данными — только владельцу. Внутри лежат ключи провайдеров,
+    // история команд и переписки с агентом. На Windows это почти no-op (там
+    // ACL), смысл в Linux и macOS.
+    void hardenDir(app.getPath('userData'))
+
     // Проверка обновлений — один анонимный запрос при запуске, и только если
     // это разрешено настройкой. Ошибка сети сюда не всплывает: сервис держит её
     // в своём состоянии строкой, а не роняет старт приложения.
     if (settingsStore.get().updates.check) void updateService.check()
 
     settingsStore.onChange((s) => {
+      historyStore.configure(s.history)
       mainWindow?.webContents.send(CH.settingsChanged, s)
     })
 

@@ -1100,7 +1100,86 @@ function SessionsTab(): React.JSX.Element {
       <div className="zy-item-sub zy-set-footnote">
         Сессии сохраняются локально и переживают перезагрузку устройства.
       </div>
+      <div className="zy-section-label">История команд</div>
+      <HistoryRows />
     </section>
+  )
+}
+
+/**
+ * История команд («Хроника», Ctrl+R).
+ *
+ * Команды регулярно содержат секреты: токены в переменных окружения, ключи в
+ * аргументах curl, пароли в строках подключения. Файл рос без ограничений,
+ * выключить запись было нельзя, стереть — тоже. Три недостающих управления и
+ * честная строка о том, сколько всего накопилось.
+ */
+function HistoryRows(): React.JSX.Element {
+  const h = useSettingsStore((s) => s.settings.history)
+  const update = useSettingsStore((s) => s.update)
+  const [stats, setStats] = useState<{ entries: number; bytes: number } | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const refresh = useCallback(() => {
+    void window.zarya.history.stats().then(setStats)
+  }, [])
+  useEffect(() => refresh(), [refresh])
+
+  const size = stats
+    ? stats.bytes >= 1_000_000
+      ? `${(stats.bytes / 1_000_000).toFixed(1)} МБ`
+      : `${Math.max(1, Math.round(stats.bytes / 1000))} КБ`
+    : '…'
+
+  return (
+    <>
+      <Row
+        title="Вести историю команд"
+        sub="RECORD HISTORY"
+        desc="Выключено — команды не записываются и не попадают в поиск по Ctrl+R. Уже накопленное остаётся на диске, пока не сотрёте."
+      >
+        <Toggle
+          checked={h.record}
+          onChange={(v) => void update({ history: { record: v } as never })}
+        />
+      </Row>
+      <Row
+        title="Хранить не больше"
+        sub="MAX ENTRIES"
+        desc="Команд в истории. Лишние старые удаляются из файла пачками, так что он не превышает потолок больше чем на десятую часть. Ноль — без ограничения."
+      >
+        <NumberField
+          value={h.maxEntries}
+          min={0}
+          max={1_000_000}
+          step={1000}
+          onCommit={(v) => void update({ history: { maxEntries: v } as never })}
+        />
+      </Row>
+      <Row
+        title="Сейчас в истории"
+        sub="STORED"
+        desc={stats ? `${stats.entries} команд · файл ${size}` : 'считаю…'}
+      >
+        <button
+          type="button"
+          className="zy-btn zy-btn--danger"
+          disabled={busy || !stats?.entries}
+          onClick={() => {
+            setBusy(true)
+            void window.zarya.history
+              .clear()
+              .then(() => {
+                refresh()
+                useUiStore.getState().toast('История команд стёрта', 'success')
+              })
+              .finally(() => setBusy(false))
+          }}
+        >
+          Очистить историю
+        </button>
+      </Row>
+    </>
   )
 }
 

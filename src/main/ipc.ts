@@ -349,6 +349,8 @@ export function registerIpc(ctx: IpcContext): void {
 
   // --------------------------------------------------------------- history
   ipcMain.handle(CH.historyAdd, (_e, entry: HistoryEntry) => historyStore.add(entry))
+  ipcMain.handle(CH.historyClear, () => historyStore.clear())
+  ipcMain.handle(CH.historyStats, () => historyStore.stats())
   ipcMain.handle(CH.historySearch, (_e, query: string, limit?: number) =>
     historyStore.search(query, limit)
   )

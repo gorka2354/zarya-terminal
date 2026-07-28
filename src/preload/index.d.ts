@@ -148,6 +148,10 @@ export interface ZaryaApi {
   history: {
     add(entry: HistoryEntry): Promise<void>
     search(query: string, limit?: number): Promise<HistoryEntry[]>
+    /** Стереть историю целиком — и в памяти, и на диске. */
+    clear(): Promise<{ ok: boolean }>
+    /** Сколько записей и сколько весит файл — для строки в настройках. */
+    stats(): Promise<{ entries: number; bytes: number }>
   }
   workflows: {
     list(): Promise<WorkflowDef[]>
