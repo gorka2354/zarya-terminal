@@ -9,6 +9,7 @@ import type {
   WorkspaceState
 } from '@shared/types'
 import { uid } from '@/lib/uid'
+import { autoLayout, isAutoLayout } from '@shared/autoLayout'
 import { emitBus, onBus } from '@/lib/bus'
 import { runQuitFlushers } from '@/lib/quitFlush'
 import { useBlocksStore } from './blocksStore'
@@ -354,13 +355,22 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
             ? t
             : {
                 ...t,
-                layout: replaceLeaf(t.layout, tab.activeSessionId, {
-                  type: 'split',
-                  dir,
-                  ratio: 0.5,
-                  a: { type: 'leaf', sessionId: tab.activeSessionId },
-                  b: { type: 'leaf', sessionId: id }
-                }),
+                // Пока раскладка не тронута руками, число панелей само
+                // выбирает вид: одна — во весь экран, две-три — колонками,
+                // четыре — сетка 2×2. Как только человек протянул разделитель
+                // или сложил панели по-своему, дерево перестаёт совпадать с
+                // автоматическим — и мы больше в него не лезем. Отдельного
+                // «замка» для этого не нужно: несовпадение и есть замок.
+                layout:
+                  autoLayout([...listLeaves(t.layout), id]) && isAutoLayout(t.layout)
+                    ? (autoLayout([...listLeaves(t.layout), id]) as SplitNode)
+                    : replaceLeaf(t.layout, tab.activeSessionId, {
+                        type: 'split',
+                        dir,
+                        ratio: 0.5,
+                        a: { type: 'leaf', sessionId: tab.activeSessionId },
+                        b: { type: 'leaf', sessionId: id }
+                      }),
                 activeSessionId: id
               }
         )
