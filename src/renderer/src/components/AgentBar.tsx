@@ -1230,6 +1230,12 @@ ${prev}`
         {voiceNote && <span className="zy-agentbar-voicenote">{voiceNote}</span>}
         <textarea
           ref={ref}
+        // Курсор в поле — панель становится активной. Без этого «панель, куда я
+        // печатаю» и «панель, на которую действует Enter» расходятся: можно
+        // одобрить запуск команды, которую даже не видел.
+        onFocus={() => {
+          if (paneSessionId) useSessionsStore.getState().setActiveSession(paneSessionId)
+        }}
           className="zy-agentbar-input"
           rows={1}
           placeholder={

@@ -622,6 +622,17 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
     if (sid) window.zarya.pty.write(sid, cmd + '\r')
     return sid
   }
+/**
+ * Текст терминала как его видит человек, и фокус конкретной панели. Нужны
+ * многопанельным прогонам: «шелл ответил» проверяется тем, что он ОТВЕТИЛ, а
+ * адресат клавиш — тем, что фокус переставили явно, а не догадкой.
+ */
+;(window as unknown as { __zaryaTermText?: (sessionId: string) => string }).__zaryaTermText = (
+  sessionId
+) => getTerminal(sessionId)?.serialize(200) ?? ''
+;(window as unknown as { __zaryaFocusPane?: (sessionId: string) => void }).__zaryaFocusPane = (
+  sessionId
+) => useSessionsStore.getState().setActiveSession(sessionId)
 ;(window as unknown as { __zaryaSplitActive?: (dir: SplitDirection) => Promise<void> }).__zaryaSplitActive =
   (dir) => useSessionsStore.getState().splitActive(dir)
 ;(window as unknown as { __zaryaCloseSession?: (sid: string) => Promise<void> }).__zaryaCloseSession = (sid) =>

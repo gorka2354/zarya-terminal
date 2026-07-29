@@ -1371,6 +1371,20 @@ onBus('terminal:focus', ({ sessionId }) => {
 // Ф5: start an agent turn on a SPECIFIC engine and return its conversation id,
 // so the concurrent harness can drive two engines in one terminal and read each
 // conversation back by id (proving events never cross between them).
+// Прогонам многопанельного режима нужно адресовать КОНКРЕТНУЮ панель и беседу:
+// «активная» тут не годится — проверяется как раз то, что панели независимы.
+;(
+  window as unknown as { __zaryaStartAgentIn?: (e: AgentEngine, t: string, sid: string) => string }
+).__zaryaStartAgentIn = (engine, text, sessionId) => {
+  const store = useAiStore.getState()
+  const id = store.newConversation({ sessionId, engine })
+  store.setActiveConversation(id)
+  void store.send(text, { conversationId: id })
+  return id
+}
+;(
+  window as unknown as { __zaryaSetBypassFor?: (convId: string, on: boolean) => void }
+).__zaryaSetBypassFor = (convId, on) => useAiStore.getState().setBypass(convId, on)
 ;(
   window as unknown as { __zaryaStartAgent?: (engine: AgentEngine, text: string) => string }
 ).__zaryaStartAgent = (engine, text) => {
@@ -1421,6 +1435,7 @@ onBus('terminal:focus', ({ sessionId }) => {
         // (забрать приписку обратно, не трогая агента), и проверять её нужно
         // по конкретной беседе, а не только по активной.
         queued: c.queued,
+        bypass: c.bypass === true,
         userTexts: c.messages
           .filter((m) => m.role === 'user')
           .map((m) =>
