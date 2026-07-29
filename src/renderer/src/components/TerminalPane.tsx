@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { XtermView } from '@/terminal/XtermView'
+import { MissionFeed } from './MissionFeed'
 import { getTerminal } from '@/terminal/terminalRegistry'
 import { useSessionsStore } from '@/state/sessionsStore'
 import { useSettingsStore } from '@/state/settingsStore'
-import { setRaw, useUiStore } from '@/state/uiStore'
+import { isRaw, setRaw, useUiStore } from '@/state/uiStore'
 import { useContextMenu } from './ContextMenu'
 import { Icon } from './Icon'
 
@@ -18,6 +19,7 @@ export function TerminalPane({ sessionId, active, visible }: Props): React.JSX.E
   const searchOpenFor = useUiStore((s) => s.searchOpenFor)
   const rightClickBehavior = useSettingsStore((s) => s.settings.terminal.rightClickBehavior)
   const { menu, open } = useContextMenu()
+  const raw = useUiStore((s) => isRaw(s, sessionId))
   const multiPane = useSessionsStore((s) => {
     const tab = s.tabs.find((t) => t.id === s.activeTabId)
     return tab ? tab.layout.type !== 'leaf' : false
@@ -91,6 +93,12 @@ export function TerminalPane({ sessionId, active, visible }: Props): React.JSX.E
     >
       <PaneHeader sessionId={sessionId} />
       <XtermView sessionId={sessionId} active={active} visible={visible} />
+      {/* Лента живёт ВНУТРИ панели, а не поверх всей рабочей области. Раньше она
+          была непрозрачным слоем на всё окно: в блочном режиме сплитов не было
+          видно вообще — четыре панели существовали, но человек видел одну ленту.
+          Слой позиционируется по .zy-pane (position: relative), заголовок панели
+          остаётся над ним. */}
+      {!raw && <MissionFeed sessionId={sessionId} />}
       {searchOpenFor === sessionId && <TermSearchBar sessionId={sessionId} />}
       {menu}
     </div>

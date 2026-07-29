@@ -816,9 +816,22 @@ body {
  */
 .zy-pane--focused {
   border-color: color-mix(in srgb, var(--accent) 72%, transparent);
+}
+/**
+ * Кольцо рисуется ОТДЕЛЬНЫМ слоем поверх содержимого. Внутренняя тень на самой
+ * панели пряталась под лентой: та лежит абсолютным слоем с непрозрачным фоном,
+ * и рамка активной панели исчезала ровно в блочном режиме — там, где по ней и
+ * определяют, куда уйдёт Enter.
+ */
+.zy-pane--focused::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
   box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--accent) 34%, transparent),
-    0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent);
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent),
+    inset 0 0 0 2px color-mix(in srgb, var(--accent) 16%, transparent);
 }
 /* Неактивные приглушены — глаз находит рабочую панель, не читая заголовков. */
 .zy-pane--dim .zy-term-wrap {
@@ -826,6 +839,18 @@ body {
 }
 .zy-pane--dim:hover .zy-term-wrap {
   opacity: 0.82;
+}
+/**
+ * Лента гасится ЯРКОСТЬЮ, а не прозрачностью. Прозрачность здесь показала себя
+ * сразу: лента лежит слоем поверх терминала, и полупрозрачная превращалась в
+ * текст поверх текста — обе неактивные панели становились нечитаемой кашей.
+ * brightness оставляет слой непрозрачным.
+ */
+.zy-pane--dim .zy-mf {
+  filter: brightness(0.66);
+}
+.zy-pane--dim:hover .zy-mf {
+  filter: brightness(0.85);
 }
 
 .zy-term-wrap {

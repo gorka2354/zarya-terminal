@@ -212,14 +212,13 @@ function MainContent(): React.JSX.Element {
               <SplitLayout key={tab.id} tab={tab} visible={tab.id === activeTabId} />
             ))}
           </div>
-          {!rawTerminal &&
-            (activeSessionId ? (
-              <MissionFeed sessionId={activeSessionId} />
-            ) : (
-              <div className="zy-empty" style={{ margin: 'auto' }}>
-                Открой терминал кнопкой + в сайдбаре (Ctrl+Shift+T)
-              </div>
-            ))}
+          {/* Лента теперь рисуется КАЖДОЙ панелью (TerminalPane): иначе четыре
+              панели показывали бы один разговор, а сплиты были бы не видны. */}
+          {!activeSessionId && (
+            <div className="zy-empty" style={{ margin: 'auto' }}>
+              Открой терминал кнопкой + в сайдбаре (Ctrl+Shift+T)
+            </div>
+          )}
         </div>
         {/* Hidden in «Терминал» mode: a raw TUI (claude/vim/ssh) owns the input,
             so a second bar here would be a confusing double input. */}
