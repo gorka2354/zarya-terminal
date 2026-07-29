@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { AiCli } from '@shared/types'
 import { useSessionsStore } from '@/state/sessionsStore'
-import { useUiStore } from '@/state/uiStore'
+import { setBarModeOf, setRaw, useUiStore } from '@/state/uiStore'
 import { convForSession, useAiStore } from '@/features/ai/aiStore'
 import { getTerminal } from '@/terminal/terminalRegistry'
 import './aiclilauncher.css'
@@ -32,18 +32,25 @@ function useAiClis(): AiCli[] {
  */
 export function launchClaudeNative(): void {
   const sessionId = useSessionsStore.getState().activeSessionId()
-  useUiStore.getState().set({ barMode: 'claude-code', rawTerminal: false })
+  setBarModeOf(sessionId, 'claude-code')
+  setRaw(sessionId, false)
   const store = useAiStore.getState()
   // Reuse this terminal's Claude conversation if it already exists & is idle,
   // otherwise start a fresh one bound to the active terminal.
   const existing = convForSession(store, sessionId)
   if (!existing || existing.engine !== 'claude-code') {
-    const id = store.newConversation({ sessionId: sessionId ?? undefined, engine: 'claude-code', title: 'Claude Code' })
+    const id = store.newConversation({
+      sessionId: sessionId ?? undefined,
+      engine: 'claude-code',
+      title: 'Claude Code'
+    })
     store.setActiveConversation(id)
   } else {
     store.setActiveConversation(existing.id)
   }
-  useUiStore.getState().toast('Claude Code активен — просто напишите запрос и нажмите Enter', 'success')
+  useUiStore
+    .getState()
+    .toast('Claude Code активен — просто напишите запрос и нажмите Enter', 'success')
 }
 
 /**
@@ -58,7 +65,7 @@ export function launchAiCli(cli: AiCli): void {
   }
   const sessionId = useSessionsStore.getState().activeSessionId()
   if (!sessionId) return
-  useUiStore.getState().set({ rawTerminal: true })
+  setRaw(sessionId, true)
   window.zarya.pty.write(sessionId, cli.cmd + '\r')
   setTimeout(() => getTerminal(sessionId)?.focus(), 80)
 }
@@ -80,7 +87,9 @@ export function AiCliLauncher(): React.JSX.Element | null {
   return (
     <div className="zy-clilaunch">
       <div className="zy-clilaunch-label">
-        {installed.length > 0 ? 'запустить ИИ-агента в терминале' : 'поддерживаемые ИИ-агенты (не установлены)'}
+        {installed.length > 0
+          ? 'запустить ИИ-агента в терминале'
+          : 'поддерживаемые ИИ-агенты (не установлены)'}
       </div>
       <div className="zy-clilaunch-grid">
         {shown.map((cli) => (
@@ -97,7 +106,9 @@ export function AiCliLauncher(): React.JSX.Element | null {
             disabled={!cli.detected}
             onClick={() => cli.detected && launchAiCli(cli)}
           >
-            <span className={`zy-clilaunch-glyph zy-clilaunch-glyph--${cli.tint}`}>{cli.glyph}</span>
+            <span className={`zy-clilaunch-glyph zy-clilaunch-glyph--${cli.tint}`}>
+              {cli.glyph}
+            </span>
             <span className="zy-clilaunch-name">{cli.name}</span>
           </button>
         ))}

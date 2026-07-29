@@ -1,5 +1,5 @@
 import { useSessionsStore } from '@/state/sessionsStore'
-import { useUiStore } from '@/state/uiStore'
+import { isRaw, useUiStore } from '@/state/uiStore'
 
 /**
  * Диспетчер Esc и Enter — один на окно.
@@ -72,7 +72,7 @@ function overlayOwnsKeys(): boolean {
     ui.quickOpenOpen ||
     ui.historyOverlayOpen ||
     ui.aiBarOpen ||
-    ui.rawTerminal
+    isRaw(ui, keyTargetSessionId())
   )
 }
 

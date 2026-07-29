@@ -9,7 +9,7 @@ import { WebglAddon } from '@xterm/addon-webgl'
 import '@xterm/xterm/css/xterm.css'
 import { useSettingsStore } from '@/state/settingsStore'
 import { useSessionsStore } from '@/state/sessionsStore'
-import { useUiStore } from '@/state/uiStore'
+import { isRaw, setRaw, useUiStore } from '@/state/uiStore'
 import { getTheme, toXtermTheme } from '@/features/themes/themes'
 import { shouldBypassTerminal } from '@/features/palette/keybindings'
 import { openFileInEditor } from '@/features/editor/editorBridge'
@@ -44,7 +44,7 @@ export function XtermView({ sessionId, active, visible }: Props): React.JSX.Elem
   const shadowRef = useRef<{ buf: string; reliable: boolean }>({ buf: '', reliable: true })
   const session = useSessionsStore((s) => s.sessions[sessionId])
   const settings = useSettingsStore((s) => s.settings)
-  const rawTerminal = useUiStore((s) => s.rawTerminal)
+  const rawTerminal = useUiStore((s) => isRaw(s, sessionId))
   const status = session?.status
 
   // ------------------------------------------------------------- lifecycle
@@ -64,7 +64,7 @@ export function XtermView({ sessionId, active, visible }: Props): React.JSX.Elem
       // In «Блоки» mode the terminal is display-only (single input is the
       // ask-agent bar). In «Терминал» mode stdin is enabled so you can type
       // directly and run interactive tools (vim / claude / ssh). Toggled live.
-      disableStdin: !useUiStore.getState().rawTerminal
+      disableStdin: !isRaw(useUiStore.getState(), sessionId)
     })
 
     const fit = new FitAddon()
@@ -262,14 +262,15 @@ export function XtermView({ sessionId, active, visible }: Props): React.JSX.Elem
     // view so arrows/prompts work, and return to «Блоки» when they exit.
     const bufDisp = term.buffer.onBufferChange((buf) => {
       const isAlt = buf.type === 'alternate'
-      const ui = useUiStore.getState()
-      if (isAlt && !ui.rawTerminal) {
+      // Полноэкранная программа переключает ТОЛЬКО свою панель: раньше vim в
+      // одной гасил ленты и строки ввода во всех остальных.
+      if (isAlt && !isRaw(useUiStore.getState(), sessionId)) {
         autoRawRef.current = true
-        ui.set({ rawTerminal: true })
+        setRaw(sessionId, true)
         requestAnimationFrame(() => term.focus())
       } else if (!isAlt && autoRawRef.current) {
         autoRawRef.current = false
-        ui.set({ rawTerminal: false })
+        setRaw(sessionId, false)
       }
     })
 
@@ -294,9 +295,7 @@ export function XtermView({ sessionId, active, visible }: Props): React.JSX.Elem
     const restored = takePendingRestore(sessionId)
     if (restored) {
       term.write(restored)
-      term.write(
-        '\r\n\x1b[2m╌╌╌╌╌  сессия восстановлена · новый shell  ╌╌╌╌╌\x1b[0m\r\n'
-      )
+      term.write('\r\n\x1b[2m╌╌╌╌╌  сессия восстановлена · новый shell  ╌╌╌╌╌\x1b[0m\r\n')
     }
 
     // A freshly spawned ConPTY shell begins with a full-screen repaint
@@ -312,9 +311,7 @@ export function XtermView({ sessionId, active, visible }: Props): React.JSX.Elem
       const tail = restoredGate.buf
       restoredGate = null
       clearTimeout(gateTimer)
-      term.write(
-        tail.replace(/\x1b\[[0-9;]*[23]J/g, '').replace(/\x1b\[(?:1;1)?H/g, '')
-      )
+      term.write(tail.replace(/\x1b\[[0-9;]*[23]J/g, '').replace(/\x1b\[(?:1;1)?H/g, ''))
     }
     if (restoredGate) {
       gateTimer = setTimeout(releaseGate, 2500)

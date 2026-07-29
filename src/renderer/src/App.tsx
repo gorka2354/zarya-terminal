@@ -33,7 +33,7 @@ import logoZarya from '@/assets/logo-zarya-64.png'
 import { seedHistoryCache } from '@/terminal/historyCache'
 import { useSessionsStore } from '@/state/sessionsStore'
 import { useSettingsStore } from '@/state/settingsStore'
-import { useUiStore } from '@/state/uiStore'
+import { isRaw, useUiStore } from '@/state/uiStore'
 import { useAiStore } from '@/features/ai/aiStore'
 
 export default function App(): React.JSX.Element {
@@ -190,7 +190,9 @@ function MainContent(): React.JSX.Element {
   const tabs = useSessionsStore((s) => s.tabs)
   const activeTabId = useSessionsStore((s) => s.activeTabId)
   const activeSessionId = useSessionsStore((s) => s.activeSessionId())
-  const rawTerminal = useUiStore((s) => s.rawTerminal)
+  // Пока лента одна на окно, она смотрит на режим АКТИВНОЙ панели. Когда лента
+  // переедет внутрь панели (этап 3), каждая будет читать свой.
+  const rawTerminal = useUiStore((s) => isRaw(s, activeSessionId))
   const ideMode = useSettingsStore((s) => s.settings.ideMode)
   const editorFiles = useEditorStore((s) => s.files)
   const [editorWidth, setEditorWidth] = useState(46) // percent

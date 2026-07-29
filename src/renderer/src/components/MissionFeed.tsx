@@ -4,7 +4,7 @@ import { onBus } from '@/lib/bus'
 import { formatDuration, formatRelative, shortenPath } from '@/lib/ansi'
 import { useBlocksStore } from '@/state/blocksStore'
 import { useSessionsStore } from '@/state/sessionsStore'
-import { useUiStore } from '@/state/uiStore'
+import { setBarModeOf, setRaw, useUiStore } from '@/state/uiStore'
 import { convForSession, useAiStore, type Conversation } from '@/features/ai/aiStore'
 import {
   feedIsBusy,
@@ -88,7 +88,8 @@ export function MissionFeed({ sessionId }: { sessionId: string }): React.JSX.Ele
               cwd: folder,
               sessionId
             })
-            useUiStore.getState().set({ barMode: 'claude-code', rawTerminal: false })
+            setBarModeOf(sessionId, 'claude-code')
+            setRaw(sessionId, false)
           })
         }
       }))
@@ -308,9 +309,13 @@ export function MissionFeed({ sessionId }: { sessionId: string }): React.JSX.Ele
                 waits for a decision. */}
             {!busy && (
               <div className="zy-mf-ready">
-                <span className="zy-mf-spark"><PixelIcon name="star" /></span>
+                <span className="zy-mf-spark">
+                  <PixelIcon name="star" />
+                </span>
                 <span className="zy-mf-cwd">{cwdShort || '~'}</span>
-                <span className="zy-mf-chev"><PixelIcon name="chevron-right" /></span>
+                <span className="zy-mf-chev">
+                  <PixelIcon name="chevron-right" />
+                </span>
                 <span className="zy-mf-ready-text">готов · введите запрос в строку ниже ↓</span>
               </div>
             )}
@@ -342,7 +347,9 @@ function ShellBlock({
   return (
     <div className={`zy-mf-block${failed ? ' zy-mf-block--fail' : ''}`}>
       <div className="zy-mf-cmd">
-        <span className="zy-mf-star"><PixelIcon name="star" /></span>
+        <span className="zy-mf-star">
+          <PixelIcon name="star" />
+        </span>
         <span className="zy-mf-cwd">{cwdShort}</span>
         {branch && (
           <span className="zy-mf-git">
@@ -379,7 +386,8 @@ function toolVerb(name: string): { want: string; run: string } {
     return { want: 'агент хочет изменить файл', run: 'применяет правку…' }
   if (n === 'webfetch' || n === 'websearch')
     return { want: 'агент хочет в сеть', run: 'запрос в сеть…' }
-  if (n === 'task' || n === 'agent') return { want: 'агент хочет запустить субагента', run: 'субагент работает…' }
+  if (n === 'task' || n === 'agent')
+    return { want: 'агент хочет запустить субагента', run: 'субагент работает…' }
   return { want: 'агент хочет выполнить', run: 'выполняется…' }
 }
 
@@ -414,7 +422,13 @@ function AgentSection({ conv, cwd }: { conv: Conversation; cwd: string }): React
         <span className="zy-mf-divider-line" />
       </div>
       {conv.messages.map((m, i) => (
-        <AgentMessage key={i} msg={m} conv={conv} cwd={cwd} interrupted={(conv.interrupted ?? []).includes(i)} />
+        <AgentMessage
+          key={i}
+          msg={m}
+          conv={conv}
+          cwd={cwd}
+          interrupted={(conv.interrupted ?? []).includes(i)}
+        />
       ))}
       {/*
         Gates that no message describes. Claude Code announces a tool as a
@@ -471,11 +485,7 @@ function SubagentWave({ conv }: { conv: Conversation }): React.JSX.Element | nul
   return (
     <div className={`zy-mf-wave${allDone ? ' zy-mf-wave--done' : ''}`}>
       <div className="zy-mf-wave-head">
-        {allDone ? (
-          <Icon name="check" size={12} />
-        ) : (
-          <span className="zy-mf-spinner" aria-hidden />
-        )}
+        {allDone ? <Icon name="check" size={12} /> : <span className="zy-mf-spinner" aria-hidden />}
         <span className="zy-mf-wave-count">
           {w.done}/{w.total} {w.total === 1 ? 'агент' : 'агентов'}
         </span>
@@ -498,9 +508,7 @@ function SubagentWave({ conv }: { conv: Conversation }): React.JSX.Element | nul
         </div>
       ))}
       {w.running.length > 4 && (
-        <div className="zy-mf-wave-row zy-mf-wave-row--more">
-          …и ещё {w.running.length - 4}
-        </div>
+        <div className="zy-mf-wave-row zy-mf-wave-row--more">…и ещё {w.running.length - 4}</div>
       )}
     </div>
   )
@@ -528,12 +536,19 @@ function AgentMessage({
     if (!text) return null
     return (
       <div className="zy-mf-user">
-        <span className="zy-mf-spark"><PixelIcon name="star" /></span>
+        <span className="zy-mf-spark">
+          <PixelIcon name="star" />
+        </span>
         <span className="zy-mf-cwd">{cwd}</span>
-        <span className="zy-mf-chev"><PixelIcon name="chevron-right" /></span>
+        <span className="zy-mf-chev">
+          <PixelIcon name="chevron-right" />
+        </span>
         <span className="zy-mf-user-text">{text}</span>
         {interrupted && (
-          <span className="zy-mf-user-cut" title="Ход прерван по Esc. Ответа не будет, но агент увидит это сообщение при продолжении беседы">
+          <span
+            className="zy-mf-user-cut"
+            title="Ход прерван по Esc. Ответа не будет, но агент увидит это сообщение при продолжении беседы"
+          >
             прервано
           </span>
         )}
@@ -717,9 +732,7 @@ function ToolCard({
         {!view.mustShowFull && <span className="zy-mf-tool-note">{verb.want}</span>}
       </div>
       {(view.mustShowFull || (open && view.isLong)) && (
-        <pre
-          className={`zy-mf-tool-full${view.mustShowFull ? ' zy-mf-tool-full--pinned' : ''}`}
-        >
+        <pre className={`zy-mf-tool-full${view.mustShowFull ? ' zy-mf-tool-full--pinned' : ''}`}>
           {cmd}
         </pre>
       )}
@@ -734,12 +747,16 @@ function EmptyHero({ sessionId }: { sessionId: string }): React.JSX.Element {
   return (
     <div className="zy-mf-empty">
       <div className="zy-mf-empty-mark">
-        <img src={logoZarya} width={44} height={44} style={{ imageRendering: 'pixelated' }} alt="" />
+        <img
+          src={logoZarya}
+          width={44}
+          height={44}
+          style={{ imageRendering: 'pixelated' }}
+          alt=""
+        />
       </div>
       <div className="zy-mf-empty-title">Борт готов к старту</div>
-      <div className="zy-mf-empty-hint">
-        введите команду или запрос агенту в строку ниже ↓
-      </div>
+      <div className="zy-mf-empty-hint">введите команду или запрос агенту в строку ниже ↓</div>
       <AiCliLauncher />
       <ClaudeResumeList sessionId={sessionId} />
     </div>
@@ -778,7 +795,8 @@ function ClaudeResumeList({ sessionId }: { sessionId: string }): React.JSX.Eleme
         cwd,
         sessionId
       })
-      useUiStore.getState().set({ barMode: 'claude-code', rawTerminal: false })
+      setBarModeOf(sessionId, 'claude-code')
+      setRaw(sessionId, false)
     })
   }
 
@@ -800,9 +818,7 @@ function ClaudeResumeList({ sessionId }: { sessionId: string }): React.JSX.Eleme
 
 // QA hook: seed the feed with the design's sample mission so the offscreen
 // harness can screenshot a populated 1:1 view. Harmless in production.
-;(
-  window as unknown as { __zaryaSeedMission?: () => void }
-).__zaryaSeedMission = () => {
+;(window as unknown as { __zaryaSeedMission?: () => void }).__zaryaSeedMission = () => {
   const sid = useSessionsStore.getState().activeSessionId()
   if (!sid) return
   const t = Date.now()
@@ -839,21 +855,34 @@ function ClaudeResumeList({ sessionId }: { sessionId: string }): React.JSX.Eleme
         ? {
             ...c,
             messages: [
-              { role: 'user', content: [{ type: 'text', text: 'собери проект и почини ошибки типов' }] },
+              {
+                role: 'user',
+                content: [{ type: 'text', text: 'собери проект и почини ошибки типов' }]
+              },
               {
                 role: 'assistant',
                 content: [
                   {
                     type: 'text',
-                    text:
-                      'Запускаю сборку… нашёл **2 ошибки типов** в `src/store.ts` — значение может быть `null`. Готовлю патч.\n\n```diff\n--- a/src/store.ts\n+++ b/src/store.ts\n- const u = store.get(id).user\n+ const u = store.get(id)?.user ?? null\n```'
+                    text: 'Запускаю сборку… нашёл **2 ошибки типов** в `src/store.ts` — значение может быть `null`. Готовлю патч.\n\n```diff\n--- a/src/store.ts\n+++ b/src/store.ts\n- const u = store.get(id).user\n+ const u = store.get(id)?.user ?? null\n```'
                   },
-                  { type: 'tool_use', id: 'seed-tu', name: 'run_command', input: { command: 'pnpm build' } }
+                  {
+                    type: 'tool_use',
+                    id: 'seed-tu',
+                    name: 'run_command',
+                    input: { command: 'pnpm build' }
+                  }
                 ]
               }
             ],
             pendingTools: [
-              { id: 'seed-tu', name: 'run_command', input: { command: 'pnpm build' }, autoApproved: false, settled: false }
+              {
+                id: 'seed-tu',
+                name: 'run_command',
+                input: { command: 'pnpm build' },
+                autoApproved: false,
+                settled: false
+              }
             ]
           }
         : c

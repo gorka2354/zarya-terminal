@@ -2,7 +2,7 @@ import { registerActions } from '@/lib/actionRegistry'
 import { useBlocksStore } from '@/state/blocksStore'
 import { listLeaves, useSessionsStore } from '@/state/sessionsStore'
 import { getSettings, useSettingsStore } from '@/state/settingsStore'
-import { useUiStore } from '@/state/uiStore'
+import { isRaw, setRaw, useUiStore } from '@/state/uiStore'
 import { getTerminal } from '@/terminal/terminalRegistry'
 import { aiOpenCommandBar, aiOpenPanel } from '@/features/ai/aiBridge'
 import { setIdeMode, toggleIdeMode } from '@/features/ide/ideMode'
@@ -149,10 +149,12 @@ export function registerCoreActions(): void {
       category: 'Терминал',
       keywords: 'raw interactive интерактивный warp фид блоки claude vim tui',
       run: () => {
-        const raw = useUiStore.getState().rawTerminal
-        ui.set({ rawTerminal: !raw })
+        // Режим переключается у АКТИВНОЙ панели: соседние продолжают жить
+        // своей жизнью, а не гаснут заодно.
+        const id = activeSessionId()
+        const raw = isRaw(useUiStore.getState(), id)
+        setRaw(id, !raw)
         if (!raw) {
-          const id = activeSessionId()
           if (id) setTimeout(() => getTerminal(id)?.focus(), 60)
         }
       }

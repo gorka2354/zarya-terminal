@@ -3,7 +3,7 @@ import { XtermView } from '@/terminal/XtermView'
 import { getTerminal } from '@/terminal/terminalRegistry'
 import { useSessionsStore } from '@/state/sessionsStore'
 import { useSettingsStore } from '@/state/settingsStore'
-import { useUiStore } from '@/state/uiStore'
+import { setRaw, useUiStore } from '@/state/uiStore'
 import { useContextMenu } from './ContextMenu'
 import { Icon } from './Icon'
 
@@ -156,7 +156,7 @@ function PaneHeader({ sessionId }: { sessionId: string }): React.JSX.Element {
         <button
           className="zy-icon-btn"
           title="Вернуться к блокам (Warp-фид)"
-          onClick={() => useUiStore.getState().set({ rawTerminal: false })}
+          onClick={() => setRaw(sessionId, false)}
         >
           <Icon name="sessions" size={13} />
         </button>

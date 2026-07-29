@@ -3,7 +3,7 @@ import type { AgentEngine, AgentUsage, AiEffort, ClaudeCliQuestion } from '@shar
 import { EFFORT_TUNING } from '@shared/defaults'
 import { useSessionsStore } from '@/state/sessionsStore'
 import { useSettingsStore } from '@/state/settingsStore'
-import { useUiStore } from '@/state/uiStore'
+import { setRaw, useUiStore } from '@/state/uiStore'
 import { getTerminal } from '@/terminal/terminalRegistry'
 import { convForSession, useAiStore } from '@/features/ai/aiStore'
 import { nextGate } from '@/features/ai/gates'
@@ -481,7 +481,7 @@ ${prev}`
     }
     setText('')
     if (isInteractiveCmd(cmd)) {
-      useUiStore.getState().set({ rawTerminal: true })
+      setRaw(activeSessionId, true)
       setTimeout(() => getTerminal(activeSessionId)?.focus(), 60)
     }
     window.zarya.pty.write(activeSessionId, cmd + '\r')
