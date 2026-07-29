@@ -305,7 +305,7 @@ function UsagePanel({
  * When Claude Code raises an AskUserQuestion the whole bar morphs into
  * {@link ClaudeQuestionBar} — the single input becomes a native choice selector.
  */
-export function AgentBar(): React.JSX.Element {
+export function AgentBar({ paneSessionId }: { paneSessionId?: string } = {}): React.JSX.Element {
   const model = useSettingsStore((s) => s.settings.ai.model)
   const effort = useSettingsStore((s) => s.settings.ai.effort)
   const effortIdx = EFFORTS.indexOf(effort)
@@ -341,7 +341,11 @@ export function AgentBar(): React.JSX.Element {
   const draftRef = useRef('')
   const ref = useRef<HTMLTextAreaElement>(null)
 
-  const activeSessionId = useSessionsStore((s) => s.activeSessionId())
+  // Своя панель, а не «какая сейчас активная». Спрашивать про активную — это тот
+  // самый разрыв, из-за которого можно печатать в одну панель, а Enter уйдёт в
+  // другую. Без параметра ведём себя как раньше: одна строка на окно.
+  const storeActive = useSessionsStore((s) => s.activeSessionId())
+  const activeSessionId = paneSessionId ?? storeActive
   /** Вернуть курсор в поле и поставить его в конец — после возврата текста из очереди или отмены. */
   const focusInputEnd = (): void => {
     requestAnimationFrame(() => {
