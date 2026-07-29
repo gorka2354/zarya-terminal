@@ -416,7 +416,27 @@ export function AgentBar(): React.JSX.Element {
       if (!conv.streaming) return
       if (conv.pendingTools.some((t) => t.kind === 'question' && !t.settled)) return
       e.preventDefault()
-      useAiStore.getState().abort(conv.id)
+      // Отмена ОТПРАВЛЕННОГО сообщения, если агент ещё не начал отвечать: оно
+      // уходит из ленты И из памяти агента, текст возвращается в строку — так
+      // делает CLI. Умеет это только Claude Code; на остальных движках undoSend
+      // вернёт null, и Esc остаётся обычным прерыванием.
+      void useAiStore
+        .getState()
+        .undoSend(conv.id)
+        .then((text) => {
+          if (text === null) {
+            useAiStore.getState().abort(conv.id)
+            return
+          }
+          setHistIdx(-1)
+          setText((prev) => (prev.trim() ? `${text}\n${prev}` : text))
+          requestAnimationFrame(() => {
+            const el = ref.current
+            if (!el) return
+            el.focus()
+            el.selectionStart = el.selectionEnd = el.value.length
+          })
+        })
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -963,7 +983,6 @@ export function AgentBar(): React.JSX.Element {
       )
   }
 
-
   const isShell = mode === 'shell'
   const isAgent = activeEngine !== null // a native agent mode is selected
   // Conditional controls driven by the engine's declared capabilities, not by
@@ -1077,6 +1096,7 @@ export function AgentBar(): React.JSX.Element {
         </button>
         <span className="zy-agentbar-fuel-spacer" />
         {showModel && (claudeStatus.model || claudeStatus.effort || ultracode) && (
+
           <button className="zy-agentbar-fuel-model" onClick={openLaunchPad} title="Двигатель и тяга">
             {claudeStatus.model ? prettyModel(claudeStatus.model) : ''}
             {ultracode

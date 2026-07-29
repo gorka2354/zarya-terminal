@@ -5,6 +5,7 @@ import type {
   AgentEngine,
   AgentPermissionDecision,
   AgentQuestionAnswer,
+  AgentRewind,
   AgentStartOpts,
   AgentStreamEvent,
   AiChatRequest,
@@ -89,6 +90,8 @@ const api = {
       ipcRenderer.send(CH.agentStart, engine, requestId, opts),
     input: (engine: AgentEngine, requestId: string, text: string) =>
       ipcRenderer.send(CH.agentInput, engine, requestId, text),
+    rewind: (engine: AgentEngine, requestId: string) =>
+      ipcRenderer.invoke(CH.agentRewind, engine, requestId) as Promise<AgentRewind | null>,
     interrupt: (engine: AgentEngine, requestId: string) =>
       ipcRenderer.send(CH.agentInterrupt, engine, requestId),
     permission: (

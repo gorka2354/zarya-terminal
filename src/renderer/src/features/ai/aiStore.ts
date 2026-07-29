@@ -102,6 +102,11 @@ export interface Conversation {
   /** Claude Code session id (from init/result) for resume / continuity. */
   claudeSessionId?: string
   /**
+   * Точка ветки после отмены отправленного сообщения: следующий ход возьмёт
+   * историю ДО этого ответа агента. Живёт до init новой сессии.
+   */
+  resumeAt?: string
+  /**
    * Indices of user turns that were interrupted with Esc. They look exactly
    * like ordinary turns otherwise — no answer ever arrives — and the agent
    * still sees them on resume, so the feed says so out loud.
@@ -182,6 +187,12 @@ interface AiState {
 
   send: (text: string, opts?: { conversationId?: string }) => Promise<void>
   abort: (conversationId?: string) => void
+  /**
+   * Отменить ОТПРАВЛЕННОЕ сообщение, на которое агент ещё не ответил: убрать его
+   * из ленты и из контекста и вернуть текст для строки ввода. Возвращает текст
+   * или null, если отменить нечего или движок так не умеет.
+   */
+  undoSend: (conversationId?: string) => Promise<string | null>
   /** Approve a pending tool by id (defaults to the first unsettled one). */
   approveTool: (conversationId?: string, toolId?: string) => Promise<void>
   /** Deny a pending tool by id (defaults to the first unsettled one). */
@@ -439,6 +450,7 @@ function persistConversations(state: AiState): Promise<void> {
       engine: c.engine,
       sessionId: c.sessionId,
       claudeSessionId: c.claudeSessionId,
+      resumeAt: c.resumeAt,
       interrupted: c.interrupted,
       cwd: c.cwd,
       messages: c.messages,
@@ -550,7 +562,9 @@ export const useAiStore = create<AiState>((set, get) => {
       // After a restart there's no live session for this conversation — resume the
       // real on-disk session so context is intact. The driver only uses `resume`
       // when spawning fresh; a live follow-up in the same run ignores it.
-      resume: conv.claudeSessionId
+      resume: conv.claudeSessionId,
+      // После отмены отправленного — продолжаем веткой от последнего ответа.
+      resumeAt: conv.resumeAt
     })
   }
 
@@ -570,7 +584,12 @@ export const useAiStore = create<AiState>((set, get) => {
       // regardless of which engine is active.
       if (u.contextPct != null || u.contextTokens != null || u.contextWindow != null) {
         useUiStore.getState().set({
-          agentContext: { pct: u.contextPct, tokens: u.contextTokens, window: u.contextWindow, engine }
+          agentContext: {
+            pct: u.contextPct,
+            tokens: u.contextTokens,
+            window: u.contextWindow,
+            engine
+          }
         })
       }
       // Subscription fuel (5h/7d windows) is Claude-only.
@@ -612,7 +631,16 @@ export const useAiStore = create<AiState>((set, get) => {
 
     switch (ev.type) {
       case 'init':
-        patchConversation(convId, (c) => ({ ...c, claudeSessionId: ev.sessionId }))
+        // Точку отмотки снимает только НОВАЯ сессия: ветка стартовала, дальше
+        // отматывать нечего. Тот же id означает, что init прилетел от прежней
+        // сессии (CLI шлёт его, например, после прерывания) — снять точку здесь
+        // значило бы отправить следующий ход в неотмотанную историю, вернув
+        // отменённое сообщение в контекст.
+        patchConversation(convId, (c) => ({
+          ...c,
+          claudeSessionId: ev.sessionId,
+          resumeAt: ev.sessionId === c.claudeSessionId ? c.resumeAt : undefined
+        }))
         if (isClaudeStatus)
           useUiStore.getState().set({
             claudeStatus: {
@@ -866,6 +894,7 @@ export const useAiStore = create<AiState>((set, get) => {
         sessionId: p.sessionId,
         engine: p.engine,
         claudeSessionId: p.claudeSessionId,
+        resumeAt: p.resumeAt,
         interrupted: p.interrupted,
         cwd: p.cwd,
         // Any non-builtin engine drives its own agentic tool loop. A conv written
@@ -1023,6 +1052,52 @@ export const useAiStore = create<AiState>((set, get) => {
             ? [...(c.interrupted ?? []), lastUser]
             : c.interrupted
       }))
+    },
+
+    undoSend: async (conversationId) => {
+      const conv = resolveConv(conversationId)
+      if (!conv || conv.engine === 'builtin') return null
+      // Отменяем только то, на что агент ещё НЕ ответил. Если он успел что-то
+      // сказать, удаление хода стёрло бы и его слова — так не делает и CLI: там
+      // в этом случае остаётся пометка о прерывании.
+      const last = conv.messages[conv.messages.length - 1]
+      const text = (last?.role === 'user' ? last.content : [])
+        .filter((p): p is Extract<AiContentPart, { type: 'text' }> => p.type === 'text')
+        .map((p) => p.text)
+        .filter((t) => !t.startsWith('[Контекст:'))
+        .join('\n')
+        .trim()
+      if (!text) return null
+      // Спрашиваем ДРАЙВЕР, умеет ли он убрать это из памяти агента. Убрать из
+      // ленты то, что агент всё равно помнит, — ровно то враньё, из-за которого
+      // «я же отменил» и оказывалось неправдой.
+      const rewind = await window.zarya.agent.rewind(conv.engine, conv.id)
+      if (!rewind) return null
+      // За время запроса агент мог заговорить. Тогда последним стоит уже ЕГО
+      // сообщение, и слепое «убрать последнее» стёрло бы ответ вместо вопроса.
+      // Отступаем: ход всё равно прерван, лента честно скажет «прервано».
+      const fresh = get().conversations.find((c) => c.id === conv.id)
+      if (!fresh || fresh.messages[fresh.messages.length - 1] !== last) return null
+      bumpEpoch(conv.id)
+      execChains.delete(conv.id)
+      patchConversation(conv.id, (c) => ({
+        ...c,
+        messages: c.messages.slice(0, -1),
+        streaming: false,
+        activeRequestId: undefined,
+        pendingTools: [],
+        subagents: undefined,
+        // Куда продолжать. 'fork' — веткой от последнего ответа агента;
+        // 'fresh' — отматывать не к чему, и следующий ход начнёт сессию с нуля,
+        // поэтому прежний id надо забыть: возобновление втащило бы отменённое
+        // обратно. Оба поля переживают перезапуск (см. PersistedConversation).
+        claudeSessionId: rewind.kind === 'fork' ? rewind.sessionId : undefined,
+        resumeAt: rewind.kind === 'fork' ? rewind.at : undefined,
+        // Пометка «прервано» указывает на индексы ходов; после удаления
+        // последнего она бы поехала. Ход исчез — помечать нечего.
+        interrupted: (c.interrupted ?? []).filter((i) => i < c.messages.length - 1)
+      }))
+      return text
     },
 
     approveTool: async (conversationId, toolId) => {
@@ -1264,15 +1339,17 @@ onBus('terminal:focus', ({ sessionId }) => {
   const sid = useSessionsStore.getState().activeSessionId() ?? undefined
   const id = store.newConversation({ sessionId: sid, engine })
   useAiStore.setState((s) => ({
-    conversations: s.conversations.map((c) => (c.id === id ? { ...c, claudeSessionId: sessionId } : c))
+    conversations: s.conversations.map((c) =>
+      c.id === id ? { ...c, claudeSessionId: sessionId } : c
+    )
   }))
   store.setActiveConversation(id)
   void store.send(text, { conversationId: id })
   return id
 }
-;(window as unknown as { __zaryaListModels?: (engine: AgentEngine) => Promise<unknown> }).__zaryaListModels = (
-  engine
-) => window.zarya.agent.listModels(engine)
+;(
+  window as unknown as { __zaryaListModels?: (engine: AgentEngine) => Promise<unknown> }
+).__zaryaListModels = (engine) => window.zarya.agent.listModels(engine)
 ;(window as unknown as { __zaryaConvById?: (id: string) => unknown }).__zaryaConvById = (id) => {
   const c = useAiStore.getState().conversations.find((x) => x.id === id)
   return c
@@ -1282,6 +1359,10 @@ onBus('terminal:focus', ({ sessionId }) => {
         streaming: c.streaming,
         error: c.error,
         sessionId: c.claudeSessionId,
+        // Точка ветки после отмены отправленного: без неё «сообщение ушло из
+        // контекста» проверить нечем — харнесс обязан видеть, с чем уйдёт
+        // следующий ход.
+        resumeAt: c.resumeAt,
         // Очередь — часть наблюдаемого состояния: на ней держится семантика Esc
         // (забрать приписку обратно, не трогая агента), и проверять её нужно
         // по конкретной беседе, а не только по активной.

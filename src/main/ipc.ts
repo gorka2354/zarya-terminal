@@ -6,6 +6,7 @@ import type {
   AgentEngine,
   AgentPermissionDecision,
   AgentQuestionAnswer,
+  AgentRewind,
   AgentStartOpts,
   AiChatRequest,
   AiConversationsState,
@@ -293,6 +294,15 @@ export function registerIpc(ctx: IpcContext): void {
   })
   ipcMain.on(CH.agentInterrupt, (_e, engine: AgentEngine, requestId: string) => {
     driverFor(engine)?.interrupt(requestId)
+  })
+  /**
+   * Отмена ОТПРАВЛЕННОГО сообщения. Возвращает точку продолжения либо null:
+   * только Claude Code умеет отматывать ветку, и рендерер обязан знать правду —
+   * иначе он убрал бы сообщение из ленты там, где агент его всё равно помнит.
+   */
+  ipcMain.handle(CH.agentRewind, (_e, engine: AgentEngine, requestId: string) => {
+    const d = driverFor(engine) as { rewindAfterInterrupt?: (id: string) => AgentRewind | null } | undefined
+    return d?.rewindAfterInterrupt?.(requestId) ?? null
   })
   ipcMain.on(
     CH.agentPermission,

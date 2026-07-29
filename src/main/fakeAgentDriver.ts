@@ -6,9 +6,11 @@ import type {
   AgentEngine,
   AgentPermissionDecision,
   AgentQuestionAnswer,
+  AgentRewind,
   AgentStreamEvent,
   AgentStartOpts
 } from '@shared/types'
+import { rewindPoint } from '@shared/rewind'
 import type { AgentDriver } from './agentDriver'
 
 /**
@@ -26,6 +28,21 @@ export class FakeAgentDriver implements AgentDriver {
   private getWindow: () => BrowserWindow | null
   private timers = new Map<string, ReturnType<typeof setTimeout>[]>()
   private started = new Set<string>()
+  /**
+   * Состояние «сессии» — ровно то, что нужно отмотке: чем сессия себя назвала,
+   * что последним сказал агент и от какой точки эта ветка началась. Живёт между
+   * ходами, как у настоящего драйвера (ключ — requestId, он же id беседы).
+   */
+  private sessions = new Map<
+    string,
+    {
+      sessionId: string
+      lastAssistantUuid?: string
+      forkBase?: { sessionId: string; at: string }
+      resumed: boolean
+    }
+  >()
+  private seq = 0
 
   constructor(
     engine: AgentEngine,
@@ -50,10 +67,44 @@ export class FakeAgentDriver implements AgentDriver {
 
   async start(requestId: string, opts: AgentStartOpts): Promise<void> {
     this.started.add(requestId)
+    // Что драйвер получил на входе — для проверки отмотки: тест обязан видеть,
+    // с каким resume/resumeAt ушёл СЛЕДУЮЩИЙ ход, иначе «сообщение пропало из
+    // контекста» останется словами.
+    const log = process.env.ZARYA_FAKE_START_LOG
+    if (log) {
+      try {
+        appendFileSync(
+          log,
+          JSON.stringify({
+            engine: this.engine,
+            requestId,
+            prompt: opts.prompt,
+            resume: opts.resume ?? null,
+            resumeAt: opts.resumeAt ?? null
+          }) + '\n'
+        )
+      } catch {
+        /* best-effort */
+      }
+    }
+    // Ветка (или первый запуск) — новая сессия со своим id; продолжение живой
+    // сессии оставляет прежний.
+    const prev = this.sessions.get(requestId)
+    const session =
+      prev && !opts.resumeAt
+        ? prev
+        : {
+            sessionId: `fake-${this.engine}-${++this.seq}`,
+            resumed: !!opts.resume,
+            ...(opts.resume && opts.resumeAt
+              ? { forkBase: { sessionId: opts.resume, at: opts.resumeAt } }
+              : {})
+          }
+    this.sessions.set(requestId, session)
     // init immediately (like a real driver's system:init).
     this.emit(requestId, {
       type: 'init',
-      sessionId: `fake-${this.engine}-${requestId}`,
+      sessionId: session.sessionId,
       model: `${this.engine}-model`,
       cwd: opts.cwd ?? '',
       permissionMode: opts.permissionMode ?? 'default',
@@ -67,14 +118,23 @@ export class FakeAgentDriver implements AgentDriver {
         type: 'models',
         models: [{ value: `${this.engine}-a`, displayName: `${this.engine} A` }]
       })
-    // Stream an assistant reply so the turn takes real wall-clock time.
-    this.schedule(requestId, 250, () =>
-      this.emit(requestId, {
-        type: 'assistant',
-        content: [{ type: 'text', text: `fake ${this.engine}: ${opts.prompt}` }]
+    // Stream an assistant reply so the turn takes real wall-clock time. «mute:»
+    // — ход, в котором агент НИЧЕГО не говорит: только в таком окне отмена
+    // отправленного и имеет смысл, а иначе тест гонялся бы с таймером.
+    const mute = /mute/i.test(opts.prompt)
+    if (!mute)
+      this.schedule(requestId, 250, () => {
+        session.lastAssistantUuid = `fake-uuid-${++this.seq}`
+        this.emit(requestId, {
+          type: 'assistant',
+          content: [{ type: 'text', text: `fake ${this.engine}: ${opts.prompt}` }]
+        })
       })
-    )
-    if (/tool/i.test(opts.prompt)) {
+    if (mute) {
+      this.schedule(requestId, 8000, () =>
+        this.emit(requestId, { type: 'result', isError: false, models: [`${this.engine}-model`] })
+      )
+    } else if (/tool/i.test(opts.prompt)) {
       // Gate a tool so approve/deny + concurrent-gate behaviour is testable.
       this.schedule(requestId, 400, () =>
         this.emit(requestId, {
@@ -129,6 +189,23 @@ export class FakeAgentDriver implements AgentDriver {
 
   interrupt(requestId: string): void {
     this.emit(requestId, { type: 'result', isError: false })
+  }
+
+  /**
+   * Отмотка — только если профиль движка её заявляет: так харнесс проверяет ОБА
+   * поведения. Правило то же, что у настоящего драйвера: есть ответ агента —
+   * ветка от него; нет, но ветка сама откуда-то началась — от той же точки;
+   * продолженная сессия без ответа — отматывать нечем, честный отказ.
+   */
+  rewindAfterInterrupt(requestId: string): AgentRewind | null {
+    if (!this.capabilities.rewind) return null
+    const s = this.sessions.get(requestId)
+    if (!s) return null
+    const at = rewindPoint(s)
+    if (!at) return null
+    if (at.kind === 'fresh') this.sessions.delete(requestId)
+    this.interrupt(requestId)
+    return at
   }
 
   resolvePermission(requestId: string, toolUseId: string, decision: AgentPermissionDecision): void {

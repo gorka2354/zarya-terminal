@@ -47,6 +47,8 @@ export const CH = {
   agentStart: 'agent:start',
   agentInput: 'agent:input',
   agentInterrupt: 'agent:interrupt',
+  /** Отмена отправленного сообщения: убрать его и из контекста агента. */
+  agentRewind: 'agent:rewind',
   agentPermission: 'agent:permission',
   agentQuestion: 'agent:question', // resolve a structured AskUserQuestion-style prompt
   agentStream: 'agent:stream', // main -> renderer, payload carries `engine`

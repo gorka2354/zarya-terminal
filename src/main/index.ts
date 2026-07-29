@@ -127,7 +127,10 @@ if (process.env.ZARYA_FAKE_AGENT) {
         bypass: true,
         resumableSessions: true,
         usage: false,
-        structuredQuestions: true
+        structuredQuestions: true,
+        // Отмотка отправленного — только у этого фейка: esc-queue-test
+        // проверяет на codex обратное (сообщение остаётся с пометкой).
+        rewind: true
       },
       () => mainWindow
     )

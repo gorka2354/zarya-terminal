@@ -341,6 +341,12 @@ export interface PersistedConversation {
   sessionId?: string
   /** Claude Code session id — resumed on the next turn to keep full context. */
   claudeSessionId?: string
+  /**
+   * Точка ветки после отмены отправленного сообщения (см. {@link AgentRewind}).
+   * Переживает перезапуск намеренно: без неё возобновление подтянуло бы
+   * отменённое обратно в контекст, а в ленте его уже нет.
+   */
+  resumeAt?: string
   /** Working directory the conversation was opened in. */
   cwd?: string
   messages: AiMessage[]
@@ -414,9 +420,28 @@ export interface AgentStartOpts {
   ultracode?: boolean
   /** Resume a prior session id (multi-turn continuity). */
   resume?: string
+  /**
+   * UUID ответа агента, ДО которого (включительно) брать историю `resume`.
+   * Ставится после отмены отправленного сообщения: ход уходит ВЕТКОЙ от этой
+   * точки, и всё, что было после неё, в контекст не попадает. Без `resume`
+   * бессмысленно. См. {@link AgentRewind}.
+   */
+  resumeAt?: string
   /** Escape hatch for vendor-specific flags (never a required member). */
   vendorOpts?: Record<string, unknown>
 }
+
+/**
+ * Ответ драйвера на отмену отправленного сообщения (Esc над ходом, на который
+ * агент ещё не ответил).
+ *
+ * `fork` — беседа продолжится веткой от `at` в сессии `sessionId`; отменённое
+ * останется в файле мёртвой веткой и в контекст не попадёт. `fresh` — отматывать
+ * не к чему (агент в этой сессии ещё ничего не сказал), следующий ход начнёт
+ * новую сессию. `null` (не этот тип) — движок так не умеет, и рендерер обязан
+ * оставить сообщение в ленте: убрать с глаз то, что агент помнит, — враньё.
+ */
+export type AgentRewind = { kind: 'fork'; sessionId: string; at: string } | { kind: 'fresh' }
 
 /** Subscription rate-limit windows (utilization %, reset time) for the fuel gauge. */
 export interface AgentUsage {
@@ -576,6 +601,14 @@ export interface AgentCapabilities {
   usage: boolean
   /** The driver can emit a 'permission' event carrying `questions` (AskUserQuestion-style). */
   structuredQuestions: boolean
+  /**
+   * Движок умеет отматывать отправленное сообщение из контекста (Esc над ходом,
+   * на который агент ещё не ответил) — см. {@link AgentRewind}. Возможность, а
+   * не обещание: удастся ли конкретная отмена, отвечает сам драйвер. Где false,
+   * сообщение остаётся в ленте с пометкой «прервано» — прятать его нельзя,
+   * агент его помнит.
+   */
+  rewind?: boolean
   /** Extra named toggles beyond the common set (e.g. Claude's 'ultracode'); UI renders generically. */
   vendorFlags?: { key: string; label: string; desc?: string }[]
 }

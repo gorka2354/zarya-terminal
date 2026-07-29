@@ -6,6 +6,7 @@ import type {
   AgentPermissionDecision,
   AgentQuestionAnswer,
   AgentSessionInfo,
+  AgentRewind,
   AgentStartOpts,
   AgentStreamEvent,
   AiChatRequest,
@@ -89,6 +90,12 @@ export interface ZaryaApi {
     capabilities(): Promise<Record<AgentEngine, AgentCapabilities>>
     start(engine: AgentEngine, requestId: string, opts: AgentStartOpts): void
     input(engine: AgentEngine, requestId: string, text: string): void
+    /**
+     * Отменить отправленное сообщение: прервать ход и сказать, откуда продолжать.
+     * Точка ветки — сообщение из контекста уйдёт; null — движок так не умеет,
+     * убирать его из ленты нельзя.
+     */
+    rewind(engine: AgentEngine, requestId: string): Promise<AgentRewind | null>
     interrupt(engine: AgentEngine, requestId: string): void
     permission(
       engine: AgentEngine,

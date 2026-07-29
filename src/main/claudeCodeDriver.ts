@@ -7,6 +7,7 @@ import type {
   AgentCapabilities,
   AgentEngine,
   AgentQuestionAnswer,
+  AgentRewind,
   AiContentPart,
   AiMessage,
   ClaudeCliQuestion,
@@ -15,13 +16,9 @@ import type {
   ClaudeStartOpts,
   ClaudeStreamEvent
 } from '@shared/types'
+import { rewindPoint } from '@shared/rewind'
 import type { AgentDriver } from './agentDriver'
-import {
-  bundledPkgName,
-  claudeExeName,
-  resolveClaudeExe,
-  type ExePick
-} from './claudeExe'
+import { bundledPkgName, claudeExeName, resolveClaudeExe, type ExePick } from './claudeExe'
 // Types only (erased at runtime) — safe to import statically from the ESM-only
 // package; the runtime value is loaded via a dynamic import below.
 import type {
@@ -201,7 +198,8 @@ function sessionMsgToAiMessage(sm: Record<string, unknown>): AiMessage | null {
   }
   const parts: AiContentPart[] = []
   if (typeof content === 'string') {
-    if (content.trim() && !content.startsWith('[Контекст:')) parts.push({ type: 'text', text: content })
+    if (content.trim() && !content.startsWith('[Контекст:'))
+      parts.push({ type: 'text', text: content })
   } else if (Array.isArray(content)) {
     for (const b of content as Array<Record<string, unknown>>) {
       if (b.type === 'text' && typeof b.text === 'string' && b.text.trim()) {
@@ -324,6 +322,26 @@ interface Session {
   interrupted?: boolean
   /** Task ids that are plain shell commands, not subagents — filtered from the count. */
   shellTasks: Set<string>
+  /**
+   * UUID последнего ОТВЕТА агента. Точка, с которой можно продолжить беседу, не
+   * взяв в контекст то, что было после неё, — см. rewindAfterInterrupt.
+   */
+  lastAssistantUuid?: string
+  /** Id сессии из init — нужен, чтобы продолжить веткой после отмены. */
+  claudeSessionId?: string
+  /** Сессия продолжает прежнюю историю (`resume`), а не начата с нуля. */
+  resumed: boolean
+  /**
+   * Точка, от которой эта сессия сама была отмотана. Живёт, пока агент в ней
+   * ничего не сказал: два Esc подряд отматывают к одному и тому же месту.
+   */
+  forkBase?: { sessionId: string; at: string }
+  /**
+   * Человек отменил отправленное сообщение (Esc). В истории этой сессии
+   * отменённое уже лежит, поэтому дописывать в неё нельзя: следующий ход её
+   * гасит и стартует заново (веткой — по opts.resumeAt от рендерера).
+   */
+  rewound?: boolean
 }
 
 /**
@@ -343,6 +361,8 @@ export class ClaudeCodeDriver implements AgentDriver {
     resumableSessions: true,
     usage: true,
     structuredQuestions: true,
+    // resumeSessionAt + forkSession — см. rewindAfterInterrupt.
+    rewind: true,
     vendorFlags: [{ key: 'ultracode', label: 'ULTRACODE', desc: 'xhigh + оркестрация воркфлоу' }]
   }
   private sessions = new Map<string, Session>()
@@ -391,6 +411,21 @@ export class ClaudeCodeDriver implements AgentDriver {
   }
 
   private emit(requestId: string, ev: ClaudeStreamEvent): void {
+    // Отменённая сессия ещё доживает свои события: после interrupt приходит
+    // 'result', а CLI шлёт вдогонку повторный 'init' с тем же id. Её id больше
+    // не описывает беседу — рендерер уже решил, откуда продолжать. Пропустить их
+    // как есть значило бы снять точку отмотки (init) или вернуть забытый id
+    // (result), то есть тихо втащить отменённое сообщение обратно в контекст.
+    const s = this.sessions.get(requestId)
+    if (process.env.ZARYA_DEBUG && (ev.type === 'init' || ev.type === 'result'))
+      console.error(
+        '[claude-code] ids',
+        JSON.stringify({ ev: ev.type, sid: ev.sessionId, rewound: !!s?.rewound })
+      )
+    if (s?.rewound) {
+      if (ev.type === 'init') return
+      if (ev.type === 'result') ev = { ...ev, sessionId: undefined }
+    }
     // Generic agent stream — carries `engine` so the renderer routes without a
     // per-vendor channel. The claudeCode.* preload shim filters to this engine.
     this.getWindow()?.webContents.send(CH.agentStream, requestId, this.engine, ev)
@@ -403,7 +438,19 @@ export class ClaudeCodeDriver implements AgentDriver {
     // still in the map. Sending into it lost the prompt without a word — drop
     // the entry and fall through to spawning a fresh session instead.
     const existing = this.sessions.get(requestId)
-    if (existing?.input.isClosed()) {
+    // Отмена отправленного сообщения: дописывать в ту же сессию нельзя — в её
+    // истории отменённое уже лежит. Гасим её; куда продолжать, говорит рендерер
+    // (opts.resume + opts.resumeAt), потому что это должно пережить и перезапуск
+    // приложения — иначе отменённое тихо вернулось бы в контекст.
+    if (existing?.rewound) {
+      try {
+        existing.abort.abort()
+        existing.input.close()
+      } catch {
+        /* сессия могла уже умереть */
+      }
+      this.sessions.delete(requestId)
+    } else if (existing?.input.isClosed()) {
       this.sessions.delete(requestId)
     } else if (existing) {
       // Re-sync the per-session bypass to the current global (dispatchClaude
@@ -494,6 +541,17 @@ export class ClaudeCodeDriver implements AgentDriver {
       })
 
     const exePath = (await claudeExe()).path
+    /**
+     * Продолжение беседы. Обычный случай — `resume` по id сессии. После отмены
+     * отправленного сообщения рендерер добавляет `resumeAt`: берём историю ДО
+     * этого ответа включительно и уходим ВЕТКОЙ. Без forkSession продолжение
+     * дописывало бы прежнюю ветку, и отменённое вернулось бы в контекст.
+     */
+    const resumeOpts: Partial<Options> = !opts.resume
+      ? {}
+      : opts.resumeAt
+        ? { resume: opts.resume, resumeSessionAt: opts.resumeAt, forkSession: true }
+        : { resume: opts.resume }
     const options: Options = {
       cwd: opts.cwd,
       abortController: abort,
@@ -521,7 +579,7 @@ export class ClaudeCodeDriver implements AgentDriver {
       ...(opts.ultracode
         ? { settings: { ultracode: true, effortLevel: 'xhigh' } as Options['settings'] }
         : {}),
-      ...(opts.resume ? { resume: opts.resume } : {})
+      ...resumeOpts
     }
     // Remember the effort override so init reports the effective value.
     const effortOverride = opts.effort
@@ -548,7 +606,13 @@ export class ClaudeCodeDriver implements AgentDriver {
       effort: effortOverride,
       model: opts.model,
       ultracode: !!opts.ultracode,
-      shellTasks: new Set<string>()
+      shellTasks: new Set<string>(),
+      resumed: !!opts.resume,
+      // Ветка запомнила, откуда началась: если человек нажмёт Esc и здесь, до
+      // первого слова агента, отматывать будем к той же точке.
+      ...(opts.resume && opts.resumeAt
+        ? { forkBase: { sessionId: opts.resume, at: opts.resumeAt } }
+        : {})
     }
     this.sessions.set(requestId, session)
 
@@ -559,6 +623,12 @@ export class ClaudeCodeDriver implements AgentDriver {
   private async pump(requestId: string, session: Session): Promise<void> {
     try {
       for await (const msg of session.query as AsyncIterable<SDKMessage>) {
+        // Ход отменён (Esc над отправленным): всё, что сессия скажет дальше,
+        // относится к сообщению, которого в беседе больше нет — включая уже
+        // сочинённый ответ на него. Поток при этом дочитываем: оборвать цикл
+        // значило бы снять сессию с учёта в finally, и убить процесс при
+        // следующем ходе стало бы некому.
+        if (session.rewound) continue
         switch (msg.type) {
           case 'system':
             // Subagent telemetry. The SDK counts tokens, tool calls and duration
@@ -615,7 +685,7 @@ export class ClaudeCodeDriver implements AgentDriver {
             if (msg.subtype === 'init') {
               this.emit(requestId, {
                 type: 'init',
-                sessionId: msg.session_id,
+                sessionId: (session.claudeSessionId = msg.session_id),
                 model: msg.model,
                 cwd: msg.cwd,
                 permissionMode: msg.permissionMode,
@@ -632,8 +702,15 @@ export class ClaudeCodeDriver implements AgentDriver {
             break
 
           case 'rate_limit_event': {
-            const info = (msg as { rate_limit_info?: { utilization?: number; resetsAt?: number; rateLimitType?: string } })
-              .rate_limit_info
+            const info = (
+              msg as {
+                rate_limit_info?: {
+                  utilization?: number
+                  resetsAt?: number
+                  rateLimitType?: string
+                }
+              }
+            ).rate_limit_info
             if (info?.utilization !== undefined) {
               // SDKRateLimitInfo.utilization is already a 0-100 percentage (same
               // scale as the /usage endpoint) — no ×100. resetsAt is a Unix
@@ -663,9 +740,11 @@ export class ClaudeCodeDriver implements AgentDriver {
             // wave line summarises them: how many, how long, what they cost and
             // which tool each is on right now.
             if (msg.parent_tool_use_id) break
-            const content = mapAssistantContent(
-              (msg.message as { content?: unknown }).content
-            )
+            // Точка отмотки: продолжать беседу можно только с ответа агента —
+            // так требует resumeSessionAt.
+            const uuid = (msg as unknown as { uuid?: string }).uuid
+            if (uuid) session.lastAssistantUuid = uuid
+            const content = mapAssistantContent((msg.message as { content?: unknown }).content)
             if (content.length) this.emit(requestId, { type: 'assistant', content })
             break
           }
@@ -695,28 +774,38 @@ export class ClaudeCodeDriver implements AgentDriver {
             // The turn finished on its own, so the session is healthy again: a
             // later crash must be reported, not swallowed as «that Esc earlier».
             session.interrupted = false
-            const modelUsage = (msg as { modelUsage?: Record<string, { contextWindow?: number }> })
-              .modelUsage ?? {}
+            const modelUsage =
+              (msg as { modelUsage?: Record<string, { contextWindow?: number }> }).modelUsage ?? {}
             this.emit(requestId, {
               type: 'result',
               isError: msg.is_error,
               result: 'result' in msg ? msg.result : undefined,
               costUsd: 'total_cost_usd' in msg ? msg.total_cost_usd : undefined,
               numTurns: 'num_turns' in msg ? msg.num_turns : undefined,
-              sessionId: msg.session_id,
+              // Id живой сессии, а не тот, что назвал result. После ветки
+              // (forkSession) SDK возвращает здесь ИСХОДНУЮ сессию, и рендерер,
+              // поверив ей, возобновил бы на следующем ходу неотмотанную
+              // историю — вместе с отменённым сообщением. Что реально открыто,
+              // знает init.
+              sessionId: session.claudeSessionId ?? msg.session_id,
               models: Object.keys(modelUsage)
             })
             // Context-window fill: this turn's context tokens (fresh input + both
             // cache tiers) against the model's window, so the gauge reads how full
             // the conversation context is.
-            const u = (msg as {
-              usage?: {
-                input_tokens?: number
-                cache_read_input_tokens?: number
-                cache_creation_input_tokens?: number
+            const u = (
+              msg as {
+                usage?: {
+                  input_tokens?: number
+                  cache_read_input_tokens?: number
+                  cache_creation_input_tokens?: number
+                }
               }
-            }).usage
-            const ctxWindow = Math.max(0, ...Object.values(modelUsage).map((m) => m?.contextWindow ?? 0))
+            ).usage
+            const ctxWindow = Math.max(
+              0,
+              ...Object.values(modelUsage).map((m) => m?.contextWindow ?? 0)
+            )
             const ctxTokens =
               (u?.input_tokens ?? 0) +
               (u?.cache_read_input_tokens ?? 0) +
@@ -744,14 +833,16 @@ export class ClaudeCodeDriver implements AgentDriver {
     } catch (e) {
       // A process that exits because the user pressed Esc is not an error to
       // report — it is the thing they just asked for.
-      if (!session.abort.signal.aborted && !session.interrupted) {
+      if (!session.abort.signal.aborted && !session.interrupted && !session.rewound) {
         this.emit(requestId, {
           type: 'error',
           message: e instanceof Error ? e.message : String(e)
         })
       }
     } finally {
-      this.sessions.delete(requestId)
+      // Только СВОЮ запись: сессия, которую отменили и заменили, доживает
+      // асинхронно, и слепой delete снял бы с учёта уже новый процесс.
+      if (this.sessions.get(requestId) === session) this.sessions.delete(requestId)
       // Fail any still-pending permission prompts so the SDK isn't left hanging.
       for (const resolve of session.perms.values()) resolve(null)
       session.perms.clear()
@@ -760,6 +851,7 @@ export class ClaudeCodeDriver implements AgentDriver {
 
   /** Pull the /usage snapshot (subscription rate-limit windows) after a turn. */
   private async fetchUsage(requestId: string, session: Session): Promise<void> {
+    if (session.rewound) return
     try {
       const q = session.query as unknown as {
         usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET?: () => Promise<unknown>
@@ -768,7 +860,11 @@ export class ClaudeCodeDriver implements AgentDriver {
       if (typeof fn !== 'function') return
       const resp = await fn.call(session.query)
       const usage = usageFromResponse(resp)
-      if (usage.fiveHourPct !== undefined || usage.sevenDayPct !== undefined || usage.subscriptionType) {
+      if (
+        usage.fiveHourPct !== undefined ||
+        usage.sevenDayPct !== undefined ||
+        usage.subscriptionType
+      ) {
         this.emit(requestId, { type: 'usage', usage })
       }
     } catch {
@@ -882,6 +978,7 @@ export class ClaudeCodeDriver implements AgentDriver {
 
   /** Fetch the dynamic model catalog from a live session and emit it. */
   private async fetchModels(requestId: string, session: Session): Promise<void> {
+    if (session.rewound) return
     try {
       const q = session.query as unknown as {
         supportedModels?: () => Promise<Array<Record<string, unknown>>>
@@ -1031,6 +1128,46 @@ export class ClaudeCodeDriver implements AgentDriver {
       behavior: 'allow',
       updatedInput: { questions, answers: answer.answers }
     })
+  }
+
+  /**
+   * Отменить ОТПРАВЛЕННОЕ сообщение: прервать ход и запомнить, что следующий
+   * начнётся веткой от последнего ответа агента.
+   *
+   * Просто убрать сообщение из ленты было бы враньём: у агента оно осталось бы в
+   * контексте. SDK даёт настоящий механизм — `resumeSessionAt` обрезает историю
+   * по UUID ответа, `forkSession` уводит продолжение в новую ветку. Отменённое
+   * остаётся в файле мёртвой веткой и в контекст не попадает.
+   *
+   * Возвращает null, когда отматывать нечем — тогда рендерер обязан оставить
+   * сообщение в ленте: убрать с глаз то, что агент помнит, было бы враньём.
+   * Разбор случаев — общий для всех драйверов, см. {@link rewindPoint}.
+   */
+  rewindAfterInterrupt(requestId: string): AgentRewind | null {
+    const session = this.sessions.get(requestId)
+    if (!session) return null
+    const at = rewindPoint({
+      lastAssistantUuid: session.lastAssistantUuid,
+      sessionId: session.claudeSessionId,
+      forkBase: session.forkBase,
+      resumed: session.resumed
+    })
+    if (process.env.ZARYA_DEBUG) {
+      console.error(
+        '[claude-code] rewind',
+        JSON.stringify({
+          uuid: session.lastAssistantUuid,
+          sid: session.claudeSessionId,
+          forkBase: session.forkBase,
+          resumed: session.resumed,
+          at
+        })
+      )
+    }
+    if (!at) return null
+    session.rewound = true
+    this.interrupt(requestId)
+    return at
   }
 
   interrupt(requestId: string): void {
