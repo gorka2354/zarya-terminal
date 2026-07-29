@@ -515,3 +515,52 @@
   color: var(--accent-2);
   white-space: nowrap;
 }
+
+/* =====================================================================
+   Строка ввода ВНУТРИ панели (inc-17) и общая нижняя полоса окна.
+   ===================================================================== */
+
+/* Сцена панели: терминал и лента слоями, строка ввода — под ними. Без этого
+   контейнера лента (абсолютный слой на всю панель) накрывала бы строку. */
+.zy-pane-stage {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+/* В панели строка компактнее: место здесь дороже, чем на всю ширину окна. */
+.zy-pane .zy-agentbar {
+  border-top: 1px solid var(--border);
+  padding: 4px 6px;
+  gap: 4px;
+}
+.zy-pane .zy-agentbar-input {
+  min-height: 26px;
+}
+
+/* Общая полоса: только то, что принадлежит приложению, а не панели. */
+.zy-strip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px;
+  height: 26px;
+  flex: none;
+  border-top: 1px solid var(--border);
+  background: var(--panel);
+  font-size: 10px;
+  position: relative;
+}
+.zy-strip-spacer {
+  flex: 1;
+}
+/* Ждущая панель может быть той, куда вы сейчас не смотрите: невидимый вопрос —
+   это агент, вставший навсегда. */
+.zy-strip-waiting {
+  color: var(--accent);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}

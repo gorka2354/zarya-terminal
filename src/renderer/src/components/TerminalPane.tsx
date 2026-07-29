@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { XtermView } from '@/terminal/XtermView'
 import { MissionFeed } from './MissionFeed'
+import { AgentBar } from './AgentBar'
 import { getTerminal } from '@/terminal/terminalRegistry'
 import { useSessionsStore } from '@/state/sessionsStore'
 import { useSettingsStore } from '@/state/settingsStore'
@@ -92,13 +93,21 @@ export function TerminalPane({ sessionId, active, visible }: Props): React.JSX.E
       onContextMenu={onContextMenu}
     >
       <PaneHeader sessionId={sessionId} />
-      <XtermView sessionId={sessionId} active={active} visible={visible} />
+      {/* Сцена — терминал и лента в одном слоистом контейнере. Лента лежит
+          абсолютным слоем, и без этой обёртки она накрыла бы строку ввода
+          собой, как накрыла рамку панели. */}
+      <div className="zy-pane-stage">
+        <XtermView sessionId={sessionId} active={active} visible={visible} />
       {/* Лента живёт ВНУТРИ панели, а не поверх всей рабочей области. Раньше она
           была непрозрачным слоем на всё окно: в блочном режиме сплитов не было
           видно вообще — четыре панели существовали, но человек видел одну ленту.
           Слой позиционируется по .zy-pane (position: relative), заголовок панели
           остаётся над ним. */}
-      {!raw && <MissionFeed sessionId={sessionId} />}
+        {!raw && <MissionFeed sessionId={sessionId} />}
+      </div>
+      {/* Своя строка ввода: у каждой панели свой разговор, свой ввод и свой
+          статус — иначе это не CLI, а один разговор на четыре терминала. */}
+      {!raw && <AgentBar paneSessionId={sessionId} />}
       {searchOpenFor === sessionId && <TermSearchBar sessionId={sessionId} />}
       {menu}
     </div>

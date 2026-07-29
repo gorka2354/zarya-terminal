@@ -2,7 +2,7 @@ import { installKeyRouter } from '@/features/ai/keyRouter'
 import { useEffect, useRef, useState } from 'react'
 import { registerCoreActions } from '@/actions/coreActions'
 import { ActivityBar } from '@/components/ActivityBar'
-import { AgentBar } from '@/components/AgentBar'
+import { BottomStrip } from '@/components/BottomStrip'
 import { BlocksPanel } from '@/components/BlocksPanel'
 import { LaunchPad } from '@/components/LaunchPad'
 import { MissionFeed } from '@/components/MissionFeed'
@@ -220,9 +220,10 @@ function MainContent(): React.JSX.Element {
             </div>
           )}
         </div>
-        {/* Hidden in «Терминал» mode: a raw TUI (claude/vim/ssh) owns the input,
-            so a second bar here would be a confusing double input. */}
-        {!rawTerminal && <AgentBar />}
+        {/* Строка ввода живёт в КАЖДОЙ панели (TerminalPane). Внизу окна
+            остаётся только общее: топливомер подписки и счётчик панелей,
+            ждущих решения. */}
+        <BottomStrip />
       </div>
       {editorOpen && (
         <>

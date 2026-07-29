@@ -161,7 +161,7 @@ function fmtTokens(n?: number): string {
  * `used` is the utilization % (0-100); the tank shows the remaining fuel and
  * reddens as it empties.
  */
-function FuelGauge({ used }: { used: number }): React.JSX.Element {
+export function FuelGauge({ used }: { used: number }): React.JSX.Element {
   const remaining = Math.max(0, Math.min(100, 100 - used))
   const cells = Math.round((remaining / 100) * 10)
   const level = remaining > 40 ? 'ok' : remaining > 15 ? 'warn' : 'low'
@@ -203,7 +203,7 @@ function UsageRow({
  * Engines without a subscription gauge (Codex, the ACP ones) still get the
  * context row — it is universal — instead of an empty panel.
  */
-function UsagePanel({
+export function UsagePanel({
   usage,
   context,
   onClose,
@@ -1089,7 +1089,10 @@ ${prev}`
       )}
       {/* One headline figure, not four readings queued on a single line. The rest
           opens on demand — see UsagePanel. */}
-      <div className="zy-agentbar-fuel">
+      {/* Топливомер общий на окно и живёт в нижней полосе: четыре одинаковых
+          индикатора показывали бы одно и то же число, отнимая место у работы. */}
+      {!paneSessionId && (
+        <div className="zy-agentbar-fuel">
         <button
           ref={fuelBtnRef}
           className="zy-agentbar-fuel-main"
@@ -1144,10 +1147,15 @@ ${prev}`
                 : ''}
           </button>
         )}
-        <button className="zy-agentbar-fuel-pult" onClick={openLaunchPad} title="Пусковой комплекс">
-          пульт ▴
-        </button>
-      </div>
+          <button
+            className="zy-agentbar-fuel-pult"
+            onClick={openLaunchPad}
+            title="Пусковой комплекс"
+          >
+            пульт ▴
+          </button>
+        </div>
+      )}
 
       <div className="zy-agentbar-row">
         {/* Icon-only chips: the engine and the gate are permanent fixtures, and
