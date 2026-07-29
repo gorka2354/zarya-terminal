@@ -1035,8 +1035,13 @@ export const useAiStore = create<AiState>((set, get) => {
         m.content.some(
           (p) => p.type === 'text' && !p.text.startsWith('[Контекст:') && !!p.text.trim()
         )
+      // Помечать есть что, только если ход и правда шёл. Esc по уже законченной
+      // беседе прерывать нечего — а метку бы поставил: второй Esc сразу после
+      // отмены отправленного (первый ещё летит по IPC) вешал «прервано» на
+      // ПРЕДЫДУЩИЙ, честно отвеченный ход.
+      const wasRunning = conv.streaming || conv.pendingTools.length > 0
       let lastUser = -1
-      for (let i = conv.messages.length - 1; i >= 0; i--) {
+      for (let i = conv.messages.length - 1; wasRunning && i >= 0; i--) {
         if (isVisibleUserTurn(conv.messages[i])) {
           lastUser = i
           break

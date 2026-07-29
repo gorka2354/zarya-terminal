@@ -149,6 +149,25 @@ try {
   ok('прежний id сессии забыт', !conv2?.sessionId, conv2?.sessionId)
   ok('точки отмотки нет', !conv2?.resumeAt, conv2?.resumeAt)
 
+  console.log('\n[6] Два Esc подряд не вешают «прервано» на прошлый, отвеченный ход')
+  // Первый Esc ещё летит по IPC, когда приходит второй: беседа в этот момент
+  // выглядит нестримящей, и прежний abort ставил метку на ПРЕДЫДУЩИЙ ход —
+  // тот, на который агент честно ответил.
+  const id3 = await page.evaluate(() => window.__zaryaStartAgent?.('gemini', 'обычный вопрос'))
+  await page.waitForTimeout(1000)
+  await clearInput(page)
+  await page.keyboard.type('mute: и ещё одно')
+  await page.keyboard.press('Enter')
+  await page.waitForTimeout(400)
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(800)
+  const conv3 = await convById(page, id3)
+  const feed3 = await feedText(page)
+  ok('отменённого нет', !(conv3?.userTexts ?? []).some((t) => t.includes('и ещё одно')), conv3?.userTexts)
+  ok('прошлый ход не помечен «прервано»', !feed3.includes('прервано'), feed3.slice(-160))
+  ok('и он сам на месте', (conv3?.userTexts ?? []).some((t) => t.includes('обычный вопрос')))
+
   console.log(`\n[esc-rewind] PASS ${pass} · FAIL ${fail}`)
 } finally {
   await app.close()
