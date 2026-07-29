@@ -7,6 +7,7 @@ import { useUiStore } from '@/state/uiStore'
 import { getTerminal } from '@/terminal/terminalRegistry'
 import { convForSession, useAiStore } from '@/features/ai/aiStore'
 import { nextGate } from '@/features/ai/gates'
+import { registerPaneKeys } from '@/features/ai/keyRouter'
 import { Icon, EngineGlyph } from './Icon'
 import { PixelIcon } from './PixelIcon'
 import { isSilent, startRecording, type Recording } from '@/features/voice/dictation'
@@ -137,7 +138,12 @@ function resetLabel(ts?: number): string {
   // that — count in days once it stops being an afternoon away.
   if (h >= 24) {
     const d = Math.round(h / 24)
-    const tail = d % 10 === 1 && d % 100 !== 11 ? 'день' : d % 10 >= 2 && d % 10 <= 4 && (d % 100 < 10 || d % 100 >= 20) ? 'дня' : 'дней'
+    const tail =
+      d % 10 === 1 && d % 100 !== 11
+        ? 'день'
+        : d % 10 >= 2 && d % 10 <= 4 && (d % 100 < 10 || d % 100 >= 20)
+          ? 'дня'
+          : 'дней'
     return `${d} ${tail}`
   }
   return m ? `${h} ч ${m} мин` : `${h} ч`
@@ -243,7 +249,9 @@ function UsagePanel({
         key="5h"
         label="5 часов"
         pct={usage.fiveHourPct}
-        note={usage.fiveHourResetsAt ? `сброс через ${resetLabel(usage.fiveHourResetsAt)}` : undefined}
+        note={
+          usage.fiveHourResetsAt ? `сброс через ${resetLabel(usage.fiveHourResetsAt)}` : undefined
+        }
       />
     )
   if (usage?.sevenDayPct != null)
@@ -252,7 +260,9 @@ function UsagePanel({
         key="7d"
         label="7 дней"
         pct={usage.sevenDayPct}
-        note={usage.sevenDayResetsAt ? `сброс через ${resetLabel(usage.sevenDayResetsAt)}` : undefined}
+        note={
+          usage.sevenDayResetsAt ? `сброс через ${resetLabel(usage.sevenDayResetsAt)}` : undefined
+        }
       />
     )
   if (context.pct != null)
@@ -273,7 +283,9 @@ function UsagePanel({
     <div className="zy-usage-panel" ref={ref}>
       <div className="zy-usage-head">
         <span>РАСХОД</span>
-        {usage?.subscriptionType ? <span className="zy-usage-sub">{usage.subscriptionType}</span> : null}
+        {usage?.subscriptionType ? (
+          <span className="zy-usage-sub">{usage.subscriptionType}</span>
+        ) : null}
       </div>
       {rows.length ? (
         rows
@@ -330,117 +342,107 @@ export function AgentBar(): React.JSX.Element {
   const ref = useRef<HTMLTextAreaElement>(null)
 
   const activeSessionId = useSessionsStore((s) => s.activeSessionId())
+  /** Вернуть курсор в поле и поставить его в конец — после возврата текста из очереди или отмены. */
+  const focusInputEnd = (): void => {
+    requestAnimationFrame(() => {
+      const el = ref.current
+      if (!el) return
+      el.focus()
+      el.selectionStart = el.selectionEnd = el.value.length
+    })
+  }
   // The conversation belongs to the active terminal — each terminal its own chat.
   const activeConv = useAiStore((s) => convForSession(s, activeSessionId))
 
-  // Global keys (window-active, focus-independent): Esc interrupts the working
-  // agent; Enter/Esc approve/deny a pending tool. Skipped while an overlay owns
-  // Esc, in raw terminal mode, or during a pending choice (the choice bar owns it).
+  /**
+   * Клавиши своей панели. Строка ввода БОЛЬШЕ НЕ СЛУШАЕТ ОКНО: она заявляет свои
+   * обработчики диспетчеру (features/ai/keyRouter), и тот отдаёт нажатие ровно
+   * одному адресату. Пока строка одна, поведение прежнее; когда панелей станет
+   * несколько, один Enter перестанет одобрять команды сразу в нескольких.
+   */
   useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key !== 'Escape' && e.key !== 'Enter') return
-      // SECURITY: only a BARE Enter approves a gate. Once the input became a
-      // textarea, Shift/Ctrl+Enter meant «new line» — but this global listener
-      // still saw a plain Enter with the field empty and silently ran the
-      // pending tool. Approving something because the user asked for a line
-      // break is exactly the blind «yes» the gate exists to prevent.
-      if (e.key === 'Enter' && (e.shiftKey || e.ctrlKey || e.metaKey || e.altKey)) return
-      // Esc during dictation cancels the take. The tooltip promised this and
-      // nothing implemented it, so Esc fell through to interrupting the agent.
-      if (e.key === 'Escape' && recRef.current) {
-        e.preventDefault()
-        voiceCancelled.current = true
-        recRef.current.cancel()
-        recRef.current = null
-        setVoice('idle')
-        setVoiceLevel(0)
-        setVoiceNote('')
-        return
-      }
-      const ui = useUiStore.getState()
-      if (
-        ui.paletteOpen ||
-        ui.settingsOpen ||
-        ui.launchPadOpen ||
-        ui.quickOpenOpen ||
-        ui.historyOverlayOpen ||
-        ui.aiBarOpen ||
-        ui.rawTerminal
-      )
-        return
-      const sid = useSessionsStore.getState().activeSessionId()
-      const conv = convForSession(useAiStore.getState(), sid)
-      if (!conv) return
-      // A tool call awaiting approval: Enter (empty input) approves, Esc denies —
-      // CLI-style, no reaching for the mouse. Takes precedence over interrupt.
-      const pendingRun = nextGate(conv)
-      if (pendingRun) {
-        if (e.key === 'Escape') {
-          e.preventDefault()
-          useAiStore.getState().denyTool(conv.id, pendingRun.id)
-          return
+    const sid = activeSessionId
+    if (!sid) return
+    return registerPaneKeys(sid, {
+      onEscape: ({ overlayOpen }) => {
+        // 1. Идёт диктовка — Esc прекращает запись. Выше оверлеев: микрофон
+        //    слушает прямо сейчас, что бы ни было открыто.
+        if (recRef.current) {
+          voiceCancelled.current = true
+          recRef.current.cancel()
+          recRef.current = null
+          setVoice('idle')
+          setVoiceLevel(0)
+          setVoiceNote('')
+          return true
         }
+        if (overlayOpen) return false
+        const conv = convForSession(useAiStore.getState(), sid)
+        if (!conv) return false
+        // 2. Висит гейт — Esc отклоняет его.
+        const pendingRun = nextGate(conv)
+        if (pendingRun) {
+          useAiStore.getState().denyTool(conv.id, pendingRun.id)
+          return true
+        }
+        // 3. Непустая очередь — Esc забирает СВОЮ приписку обратно в строку и НЕ
+        //    трогает агента. Так устроен CLI: в транскриптах 103 из 103 случаев
+        //    `queue-operation: remove` идут без `[Request interrupted by user]`.
+        if (conv.queued) {
+          const q = useAiStore.getState().takeQueued(conv.id)
+          if (!q) return true
+          setHistIdx(-1)
+          setText((prev) =>
+            prev.trim()
+              ? `${q}
+${prev}`
+              : q
+          )
+          focusInputEnd()
+          return true
+        }
+        if (!conv.streaming) return false
+        if (conv.pendingTools.some((t) => t.kind === 'question' && !t.settled)) return false
+        // 4. Отмена ОТПРАВЛЕННОГО сообщения: уходит из ленты И из памяти агента,
+        //    текст возвращается в строку. Умеет только Claude Code; на остальных
+        //    движках undoSend вернёт null, и Esc остаётся прерыванием хода.
+        void useAiStore
+          .getState()
+          .undoSend(conv.id)
+          .then((text) => {
+            if (text === null) {
+              useAiStore.getState().abort(conv.id)
+              return
+            }
+            setHistIdx(-1)
+            setText((prev) =>
+              prev.trim()
+                ? `${text}
+${prev}`
+                : text
+            )
+            focusInputEnd()
+          })
+        return true
+      },
+      onEnter: () => {
+        const conv = convForSession(useAiStore.getState(), sid)
+        if (!conv) return false
+        const pendingRun = nextGate(conv)
+        if (!pendingRun) return false
+        // Одобряет только пустое поле и только когда курсор не в другом поле
+        // ввода: Enter в чужой форме не должен запускать инструмент.
         const ae = document.activeElement as HTMLElement | null
         const inOtherField =
           !!ae &&
           ae !== ref.current &&
           (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)
-        if (e.key === 'Enter' && !inOtherField && !ref.current?.value.trim()) {
-          e.preventDefault()
-          void useAiStore.getState().approveTool(conv.id, pendingRun.id)
-          return
-        }
+        if (inOtherField || ref.current?.value.trim()) return false
+        void useAiStore.getState().approveTool(conv.id, pendingRun.id)
+        return true
       }
-      if (e.key !== 'Escape') return
-      // Esc при непустой очереди забирает СВОЮ приписку обратно в строку и НЕ
-      // трогает агента. Так устроен CLI: в транскриптах пользователя 103 из 103
-      // случаев `queue-operation: remove` идут без `[Request interrupted by
-      // user]` — то есть отмена очереди и прерывание хода там не связаны.
-      // Раньше Заря на Esc прерывала агента, а очередь оставляла — и та уходила
-      // ему сама сразу после конца хода. Ровно наоборот тому, чего от Esc ждут.
-      if (conv.queued) {
-        e.preventDefault()
-        const q = useAiStore.getState().takeQueued(conv.id)
-        if (!q) return
-        setHistIdx(-1)
-        // Приписка была раньше черновика, поэтому встаёт перед ним.
-        setText((prev) => (prev.trim() ? `${q}\n${prev}` : q))
-        requestAnimationFrame(() => {
-          const el = ref.current
-          if (!el) return
-          el.focus()
-          el.selectionStart = el.selectionEnd = el.value.length
-        })
-        return
-      }
-      if (!conv.streaming) return
-      if (conv.pendingTools.some((t) => t.kind === 'question' && !t.settled)) return
-      e.preventDefault()
-      // Отмена ОТПРАВЛЕННОГО сообщения, если агент ещё не начал отвечать: оно
-      // уходит из ленты И из памяти агента, текст возвращается в строку — так
-      // делает CLI. Умеет это только Claude Code; на остальных движках undoSend
-      // вернёт null, и Esc остаётся обычным прерыванием.
-      void useAiStore
-        .getState()
-        .undoSend(conv.id)
-        .then((text) => {
-          if (text === null) {
-            useAiStore.getState().abort(conv.id)
-            return
-          }
-          setHistIdx(-1)
-          setText((prev) => (prev.trim() ? `${text}\n${prev}` : text))
-          requestAnimationFrame(() => {
-            const el = ref.current
-            if (!el) return
-            el.focus()
-            el.selectionStart = el.selectionEnd = el.value.length
-          })
-        })
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [])
+    })
+  }, [activeSessionId])
 
   // Auto-follow: when an agent conversation becomes active (selected, or you
   // start chatting), the bar switches to that engine's mode by itself — no
@@ -1096,8 +1098,11 @@ export function AgentBar(): React.JSX.Element {
         </button>
         <span className="zy-agentbar-fuel-spacer" />
         {showModel && (claudeStatus.model || claudeStatus.effort || ultracode) && (
-
-          <button className="zy-agentbar-fuel-model" onClick={openLaunchPad} title="Двигатель и тяга">
+          <button
+            className="zy-agentbar-fuel-model"
+            onClick={openLaunchPad}
+            title="Двигатель и тяга"
+          >
             {claudeStatus.model ? prettyModel(claudeStatus.model) : ''}
             {ultracode
               ? ' · ⚡ULTRACODE'
@@ -1138,9 +1143,7 @@ export function AgentBar(): React.JSX.Element {
             title={gateTitle}
             aria-label={gateOff ? 'Автопилот включён' : 'Ручное управление'}
             disabled={!canToggleGate}
-            onClick={
-              canToggleGate ? (isBuiltinMode ? toggleAutoApprove : toggleBypass) : undefined
-            }
+            onClick={canToggleGate ? (isBuiltinMode ? toggleAutoApprove : toggleBypass) : undefined}
           >
             {gateOff ? <Icon name="bolt" size={13} /> : <PixelIcon name="lock" />}
           </button>

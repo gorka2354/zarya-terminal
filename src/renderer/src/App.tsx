@@ -1,3 +1,4 @@
+import { installKeyRouter } from '@/features/ai/keyRouter'
 import { useEffect, useRef, useState } from 'react'
 import { registerCoreActions } from '@/actions/coreActions'
 import { ActivityBar } from '@/components/ActivityBar'
@@ -36,6 +37,9 @@ import { useUiStore } from '@/state/uiStore'
 import { useAiStore } from '@/features/ai/aiStore'
 
 export default function App(): React.JSX.Element {
+  // Единственный слушатель Esc/Enter на окно. Панели не слушают окно сами —
+  // иначе одно нажатие обслужат все, и один Enter одобрит несколько команд.
+  useEffect(() => installKeyRouter(), [])
   const [booted, setBooted] = useState(false)
   // QA-хук: открыть контекстное меню с заданными пунктами. Меню — общий
   // компонент, и его геометрия (влезает ли в окно, прокручивается ли длинный
@@ -102,7 +106,13 @@ export default function App(): React.JSX.Element {
     return (
       <div className="zy-splash">
         <div className="zy-splash-mark">
-          <img src={logoZarya} width={48} height={48} style={{ imageRendering: 'pixelated' }} alt="" />
+          <img
+            src={logoZarya}
+            width={48}
+            height={48}
+            style={{ imageRendering: 'pixelated' }}
+            alt=""
+          />
         </div>
         <div className="zy-splash-text">Заря · подготовка к старту</div>
       </div>
@@ -160,7 +170,12 @@ function Sidebar(): React.JSX.Element | null {
   if (!view) return null
   // Files/Workflows are IDE-only; fall back to Sessions if the IDE layer is off.
   const ideView = view === 'files' || view === 'workflows'
-  if (ideView && !ideMode) return <aside className="zy-sidebar"><SessionsPanel /></aside>
+  if (ideView && !ideMode)
+    return (
+      <aside className="zy-sidebar">
+        <SessionsPanel />
+      </aside>
+    )
   return (
     <aside className="zy-sidebar">
       {view === 'sessions' && <SessionsPanel />}
