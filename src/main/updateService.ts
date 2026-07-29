@@ -1,12 +1,13 @@
 import { get } from 'https'
 import { autoUpdater } from 'electron-updater'
-import { readdir, stat, unlink } from 'fs/promises'
+import { readFile, readdir, stat, unlink } from 'fs/promises'
 import { homedir } from 'os'
-import { join } from 'path'
+import { basename, join } from 'path'
 
 /** Каталог кеша обновлятора; значение из app-update.yml (updaterCacheDirName). */
 const UPDATER_CACHE_DIR = 'zarya-terminal-updater'
 import {
+  findSigAsset,
   findSumsAsset,
   latestReleaseApiUrl,
   parseRelease,
@@ -16,8 +17,10 @@ import {
   REPO,
   staleUpdaterFiles,
   type ReleaseInfo,
+  type ReleaseSignature,
   type UpdateState
 } from '@shared/updates'
+import { sha256Hex, verifyManifest } from './releaseSignature'
 
 /**
  * Проверка обновлений.
@@ -109,8 +112,11 @@ export class UpdateService {
         }
       })
     })
+    // 'update-downloaded' НЕ объявляет обновление готовым: файл ещё не сверен с
+    // подписанным списком сумм. Флаг ставит download() после проверки — иначе
+    // кнопка «Установить» загоралась бы на непроверенном файле.
     autoUpdater.on('update-downloaded', () => {
-      this.set({ downloading: undefined, downloaded: true, installError: undefined })
+      this.set({ downloading: undefined })
     })
     autoUpdater.on('error', (e) => {
       this.set({
@@ -150,7 +156,12 @@ export class UpdateService {
     try {
       const entries = await readdir(base, { recursive: true, withFileTypes: true })
       const files = entries.filter((e) => e.isFile())
-      const stale = new Set(staleUpdaterFiles(files.map((e) => e.name), this.currentVersion))
+      const stale = new Set(
+        staleUpdaterFiles(
+          files.map((e) => e.name),
+          this.currentVersion
+        )
+      )
       for (const e of files) {
         if (!stale.has(e.name)) continue
         const full = join(e.parentPath ?? base, e.name)
@@ -173,18 +184,42 @@ export class UpdateService {
   }
 
   /**
-   * Скачать обновление. Прогресс уезжает в состояние, целостность проверяет сам
-   * electron-updater по sha512 из latest.yml.
+   * Скачать обновление. Прогресс уезжает в состояние; целостность проверяется
+   * дважды: electron-updater сверяет sha512 из latest.yml (защита от битой
+   * закачки), а мы — sha256 из ПОДПИСАННОГО списка сумм (защита от подменённой
+   * сборки, которую latest.yml подтвердил бы сам себе).
    */
   async download(): Promise<UpdateState> {
     if (!this.state.canInstall) {
       this.set({ installError: 'эта сборка не умеет ставить обновление сама' })
       return this.state
     }
-    this.set({ installError: undefined, downloaded: false, downloading: { percent: 0, transferred: 0, total: 0 } })
+    // Без подписи ставить нечего: sha512 из latest.yml посчитал тот же CI, что и
+    // собрал, — при захвате сборки он будет валидным. Ручной путь со страницы
+    // релиза остаётся, но одним нажатием такое не ставим.
+    if (this.state.signature !== 'ok') {
+      this.set({
+        installError:
+          this.state.signature === 'bad'
+            ? 'подпись релиза не сходится — установка отменена, скачайте вручную со страницы релиза'
+            : 'релиз не подписан — установка одним нажатием недоступна, скачайте вручную со страницы релиза'
+      })
+      return this.state
+    }
+    this.set({
+      installError: undefined,
+      downloaded: false,
+      downloading: { percent: 0, transferred: 0, total: 0 }
+    })
     try {
       await autoUpdater.checkForUpdates()
-      await autoUpdater.downloadUpdate()
+      const files = await autoUpdater.downloadUpdate()
+      const bad = await this.mismatchedFile(files)
+      if (bad) {
+        this.set({ downloading: undefined, downloaded: false, installError: bad })
+        return this.state
+      }
+      this.set({ downloading: undefined, downloaded: true, installError: undefined })
     } catch (e) {
       this.set({
         downloading: undefined,
@@ -192,6 +227,47 @@ export class UpdateService {
       })
     }
     return this.state
+  }
+
+  /**
+   * Сверить скачанное с ПОДПИСАННЫМ списком сумм.
+   *
+   * Это и есть та единственная нить, по которой доверие доходит до файла на
+   * диске: подпись мейнтейнера → список сумм → sha256 установщика. Проверку
+   * electron-updater по sha512 из latest.yml она не заменяет, а достраивает:
+   * latest.yml пишет CI, и подтвердить он может только сам себя.
+   *
+   * Возвращает текст ошибки или undefined, если всё сошлось.
+   */
+  private async mismatchedFile(files: string[]): Promise<string | undefined> {
+    const sums = this.state.latest?.sums ?? {}
+    // Скачанного установщика может не оказаться в списке путей: разностное
+    // скачивание отдаёт .blockmap и промежуточные файлы. Проверяем те, что
+    // выглядят как сборка.
+    const installers = files.filter((f) => /\.(exe|appimage|deb|dmg|zip)$/i.test(f))
+    if (!installers.length) return 'не удалось понять, что скачалось — установка отменена'
+    for (const file of installers) {
+      const name = basename(file)
+      const want = sums[name]
+      if (!want) return `файла ${name} нет в подписанном списке — установка отменена`
+      let got: string
+      try {
+        got = sha256Hex(await readFile(file))
+      } catch {
+        return `не удалось прочитать скачанный файл ${name}`
+      }
+      if (got !== want) {
+        // Файл, не сошедшийся с подписанным списком, не должен остаться лежать
+        // рядом с настоящими: следующая установка не должна его подхватить.
+        try {
+          await unlink(file)
+        } catch {
+          /* не вышло — хотя бы не ставим */
+        }
+        return `контрольная сумма ${name} не совпала с подписанной — установка отменена`
+      }
+    }
+    return undefined
   }
 
   /**
@@ -257,17 +333,30 @@ export class UpdateService {
       this.set({ checking: false, checkedAt: Date.now(), error: 'релиз не распознан' })
       return this.state
     }
-    // Контрольные суммы — необязательная роскошь: нет файла или не скачался,
-    // релиз всё равно показываем, просто без хешей.
+    // Контрольные суммы — необязательная роскошь для ПОКАЗА: нет файла или не
+    // скачался, релиз всё равно показываем, просто без хешей. Но для установки
+    // одним нажатием они обязательны и обязаны быть подписаны — см. ниже.
     let sums: Record<string, string> = {}
+    let signature: ReleaseSignature = 'missing'
     const sumsAsset = findSumsAsset(rel.assets)
     if (sumsAsset) {
       const url = assetUrl(rel.tag, sumsAsset.name)
       if (url) {
         try {
-          sums = parseSha256Sums(await this.fetchText(url))
+          const text = await this.fetchText(url)
+          sums = parseSha256Sums(text)
+          // Подпись ставится ключом, которого нет в CI, поэтому её отсутствие —
+          // не сбой сети, а «релиз не подписали». Разница видна пользователю.
+          const sigAsset = findSigAsset(rel.assets)
+          let sigText: string | undefined
+          if (sigAsset) {
+            const sigUrl = assetUrl(rel.tag, sigAsset.name)
+            if (sigUrl) sigText = await this.fetchText(sigUrl)
+          }
+          signature = verifyManifest(text, sigText)
         } catch {
           sums = {}
+          signature = 'missing'
         }
       }
     }
@@ -276,6 +365,7 @@ export class UpdateService {
       checkedAt: Date.now(),
       error: undefined,
       latest: { ...rel, sums },
+      signature,
       updateAvailable: isNewer(this.currentVersion, rel.version)
     })
     return this.state

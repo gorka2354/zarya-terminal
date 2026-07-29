@@ -126,12 +126,24 @@ version exists. Behind it: a **«Что нового» page** with the release n
 with their sizes, and the **SHA256** of each so you can verify what you downloaded.
 Turn it off in Settings → О программе.
 
-Zarya never downloads or launches anything on its own. Builds are unsigned, and
-quietly running an unsigned installer would be worse than letting you fetch it
-deliberately. Every URL on that page is **built by the app** from a hardcoded repo
-constant and a validated tag — never taken from the API response — and links inside
-the release notes are rendered inert, because the only legitimate destinations are
-the ones Zarya constructs itself.
+Zarya never downloads or launches anything on its own. Every URL on that page is
+**built by the app** from a hardcoded repo constant and a validated tag — never
+taken from the API response — and links inside the release notes are rendered
+inert, because the only legitimate destinations are the ones Zarya constructs
+itself.
+
+One-click install is gated on a **release signature**. The checksum list of every
+release is signed with an Ed25519 key that lives on the maintainer's machine and
+is *not* in CI; the app carries the public half and refuses to self-install
+anything it cannot verify — signature over the checksum list, then sha256 of the
+downloaded installer against that list. Without it, the integrity chain would be
+CI vouching for CI: a compromised pipeline would produce a valid checksum for a
+compromised build, and with auto-update that is silent code execution on every
+machine. An unsigned release is still installable — by hand, from the release
+page, with the SHA256 shown next to each file. Note this is *not* Authenticode:
+the executables themselves carry no certificate, so SmartScreen still warns.
+Maintainer flow: `node scripts/gen-signing-key.mjs` once, then
+`node scripts/sign-release.mjs <version>` after every release.
 
 ### Blocks
 Every command becomes a distinct, navigable block — command, output, exit code and

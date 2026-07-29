@@ -140,8 +140,26 @@ export function parseSha256Sums(text: string): Record<string, string> {
 
 /** Файл с контрольными суммами среди ассетов релиза, если он приложен. */
 export function findSumsAsset(assets: ReleaseAsset[]): ReleaseAsset | undefined {
-  return assets.find((a) => /^SHA256SUMS/i.test(a.name))
+  // Рядом лежит одноимённый `.sig` — тоже на SHA256SUMS. Порядок ассетов задаёт
+  // GitHub, и без этой оговорки за список сумм можно принять файл подписи.
+  return assets.find((a) => /^SHA256SUMS/i.test(a.name) && !/\.sig$/i.test(a.name))
 }
+
+/** Подпись списка сумм — то, чего нет и не может быть у CI. */
+export function findSigAsset(assets: ReleaseAsset[]): ReleaseAsset | undefined {
+  return assets.find((a) => /^SHA256SUMS.*\.sig$/i.test(a.name))
+}
+
+/**
+ * Итог проверки подписи релиза.
+ *
+ * 'ok' — список сумм подписан ключом мейнтейнера; 'missing' — подписи к релизу
+ * нет; 'bad' — подпись есть, но не сходится. Разница видна пользователю: первое
+ * разрешает установку одним нажатием, остальные оставляют ручной путь. Само
+ * ключевое хозяйство живёт в main (src/main/releaseSignature.ts) — сюда вынесен
+ * только словарь, потому что состояние показывает рендерер.
+ */
+export type ReleaseSignature = 'ok' | 'missing' | 'bad'
 
 /**
  * Служебные файлы релиза — не для человека.
@@ -217,6 +235,12 @@ export interface UpdateState {
   downloading?: { percent: number; transferred: number; total: number }
   /** Файл скачан и проверен по sha512 — осталось перезапуститься. */
   downloaded: boolean
+  /**
+   * Подписан ли список контрольных сумм этого релиза (см. {@link ReleaseSignature}).
+   * Без валидной подписи приложение не ставит обновление само: хеш, посчитанный
+   * той же машиной, что и собрала, ничего не доказывает.
+   */
+  signature?: ReleaseSignature
   /** Скачивание или установка не удались. */
   installError?: string
   /** На какой системе мы работаем — чтобы показать нужный файл первым. */

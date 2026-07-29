@@ -180,6 +180,11 @@ export default function UpdateView(): React.JSX.Element | null {
   const close = (): void => useUiStore.getState().set({ updateOpen: false })
   const rel = state?.latest
   const busy = !!state?.downloading
+  // Подпись списка сумм ключом автора — единственное, что не может подделать
+  // сам сборочный конвейер. Нет её — ставить одним нажатием нельзя, но ручной
+  // путь со страницы релиза остаётся: это не блокировка, а отказ ручаться.
+  const signed = state?.signature === 'ok'
+  const selfInstall = !!state?.canInstall && signed
   const page = rel ? releasePageUrl(rel.tag) : null
   const { mine, others } = rel
     ? splitByPlatform(rel.assets, state?.platform ?? 'win32')
@@ -208,6 +213,13 @@ export default function UpdateView(): React.JSX.Element | null {
         <div className="zy-upd-body">
           {state?.installError && (
             <div className="zy-set-warning">Не удалось обновить: {state.installError}</div>
+          )}
+          {rel && state?.signature && !signed && (
+            <div className="zy-set-warning">
+              {state.signature === 'bad'
+                ? 'Подпись релиза не сходится с ключом автора. Так выглядела бы подмена файлов — Заря не станет ставить это сама.'
+                : 'У релиза нет подписи автора. Контрольные суммы считает та же машина, что и собирает, поэтому подтвердить ими нечего. Установка одним нажатием недоступна: скачайте файл вручную и сверьте SHA256.'}
+            </div>
           )}
           {!rel ? (
             <div className="zy-upd-empty">
@@ -275,22 +287,24 @@ export default function UpdateView(): React.JSX.Element | null {
 
         <footer className="zy-upd-foot">
           <span className="zy-upd-foot-note">
-            {state?.canInstall
-              ? 'Ничего не качается и не ставится в фоне. Целостность проверяется автоматически.'
-              : 'Эта сборка не умеет обновляться сама (переносимая версия, macOS или .deb) — скачайте файл и запустите установку. Рядом с файлом лежит SHA256 для сверки.'}
+            {!state?.canInstall
+              ? 'Эта сборка не умеет обновляться сама (переносимая версия, macOS или .deb) — скачайте файл и запустите установку. Рядом с файлом лежит SHA256 для сверки.'
+              : signed
+                ? 'Ничего не качается и не ставится в фоне. Подпись автора и контрольная сумма проверяются до установки.'
+                : 'Пока релиз не подписан автором, Заря его сама не поставит — скачайте файл и сверьте SHA256 руками.'}
           </span>
           <div className="zy-upd-spacer" />
           <button className="zy-btn" onClick={() => void check()} disabled={state?.checking || busy}>
             {state?.checking ? 'Проверяю…' : 'Проверить снова'}
           </button>
-          {rel && state?.canInstall && <InstallButton />}
+          {rel && selfInstall && <InstallButton />}
           {page && (
             <button
               // Акцент достаётся ровно одному действию. Когда приложение умеет
               // поставить обновление само, главное — «Установить»; страница
               // релиза становится второстепенной. Когда не умеет (macOS без
               // подписи), главным становится ручной путь.
-              className={`zy-btn${state?.canInstall ? '' : ' zy-btn--accent'}`}
+              className={`zy-btn${selfInstall ? '' : ' zy-btn--accent'}`}
               data-url={page}
               title={`Открыть ${page}`}
               onClick={() => window.zarya.app.openExternal(page)}

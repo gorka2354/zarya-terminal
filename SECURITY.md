@@ -119,6 +119,32 @@ itself does not.
   profile is re-validated when a terminal actually starts, not merely when it is
   stored. Auto-detected shells resolve to absolute paths for the same reason.
 
+## Updates and release signing
+
+Auto-update is the one place where the project executes its own code on your
+machine without you choosing a file. The integrity story therefore cannot rest on
+the build pipeline vouching for itself: `latest.yml` (sha512) and `SHA256SUMS` are
+both produced by the same CI run that produces the installer, so a compromised
+pipeline — a stolen token with tag-push rights, a poisoned dependency — would emit
+a perfectly valid checksum for a compromised build.
+
+- **Signed manifest.** The checksum list of each release is signed with an Ed25519
+  key held by the maintainer and deliberately absent from CI. The public half is
+  compiled into the app.
+- **Two checks before install.** The signature must verify over the checksum list
+  exactly as published, and the sha256 of the downloaded installer must match its
+  line in that signed list. A file that fails the second check is deleted rather
+  than left in the updater cache.
+- **Unsigned means manual, not blocked.** Without a valid signature the app says
+  so plainly and offers the release page; it does not pretend the release is
+  missing. Nothing is downloaded or installed in the background in any case.
+- **Not Authenticode.** The executables carry no code-signing certificate, so
+  SmartScreen and Gatekeeper still warn on a manual install. This mechanism
+  defends against a substituted *update*, not against that warning.
+- **Residual risk, stated plainly.** A compromise of the maintainer's machine
+  defeats this, because the key is there. So does a first install: signature
+  checking begins with the copy you already trust.
+
 ## Supported versions
 
 Zarya is pre-1.0. Security fixes land on the latest released version; there is no

@@ -148,6 +148,44 @@ try {
   ok('но адрес всё равно виден текстом', /evil.example/.test(bad.html), bad.html.slice(0, 160))
   if (shots) await page.screenshot({ path: join(shots, 'upd-2-hostile.png') })
 
+  console.log('\n[5] Установка одним нажатием — только для подписанного релиза')
+  // Подпись ставит мейнтейнер ключом, которого нет в CI. Без неё контрольные
+  // суммы подтверждает та же машина, что и собирает, — предлагать «Установить»
+  // на этом основании значит ручаться за то, чего не проверял.
+  const ui = async (signature) => {
+    await page.evaluate((s) => window.__zaryaSetUpdate?.(s), {
+      ...GOOD,
+      canInstall: true,
+      downloaded: false,
+      ...(signature ? { signature } : {})
+    })
+    await page.waitForTimeout(300)
+    return page.evaluate(() => ({
+      text: document.querySelector('.zy-upd')?.textContent ?? '',
+      buttons: [...document.querySelectorAll('.zy-upd-foot button')].map((b) => b.textContent),
+      accent: [...document.querySelectorAll('.zy-upd-foot button')]
+        .filter((b) => b.className.includes('accent'))
+        .map((b) => b.textContent),
+      warning: document.querySelector('.zy-set-warning')?.textContent ?? ''
+    }))
+  }
+
+  let v = await ui('ok')
+  ok('подписан → кнопка «Установить» есть', v.buttons.some((t) => t.includes('Установить')), v.buttons)
+  ok('подписан → предупреждения нет', !v.warning, v.warning)
+  ok('подписан → акцент на установке', v.accent.some((t) => t.includes('Установить')), v.accent)
+
+  v = await ui('missing')
+  ok('без подписи → кнопки «Установить» нет', !v.buttons.some((t) => t.includes('Установить')), v.buttons)
+  ok('без подписи → сказано почему', v.warning.includes('нет подписи'), v.warning)
+  ok('без подписи → ручной путь стал главным', v.accent.some((t) => t.includes('страницу релиза')), v.accent)
+  ok('без подписи → файл всё равно можно скачать руками', v.text.includes('Zarya-Setup-0.5.2-win-x64.exe'))
+
+  v = await ui('bad')
+  ok('подпись не сходится → кнопки «Установить» нет', !v.buttons.some((t) => t.includes('Установить')), v.buttons)
+  ok('подпись не сходится → сказано прямо', v.warning.includes('не сходится'), v.warning)
+  if (shots) await page.screenshot({ path: join(shots, 'upd-3-unsigned.png') })
+
   console.log(`\n[update-view] PASS ${pass} · FAIL ${fail}`)
 } finally {
   await app.close()

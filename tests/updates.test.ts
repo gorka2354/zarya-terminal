@@ -3,6 +3,7 @@ import {
   assetUrl,
   compareVersions,
   downloadableAssets,
+  findSigAsset,
   findSumsAsset,
   isNewer,
   latestReleaseApiUrl,
@@ -175,5 +176,21 @@ describe('раскладка ассетов', () => {
     expect(downloadableAssets(assets).map((a) => a.name)).toEqual([
       'Zarya-Setup-0.5.1-win-x64.exe'
     ])
+  })
+
+  it('подпись не путается со списком сумм', () => {
+    // Оба файла начинаются на SHA256SUMS, порядок ассетов задаёт GitHub. Принять
+    // подпись за список — значит проверять её саму собой и ничего не проверить.
+    const withSig = [{ name: 'SHA256SUMS-0.5.1.txt.sig', size: 89 }, ...assets]
+    expect(findSumsAsset(withSig)?.name).toBe('SHA256SUMS-0.5.1.txt')
+    expect(findSigAsset(withSig)?.name).toBe('SHA256SUMS-0.5.1.txt.sig')
+    // И то и другое — служебное: в списке файлов для человека их быть не должно.
+    expect(downloadableAssets(withSig).map((a) => a.name)).toEqual([
+      'Zarya-Setup-0.5.1-win-x64.exe'
+    ])
+  })
+
+  it('подписи нет — так и говорим', () => {
+    expect(findSigAsset(assets)).toBeUndefined()
   })
 })
