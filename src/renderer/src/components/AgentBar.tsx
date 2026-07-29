@@ -11,6 +11,7 @@ import { registerPaneKeys } from '@/features/ai/keyRouter'
 import { Icon, EngineGlyph } from './Icon'
 import { PixelIcon } from './PixelIcon'
 import { isSilent, startRecording, type Recording } from '@/features/voice/dictation'
+import { claimMic, releaseMic, useMicBusyElsewhere } from '@/features/voice/micLock'
 import {
   labelsHidden,
   listMics,
@@ -360,6 +361,9 @@ export function AgentBar(): React.JSX.Element {
     activeSessionId ? !!s.bypassBySession[activeSessionId] : false
   )
   const bypass = activeConv ? !!activeConv.bypass : paneBypass
+  // Микрофон занят другой панелью — кнопка обязана это сказать, а не молчать и
+  // не начинать вторую запись.
+  const micBusy = useMicBusyElsewhere(activeSessionId)
 
   /**
    * Клавиши своей панели. Строка ввода БОЛЬШЕ НЕ СЛУШАЕТ ОКНО: она заявляет свои
@@ -378,6 +382,7 @@ export function AgentBar(): React.JSX.Element {
           voiceCancelled.current = true
           recRef.current.cancel()
           recRef.current = null
+          releaseMic(sid)
           setVoice('idle')
           setVoiceLevel(0)
           setVoiceNote('')
@@ -631,6 +636,10 @@ ${prev}`
     const rec = recRef.current
     if (!rec) return
     recRef.current = null
+    // Микрофон свободен, как только устройство закрыто: расшифровка идёт уже без
+    // него, и держать замок на время распознавания значило бы запирать соседние
+    // панели просто так.
+    releaseMic(activeSessionId)
     setVoiceLevel(0)
     const { samples, sampleRate } = await rec.stop()
     if (isSilent(samples)) {
@@ -658,6 +667,13 @@ ${prev}`
 
   const startVoice = async (): Promise<void> => {
     if (recRef.current || voice !== 'idle') return
+    // Микрофон один на машину. Замок на всё приложение, а не внутри строки:
+    // строк станет столько же, сколько панелей, и каждая проходила бы СВОЮ
+    // защиту — четыре записи одной фразы и четыре расшифровки.
+    if (!activeSessionId || !claimMic(activeSessionId)) {
+      useUiStore.getState().toast('Микрофон занят другой панелью', 'error')
+      return
+    }
     // Claim the slot BEFORE the first await. Two entry points can fire almost
     // together (button click and the push-to-talk key), and both would pass the
     // guard above while awaiting — opening two microphones and orphaning the
@@ -723,6 +739,7 @@ ${prev}`
         onDeviceLost: () => {
           lost = true
           recRef.current = null
+          releaseMic(activeSessionId)
           setVoice('idle')
           setVoiceLevel(0)
           useUiStore.getState().toast('Микрофон отключён — запись прервана', 'error')
@@ -733,6 +750,7 @@ ${prev}`
       // открытым навсегда, а кнопки, которой это можно прекратить, уже нет.
       if (!aliveRef.current) {
         rec.cancel()
+        releaseMic(activeSessionId)
         return
       }
       // Someone cancelled while getUserMedia was resolving — release the device
@@ -740,12 +758,14 @@ ${prev}`
       if (voiceCancelled.current) {
         rec.cancel()
         voiceCancelled.current = false
+        releaseMic(activeSessionId)
         setVoice('idle')
         return
       }
       // Устройство успело отвалиться, пока промис резолвился: держать мёртвую
       // запись в recRef — значит показывать индикатор над закрытым микрофоном.
       if (lost) {
+        releaseMic(activeSessionId)
         setVoice('idle')
         return
       }
@@ -1170,7 +1190,9 @@ ${prev}`
                 ? 'Загружается модель распознавания'
                 : voice === 'work'
                   ? 'Распознаю…'
-                  : `Диктовка: нажми или удерживай Ctrl+Shift+Space. Текст попадёт в строку, отправишь сам\nМикрофон: ${micLabel} · ПКМ — выбрать`
+                  : micBusy
+                    ? 'Микрофон занят другой панелью — закончи запись там'
+                    : `Диктовка: нажми или удерживай Ctrl+Shift+Space. Текст попадёт в строку, отправишь сам\nМикрофон: ${micLabel} · ПКМ — выбрать`
           }
           aria-label="Диктовка"
           onClick={() => (voice === 'rec' ? void finishVoice() : void startVoice())}
