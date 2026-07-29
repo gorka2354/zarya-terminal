@@ -58,8 +58,16 @@ export function TerminalPane({ sessionId, active, visible }: Props): React.JSX.E
         onClick: () => handle?.term.clear()
       },
       { separator: true },
-      { label: 'Разделить вправо', hint: 'Ctrl+Shift+D', onClick: () => void store.splitActive('row') },
-      { label: 'Разделить вниз', hint: 'Ctrl+Shift+S', onClick: () => void store.splitActive('col') },
+      {
+        label: 'Разделить вправо',
+        hint: 'Ctrl+Shift+D',
+        onClick: () => void store.splitActive('row')
+      },
+      {
+        label: 'Разделить вниз',
+        hint: 'Ctrl+Shift+S',
+        onClick: () => void store.splitActive('col')
+      },
       { separator: true },
       {
         label: 'Закрыть панель',
@@ -72,6 +80,10 @@ export function TerminalPane({ sessionId, active, visible }: Props): React.JSX.E
   return (
     <div
       className={`zy-pane${active ? ' zy-pane--focused' : multiPane ? ' zy-pane--dim' : ''}`}
+      // Рамка и адресат клавиш — ОДНА величина: активная сессия вкладки. Если
+      // однажды они разойдутся, рамка начнёт врать о том, куда уйдёт Enter, —
+      // а это одобрение запуска команды (см. features/ai/keyRouter).
+      title={multiPane && active ? 'Активная панель — сюда уходят Enter и Esc' : undefined}
       onMouseDown={() => {
         if (!active) store.setActiveSession(sessionId)
       }}
@@ -159,7 +171,9 @@ function PaneHeader({ sessionId }: { sessionId: string }): React.JSX.Element {
           className={`zy-icon-btn${searchOpenFor === sessionId ? ' zy-icon-btn--active' : ''}`}
           title="Найти в терминале"
           onClick={() =>
-            useUiStore.getState().set({ searchOpenFor: searchOpenFor === sessionId ? null : sessionId })
+            useUiStore
+              .getState()
+              .set({ searchOpenFor: searchOpenFor === sessionId ? null : sessionId })
           }
         >
           <Icon name="search" size={13} />
@@ -186,7 +200,9 @@ function TermSearchBar({ sessionId }: { sessionId: string }): React.JSX.Element 
   const find = (dir: 1 | -1): void => {
     const handle = getTerminal(sessionId)
     if (!handle || !query) return
-    const opts = { decorations: { matchOverviewRuler: '#ff8a4c', activeMatchColorOverviewRuler: '#ffb86b' } }
+    const opts = {
+      decorations: { matchOverviewRuler: '#ff8a4c', activeMatchColorOverviewRuler: '#ffb86b' }
+    }
     if (dir === 1) handle.search.findNext(query, opts)
     else handle.search.findPrevious(query, opts)
   }

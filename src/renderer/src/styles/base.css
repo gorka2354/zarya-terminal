@@ -806,11 +806,26 @@ body {
   background: var(--term-bg);
   border: 1px solid transparent;
 }
+/**
+ * Активная панель — та, которой достаются Enter и Esc (features/ai/keyRouter).
+ * Рамка обязана быть однозначной: от неё зависит, куда уйдёт одобрение запуска
+ * команды. Прежние 35% прозрачности на один пиксель читались как «нет рамки».
+ *
+ * Толщина набирается внутренней тенью, а не border-width: иначе панель бы
+ * дёргалась на пиксель при каждой смене фокуса.
+ */
 .zy-pane--focused {
-  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 72%, transparent);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 34%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent);
 }
+/* Неактивные приглушены — глаз находит рабочую панель, не читая заголовков. */
 .zy-pane--dim .zy-term-wrap {
-  opacity: 0.75;
+  opacity: 0.62;
+}
+.zy-pane--dim:hover .zy-term-wrap {
+  opacity: 0.82;
 }
 
 .zy-term-wrap {
