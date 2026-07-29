@@ -195,8 +195,15 @@ export interface AiSettings {
   claudeModel: string
   /** Claude Code effort override ('' = account default). */
   claudeEffort: string
-  /** Auto-approve tool calls without prompting (canUseTool auto-allow; AskUserQuestion still surfaces). */
-  claudeBypass: boolean
+  /**
+   * АВТОПИЛОТ здесь БОЛЬШЕ НЕ ЖИВЁТ (inc-17): он стал свойством беседы.
+   *
+   * Одна настройка на окно с несколькими панелями неизбежно врёт: выключаешь её,
+   * глядя на одну панель, — гаснут чипы во всех, а работающий агент в третьей
+   * продолжает выполнять команды сам. Поэтому решение принимается для каждой
+   * беседы отдельно (Conversation.bypass), новая панель всегда открывается со
+   * спрашиванием, и наследовать автопилот неоткуда.
+   */
 }
 
 /** Диктовка: какой микрофон слушать. Распознавание всегда локальное. */

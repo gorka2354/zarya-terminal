@@ -116,6 +116,13 @@ export interface Conversation {
   subagents?: Record<string, SubagentRun>
   /** Working directory the conversation was opened in (folder the AI worked in). */
   cwd?: string
+  /**
+   * АВТОПИЛОТ этой беседы: агент выполняет инструменты, не спрашивая. Своё у
+   * каждой панели — общий переключатель с четырьмя панелями неизбежно врал бы о
+   * том, спросят ли вас. Не сохраняется на диск намеренно: перезапуск должен
+   * возвращать спрашивание, а не тихо взводить автопилот заново.
+   */
+  bypass?: boolean
   agentMode: boolean
   /** True only while an ai.chat request is in flight (between dispatch and done/error). */
   streaming: boolean
@@ -170,6 +177,15 @@ interface AiState {
   activeBySession: Record<string, string>
   /** Session id remembered for the inline command bar (set by aiBridge.openCommandBar). */
   commandBarSessionId: string | null
+  /**
+   * АВТОПИЛОТ, выбранный для ПАНЕЛИ. Беседа появляется только с первым
+   * сообщением, а чип стоит в строке сразу — без этой памяти он до первой
+   * отправки молча ничего не делал бы, то есть был бы мёртвым переключателем.
+   * Панели, которой здесь нет, автопилот не достаётся: новая всегда спрашивает,
+   * наследовать от соседней неоткуда. На диск не пишется намеренно — перезапуск
+   * возвращает спрашивание.
+   */
+  bypassBySession: Record<string, boolean>
 
   /** Load persisted conversations from disk (call once at boot, after sessions). */
   hydrate: () => Promise<void>
@@ -193,6 +209,17 @@ interface AiState {
    * или null, если отменить нечего или движок так не умеет.
    */
   undoSend: (conversationId?: string) => Promise<string | null>
+  /**
+   * Включить/выключить АВТОПИЛОТ у ОДНОЙ беседы: и в сторе, и в живой сессии
+   * драйвера. Соседние панели это не касается.
+   */
+  setBypass: (conversationId: string, on: boolean) => void
+  /**
+   * То же для панели, в которой беседы ещё нет: выбор запоминается и достаётся
+   * первой же беседе этой панели.
+   */
+  setPaneBypass: (sessionId: string, on: boolean) => void
+
   /** Approve a pending tool by id (defaults to the first unsettled one). */
   approveTool: (conversationId?: string, toolId?: string) => Promise<void>
   /** Deny a pending tool by id (defaults to the first unsettled one). */
@@ -554,7 +581,7 @@ export const useAiStore = create<AiState>((set, get) => {
       // SECURITY: permissionMode is always 'default' and gate-weakening comes only
       // from АВТОПИЛОТ — see nativeGateOpts, which owns that invariant and is
       // guarded by tests/startOpts.test.ts.
-      ...nativeGateOpts(settings.ai),
+      ...nativeGateOpts(settings.ai, conv.bypass),
       ultracode: useUiStore.getState().ultracode,
       model: settings.ai.claudeModel || undefined,
       // Ultracode forces xhigh; otherwise use the user's effort override.
@@ -875,6 +902,7 @@ export const useAiStore = create<AiState>((set, get) => {
     activeId: null,
     activeBySession: {},
     commandBarSessionId: null,
+  bypassBySession: {},
 
     hydrate: async () => {
       const saved = await window.zarya.aiConversations.load()
@@ -931,6 +959,8 @@ export const useAiStore = create<AiState>((set, get) => {
         cwd,
         // A native agent engine drives its own agentic tool loop — agent mode implicit.
         agentMode: (opts?.engine ?? 'builtin') !== 'builtin',
+        // Автопилот — из намерения ЭТОЙ панели, а не из настроек и не от соседа.
+        bypass: opts?.sessionId ? get().bypassBySession[opts.sessionId] : undefined,
         streaming: false,
         pendingTools: [],
         pendingContext: [],
@@ -1103,6 +1133,25 @@ export const useAiStore = create<AiState>((set, get) => {
         interrupted: (c.interrupted ?? []).filter((i) => i < c.messages.length - 1)
       }))
       return text
+    },
+
+    setPaneBypass: (sessionId, on) => {
+      set((s) => ({ bypassBySession: { ...s.bypassBySession, [sessionId]: on } }))
+      // Если беседа в этой панели уже есть — применить и к ней.
+      const conv = convForSession(get(), sessionId)
+      if (conv) get().setBypass(conv.id, on)
+    },
+
+    setBypass: (conversationId, on) => {
+      const conv = get().conversations.find((c) => c.id === conversationId)
+      if (!conv) return
+      patchConversation(conv.id, (c) => ({ ...c, bypass: on }))
+      // Запомнить за панелью: следующая беседа в ней откроется с тем же выбором,
+      // а соседних панелей это не касается.
+      if (conv.sessionId)
+        set((s) => ({ bypassBySession: { ...s.bypassBySession, [conv.sessionId as string]: on } }))
+      // Живой сессии — сразу: следующий инструмент не должен ждать нового хода.
+      if (conv.engine !== 'builtin') window.zarya.agent.setBypass(conv.engine, conv.id, on)
     },
 
     approveTool: async (conversationId, toolId) => {
@@ -1446,10 +1495,13 @@ onBus('terminal:focus', ({ sessionId }) => {
   if (c) useAiStore.getState().queueMessage(c.id, t)
 }
 ;(window as unknown as { __zaryaBypassLive?: (on: boolean) => void }).__zaryaBypassLive = (on) => {
-  const cur = getSettings().ai
-  void useSettingsStore.getState().update({ ai: { ...cur, claudeBypass: on } })
   const c = useAiStore.getState().activeConversation()
-  if (c && c.engine !== 'builtin') window.zarya.agent.setBypass(c.engine, c.id, on)
+  if (c) {
+    useAiStore.getState().setBypass(c.id, on)
+    return
+  }
+  const sid = useSessionsStore.getState().activeSessionId()
+  if (sid) useAiStore.getState().setPaneBypass(sid, on)
 }
 ;(window as unknown as { __zaryaApplyModelLive?: (model: string) => void }).__zaryaApplyModelLive =
   (model) => {
@@ -1468,10 +1520,13 @@ onBus('terminal:focus', ({ sessionId }) => {
     ai: {
       ...cur,
       claudeModel: model ?? cur.claudeModel,
-      claudeEffort: effort ?? cur.claudeEffort,
-      claudeBypass: bypass ?? cur.claudeBypass
+      claudeEffort: effort ?? cur.claudeEffort
     }
   })
+  if (bypass !== undefined) {
+    const c = useAiStore.getState().activeConversation()
+    if (c) useAiStore.getState().setBypass(c.id, bypass)
+  }
 }
 ;(window as unknown as { __zaryaApproveFirst?: () => void }).__zaryaApproveFirst = () => {
   const c = useAiStore.getState().activeConversation()

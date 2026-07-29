@@ -73,8 +73,7 @@ export const DEFAULT_SETTINGS: Settings = {
     contextBlocks: 3,
     systemPromptExtra: '',
     claudeModel: '',
-    claudeEffort: '',
-    claudeBypass: false
+    claudeEffort: ''
   },
   voice: {
     // Пусто = системное устройство. Дефолт именно такой, а не «первый в

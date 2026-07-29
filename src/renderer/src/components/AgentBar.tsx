@@ -312,7 +312,6 @@ export function AgentBar(): React.JSX.Element {
   const claudeStatus = useUiStore((s) => s.claudeStatus)
   const agentContext = useUiStore((s) => s.agentContext)
   const ultracode = useUiStore((s) => s.ultracode)
-  const bypass = useSettingsStore((s) => s.settings.ai.claudeBypass)
   const autoApprove = useSettingsStore((s) => s.settings.ai.autoApprove)
   const agentCaps = useUiStore((s) => s.agentCaps)
   // The native engine the bar currently targets (null in shell/zarya) + its
@@ -353,6 +352,14 @@ export function AgentBar(): React.JSX.Element {
   }
   // The conversation belongs to the active terminal — each terminal its own chat.
   const activeConv = useAiStore((s) => convForSession(s, activeSessionId))
+  // АВТОПИЛОТ показывается по СВОЕЙ беседе: общий переключатель с несколькими
+  // панелями врал бы о том, спросят ли вас.
+  // Хук вызывается всегда и безусловно: под условием React рвёт порядок хуков,
+  // компонент падает — и строки ввода не остаётся вовсе.
+  const paneBypass = useAiStore((s) =>
+    activeSessionId ? !!s.bypassBySession[activeSessionId] : false
+  )
+  const bypass = activeConv ? !!activeConv.bypass : paneBypass
 
   /**
    * Клавиши своей панели. Строка ввода БОЛЬШЕ НЕ СЛУШАЕТ ОКНО: она заявляет свои
@@ -600,9 +607,11 @@ ${prev}`
 
   const toggleBypass = (): void => {
     const next = !bypass
-    void useSettingsStore.getState().update({ ai: { claudeBypass: next } as never })
-    if (activeConv && activeConv.engine !== 'builtin')
-      window.zarya.agent.setBypass(activeConv.engine, activeConv.id, next)
+    // Беседа появляется только с первым сообщением, а решение принимается
+    // сейчас: запоминаем за панелью, чтобы чип не был мёртвым до отправки.
+    if (activeConv) useAiStore.getState().setBypass(activeConv.id, next)
+    else if (activeSessionId) useAiStore.getState().setPaneBypass(activeSessionId, next)
+    else return
     useUiStore
       .getState()
       .toast(
@@ -1015,7 +1024,7 @@ ${prev}`
   //
   // `caps === undefined` means «not loaded yet», NOT «cannot bypass»: capabilities
   // arrive from one async IPC that waits on every driver's probe, and until it
-  // lands a turn still goes out with `bypass: ai.claudeBypass` (dispatchAgent).
+  // lands a turn still goes out with the conversation's own `bypass`.
   // Collapsing unknown into false made the chip claim «always asks» while the
   // driver was auto-allowing — the exact lie it exists to prevent. Lock it only
   // on an explicit bypass:false.
