@@ -8,7 +8,7 @@ import { LaunchPad } from '@/components/LaunchPad'
 import { MissionFeed } from '@/components/MissionFeed'
 import { StarBackdrop } from '@/components/StarBackdrop'
 import { SessionsPanel } from '@/components/SessionsPanel'
-import { SplitLayout } from '@/components/SplitLayout'
+import { PanesHost } from '@/components/SplitLayout'
 import { StatusBar } from '@/components/StatusBar'
 import { Titlebar } from '@/components/Titlebar'
 import { Toasts } from '@/components/Toasts'
@@ -187,11 +187,9 @@ function Sidebar(): React.JSX.Element | null {
 }
 
 function MainContent(): React.JSX.Element {
-  const tabs = useSessionsStore((s) => s.tabs)
-  const activeTabId = useSessionsStore((s) => s.activeTabId)
   const activeSessionId = useSessionsStore((s) => s.activeSessionId())
-  // Пока лента одна на окно, она смотрит на режим АКТИВНОЙ панели. Когда лента
-  // переедет внутрь панели (этап 3), каждая будет читать свой.
+  // Сырой режим — по панели; здесь читается режим АКТИВНОЙ, потому что от него
+  // зависит только фон рабочей области.
   const rawTerminal = useUiStore((s) => isRaw(s, activeSessionId))
   const ideMode = useSettingsStore((s) => s.settings.ideMode)
   const editorFiles = useEditorStore((s) => s.files)
@@ -208,9 +206,10 @@ function MainContent(): React.JSX.Element {
               in «Блоки» mode it sits behind the opaque mission-feed overlay and
               is display-only. */}
           <div className={`zy-engine-host${rawTerminal ? ' zy-engine-host--raw' : ''}`}>
-            {tabs.map((tab) => (
-              <SplitLayout key={tab.id} tab={tab} visible={tab.id === activeTabId} />
-            ))}
+            {/* Все панели всех вкладок — одним плоским списком: место панели в
+                разметке больше не зависит от раскладки, и перестройка дерева не
+                пересоздаёт терминал (см. SplitLayout / paneTree). */}
+            <PanesHost />
           </div>
           {/* Лента теперь рисуется КАЖДОЙ панелью (TerminalPane): иначе четыре
               панели показывали бы один разговор, а сплиты были бы не видны. */}

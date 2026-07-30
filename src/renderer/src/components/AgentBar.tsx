@@ -3,6 +3,7 @@ import type { AgentEngine, AgentUsage, AiEffort, ClaudeCliQuestion } from '@shar
 import { EFFORT_TUNING } from '@shared/defaults'
 import { useSessionsStore } from '@/state/sessionsStore'
 import { useSettingsStore } from '@/state/settingsStore'
+import { paneDraft, setPaneDraft } from '@/state/paneDrafts'
 import { setRaw, useUiStore } from '@/state/uiStore'
 import { getTerminal } from '@/terminal/terminalRegistry'
 import { convForSession, useAiStore } from '@/features/ai/aiStore'
@@ -323,7 +324,9 @@ export function AgentBar({ paneSessionId }: { paneSessionId?: string } = {}): Re
   // capabilities — the UI gates controls on these, not on `=== 'claude-code'`.
   const activeEngine: AgentEngine | null = mode !== 'shell' && mode !== 'zarya' ? mode : null
   const caps = activeEngine ? agentCaps[activeEngine] : null
-  const [text, setText] = useState('')
+  // Начальное значение — черновик своей панели: строка могла уйти с экрана
+  // (сырой режим, TUI) и вернуться, и набранное обязано вернуться вместе с ней.
+  const [text, setText] = useState(() => paneDraft(paneSessionId))
   const [usageOpen, setUsageOpen] = useState(false)
   /** Кнопка топливной строки — она же открывашка панели расхода. */
   const fuelBtnRef = useRef<HTMLButtonElement>(null)
@@ -1006,6 +1009,20 @@ ${prev}`
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voice])
 
+  // Отзеркалить набранное: закрытие панели приходит снаружи (крестик в сайдбаре,
+  // пункт меню) и обязано знать, теряется ли при этом текст. Строка ввода
+  // остаётся владельцем текста — сюда уходит только копия для вопроса.
+  //
+  // Черновик переживает УХОД СТРОКИ С ЭКРАНА. Запуск vim, htop или любой
+  // команды из списка интерактивных сам включает сырой режим, строка при этом
+  // размонтируется — и набранный запрос исчезал вместе с ней, без вопроса и
+  // следа. Теперь текст возвращается на место, когда программа закрылась
+  // (начальное значение поля берётся отсюда же). Забывает его только закрытие
+  // панели.
+  useEffect(() => {
+    setPaneDraft(activeSessionId, text)
+  }, [activeSessionId, text])
+
   // Grow the field with its content instead of scrolling a one-line box —
   // capped so a pasted wall of text can't eat the window.
   useEffect(() => {
@@ -1029,10 +1046,18 @@ ${prev}`
   }, [])
 
   // Push-to-talk: hold the key, speak, release. Ignored while typing in a field.
+  //
+  // Слушают ОКНО все смонтированные строки — по одной на панель, включая панели
+  // неактивных вкладок. Поэтому первым делом каждая проверяет, ей ли адресовано
+  // нажатие: без этого на четырёх панелях один хоткей открывал микрофон в той,
+  // что смонтирована первой, расшифровка уезжала в чужую строку, а остальные
+  // три выдавали красное «микрофон занят другой панелью».
   useEffect(() => {
     const isHotkey = (e: KeyboardEvent): boolean => e.ctrlKey && e.shiftKey && e.code === 'Space'
+    const mine = (): boolean =>
+      !paneSessionId || useSessionsStore.getState().activeSessionId() === paneSessionId
     const down = (e: KeyboardEvent): void => {
-      if (!isHotkey(e) || e.repeat) return
+      if (!isHotkey(e) || e.repeat || !mine()) return
       e.preventDefault()
       pttRef.current = true
       void startVoice()
@@ -1351,7 +1376,12 @@ ${prev}`
           placeholder={
             busyConv && mode !== 'shell'
               ? 'Агент работает — Enter поставит в очередь · Esc прервать · ↑ править'
-              : MODE_PLACEHOLDER[mode]
+              : paneSessionId
+                ? // В панели места вчетверо меньше, и приписка «(Enter — выполнить)»
+                  // не влезала: подсказка обрывалась на полуслове. Что делает Enter,
+                  // написано на кнопке отправки и на чипе режима.
+                  MODE_PLACEHOLDER[mode].replace(/\s*\(.*\)\s*$/, '')
+                : MODE_PLACEHOLDER[mode]
           }
           value={text}
           onChange={(e) => {

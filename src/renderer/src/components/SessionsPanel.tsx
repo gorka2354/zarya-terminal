@@ -1,9 +1,11 @@
 import { PANE_DRAG_CWD, PANE_DRAG_SESSION } from '@shared/types'
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useRef, useState } from 'react'
 import type { SessionMeta, TabState } from '@shared/types'
+import { closePaneAsking, closeTabAsking, setPaneMaximized } from '@/actions/panes'
 import { formatRelative, shortenPath } from '@/lib/ansi'
 import { fuzzyFilter } from '@/lib/fuzzy'
 import { useAiStore } from '@/features/ai/aiStore'
+import { focusPane } from '@/terminal/paneFocus'
 import { listLeaves, useSessionsStore } from '@/state/sessionsStore'
 import { useSettingsStore } from '@/state/settingsStore'
 import { useUiStore } from '@/state/uiStore'
@@ -53,11 +55,14 @@ export function SessionsPanel(): React.JSX.Element {
   const sessions = useSessionsStore((s) => s.sessions)
   const tabs = useSessionsStore((s) => s.tabs)
   const activeTabId = useSessionsStore((s) => s.activeTabId)
+  const maximizedByTab = useUiStore((s) => s.maximizedByTab)
   const conversations = useAiStore((s) => s.conversations)
   const bookmarks = useSettingsStore((s) => s.settings.bookmarks)
   const [query, setQuery] = useState('')
   const { menu, open } = useContextMenu()
   const store = useSessionsStore.getState()
+  /** Что было развёрнуто до начала жеста мышью (см. строку панели). */
+  const maxBeforeClick = useRef<string | null>(null)
 
   // Recent folders: distinct cwds from saved sessions, minus already-bookmarked.
   const recentFolders = useMemo(() => {
@@ -137,12 +142,14 @@ export function SessionsPanel(): React.JSX.Element {
 
   // The search box filters ALL sections, not just saved sessions.
   const q = query.trim().toLowerCase()
-  const shownTabs = q
-    ? tabs.filter((t) => {
-        const s = sessions[t.activeSessionId]
-        return `${s?.title ?? ''} ${s?.cwd ?? ''}`.toLowerCase().includes(q)
-      })
-    : tabs
+  /** Подходит ли ПАНЕЛЬ под поиск — по названию и папке своей сессии. */
+  const paneMatches = (sessionId: string): boolean => {
+    const s = sessions[sessionId]
+    return `${s?.title ?? ''} ${s?.cwd ?? ''}`.toLowerCase().includes(q)
+  }
+  // Вкладка остаётся в списке, если под поиск подходит ЛЮБАЯ её панель: искать
+  // по одной активной значило бы прятать вкладку, в которой искомое открыто.
+  const shownTabs = q ? tabs.filter((t) => listLeaves(t.layout).some(paneMatches)) : tabs
   const shownProjects = q ? bookmarks.filter((b) => b.toLowerCase().includes(q)) : bookmarks
 
   const openContext = (e: React.MouseEvent, m: SessionMeta): void => {
@@ -295,21 +302,187 @@ export function SessionsPanel(): React.JSX.Element {
         onClick: () => void store.toggleFlag(sid, 'pinned')
       },
       { separator: true },
-      { label: 'Разделить вправо', onClick: () => void store.splitActive('row') },
-      { label: 'Закрыть терминал', danger: true, onClick: () => void store.closeTab(tab.id) }
+      {
+        label: 'Разделить вправо',
+        // Делим ТУ вкладку, по строке которой щёлкнули: раньше панель уезжала в
+        // активную, а при её заполненности тост говорил про лимит вкладки,
+        // которую человек даже не трогал.
+        onClick: () => {
+          store.setActiveTab(tab.id)
+          void store.splitActive('row')
+        }
+      },
+      { label: 'Закрыть терминал', danger: true, onClick: () => void closeTabAsking(tab.id) }
     ])
   }
 
+  const openPaneContext = (e: React.MouseEvent, sessionId: string, tab: TabState): void => {
+    e.preventDefault()
+    const s = sessions[sessionId]
+    if (!s) return
+    const panes = listLeaves(tab.layout).length
+    open(e.clientX, e.clientY, [
+      {
+        label:
+          maximizedByTab[tab.id] === sessionId ? 'Свернуть к раскладке' : 'Развернуть на всю вкладку',
+        hint: '2×клик',
+        onClick: () => setPaneMaximized(sessionId, maximizedByTab[tab.id] !== sessionId)
+      },
+      {
+        label: 'Переименовать…',
+        onClick: () => {
+          const title = window.prompt('Название сессии', s.title)
+          if (title) void store.renameSession(sessionId, title)
+        }
+      },
+      {
+        label: s.favorite ? 'Убрать из избранного' : 'В избранное',
+        onClick: () => void store.toggleFlag(sessionId, 'favorite')
+      },
+      { separator: true },
+      {
+        label: 'Открыть панель рядом',
+        // Делим ТУ панель, по которой щёлкнули: делить «активную» значило бы
+        // открыть панель не там, куда показали мышью.
+        onClick: () => {
+          store.setActiveSession(sessionId)
+          void store.splitActive('row')
+        }
+      },
+      { label: 'Закрыть панель', danger: true, onClick: () => void closePaneAsking(sessionId) },
+      // Закрыть весь рабочий стол: у активной вкладки своей строки в списке нет
+      // (она раскрыта панелями), и без этого пункта закрыть её целиком можно
+      // было бы только горячей клавишей.
+      ...(panes > 1
+        ? [
+            {
+              label: `Закрыть терминал целиком · ${panes} панели`,
+              danger: true,
+              hint: 'Ctrl+Shift+W',
+              onClick: () => void closeTabAsking(tab.id)
+            }
+          ]
+        : [])
+    ])
+  }
+
+  /**
+   * Строка ПАНЕЛИ активной вкладки.
+   *
+   * Две степени выделения, и путать их нельзя. «На экране» (панель видна в
+   * сетке) — сдержанная подсветка фона; таких строк бывает четыре. «В фокусе»
+   * (панели достаются Enter и Esc) — тот же акцент, что у рамки панели на
+   * экране; такая строка ровно одна. Если четыре строки получат вид активной
+   * рамки, человек перестанет понимать, куда уйдёт одобрение запуска команды.
+   */
+  const renderPane = (sessionId: string, tab: TabState): React.JSX.Element => {
+    const session = sessions[sessionId]
+    const focused = tab.activeSessionId === sessionId
+    // Разворот считается по СВОЕЙ вкладке: развёрнутая панель соседнего
+    // рабочего стола об этих панелях ничего не говорит.
+    const maxedHere = maximizedByTab[tab.id]
+    const maxed = maxedHere === sessionId
+    // «На экране» значит РОВНО это: панель сейчас видно. Развёрнут сосед — её не
+    // видно, и подсветка обязана погаснуть, иначе список врёт о происходящем.
+    const onScreen = !maxedHere || maxed
+    return (
+      <div
+        key={sessionId}
+        data-session={sessionId}
+        className={`zy-item zy-pane-row${onScreen ? ' zy-item--onscreen' : ''}${focused ? ' zy-item--focus' : ''}`}
+        title={
+          focused
+            ? `${session?.cwd ?? ''}\nПанель в фокусе — сюда уходят Enter и Esc`
+            : onScreen
+              ? `${session?.cwd ?? ''}\nКлик — сделать активной · 2×клик — на всю вкладку`
+              : `${session?.cwd ?? ''}\nСейчас не видно — развёрнута другая панель. Клик — показать эту`
+        }
+        // Что было развёрнуто ДО жеста. Двойной клик — это click, click,
+        // dblclick: первый клик уже переносит разворот на эту панель, и
+        // «переключить» на третьем шаге свернул бы то, что просили развернуть.
+        onMouseDown={(e) => {
+          if (e.detail <= 1) maxBeforeClick.current = maxedHere ?? null
+        }}
+        // Клик делает панель активной, но НЕ переключает вкладку и не трогает
+        // текст в строках ввода: набранное остаётся там, где его набирали.
+        onClick={() => {
+          // Развёрнут сосед — эту панель не видно; разворачивать её вместо него
+          // будет сам стор: фокус и «что видно» обязаны сходиться всегда, а не
+          // только при клике отсюда.
+          store.setActiveSession(sessionId)
+          // Курсор уезжает в строку ВЫБРАННОЙ панели: печатать после клика надо
+          // где-то. Текст, набранный в других панелях, при этом не трогается —
+          // он живёт в их собственных строках.
+          focusPane(sessionId)
+        }}
+        onDoubleClick={() => setPaneMaximized(sessionId, maxBeforeClick.current !== sessionId)}
+        onContextMenu={(e) => openPaneContext(e, sessionId, tab)}
+        // Панель хватается за свою строку: бросок на другую панель переносит её
+        // ТУДА. Процесс не трогается — двигается лист в дереве.
+        draggable
+        onDragStart={(e) => {
+          e.dataTransfer.setData(PANE_DRAG_SESSION, sessionId)
+          e.dataTransfer.effectAllowed = 'move'
+        }}
+      >
+        <span className="zy-item-icon">
+          <ShellGlyph code={session?.shellIcon || '>_'} />
+        </span>
+        <div className="zy-item-body">
+          <div className="zy-item-title">
+            {session?.pinned && <span className="zy-pin-dot" title="Закреплена" />}
+            {session?.title || 'Терминал'}
+            {maxed && (
+              <span className="zy-badge" style={{ marginLeft: 6 }}>
+                во весь экран
+              </span>
+            )}
+          </div>
+          <div className="zy-item-sub zy-item-sub--path">{shortenPath(session?.cwd || '', 34)}</div>
+        </div>
+        <div className="zy-item-actions">
+          <button
+            className="zy-icon-btn"
+            title={session?.favorite ? 'Убрать из избранного' : 'В избранное'}
+            onClick={(e) => {
+              e.stopPropagation()
+              void store.toggleFlag(sessionId, 'favorite')
+            }}
+          >
+            <Icon name={session?.favorite ? 'star' : 'star-outline'} size={13} />
+          </button>
+          <button
+            className="zy-icon-btn"
+            title="Закрыть панель"
+            onClick={(e) => {
+              e.stopPropagation()
+              void closePaneAsking(sessionId)
+            }}
+          >
+            <Icon name="close" size={13} />
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  /**
+   * СВЁРНУТАЯ вкладка — одна строка со счётчиком панелей.
+   *
+   * Разворачивать все вкладки разом нельзя: три вкладки по четыре панели дают
+   * двенадцать строк, и живое снова тонет. Развёрнута только активная.
+   */
   const renderOpenTab = (tab: TabState): React.JSX.Element => {
     const session = sessions[tab.activeSessionId]
     const count = listLeaves(tab.layout).length
     return (
       <div
         key={tab.id}
-        className={`zy-item${tab.id === activeTabId ? ' zy-item--active' : ''}`}
+        data-tab={tab.id}
+        className="zy-item zy-tab-row"
         onClick={() => store.setActiveTab(tab.id)}
         onContextMenu={(e) => openTabContext(e, tab)}
-        title={session?.cwd}
+        title={`${session?.cwd ?? ''}\nКлик — открыть этот рабочий стол`}
         // Открытый терминал тоже хватается: бросок на панель переносит его
         // ТУДА. Процесс при этом не трогается — двигается лист в дереве.
         draggable
@@ -323,20 +496,7 @@ export function SessionsPanel(): React.JSX.Element {
         </span>
         <div className="zy-item-body">
           <div className="zy-item-title">
-            {session?.pinned && (
-              <span
-                title="Закреплена"
-                style={{
-                  display: 'inline-block',
-                  width: 6,
-                  height: 6,
-                  marginRight: 5,
-                  borderRadius: '50%',
-                  background: 'var(--accent)',
-                  verticalAlign: 'middle'
-                }}
-              />
-            )}
+            {session?.pinned && <span className="zy-pin-dot" title="Закреплена" />}
             {(session?.title || 'Терминал') + (count > 1 ? ` · ${count}` : '')}
           </div>
           <div className="zy-item-sub zy-item-sub--path">{shortenPath(session?.cwd || '', 34)}</div>
@@ -357,7 +517,7 @@ export function SessionsPanel(): React.JSX.Element {
             title="Закрыть терминал"
             onClick={(e) => {
               e.stopPropagation()
-              void store.closeTab(tab.id)
+              void closeTabAsking(tab.id)
             }}
           >
             <Icon name="close" size={13} />
@@ -365,6 +525,20 @@ export function SessionsPanel(): React.JSX.Element {
         </div>
       </div>
     )
+  }
+
+  /**
+   * «Открытые»: панели активной вкладки — списком, остальные вкладки — свёрнутыми
+   * строками, каждая на своём месте. Раньше здесь были только вкладки, и четыре
+   * панели давали одну строку с припиской «· 4»: попасть мышью в конкретную
+   * панель было нельзя.
+   */
+  const renderOpenRow = (tab: TabState): React.JSX.Element => {
+    if (tab.id !== activeTabId) return renderOpenTab(tab)
+    const leaves = listLeaves(tab.layout).filter((sid) => !q || paneMatches(sid))
+    // Фрагмент с ключом вкладки: строки панелей — это раскрытая вкладка, и
+    // React должен видеть их одной группой, а не безымянным вложенным списком.
+    return <Fragment key={tab.id}>{leaves.map((sid) => renderPane(sid, tab))}</Fragment>
   }
 
   return (
@@ -413,7 +587,7 @@ export function SessionsPanel(): React.JSX.Element {
               <Icon name="terminal" size={11} />
               Открытые
             </div>
-            {shownTabs.map(renderOpenTab)}
+            {shownTabs.map(renderOpenRow)}
           </>
         )}
         {false && shownProjects.length > 0 && (

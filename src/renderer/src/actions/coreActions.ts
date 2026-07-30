@@ -1,4 +1,5 @@
 import { registerActions } from '@/lib/actionRegistry'
+import { closePaneAsking, closeTabAsking } from '@/actions/panes'
 import { useBlocksStore } from '@/state/blocksStore'
 import { listLeaves, useSessionsStore } from '@/state/sessionsStore'
 import { getSettings, useSettingsStore } from '@/state/settingsStore'
@@ -126,7 +127,9 @@ export function registerCoreActions(): void {
       category: 'Вкладки',
       run: () => {
         const { activeTabId } = useSessionsStore.getState()
-        if (activeTabId) void sessions.closeTab(activeTabId)
+        // Через спрашивающую обёртку: горячая клавиша не должна выбрасывать
+        // недописанный запрос агенту молча, раз крестик в сайдбаре спрашивает.
+        if (activeTabId) void closeTabAsking(activeTabId)
       }
     },
     {
@@ -190,7 +193,7 @@ export function registerCoreActions(): void {
       category: 'Терминал',
       run: () => {
         const id = activeSessionId()
-        if (id) void sessions.closeSession(id)
+        if (id) void closePaneAsking(id)
       }
     },
     {

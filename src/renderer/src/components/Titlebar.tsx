@@ -1,4 +1,6 @@
+import { PANE_DRAG_CWD } from '@shared/types'
 import { useState } from 'react'
+import { closeTabAsking } from '@/actions/panes'
 import { listLeaves, useSessionsStore } from '@/state/sessionsStore'
 import { useSettingsStore } from '@/state/settingsStore'
 import { useUiStore } from '@/state/uiStore'
@@ -92,14 +94,18 @@ export function Titlebar(): React.JSX.Element {
       {
         label: 'Закрыть другие вкладки',
         onClick: () => {
-          for (const t of tabs.filter((t) => t.id !== tabId)) void store.closeTab(t.id)
+          // По очереди и через вопрос: закрывать десяток терминалов пачкой,
+          // не спросив ни про один недописанный запрос, — потеря без следа.
+          void (async () => {
+            for (const t of tabs.filter((t) => t.id !== tabId)) await closeTabAsking(t.id)
+          })()
         }
       },
       {
         label: 'Закрыть вкладку',
         hint: 'Ctrl+Shift+W',
         danger: true,
-        onClick: () => void store.closeTab(tabId)
+        onClick: () => void closeTabAsking(tabId)
       }
     ])
   }
@@ -129,6 +135,11 @@ export function Titlebar(): React.JSX.Element {
             for (const b of bookmarks) {
               items.push({
                 label: shortTail(b),
+                // Проект можно утащить прямо отсюда на нужную панель — так он
+                // окажется ИМЕННО ТАМ, куда показали мышью, а не рядом с
+                // активной. Пока проекты жили в сайдбаре, их таскали оттуда.
+                hint: 'тащи на панель',
+                drag: { type: PANE_DRAG_CWD, data: b },
                 onClick: () => void store2.newTab(undefined, b)
               })
               items.push({

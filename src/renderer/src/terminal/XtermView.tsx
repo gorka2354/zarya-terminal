@@ -7,6 +7,8 @@ import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { WebglAddon } from '@xterm/addon-webgl'
 import '@xterm/xterm/css/xterm.css'
+import { closePaneAsking } from '@/actions/panes'
+import { focusPane } from './paneFocus'
 import { useSettingsStore } from '@/state/settingsStore'
 import { useSessionsStore } from '@/state/sessionsStore'
 import { isRaw, setRaw, useUiStore } from '@/state/uiStore'
@@ -380,7 +382,11 @@ export function XtermView({ sessionId, active, visible }: Props): React.JSX.Elem
     if (!visible) return
     const handle = getTerminal(sessionId)
     handle?.fit()
-    if (active) handle?.focus()
+    // Курсор — туда, где в этой панели печатают: в блочном режиме это строка
+    // ввода, в сыром — сам терминал. Безусловный фокус в скрытое поле xterm
+    // делал голый Enter «чужим полем» для гейта: рамка обещала «сюда уйдёт
+    // Enter», а одобрение не срабатывало (см. paneFocus / features/ai/keyRouter).
+    if (active) focusPane(sessionId)
   }, [visible, active, sessionId])
 
   // Toggle interactive stdin live; entering «Терминал» mode re-fits and focuses
@@ -425,7 +431,7 @@ export function XtermView({ sessionId, active, visible }: Props): React.JSX.Elem
               </button>
               <button
                 className="zy-btn"
-                onClick={() => void useSessionsStore.getState().closeSession(sessionId)}
+                onClick={() => void closePaneAsking(sessionId)}
               >
                 Закрыть
               </button>

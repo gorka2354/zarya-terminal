@@ -4,7 +4,8 @@ import { XtermView } from '@/terminal/XtermView'
 import { MissionFeed } from './MissionFeed'
 import { AgentBar } from './AgentBar'
 import { getTerminal } from '@/terminal/terminalRegistry'
-import { useSessionsStore } from '@/state/sessionsStore'
+import { closePaneAsking, toggleMaximizePane } from '@/actions/panes'
+import { listLeaves, useSessionsStore } from '@/state/sessionsStore'
 import { useSettingsStore } from '@/state/settingsStore'
 import { isRaw, setRaw, useUiStore } from '@/state/uiStore'
 import { useContextMenu } from './ContextMenu'
@@ -22,9 +23,16 @@ export function TerminalPane({ sessionId, active, visible }: Props): React.JSX.E
   const rightClickBehavior = useSettingsStore((s) => s.settings.terminal.rightClickBehavior)
   const { menu, open } = useContextMenu()
   const raw = useUiStore((s) => isRaw(s, sessionId))
+  // Разворот — по своей вкладке: чужая развёрнутая панель этой ничего не говорит.
+  const maximized = useUiStore((s) => {
+    const tab = useSessionsStore.getState().tabs.find((t) => listLeaves(t.layout).includes(sessionId))
+    return !!tab && s.maximizedByTab[tab.id] === sessionId
+  })
   const [dropHere, setDropHere] = useState(false)
+  // Соседи считаются по СВОЕЙ вкладке, а не по активной: панель скрытой вкладки
+  // иначе приглушалась бы по чужой раскладке.
   const multiPane = useSessionsStore((s) => {
-    const tab = s.tabs.find((t) => t.id === s.activeTabId)
+    const tab = s.tabs.find((t) => listLeaves(t.layout).includes(sessionId))
     return tab ? tab.layout.type !== 'leaf' : false
   })
 
@@ -73,11 +81,17 @@ export function TerminalPane({ sessionId, active, visible }: Props): React.JSX.E
         hint: 'Ctrl+Shift+S',
         onClick: () => void store.splitActive('col')
       },
+      {
+        label: maximized ? 'Свернуть к раскладке' : 'Развернуть на всю вкладку',
+        onClick: () => toggleMaximizePane(sessionId)
+      },
       { separator: true },
       {
+        // Спрашиваем про несохранённый текст: закрыть панель с недописанным
+        // запросом молча — то же, что закрыть редактор без вопроса.
         label: 'Закрыть панель',
         danger: true,
-        onClick: () => void store.closeSession(sessionId)
+        onClick: () => void closePaneAsking(sessionId)
       }
     ])
   }
@@ -85,6 +99,9 @@ export function TerminalPane({ sessionId, active, visible }: Props): React.JSX.E
   return (
     <div
       className={`zy-pane${active ? ' zy-pane--focused' : multiPane ? ' zy-pane--dim' : ''}${dropHere ? ' zy-pane--drop' : ''}`}
+      // Чья это панель — видно в разметке. Нужно прогонам: «строка сайдбара
+      // указывает на ЭТУ панель» иначе проверяется догадкой по порядку.
+      data-session={sessionId}
       // Рамка и адресат клавиш — ОДНА величина: активная сессия вкладки. Если
       // однажды они разойдутся, рамка начнёт врать о том, куда уйдёт Enter, —
       // а это одобрение запуска команды (см. features/ai/keyRouter).
@@ -123,7 +140,7 @@ export function TerminalPane({ sessionId, active, visible }: Props): React.JSX.E
         void store.splitActive('row', cwd)
       }}
     >
-      <PaneHeader sessionId={sessionId} />
+      <PaneHeader sessionId={sessionId} maximized={maximized} multiPane={multiPane} />
       {/* Сцена — терминал и лента в одном слоистом контейнере. Лента лежит
           абсолютным слоем, и без этой обёртки она накрыла бы строку ввода
           собой, как накрыла рамку панели. */}
@@ -150,7 +167,15 @@ export function TerminalPane({ sessionId, active, visible }: Props): React.JSX.E
  * mark, the pane's own cwd, split + search shortcuts. One per pane (not per
  * split gutter) so every terminal keeps its own working-directory readout.
  */
-function PaneHeader({ sessionId }: { sessionId: string }): React.JSX.Element {
+function PaneHeader({
+  sessionId,
+  maximized,
+  multiPane
+}: {
+  sessionId: string
+  maximized: boolean
+  multiPane: boolean
+}): React.JSX.Element {
   const cwd = useSessionsStore((s) => s.sessions[sessionId]?.cwd)
   const searchOpenFor = useUiStore((s) => s.searchOpenFor)
 
@@ -215,6 +240,17 @@ function PaneHeader({ sessionId }: { sessionId: string }): React.JSX.Element {
         >
           <Icon name="split-h" size={13} />
         </button>
+        {/* Путь назад из «во весь экран» обязан быть там же, где сама панель:
+            сайдбар бывает закрыт, и другого выхода тогда не остаётся. */}
+        {(multiPane || maximized) && (
+          <button
+            className={`zy-icon-btn${maximized ? ' zy-icon-btn--active' : ''}`}
+            title={maximized ? 'Свернуть к раскладке' : 'Развернуть на всю вкладку'}
+            onClick={() => toggleMaximizePane(sessionId)}
+          >
+            <Icon name={maximized ? 'restore' : 'maximize'} size={13} />
+          </button>
+        )}
         <button
           className={`zy-icon-btn${searchOpenFor === sessionId ? ' zy-icon-btn--active' : ''}`}
           title="Найти в терминале"

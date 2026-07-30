@@ -8,6 +8,16 @@ export interface MenuItem {
   separator?: boolean
   disabled?: boolean
   onClick?: () => void
+  /**
+   * Пункт можно утащить мышью: (тип, данные) уедут в dataTransfer.
+   *
+   * Нужен проектам в шапке. Пока проекты жили в сайдбаре, их таскали прямо
+   * оттуда на нужную панель; после переезда в меню перетаскивание пропало, и
+   * «положить проект В ЭТУ панель» стало невозможно — оставалось «панелью рядом»
+   * от активной. Меню при начале перетаскивания закрывается: тащат на панель,
+   * а она под меню.
+   */
+  drag?: { type: string; data: string }
 }
 
 interface Props {
@@ -31,6 +41,12 @@ interface Props {
 export function ContextMenu({ x, y, items, onClose, anchor }: Props): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState({ left: x, top: y })
+  /**
+   * Пункт тащат прямо сейчас. Меню при этом ПРЯЧЕТСЯ, но остаётся в разметке:
+   * убрать узел, который в этот момент тащат, — верный способ отменить
+   * перетаскивание в середине жеста. Закроется оно по dragend.
+   */
+  const [dragging, setDragging] = useState(false)
 
   useEffect(() => {
     const el = ref.current
@@ -78,7 +94,7 @@ export function ContextMenu({ x, y, items, onClose, anchor }: Props): React.JSX.
   return createPortal(
     <div
       ref={ref}
-      className="zy-context-menu"
+      className={`zy-context-menu${dragging ? ' zy-context-menu--dragging' : ''}`}
       style={pos}
       onMouseDown={(e) => e.stopPropagation()}
     >
@@ -90,6 +106,20 @@ export function ContextMenu({ x, y, items, onClose, anchor }: Props): React.JSX.
             key={i}
             className={`zy-context-item${item.danger ? ' zy-context-item--danger' : ''}`}
             disabled={item.disabled}
+            draggable={!!item.drag}
+            onDragStart={(e) => {
+              if (!item.drag) return
+              e.dataTransfer.setData(item.drag.type, item.drag.data)
+              e.dataTransfer.effectAllowed = 'copy'
+              // Меню исчезает с глаз, но не из разметки: целятся в панель ПОД
+              // ним, а удалить узел, который тащат, значит оборвать жест.
+              setDragging(true)
+            }}
+            onDragEnd={() => {
+              if (!item.drag) return
+              setDragging(false)
+              onClose()
+            }}
             onClick={() => {
               onClose()
               item.onClick?.()

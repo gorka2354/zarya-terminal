@@ -52,7 +52,16 @@ export function onPtyExit(cb: (sessionId: string, exitCode: number) => void): vo
   exitCallback = cb
 }
 
+/**
+ * Сколько раз для сессии создавали терминал. Одна панель — один терминал на всю
+ * жизнь сессии: второе создание означает, что панель перемонтировали, а вместе с
+ * ней потеряли всё, что человек видел на экране. Счётчик читают прогоны — глазами
+ * такую потерю замечают уже после того, как она случилась.
+ */
+const creations = new Map<string, number>()
+
 export function registerTerminal(sessionId: string, handle: TermHandle): void {
+  creations.set(sessionId, (creations.get(sessionId) ?? 0) + 1)
   handles.set(sessionId, handle)
   const buf = buffers.get(sessionId)
   if (buf) {
@@ -70,6 +79,7 @@ export function disposeTerminal(sessionId: string): void {
   handles.delete(sessionId)
   buffers.delete(sessionId)
   pendingRestore.delete(sessionId)
+  creations.delete(sessionId)
   try {
     h?.dispose()
   } catch {
@@ -91,6 +101,19 @@ export function takePendingRestore(sessionId: string): string | undefined {
 export function peekPendingRestore(sessionId: string): string | undefined {
   return pendingRestore.get(sessionId)
 }
+
+/**
+ * Прогонам: написать прямо в терминал, минуя pty. Так проверяется, что при
+ * перестройке раскладки экран панели ОСТАЛСЯ тем же: метку, которой оболочка
+ * никогда не присылала, новый терминал показать не может.
+ */
+;(window as unknown as { __zaryaTermWrite?: (sessionId: string, text: string) => void }).__zaryaTermWrite =
+  (sessionId, text) => handles.get(sessionId)?.term.write(text)
+
+// Прогонам: сколько раз создавали терминал каждой сессии. Больше одного — панель
+// перемонтировали, и то, что было на экране, человек уже не увидит.
+;(window as unknown as { __zaryaTermCreations?: () => Record<string, number> }).__zaryaTermCreations =
+  () => Object.fromEntries(creations)
 
 // QA hook: the live xterm option bag of the first registered terminal, so a
 // harness can verify that a settings change actually reached the terminal.

@@ -698,6 +698,72 @@ body {
   border-color: var(--border);
   color: var(--fg);
 }
+/**
+ * Две степени выделения панелей в списке, и путать их нельзя.
+ *
+ * «На экране» — панель видна в сетке. Таких бывает четыре, поэтому вид сдержанный:
+ * только фон, как у наведения. «В фокусе» — панель, которой достаются Enter и
+ * Esc; такая ровно одна, и метится она ТЕМ ЖЕ акцентом, что рамка активной
+ * панели на экране (--accent). Если четыре строки получат вид активной рамки,
+ * человек перестанет понимать, куда уйдёт одобрение запуска команды.
+ */
+/**
+ * «На экране» — СОСТОЯНИЕ, а не отклик на мышь. Первым заходом он был объявлен
+ * ровно как `:hover` (тот же фон), и под курсором любая строка выглядела
+ * открытой панелью — включая свёрнутые вкладки и панели, спрятанные разворотом.
+ * Поэтому здесь рамка и приглушённый фон, а наведение по-прежнему подсвечивает
+ * фоном поярче: два разных сигнала, а не один и тот же.
+ */
+.zy-item--onscreen {
+  background: color-mix(in srgb, var(--fg) 5%, transparent);
+  border-color: var(--border);
+  color: var(--fg);
+}
+.zy-item--focus {
+  position: relative;
+  border-color: color-mix(in srgb, var(--accent) 72%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+/* Засечка слева — тот же акцент, что и рамка панели: строка и панель читаются
+   как одно целое, а не как два разных выделения. */
+.zy-item--focus::before {
+  content: '';
+  position: absolute;
+  left: -1px;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  background: var(--accent);
+}
+.zy-item--focus .zy-item-title {
+  color: var(--accent);
+}
+/* Панели живут внутри вкладки — отступ показывает вложенность без лишних слов. */
+.zy-pane-row {
+  margin-left: 6px;
+}
+/* Свёрнутая вкладка — узел, который можно раскрыть. Без этого признака строка
+   вкладки под курсором читалась так же, как строка открытой панели. */
+.zy-tab-row::before {
+  content: '▸';
+  flex-shrink: 0;
+  margin-right: -2px;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--fg-faint);
+}
+.zy-tab-row .zy-item-title {
+  color: var(--fg-dim);
+}
+.zy-pin-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  vertical-align: middle;
+}
 .zy-item-icon {
   flex-shrink: 0;
   min-width: 18px;
@@ -751,12 +817,49 @@ body {
 
 /* ============================================================ terminal */
 
+/**
+ * Рабочая область: панели — АБСОЛЮТНЫЕ слои по координатам из дерева раскладки
+ * (см. SplitLayout / paneTree). Вложенные контейнеры пришлось убрать: место
+ * панели в разметке зависело от её места в дереве, и любая перестройка раскладки
+ * пересоздавала терминал вместе с его экраном.
+ */
 .zy-panes {
   flex: 1;
   min-width: 0;
   min-height: 0;
-  display: flex;
   position: relative;
+  overflow: hidden;
+}
+.zy-pane-slot {
+  position: absolute;
+  display: flex;
+  overflow: hidden;
+}
+/* Скрытая панель остаётся СМОНТИРОВАННОЙ: размонтировать значит пересоздать её
+   терминал и вернуть человека к пустому экрану. */
+.zy-pane-slot--hidden {
+  display: none;
+}
+/* Разделители лежат поверх шва между панелями — своего места в потоке у них
+   больше нет. Толщина в пикселях: доля в 5 пикселей не выражается. */
+.zy-gutter {
+  position: absolute;
+  z-index: 6;
+  background: transparent;
+  transition: background 0.15s ease;
+}
+.zy-gutter--row {
+  width: 6px;
+  cursor: col-resize;
+}
+.zy-gutter--col {
+  height: 6px;
+  cursor: row-resize;
+}
+.zy-gutter:hover,
+.zy-gutter.zy-split-gutter--dragging {
+  background: var(--accent);
+  opacity: 0.5;
 }
 
 .zy-split {
@@ -1109,6 +1212,12 @@ body {
   }
 }
 
+/* Пункт тащат: меню не должно ни закрывать цель, ни ловить события. Узел при
+   этом остаётся — удалить то, что тащат, значит оборвать жест. */
+.zy-context-menu--dragging {
+  opacity: 0;
+  pointer-events: none;
+}
 .zy-context-menu {
   position: fixed;
   z-index: 300;

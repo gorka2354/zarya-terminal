@@ -55,6 +55,20 @@ interface UiState {
   /** Ultracode session mode (xhigh + workflow orchestration). Session-scoped, default off. */
   ultracode: boolean
   historyOverlayOpen: boolean
+  /**
+   * Развёрнутые панели — ПО ВКЛАДКАМ: ключ вкладки → её панель во весь экран.
+   *
+   * Сперва это было одно значение на окно, и оно врало соседним вкладкам:
+   * развернул панель в первой вкладке, перешёл во вторую — там пропадали
+   * разделители, а сайдбар писал «сейчас не видно» про панели, которые видно.
+   * Разворот принадлежит вкладке, поэтому и хранится по вкладке: расхождение
+   * становится невыразимым.
+   *
+   * Соседи развёрнутой панели остаются СМОНТИРОВАННЫМИ и просто не видны —
+   * размонтировать значило бы пересоздать их терминалы и вернуть человека к
+   * пустым экранам. В воркспейс это не сохраняется: разворот временный.
+   */
+  maximizedByTab: Record<string, string>
   /** Session id whose find-in-terminal bar is open. */
   searchOpenFor: string | null
   blocksPanelOpen: boolean
@@ -86,6 +100,7 @@ export const useUiStore = create<UiState>((set, get) => ({
   claudeModels: [],
   ultracode: false,
   historyOverlayOpen: false,
+  maximizedByTab: {},
   searchOpenFor: null,
   blocksPanelOpen: false,
   maximized: false,
@@ -151,6 +166,33 @@ export function setBarModeOf(sessionId: string | null | undefined, mode: UiState
   // Общее значение тоже двигаем: это умолчание для следующей новой панели.
   st.set({ barMode: mode, barModeBySession: { ...st.barModeBySession, [sessionId]: mode } })
 }
+/** Развёрнутая панель ЭТОЙ вкладки, если она есть. */
+export function maximizedIn(state: UiState, tabId: string | null | undefined): string | null {
+  return (tabId && state.maximizedByTab[tabId]) || null
+}
+/**
+ * Развернуть панель вкладки / вернуть сетку (`null`).
+ *
+ * Одно место на все входы: строка сайдбара, шапка панели, контекстное меню.
+ * Инвариант «развёрнута ровно та панель, что в фокусе» держится в
+ * sessionsStore.setActiveSession — здесь только хранение.
+ */
+export function setMaximized(tabId: string, sessionId: string | null): void {
+  const st = useUiStore.getState()
+  const next = { ...st.maximizedByTab }
+  if (sessionId) next[tabId] = sessionId
+  else delete next[tabId]
+  st.set({ maximizedByTab: next })
+}
+/** Вкладка закрылась — её разворот больше ничего не значит. */
+export function forgetTabUi(tabId: string): void {
+  const st = useUiStore.getState()
+  if (!(tabId in st.maximizedByTab)) return
+  const next = { ...st.maximizedByTab }
+  delete next[tabId]
+  st.set({ maximizedByTab: next })
+}
+
 /** Убрать записи закрытой сессии, чтобы карты не росли вечно. */
 export function forgetSessionUi(sessionId: string): void {
   const st = useUiStore.getState()

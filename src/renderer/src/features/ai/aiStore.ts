@@ -233,6 +233,18 @@ interface AiState {
   dropImage: (sessionId: string, id: string) => void
   /** Очистить вложения панели (после отправки). */
   clearImages: (sessionId: string) => void
+  /**
+   * Панель закрыта — убрать всё, что за ней числилось.
+   *
+   * Две причины, и обе видно человеку. Первая: карты по sessionId переживали
+   * панель, а `restoreSaved` открывает сессию ПОД ТЕМ ЖЕ id — восстановленный
+   * терминал получал чужие вложения из прошлой жизни и, что хуже, включённый
+   * автопилот: новая беседа заводилась с `bypass` мёртвой панели и выполняла
+   * инструменты без спроса. Вторая: висящий гейт и идущий ход остаются в
+   * беседе, а карточка, которой их решают, умерла вместе с панелью — счётчик
+   * «ждут решения» в нижней полосе застревал до конца работы приложения.
+   */
+  forgetSession: (sessionId: string) => void
 
   /** Approve a pending tool by id (defaults to the first unsettled one). */
   approveTool: (conversationId?: string, toolId?: string) => Promise<void>
@@ -1196,6 +1208,26 @@ export const useAiStore = create<AiState>((set, get) => {
         const next = { ...s.pendingImages }
         delete next[sessionId]
         return { pendingImages: next }
+      })
+    },
+
+    forgetSession: (sessionId) => {
+      // Сперва развязать беседу: гейт без карточки решить больше нечем, а ход
+      // без панели некому показать. Отклоняем и прерываем ЯВНО — молчание
+      // оставило бы «ждут решения: 1» навсегда.
+      const conv = convForSession(get(), sessionId)
+      if (conv) {
+        for (const t of conv.pendingTools.filter((x) => !x.settled)) {
+          get().denyTool(conv.id, t.id)
+        }
+        if (conv.streaming) get().abort(conv.id)
+      }
+      set((s) => {
+        const images = { ...s.pendingImages }
+        const bypass = { ...s.bypassBySession }
+        delete images[sessionId]
+        delete bypass[sessionId]
+        return { pendingImages: images, bypassBySession: bypass }
       })
     },
 

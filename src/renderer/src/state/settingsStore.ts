@@ -66,3 +66,9 @@ export function getSettings(): Settings {
   useSettingsStore.getState().settings
 ;(window as unknown as { __zaryaSetFontSize?: (v: number) => void }).__zaryaSetFontSize = (v) =>
   void useSettingsStore.getState().update({ appearance: { fontSize: v } as never })
+// Проект в закладки — прогону, который проверяет проекты в шапке: настоящий
+// выбор папки открывает системное окно, и нажать его прогон не может.
+;(window as unknown as { __zaryaAddProject?: (dir: string) => void }).__zaryaAddProject = (dir) => {
+  const cur = useSettingsStore.getState().settings.bookmarks
+  if (!cur.includes(dir)) void useSettingsStore.getState().update({ bookmarks: [...cur, dir] })
+}

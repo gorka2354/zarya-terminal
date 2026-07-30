@@ -9,12 +9,23 @@ import type {
   WorkspaceState
 } from '@shared/types'
 import { uid } from '@/lib/uid'
-import { autoLayout, isAutoLayout } from '@shared/autoLayout'
+import { MAX_PANES, autoLayout, isAutoLayout } from '@shared/autoLayout'
+import {
+  closePane,
+  listLeaves,
+  mapLeaves,
+  removeLeaf,
+  replaceLeaf,
+  setRatioAt
+} from '@shared/paneTree'
 import { emitBus, onBus } from '@/lib/bus'
 import { runQuitFlushers } from '@/lib/quitFlush'
 import { useBlocksStore } from './blocksStore'
 import { getSettings } from './settingsStore'
-import { useUiStore } from './uiStore'
+import { forgetPaneDraft } from './paneDrafts'
+import { forgetSessionUi, forgetTabUi, maximizedIn, setMaximized, useUiStore } from './uiStore'
+import { useAiStore } from '@/features/ai/aiStore'
+import { focusPane } from '@/terminal/paneFocus'
 import {
   disposeTerminal,
   getTerminal,
@@ -44,36 +55,11 @@ export interface RuntimeSession {
 
 // ---------------------------------------------------------------- split tree
 
-export function listLeaves(node: SplitNode): string[] {
-  if (node.type === 'leaf') return [node.sessionId]
-  return [...listLeaves(node.a), ...listLeaves(node.b)]
-}
-
-function replaceLeaf(node: SplitNode, sessionId: string, replacement: SplitNode): SplitNode {
-  if (node.type === 'leaf') {
-    return node.sessionId === sessionId ? replacement : node
-  }
-  return {
-    ...node,
-    a: replaceLeaf(node.a, sessionId, replacement),
-    b: replaceLeaf(node.b, sessionId, replacement)
-  }
-}
-
-function removeLeaf(node: SplitNode, sessionId: string): SplitNode | null {
-  if (node.type === 'leaf') {
-    return node.sessionId === sessionId ? null : node
-  }
-  const a = removeLeaf(node.a, sessionId)
-  const b = removeLeaf(node.b, sessionId)
-  if (a && b) return { ...node, a, b }
-  return a ?? b
-}
-
-function mapLeaves(node: SplitNode, map: (id: string) => string): SplitNode {
-  if (node.type === 'leaf') return { type: 'leaf', sessionId: map(node.sessionId) }
-  return { ...node, a: mapLeaves(node.a, map), b: mapLeaves(node.b, map) }
-}
+// Обход и правки дерева живут в @shared/paneTree — там же, где геометрия и
+// правила закрытия: это чистые функции, и проверяются они тестом, а не четырьмя
+// открытыми терминалами. Здесь только реэкспорт: `listLeaves` спрашивают из
+// сайдбара и шапки.
+export { listLeaves } from '@shared/paneTree'
 
 // -------------------------------------------------------------------- store
 
@@ -104,7 +90,8 @@ interface SessionsState {
    * переезд — перерисовывается лишь картинка.
    */
   movePaneNextTo: (sessionId: string, targetSessionId: string) => void
-  setSplitRatio: (tabId: string, path: SplitNode, ratio: number) => void
+  /** Пропорция узла раскладки. Узел адресуется ПУТЁМ от корня (см. paneTree). */
+  setSplitRatio: (tabId: string, path: number[], ratio: number) => void
   closeSession: (sessionId: string, opts?: { save?: boolean }) => Promise<void>
   restartSession: (sessionId: string) => Promise<void>
   restoreSaved: (savedId: string) => Promise<void>
@@ -325,7 +312,10 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
       if (tab) {
         // Let the AI store follow the terminal (activeId → this terminal's chat).
         emitBus('terminal:focus', { sessionId: tab.activeSessionId })
-        requestAnimationFrame(() => getTerminal(tab.activeSessionId)?.focus())
+        // Курсор — в строку ввода панели, а не в скрытое поле xterm. Фокус в
+        // поле терминала делает голый Enter «чужим полем» для гейта: рамка
+        // обещает «сюда уйдёт Enter», а одобрение не срабатывает (см. paneFocus).
+        focusPane(tab.activeSessionId)
       }
       schedulePersistWorkspace(get)
     },
@@ -347,6 +337,16 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
           activeTabId: tab.id
         }
       })
+      // Инвариант окна: в фокусе — та панель, которую ВИДНО. Если во вкладке
+      // развёрнута другая, разворот переезжает сюда. Фокус на невидимой панели
+      // означал бы, что Enter и Esc уходят туда, куда человек не смотрит, — а
+      // Enter одобряет запуск команды. Правило живёт ЗДЕСЬ, потому что через эту
+      // дверь проходят все: клик по панели, клик по строке, переезд, закрытие.
+      const tab = get().tabs.find((t) => listLeaves(t.layout).includes(sessionId))
+      if (tab) {
+        const maxed = maximizedIn(useUiStore.getState(), tab.id)
+        if (maxed && maxed !== sessionId) setMaximized(tab.id, sessionId)
+      }
       emitBus('terminal:focus', { sessionId })
     },
 
@@ -354,6 +354,17 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
       const state = get()
       const tab = state.tabs.find((t) => t.id === state.activeTabId)
       if (!tab) return
+      // Потолок в четыре панели — решение inc-17, и держать его должен тот, кто
+      // панели создаёт. Раньше пятая панель заводила живую сессию, которой не
+      // было места в дереве: терминал работал, в списке не значился, а Enter и
+      // Esc адресовались именно ему. Пятая уходит НОВОЙ ВКЛАДКОЙ.
+      if (listLeaves(tab.layout).length >= MAX_PANES) {
+        useUiStore
+          .getState()
+          .toast(`В одной вкладке не больше ${MAX_PANES} панелей — открыл новой вкладкой`, 'info')
+        await get().newTab(undefined, cwd)
+        return
+      }
       const current = state.sessions[tab.activeSessionId]
       const id = uid('s')
       const session = makeRuntime({
@@ -389,12 +400,34 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
               }
         )
       }))
+      // Просили ещё одну панель — значит, просили увидеть раскладку. Оставить
+      // разворот значило бы завести живой терминал, которого не видно, и отдать
+      // ему Enter: ровно то, что чинилось потолком в четыре панели.
+      setMaximized(tab.id, null)
+      get().setActiveSession(id)
       await spawnSession(setPartial, session)
+      focusPane(id)
       schedulePersistWorkspace(get)
     },
 
     movePaneNextTo: (sessionId, targetSessionId) => {
       if (sessionId === targetSessionId) return
+      // Переезд в ЧУЖУЮ вкладку добавляет ей панель — потолок тот же, что у
+      // деления. Внутри своей вкладки число панелей не меняется: там можно.
+      const before = get()
+      const fromTab = before.tabs.find((t) => listLeaves(t.layout).includes(sessionId))
+      const toTab = before.tabs.find((t) => listLeaves(t.layout).includes(targetSessionId))
+      if (!fromTab || !toTab) return
+      if (fromTab.id !== toTab.id && listLeaves(toTab.layout).length >= MAX_PANES) {
+        useUiStore
+          .getState()
+          .toast(`В этой вкладке уже ${MAX_PANES} панели — больше не влезет`, 'error')
+        return
+      }
+      // Вкладка отдала последнюю панель — она закроется, и её разворот вместе
+      // с ней. Считаем ДО правки состояния: после неё вкладки уже нет.
+      const donorEmpties =
+        fromTab.id !== toTab.id && !removeLeaf(fromTab.layout, sessionId)
       setPartial((s) => {
         const from = s.tabs.find((t) => listLeaves(t.layout).includes(sessionId))
         const to = s.tabs.find((t) => listLeaves(t.layout).includes(targetSessionId))
@@ -421,7 +454,15 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
             }
             if (t.id === from.id) {
               // Вкладка осталась пустой — она уйдёт ниже вместе с фильтром.
-              return stripped ? { ...t, layout: stripped, activeSessionId: listLeaves(stripped)[0] } : t
+              // Фокус в ней трогаем ТОЛЬКО если уехала именно фокусная панель:
+              // иначе, вернувшись, человек нашёл бы рамку не там, где оставил.
+              if (!stripped) return t
+              const rest = listLeaves(stripped)
+              return {
+                ...t,
+                layout: stripped,
+                activeSessionId: rest.includes(t.activeSessionId) ? t.activeSessionId : rest[0]
+              }
             }
             if (t.id === to.id) {
               return {
@@ -443,20 +484,19 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
           .filter((t) => !(t.id === from.id && from.id !== to.id && !stripped))
         return { tabs, activeTabId: to.id }
       })
+      // Опустевшая вкладка уходит — вместе с ней уходит и её разворот.
+      if (donorEmpties) forgetTabUi(fromTab.id)
+      // Переехавшая панель — та, куда теперь уходят клавиши. Через общую дверь:
+      // там же примиряется разворот вкладки-приёмника, иначе панель приехала бы
+      // под развёрнутого соседа — живой терминал, которого не видно.
+      get().setActiveSession(sessionId)
+      focusPane(sessionId)
       schedulePersistWorkspace(get)
     },
 
-    setSplitRatio: (tabId, node, ratio) => {
+    setSplitRatio: (tabId, path, ratio) => {
       setPartial((s) => ({
-        tabs: s.tabs.map((t) => {
-          if (t.id !== tabId) return t
-          const patch = (n: SplitNode): SplitNode => {
-            if (n === node && n.type === 'split') return { ...n, ratio }
-            if (n.type === 'split') return { ...n, a: patch(n.a), b: patch(n.b) }
-            return n
-          }
-          return { ...t, layout: patch(t.layout) }
-        })
+        tabs: s.tabs.map((t) => (t.id === tabId ? { ...t, layout: setRatioAt(t.layout, path, ratio) } : t))
       }))
       schedulePersistWorkspace(get)
     },
@@ -475,6 +515,18 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
       window.zarya.pty.kill(sessionId)
       disposeTerminal(sessionId)
       useBlocksStore.getState().clear(sessionId)
+      // Следы закрытой панели в картах интерфейса (сырой режим, режим строки,
+      // черновик строки ввода) — мусор: сессии больше нет, а записи остались бы
+      // до конца работы приложения. Беседа убирается там же: висящий гейт без
+      // своей карточки решить нечем, а вложения и автопилот мёртвой панели
+      // воскресали при восстановлении сессии — она открывается под тем же id.
+      forgetSessionUi(sessionId)
+      forgetPaneDraft(sessionId)
+      useAiStore.getState().forgetSession(sessionId)
+      /** Кому уйдут Enter и Esc после закрытия. Считается внутри set, отдаётся наружу. */
+      let handOver: string | null = null
+      /** Вкладка, которая закрылась вместе с последней панелью. */
+      let closedTabId: string | null = null
       setPartial((s) => {
         const sessions = { ...s.sessions }
         delete sessions[sessionId]
@@ -482,27 +534,42 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
         let activeTabId = s.activeTabId
         const tab = s.tabs.find((t) => listLeaves(t.layout).includes(sessionId))
         if (tab) {
-          const newLayout = removeLeaf(tab.layout, sessionId)
-          if (!newLayout) {
+          // Раскладка пересобирается только если её не трогали руками, а фокус
+          // уходит СОСЕДНЕЙ панели, а не «никуда» (см. paneTree.closePane).
+          const { layout, focus } = closePane(tab.layout, sessionId)
+          if (!layout) {
             tabs = s.tabs.filter((t) => t.id !== tab.id)
-            if (activeTabId === tab.id) activeTabId = tabs[tabs.length - 1]?.id ?? null
+            closedTabId = tab.id
+            if (activeTabId === tab.id) {
+              const next = tabs[tabs.length - 1]
+              activeTabId = next?.id ?? null
+              handOver = next?.activeSessionId ?? null
+            }
           } else {
-            const leaves = listLeaves(newLayout)
-            tabs = s.tabs.map((t) =>
-              t.id === tab.id
-                ? {
-                    ...t,
-                    layout: newLayout,
-                    activeSessionId: leaves.includes(t.activeSessionId)
-                      ? t.activeSessionId
-                      : leaves[0]
-                  }
-                : t
-            )
+            const leaves = listLeaves(layout)
+            const wasFocused = tab.activeSessionId === sessionId
+            const nextActive = wasFocused
+              ? (focus && leaves.includes(focus) ? focus : leaves[0])
+              : tab.activeSessionId
+            if (wasFocused && tab.id === activeTabId) handOver = nextActive
+            tabs = s.tabs.map((t) => (t.id === tab.id ? { ...t, layout, activeSessionId: nextActive } : t))
           }
         }
         return { sessions, tabs, activeTabId }
       })
+      // Разворот принадлежит вкладке: закрылась развёрнутая панель — вкладка
+      // возвращается к раскладке; закрылась вся вкладка — запись уходит с ней.
+      if (closedTabId) forgetTabUi(closedTabId)
+      for (const [tabId, sid] of Object.entries(useUiStore.getState().maximizedByTab)) {
+        if (sid === sessionId) setMaximized(tabId, null)
+      }
+      if (handOver) {
+        // Через общий путь, а не «руками»: там же живёт правило «фокус и то, что
+        // видно, обязаны сходиться». Фокус — это не только рамка: беседа и лента
+        // следуют за панелью, а курсор уезжает туда, где можно печатать.
+        get().setActiveSession(handOver)
+        focusPane(handOver)
+      }
       await get().refreshSavedList()
       schedulePersistWorkspace(get)
     },
@@ -716,6 +783,8 @@ async function restoreWorkspace(
   get: () => SessionsState
 ): Promise<boolean> {
   let restored = false
+  /** Старый id вкладки → новый: по нему возвращается та вкладка, где работали. */
+  const tabIdMap = new Map<string, string>()
   for (const tab of ws.tabs) {
     const idMap = new Map<string, string>()
     const sessions: RuntimeSession[] = []
@@ -752,6 +821,7 @@ async function restoreWorkspace(
       layout,
       activeSessionId: idMap.get(tab.activeSessionId) ?? listLeaves(layout)[0]
     }
+    tabIdMap.set(tab.id, newTab.id)
     setPartial((s) => ({
       sessions: {
         ...s.sessions,
@@ -764,6 +834,15 @@ async function restoreWorkspace(
       await spawnSession(setPartial, session)
     }
     restored = true
+  }
+  // Возвращаемся ТУДА, где остановились. Раньше активной становилась первая
+  // восстановленная вкладка, а сохранённый выбор не читался вовсе: человек с
+  // тремя вкладками после перезапуска каждый раз попадал не в свою.
+  const wanted = ws.activeTabId ? tabIdMap.get(ws.activeTabId) : undefined
+  if (wanted) {
+    setPartial(() => ({ activeTabId: wanted }))
+    const tab = get().tabs.find((t) => t.id === wanted)
+    if (tab) emitBus('terminal:focus', { sessionId: tab.activeSessionId })
   }
   return restored
 }
