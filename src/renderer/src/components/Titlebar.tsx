@@ -2,10 +2,30 @@ import { useState } from 'react'
 import { listLeaves, useSessionsStore } from '@/state/sessionsStore'
 import { useSettingsStore } from '@/state/settingsStore'
 import { useUiStore } from '@/state/uiStore'
-import { useContextMenu } from './ContextMenu'
+import { useContextMenu, type MenuItem } from './ContextMenu'
 import { Icon, ShellGlyph } from './Icon'
 import { getThemes } from '@/features/themes/themes'
 import logoZarya from '@/assets/logo-zarya-48.png'
+
+/** Хвост пути: в шапке нужен проект, а не весь путь до него. */
+function shortTail(p: string): string {
+  // Windows-пути с обратными слэшами тоже: в шапке нужен проект, а не диск.
+  const parts = p.split(/[\\/]/).filter(Boolean)
+  return parts[parts.length - 1] || p
+}
+
+/** Открыть папку новой вкладкой — тот же жест, что в сайдбаре. */
+async function openFolder(): Promise<void> {
+  const dir = await window.zarya.app.pickDirectory()
+  if (dir) await useSessionsStore.getState().newTab(undefined, dir)
+}
+
+/** Добавить папку в проекты. */
+async function addProject(): Promise<void> {
+  const dir = await window.zarya.app.pickDirectory()
+  const cur = useSettingsStore.getState().settings.bookmarks
+  if (dir && !cur.includes(dir)) await useSettingsStore.getState().update({ bookmarks: [...cur, dir] })
+}
 
 export function Titlebar(): React.JSX.Element {
   const tabs = useSessionsStore((s) => s.tabs)
@@ -14,6 +34,12 @@ export function Titlebar(): React.JSX.Element {
   const profiles = useSettingsStore((s) => s.profiles)
   const maximized = useUiStore((s) => s.maximized)
   const { menu, open } = useContextMenu()
+  const bookmarks = useSettingsStore((s) => s.settings.bookmarks)
+  // Имя проекта активной вкладки — оно же подпись кнопки и заголовок окна.
+  const activeCwd = (() => {
+    const tab = tabs.find((t) => t.id === activeTabId)
+    return tab ? (sessions[tab.activeSessionId]?.cwd ?? '') : ''
+  })()
   const [, setHover] = useState(false)
 
   const store = useSessionsStore.getState()
@@ -86,7 +112,42 @@ export function Titlebar(): React.JSX.Element {
         <span className="zy-logo-tag">// ОРБИТА-1</span>
       </div>
 
-      {/* Terminals live in the Sessions sidebar now (single source, no tab bar). */}
+      {/* Проекты — пусковая площадка, а не список происходящего, поэтому они
+          живут здесь, а не в сайдбаре. Там они отнимали место у живых
+          терминалов: чем больше проектов, тем ниже уезжала работа. */}
+      <button
+        className="zy-titlebar-proj"
+        title={activeCwd || 'Проекты и недавние папки'}
+        onClick={(e) => {
+          const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
+          const store2 = useSessionsStore.getState()
+          const items: MenuItem[] = [
+            { label: 'Открыть папку…', hint: 'Ctrl+Shift+O', onClick: () => void openFolder() }
+          ]
+          if (bookmarks.length) {
+            items.push({ separator: true }, { label: 'ПРОЕКТЫ', disabled: true })
+            for (const b of bookmarks) {
+              items.push({
+                label: shortTail(b),
+                onClick: () => void store2.newTab(undefined, b)
+              })
+              items.push({
+                label: '      ↳ панелью рядом',
+                onClick: () => void store2.splitActive('row', b)
+              })
+            }
+          }
+          items.push(
+            { separator: true },
+            { label: 'Добавить папку в проекты…', onClick: () => void addProject() }
+          )
+          open(r.left, r.bottom + 4, items, e.currentTarget as HTMLElement)
+        }}
+      >
+        <Icon name="folder" size={12} />
+        {activeCwd ? shortTail(activeCwd) : 'проекты'}
+        <Icon name="chevron-down" size={10} />
+      </button>
       <div className="zy-titlebar-spacer" />
 
       <button

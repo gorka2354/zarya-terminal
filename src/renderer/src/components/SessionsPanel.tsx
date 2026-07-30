@@ -416,7 +416,7 @@ export function SessionsPanel(): React.JSX.Element {
             {shownTabs.map(renderOpenTab)}
           </>
         )}
-        {shownProjects.length > 0 && (
+        {false && shownProjects.length > 0 && (
           <>
             <div className="zy-section-label" style={sectionLabelStyle}>
               <Icon name="folder" size={11} />
