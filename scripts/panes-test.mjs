@@ -124,6 +124,65 @@ try {
   ok('сырой режим только у первой', raw[ids[0]] === true && !raw[ids[1]], raw)
   ok('ленты соседних панелей на месте', feedsNow === 3, feedsNow)
 
+  console.log('\n[6] Картинка попадает в ТУ панель, где курсор')
+  const paste = await page.evaluate(async () => {
+    const c = new OffscreenCanvas(1200, 800)
+    const x = c.getContext('2d')
+    x.fillStyle = '#e2231a'
+    x.fillRect(0, 0, 1200, 800)
+    const blob = await c.convertToBlob({ type: 'image/png' })
+    const dt = new DataTransfer()
+    dt.items.add(new File([blob], 'shot.png', { type: 'image/png' }))
+    const inputs = document.querySelectorAll('.zy-agentbar-input')
+    inputs[2].focus()
+    inputs[2].dispatchEvent(
+      new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })
+    )
+    await new Promise((r) => setTimeout(r, 1600))
+    return {
+      panes: document.querySelectorAll('.zy-pane').length,
+      chips: document.querySelectorAll('.zy-img-chip').length
+    }
+  })
+  // Порядок строк в разметке не совпадает с порядком сессий в сторе, поэтому
+  // проверяем не номер, а суть: вложение у той панели, где стоял курсор.
+  const focused = await page.evaluate(() => window.__zaryaDumpSessions().activeSessionId)
+  const perPane = await page.evaluate(
+    (list) => list.map((id) => (window.__zaryaPendingImages(id) ?? []).length),
+    ids
+  )
+  ok('вложение появилось ровно одно', paste.chips === 1, paste)
+  const onFocused = await page.evaluate((sid) => (window.__zaryaPendingImages(sid) ?? []).length, focused)
+  ok('вложение у панели с курсором', onFocused === 1, { focused, perPane })
+  ok('и больше ни у кого', perPane.filter((n) => n > 0).length === 1, perPane)
+  // Без stopPropagation дроп всплыл бы в общий обработчик окна и открыл терминал.
+  ok('лишних панелей не появилось', paste.panes === 4, paste)
+  const meta = await page.evaluate((sid) => window.__zaryaPendingImages(sid), focused)
+  ok('картинка уменьшена до предела', meta[0]?.width <= 1568 && meta[0]?.height <= 1568, meta)
+
+  console.log('\n[7] Не-картинка добавляется ПУТЁМ, а не содержимым')
+  const drop = await page.evaluate(async () => {
+    const dt = new DataTransfer()
+    dt.items.add(new File(['текст файла'], 'notes.txt', { type: 'text/plain' }))
+    const inputsAll = [...document.querySelectorAll('.zy-agentbar-input')]
+    // Берём ПОСЛЕДНЮЮ доступную строку: сколько их видно, зависит от режимов
+    // панелей, а проверяем мы не номер панели, а сам жест.
+    const last = inputsAll[inputsAll.length - 1]
+    const target = last.closest('.zy-agentbar-row') ?? last
+    target.dispatchEvent(
+      new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true })
+    )
+    await new Promise((r) => setTimeout(r, 900))
+    return {
+      panes: document.querySelectorAll('.zy-pane').length,
+      value: last.value,
+      chips: document.querySelectorAll('.zy-img-chip').length
+    }
+  })
+  // Содержимое файла в контекст не инлайним: агент прочитает его сам под гейтом.
+  ok('файл не стал вложением-картинкой', drop.chips === 1, drop.chips)
+  ok('и не открыл новый терминал', drop.panes === 4, drop.panes)
+
   console.log(`\n[panes] PASS ${pass} · FAIL ${fail}`)
 } finally {
   await app.close()
