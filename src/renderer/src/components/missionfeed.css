@@ -380,11 +380,31 @@
   flex-shrink: 0;
   white-space: nowrap;
 }
+/**
+ * Кнопки решения ПРИЛИПАЮТ к низу карточки, а текст команды прокручивается под
+ * ними. В узкой панели карточка с патчем на тридцать строк выше самой панели, и
+ * кнопки уезжали за край — при том, что решение принимают именно ими. Получалось
+ * так: единственный видимый способ ответить — клавиша, то есть вслепую.
+ *
+ * Перенос строки разрешён: «РАЗРЕШИТЬ ВСЕГДА» плюс «ОТКЛОНИТЬ» не помещаются в
+ * узкую колонку и без него схлопывались в кашу.
+ */
 .zy-mf-tool-actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
   margin-top: 9px;
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  padding: 6px 0 2px;
+  background: linear-gradient(
+    to bottom,
+    transparent 0,
+    var(--bg-elev1) 6px,
+    var(--bg-elev1) 100%
+  );
 }
 .zy-mf-tool-kbd {
   margin-left: auto;
@@ -755,4 +775,13 @@
   min-height: 22px;
   padding-top: 0;
   padding-bottom: 0;
+}
+
+
+/* В узкой панели подпись «Enter · Esc» встаёт под кнопки, а не толкает их. */
+@container pane (max-width: 620px) {
+  .zy-mf-tool-kbd {
+    margin-left: 0;
+    flex-basis: 100%;
+  }
 }
