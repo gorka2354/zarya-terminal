@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { AgentCapabilities, AgentEngine, ClaudeModelInfo, ClaudeUsage } from '@shared/types'
 import { uid } from '@/lib/uid'
+import { listLeaves } from '@shared/paneTree'
 import { useSessionsStore } from '@/state/sessionsStore'
 
 export type SidebarView = 'sessions' | 'files' | 'workflows' | 'history' | null
@@ -156,19 +157,45 @@ export function barModeOf(
 ): UiState['barMode'] {
   return (sessionId && state.barModeBySession[sessionId]) || state.barMode
 }
+/**
+ * Режим ТОЛЬКО этой панели, не трогая общее умолчание.
+ *
+ * Нужен авто-переключению: оно происходит само, когда где-то начинается ответ
+ * агента, и объявлять чужой ход выбором человека нельзя — иначе следующая новая
+ * панель откроется в режиме агента, которого никто не просил.
+ */
+export function setPaneBarMode(sessionId: string, mode: UiState['barMode']): void {
+  const st = useUiStore.getState()
+  if (st.barModeBySession[sessionId] === mode) return
+  st.set({ barModeBySession: { ...st.barModeBySession, [sessionId]: mode } })
+}
 export function setBarModeOf(sessionId: string | null | undefined, mode: UiState['barMode']): void {
   const st = useUiStore.getState()
   if (!sessionId) {
     st.set({ barMode: mode })
     return
   }
-  if (st.barModeBySession[sessionId] === mode) return
+  // Сверяем ОБА значения: у панели режим мог уже стоять (авто-переключением), а
+  // общее умолчание — нет. Ранний выход по одной панели оставлял бы умолчание
+  // расходиться с явным выбором человека.
+  if (st.barModeBySession[sessionId] === mode && st.barMode === mode) return
   // Общее значение тоже двигаем: это умолчание для следующей новой панели.
   st.set({ barMode: mode, barModeBySession: { ...st.barModeBySession, [sessionId]: mode } })
 }
-/** Развёрнутая панель ЭТОЙ вкладки, если она есть. */
+/**
+ * Развёрнутая панель ЭТОЙ вкладки, если она есть.
+ *
+ * Запись считается действительной, только пока названная панель ЖИВЁТ в этой
+ * вкладке. Иначе висячая запись (панель уехала переездом) заставляла сайдбар
+ * писать «сейчас не видно» про все панели вкладки, а обычный клик по панели
+ * превращался в «развернуть». Проверка на чтении, а не только на записи: правок
+ * дерева много, и каждая новая иначе снова могла бы оставить призрак.
+ */
 export function maximizedIn(state: UiState, tabId: string | null | undefined): string | null {
-  return (tabId && state.maximizedByTab[tabId]) || null
+  const sid = (tabId && state.maximizedByTab[tabId]) || null
+  if (!sid) return null
+  const tab = useSessionsStore.getState().tabs.find((t) => t.id === tabId)
+  return tab && listLeaves(tab.layout).includes(sid) ? sid : null
 }
 /**
  * Развернуть панель вкладки / вернуть сетку (`null`).
@@ -200,7 +227,14 @@ export function forgetSessionUi(sessionId: string): void {
   const modes = { ...st.barModeBySession }
   delete raw[sessionId]
   delete modes[sessionId]
-  st.set({ rawBySession: raw, barModeBySession: modes })
+  st.set({
+    rawBySession: raw,
+    barModeBySession: modes,
+    // Строка поиска по терминалу — тоже след: сессия открывается заново под тем
+    // же id (restoreSaved), и восстановленная панель показывала бы открытый
+    // поиск, которого в этой жизни никто не открывал.
+    searchOpenFor: st.searchOpenFor === sessionId ? null : st.searchOpenFor
+  })
 }
 
 ;(window as unknown as { __zaryaSetUi?: (p: Record<string, unknown>) => void }).__zaryaSetUi = (
@@ -212,6 +246,13 @@ export function forgetSessionUi(sessionId: string): void {
     const sid = useSessionsStore.getState().activeSessionId()
     setRaw(sid, !!p.rawTerminal)
     delete p.rawTerminal
+  }
+  // Режим строки — как чипом: активной панели И общим умолчанием. Прямая запись
+  // в общее значение больше ничего не переключала бы: у каждой панели свой режим.
+  if ('barMode' in p) {
+    const sid = useSessionsStore.getState().activeSessionId()
+    setBarModeOf(sid, p.barMode as UiState['barMode'])
+    delete p.barMode
   }
   useUiStore.getState().set(p as Partial<UiState>)
 }

@@ -25,6 +25,7 @@ import { getSettings } from './settingsStore'
 import { forgetPaneDraft } from './paneDrafts'
 import { forgetSessionUi, forgetTabUi, maximizedIn, setMaximized, useUiStore } from './uiStore'
 import { useAiStore } from '@/features/ai/aiStore'
+import { forgetPaneHistory } from './paneHistory'
 import { focusPane } from '@/terminal/paneFocus'
 import {
   disposeTerminal,
@@ -484,8 +485,18 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
           .filter((t) => !(t.id === from.id && from.id !== to.id && !stripped))
         return { tabs, activeTabId: to.id }
       })
-      // Опустевшая вкладка уходит — вместе с ней уходит и её разворот.
+      // Опустевшая вкладка уходит — вместе с ней уходит и её разворот. Если она
+      // осталась жить, но отдала именно развёрнутую панель, запись тоже снимаем:
+      // иначе она указывала бы на панель, которой в этой вкладке больше нет.
       if (donorEmpties) forgetTabUi(fromTab.id)
+      // Сырая карта, а не maximizedIn: тот уже видит новое дерево и честно
+      // ответил бы «ничего не развёрнуто», оставив запись-призрак в памяти.
+      else if (useUiStore.getState().maximizedByTab[fromTab.id] === sessionId) {
+        setMaximized(fromTab.id, null)
+      }
+      // «Положить рядом с этой» — просьба увидеть обе. Оставить разворот значило
+      // бы спрятать ту самую панель, на которую целились мышью.
+      setMaximized(toTab.id, null)
       // Переехавшая панель — та, куда теперь уходят клавиши. Через общую дверь:
       // там же примиряется разворот вкладки-приёмника, иначе панель приехала бы
       // под развёрнутого соседа — живой терминал, которого не видно.
@@ -522,6 +533,7 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
       // воскресали при восстановлении сессии — она открывается под тем же id.
       forgetSessionUi(sessionId)
       forgetPaneDraft(sessionId)
+      forgetPaneHistory(sessionId)
       useAiStore.getState().forgetSession(sessionId)
       /** Кому уйдут Enter и Esc после закрытия. Считается внутри set, отдаётся наружу. */
       let handOver: string | null = null

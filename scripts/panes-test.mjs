@@ -868,7 +868,102 @@ try {
   }, sid26)
   await page.waitForTimeout(300)
 
-  console.log('\n[27] Окно ни на что не жалуется')
+  console.log('\n[27] Режим строки принадлежит своей панели')
+  // Общий на окно режим означал бы: агент, начавший ход в соседней панели,
+  // переключает чип ЗДЕСЬ, и Enter уводит команду терминала в модель.
+  const st27 = await dump()
+  const tab27 = st27.tabs.find((t) => t.id === st27.activeTabId)
+  while ((await dump()).tabs.find((t) => t.id === tab27.id).leaves.length < 2) {
+    await page.evaluate(() => window.__zaryaSplitActive('row'))
+    await page.waitForTimeout(1600)
+  }
+  const [pa, pb] = (await dump()).tabs.find((t) => t.id === tab27.id).leaves
+  await page.evaluate((sid) => window.__zaryaSetRawFor(sid, false), pa)
+  await page.evaluate((sid) => window.__zaryaSetRawFor(sid, false), pb)
+  await page.waitForTimeout(500)
+  const modeBefore = await page.evaluate((sid) => window.__zaryaBarModeFor(sid), pa)
+  // В соседней панели начинается ход агента — авто-переключение сработает ТАМ.
+  await page.evaluate((sid) => window.__zaryaStartAgentIn?.('gemini', 'привет', sid), pb)
+  await page.waitForTimeout(2500)
+  const modeAfter = await page.evaluate((sid) => window.__zaryaBarModeFor(sid), pa)
+  const modeNeighbour = await page.evaluate((sid) => window.__zaryaBarModeFor(sid), pb)
+  ok('режим соседней панели переключился сам', modeNeighbour === 'gemini', modeNeighbour)
+  ok('а режим своей панели не тронут', modeAfter === modeBefore, { modeBefore, modeAfter })
+
+  console.log('\n[28] История ↑ не достаёт команду чужой панели')
+  await page.click(paneInput(pa))
+  await page.keyboard.type('echo ИСТОРИЯ-ПЕРВОЙ')
+  await page.keyboard.press('Enter')
+  await page.waitForTimeout(1200)
+  await page.click(paneInput(pb))
+  await page.waitForTimeout(300)
+  await page.keyboard.press('ArrowUp')
+  await page.waitForTimeout(400)
+  const recalled = await page.evaluate(
+    (sid) =>
+      document.querySelector(`.zy-pane[data-session="${sid}"] .zy-agentbar-input`)?.value ?? '',
+    pb
+  )
+  ok('в чужой панели ↑ не подставил команду', !/ИСТОРИЯ-ПЕРВОЙ/.test(recalled), recalled)
+  await page.click(paneInput(pa))
+  await page.waitForTimeout(300)
+  await page.keyboard.press('ArrowUp')
+  await page.waitForTimeout(400)
+  const own = await page.evaluate(
+    (sid) =>
+      document.querySelector(`.zy-pane[data-session="${sid}"] .zy-agentbar-input`)?.value ?? '',
+    pa
+  )
+  ok('в своей — подставил', /ИСТОРИЯ-ПЕРВОЙ/.test(own), own)
+  await page.evaluate(() => {
+    for (const el of document.querySelectorAll('.zy-agentbar-input')) {
+      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set
+      setter?.call(el, '')
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }
+  })
+  await page.waitForTimeout(300)
+
+  console.log('\n[29] Esc из чужого поля не прерывает работу панели')
+  // Esc, которым бросают поиск сессий в сайдбаре, уходил активной панели: мог
+  // отклонить гейт и забрать отправленное сообщение из памяти агента.
+  const conv29 = await page.evaluate(
+    (sid) => window.__zaryaStartAgentIn?.('gemini', 'tool: поработай', sid),
+    pa
+  )
+  await page.waitForTimeout(2200)
+  const gate29 = await page.evaluate(
+    (c) => (window.__zaryaConvById(c)?.pendingTools ?? []).filter((t) => !t.settled).length,
+    conv29
+  )
+  await page.click('.zy-sidebar-search .zy-input')
+  await page.keyboard.type('поиск')
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(900)
+  const gateAfter29 = await page.evaluate(
+    (c) => (window.__zaryaConvById(c)?.pendingTools ?? []).filter((t) => !t.settled).length,
+    conv29
+  )
+  ok('гейт висел', gate29 > 0, gate29)
+  ok('Esc в поиске сайдбара его не тронул', gateAfter29 === gate29, { gate29, gateAfter29 })
+  // А из своей строки — по-прежнему отклоняет.
+  await page.evaluate(() => {
+    const el = document.querySelector('.zy-sidebar-search .zy-input')
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+    setter?.call(el, '')
+    el.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  await page.click(paneInput(pa))
+  await page.waitForTimeout(300)
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(1200)
+  const gateOwn29 = await page.evaluate(
+    (c) => (window.__zaryaConvById(c)?.pendingTools ?? []).filter((t) => !t.settled).length,
+    conv29
+  )
+  ok('Esc из своей строки гейт отклонил', gateOwn29 === 0, gateOwn29)
+
+  console.log('\n[30] Окно ни на что не жалуется')
   // Ключи списка панелей, размонтирование, гонки эффектов — всё это React
   // проговаривает в консоли раньше, чем сломается видимое.
   const noise = complaints.filter((t) => !/Autofill|DevTools|Electron Security/i.test(t))

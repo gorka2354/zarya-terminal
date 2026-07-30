@@ -11,10 +11,17 @@ import { getTerminal } from './terminalRegistry'
  */
 export function focusPane(sessionId: string): void {
   requestAnimationFrame(() => {
-    const input = document.querySelector<HTMLTextAreaElement>(
-      `.zy-pane[data-session="${CSS.escape(sessionId)}"] .zy-agentbar-input`
+    const pane = document.querySelector<HTMLElement>(
+      `.zy-pane[data-session="${CSS.escape(sessionId)}"]`
     )
-    if (input) input.focus()
+    // Порядок — по тому, чем сейчас в панели отвечают. Когда агент задал вопрос,
+    // строки ввода нет вовсе: её место занимает карточка выбора, и подсказка
+    // «1–9 или ↑↓ + Enter» работает, только если фокус на карточке. Курсор в
+    // скрытом поле xterm убивал бы и её, и одобрение гейта голым Enter.
+    const target =
+      pane?.querySelector<HTMLElement>('.zy-agentbar-input') ??
+      pane?.querySelector<HTMLElement>('.zy-cqb')
+    if (target) target.focus()
     else getTerminal(sessionId)?.focus()
   })
 }

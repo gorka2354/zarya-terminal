@@ -5,6 +5,7 @@ import { MissionFeed } from './MissionFeed'
 import { AgentBar } from './AgentBar'
 import { getTerminal } from '@/terminal/terminalRegistry'
 import { closePaneAsking, toggleMaximizePane } from '@/actions/panes'
+import { focusPane } from '@/terminal/paneFocus'
 import { listLeaves, useSessionsStore } from '@/state/sessionsStore'
 import { useSettingsStore } from '@/state/settingsStore'
 import { isRaw, setRaw, useUiStore } from '@/state/uiStore'
@@ -278,7 +279,9 @@ function TermSearchBar({ sessionId }: { sessionId: string }): React.JSX.Element 
   const close = (): void => {
     getTerminal(sessionId)?.search.clearDecorations()
     useUiStore.getState().set({ searchOpenFor: null })
-    getTerminal(sessionId)?.focus()
+    // Не в скрытое поле xterm: оттуда голый Enter перестаёт одобрять гейт —
+    // диспетчер считает его «чужим полем» (см. paneFocus / features/ai/keyRouter).
+    focusPane(sessionId)
   }
 
   const find = (dir: 1 | -1): void => {

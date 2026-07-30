@@ -76,6 +76,26 @@ function overlayOwnsKeys(): boolean {
   )
 }
 
+/**
+ * Курсор стоит в поле, которое НЕ принадлежит адресуемой панели.
+ *
+ * Строка ввода своей панели — не «чужое поле»: там Esc и должен работать. А вот
+ * поиск сессий, переименование, поле настроек — чужие: нажатие в них означает
+ * «закончить здесь», а не «прервать агента в панели, на которую я не смотрю».
+ */
+function inForeignField(sessionId: string): boolean {
+  const ae = document.activeElement as HTMLElement | null
+  if (!ae) return false
+  const isField = ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable
+  if (!isField) return false
+  const pane = ae.closest('.zy-pane')
+  if (pane?.getAttribute('data-session') !== sessionId) return true
+  // Внутри своей панели «своими» считаются только строка ввода и сам терминал.
+  // Поиск по терминалу — отдельное поле со своим Esc: он закрывает поиск, и
+  // отклонять заодно ожидающий гейт ему нечего.
+  return !ae.classList.contains('zy-agentbar-input') && !ae.closest('.zy-term')
+}
+
 let installed = false
 
 /** Поставить единственный слушатель окна. Вызывается один раз при старте. */
@@ -96,6 +116,15 @@ export function installKeyRouter(): () => void {
 
     const overlayOpen = overlayOwnsKeys()
     if (e.key === 'Escape') {
+      // Esc из ЧУЖОГО поля ввода панели не адресуется. Иначе Esc, которым
+      // бросают поиск сессий в сайдбаре, прерывал ход агента в активной панели
+      // и мог забрать отправленное сообщение из памяти Claude Code — человек
+      // при этом смотрел совсем в другое место. Диктовка выше этой проверки:
+      // она разбирается внутри панели (микрофон открыт прямо сейчас).
+      if (inForeignField(sid)) {
+        if (pane.onEscape?.({ overlayOpen: true })) e.preventDefault()
+        return
+      }
       if (pane.onEscape?.({ overlayOpen })) e.preventDefault()
       return
     }

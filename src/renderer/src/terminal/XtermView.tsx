@@ -396,9 +396,15 @@ export function XtermView({ sessionId, active, visible }: Props): React.JSX.Elem
     if (!handle) return
     handle.term.options.disableStdin = !rawTerminal
     handle.fit()
-    if (rawTerminal && visible && active) {
+    if (!visible || !active) return
+    if (rawTerminal) {
       requestAnimationFrame(() => handle.focus())
+      return
     }
+    // Обратный переход тоже нужен: vim закрылся, сырой режим снялся, строка
+    // ввода вернулась вместе с набранным — а каретка оставалась в поле xterm,
+    // где ввод выключен. Печатать было некуда, и это не объяснялось ничем.
+    focusPane(sessionId)
   }, [rawTerminal, visible, active, sessionId])
 
   const pad = settings.appearance.terminalPadding

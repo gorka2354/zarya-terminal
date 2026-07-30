@@ -1,4 +1,4 @@
-import { convForSession, useAiStore } from '@/features/ai/aiStore'
+import { useAiStore } from '@/features/ai/aiStore'
 import { nextGate } from '@/features/ai/gates'
 import { listLeaves, useSessionsStore } from '@/state/sessionsStore'
 import { paneDraft } from '@/state/paneDrafts'
@@ -21,12 +21,34 @@ function lossesOf(sessionId: string): string[] {
   const out: string[] = []
   const draft = paneDraft(sessionId).trim()
   if (draft) out.push(`неотправленный текст: «${quote(draft)}»`)
-  const conv = convForSession(useAiStore.getState(), sessionId)
-  if (conv) {
-    if (nextGate(conv)) out.push('агент ждёт решения по инструменту — оно будет отклонено')
-    else if (conv.streaming) out.push('агент выполняет ход — он будет прерван')
+  const ai = useAiStore.getState()
+  // Беседы ВСЕ, а не последняя: чип «недавние сессии» заводит вторую, и гейт
+  // первой иначе оставался бы неупомянутым — а гасить его всё равно придётся.
+  const convs = ai.conversations.filter((c) => c.sessionId === sessionId)
+  if (convs.some((c) => nextGate(c))) {
+    out.push('агент ждёт решения по инструменту — оно будет отклонено')
+  } else if (convs.some((c) => c.streaming)) {
+    out.push('агент выполняет ход — он будет прерван')
+  }
+  // Вложения и приписка в очереди у ВИДИМОЙ панели молчат намеренно: они на
+  // экране, и человек закрывает панель, глядя на них. У невидимой этот довод не
+  // работает — про неё и говорим.
+  if (!isOnScreen(sessionId)) {
+    const images = ai.pendingImages[sessionId]?.length ?? 0
+    if (images) out.push(`вложений: ${images}`)
+    const queued = convs.find((c) => c.queued)?.queued
+    if (queued) out.push(`приписка в очереди: «${quote(queued)}»`)
   }
   return out
+}
+
+/** Видно ли панель прямо сейчас: своя вкладка активна и разворот её не прячет. */
+function isOnScreen(sessionId: string): boolean {
+  const store = useSessionsStore.getState()
+  const tab = store.tabs.find((t) => listLeaves(t.layout).includes(sessionId))
+  if (!tab || tab.id !== store.activeTabId) return false
+  const maxed = maximizedIn(useUiStore.getState(), tab.id)
+  return !maxed || maxed === sessionId
 }
 
 /**
@@ -37,27 +59,47 @@ function lossesOf(sessionId: string): string[] {
  * `closeSession` остаётся внутренним — иначе следующая кнопка снова выбросит
  * недописанный запрос молча.
  */
+/**
+ * Что уже закрывается. `window.confirm` блокирует рендерер, и второй щелчок по
+ * крестику (привычка двойного клика на Windows) ждал в очереди событий: ответив
+ * на первый вопрос, человек получал ТОТ ЖЕ вопрос второй раз, а закрытие уходило
+ * вторым параллельным проходом по тем же сессиям.
+ */
+const closing = new Set<string>()
+
 export async function closePaneAsking(sessionId: string): Promise<void> {
-  const losses = lossesOf(sessionId)
-  if (losses.length && !window.confirm(`Закрыть панель?\n\nПропадёт:\n· ${losses.join('\n· ')}`)) {
-    return
+  if (closing.has(sessionId)) return
+  closing.add(sessionId)
+  try {
+    const losses = lossesOf(sessionId)
+    if (losses.length && !window.confirm(`Закрыть панель?\n\nПропадёт:\n· ${losses.join('\n· ')}`)) {
+      return
+    }
+    await useSessionsStore.getState().closeSession(sessionId)
+  } finally {
+    closing.delete(sessionId)
   }
-  await useSessionsStore.getState().closeSession(sessionId)
 }
 
 /** Закрыть вкладку целиком, спросив про потери в любой из её панелей. */
 export async function closeTabAsking(tabId: string): Promise<void> {
-  const store = useSessionsStore.getState()
-  const tab = store.tabs.find((t) => t.id === tabId)
-  if (!tab) return
-  const leaves = listLeaves(tab.layout)
-  const losses = leaves.flatMap((sid) => lossesOf(sid))
-  if (losses.length) {
-    const head =
-      leaves.length > 1 ? `Закрыть терминал целиком (${leaves.length} панели)?` : 'Закрыть панель?'
-    if (!window.confirm(`${head}\n\nПропадёт:\n· ${losses.join('\n· ')}`)) return
+  if (closing.has(tabId)) return
+  closing.add(tabId)
+  try {
+    const store = useSessionsStore.getState()
+    const tab = store.tabs.find((t) => t.id === tabId)
+    if (!tab) return
+    const leaves = listLeaves(tab.layout)
+    const losses = leaves.flatMap((sid) => lossesOf(sid))
+    if (losses.length) {
+      const head =
+        leaves.length > 1 ? `Закрыть терминал целиком (${leaves.length} панели)?` : 'Закрыть панель?'
+      if (!window.confirm(`${head}\n\nПропадёт:\n· ${losses.join('\n· ')}`)) return
+    }
+    await store.closeTab(tabId)
+  } finally {
+    closing.delete(tabId)
   }
-  await store.closeTab(tabId)
 }
 
 /**

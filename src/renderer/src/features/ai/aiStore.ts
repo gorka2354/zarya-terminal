@@ -1212,15 +1212,28 @@ export const useAiStore = create<AiState>((set, get) => {
     },
 
     forgetSession: (sessionId) => {
-      // Сперва развязать беседу: гейт без карточки решить больше нечем, а ход
-      // без панели некому показать. Отклоняем и прерываем ЯВНО — молчание
-      // оставило бы «ждут решения: 1» навсегда.
-      const conv = convForSession(get(), sessionId)
-      if (conv) {
-        for (const t of conv.pendingTools.filter((x) => !x.settled)) {
-          get().denyTool(conv.id, t.id)
+      // ВСЕ беседы панели, а не только последняя: чип «недавние сессии» заводит
+      // вторую, и первая с висящим гейтом иначе оставалась бы «ждущей» навсегда.
+      for (const conv of get().conversations.filter((c) => c.sessionId === sessionId)) {
+        // Сперва глушим ход: abort бампает epoch и чистит цепочку инструментов,
+        // поэтому поздний ответ уже никуда не поедет. Безусловно, а не «если
+        // streaming»: снимок мог устареть между решением и этим вызовом.
+        get().abort(conv.id)
+        const unsettled = conv.pendingTools.filter((t) => !t.settled)
+        if (!unsettled.length) continue
+        if (conv.engine !== 'builtin') {
+          // Нативному движку отказ отправить НАДО: без ответа драйвер остаётся
+          // висеть на своём вопросе.
+          for (const t of unsettled) get().denyTool(conv.id, t.id)
+          continue
         }
-        if (conv.streaming) get().abort(conv.id)
+        // Свой агент: гейты гасим МОЛЧА. denyTool здесь по контракту продолжает
+        // диалог (maybeContinue) — то есть закрытие панели отправляло бы новый
+        // платный запрос за агента, которого человек только что закрыл.
+        patchConversation(conv.id, (c) => ({
+          ...c,
+          pendingTools: c.pendingTools.filter((t) => !unsettled.some((u) => u.id === t.id))
+        }))
       }
       set((s) => {
         const images = { ...s.pendingImages }

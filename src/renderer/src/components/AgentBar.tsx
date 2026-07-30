@@ -4,7 +4,8 @@ import { EFFORT_TUNING } from '@shared/defaults'
 import { useSessionsStore } from '@/state/sessionsStore'
 import { useSettingsStore } from '@/state/settingsStore'
 import { paneDraft, setPaneDraft } from '@/state/paneDrafts'
-import { setRaw, useUiStore } from '@/state/uiStore'
+import { paneHistory, pushPaneHistory } from '@/state/paneHistory'
+import { barModeOf, setBarModeOf, setPaneBarMode, setRaw, useUiStore } from '@/state/uiStore'
 import { getTerminal } from '@/terminal/terminalRegistry'
 import { convForSession, useAiStore } from '@/features/ai/aiStore'
 import { nextGate } from '@/features/ai/gates'
@@ -34,16 +35,6 @@ import './agentbar.css'
 const EFFORTS: AiEffort[] = ['low', 'medium', 'high', 'max']
 /** Стабильная пустая ссылка для селектора вложений — см. AgentBar. */
 const NO_IMAGES: ImageAttachment[] = []
-
-// Session-local input history for the bottom bar (↑/↓ recall, like a shell).
-// Module-level so it survives AgentBar remounts within the session.
-const barHistory: string[] = []
-function pushHistory(text: string): void {
-  const t = text.trim()
-  if (!t || barHistory[barHistory.length - 1] === t) return
-  barHistory.push(t)
-  if (barHistory.length > 200) barHistory.shift()
-}
 
 /**
  * Про какие пропавшие микрофоны уже сказали в этом запуске (ключ — сохранённый
@@ -314,7 +305,10 @@ export function AgentBar({ paneSessionId }: { paneSessionId?: string } = {}): Re
   const model = useSettingsStore((s) => s.settings.ai.model)
   const effort = useSettingsStore((s) => s.settings.ai.effort)
   const effortIdx = EFFORTS.indexOf(effort)
-  const mode = useUiStore((s) => s.barMode)
+  // Режим строки — СВОЙ у каждой панели. Общее значение окна читалось напрямую,
+  // и агент, начавший ход в соседней панели, авто-переключал чип ЗДЕСЬ: Enter
+  // уводил набранную команду терминала в модель вместо оболочки.
+  const mode = useUiStore((s) => barModeOf(s, paneSessionId))
   const claudeStatus = useUiStore((s) => s.claudeStatus)
   const agentContext = useUiStore((s) => s.agentContext)
   const ultracode = useUiStore((s) => s.ultracode)
@@ -488,7 +482,10 @@ ${prev}`
     if (followedRef.current === activeConv.id) return
     followedRef.current = activeConv.id
     const want: BarMode = activeConv.engine !== 'builtin' ? activeConv.engine : 'zarya'
-    if (useUiStore.getState().barMode !== want) useUiStore.getState().set({ barMode: want })
+    // Только СВОЯ панель: чужой ход — не выбор человека, и общим умолчанием
+    // для следующих панелей он становиться не должен.
+    if (paneSessionId) setPaneBarMode(paneSessionId, want)
+    else if (useUiStore.getState().barMode !== want) useUiStore.getState().set({ barMode: want })
   }, [activeConv?.id, activeConv?.engine, activeConv?.messages.length, activeConv?.streaming])
 
   // A pending AskUserQuestion on the active native-agent conversation replaces
@@ -501,7 +498,7 @@ ${prev}`
   const runShell = (): void => {
     const cmd = text.trim()
     if (!cmd || !activeSessionId) return
-    pushHistory(cmd)
+    pushPaneHistory(activeSessionId, cmd)
     setHistIdx(-1)
     // Auto-detect intent: a bare `claude` means "I want to work with Claude" —
     // switch straight into the native mode instead of the raw TUI (add args,
@@ -522,7 +519,7 @@ ${prev}`
   const askAgent = (agentEngine: 'builtin' | AgentEngine): void => {
     const q = text.trim()
     if (!q) return
-    pushHistory(q)
+    pushPaneHistory(activeSessionId, q)
     setHistIdx(-1)
     setText('')
     const store = useAiStore.getState()
@@ -558,7 +555,7 @@ ${prev}`
     if (activeConv && activeConv.engine === engine && busyConv) {
       const t = text.trim()
       if (t) {
-        pushHistory(t)
+        pushPaneHistory(activeSessionId, t)
         setHistIdx(-1)
         useAiStore.getState().queueMessage(activeConv.id, t)
         setText('')
@@ -590,6 +587,7 @@ ${prev}`
         return true
       }
       // 2) Walk back through previously sent messages.
+      const barHistory = paneHistory(activeSessionId)
       if (!barHistory.length) return false
       e.preventDefault()
       if (histIdx === -1) draftRef.current = text
@@ -600,6 +598,7 @@ ${prev}`
     }
     if (e.key === 'ArrowDown' && histIdx !== -1) {
       e.preventDefault()
+      const barHistory = paneHistory(activeSessionId)
       const idx = histIdx + 1
       if (idx >= barHistory.length) {
         setHistIdx(-1)
@@ -624,7 +623,8 @@ ${prev}`
     }
     const order = modeCycle(Object.keys(agentCaps))
     const next = order[(order.indexOf(mode) + 1) % order.length] ?? 'shell'
-    useUiStore.getState().set({ barMode: next })
+    // Явный выбор человека: он же становится умолчанием для новых панелей.
+    setBarModeOf(paneSessionId, next)
     setTimeout(() => ref.current?.focus(), 0)
   }
 
@@ -1009,6 +1009,15 @@ ${prev}`
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voice])
 
+  // Закрепить режим за панелью при рождении. Без этого панель, в которой режим
+  // ни разу не выбирали, продолжала бы читать общее умолчание — и менялась бы
+  // вместе с ним, когда режим переключают в СОСЕДНЕЙ панели.
+  useEffect(() => {
+    if (!paneSessionId) return
+    const st = useUiStore.getState()
+    if (!st.barModeBySession[paneSessionId]) setPaneBarMode(paneSessionId, st.barMode)
+  }, [paneSessionId])
+
   // Отзеркалить набранное: закрытие панели приходит снаружи (крестик в сайдбаре,
   // пункт меню) и обязано знать, теряется ли при этом текст. Строка ввода
   // остаётся владельцем текста — сюда уходит только копия для вопроса.
@@ -1387,7 +1396,8 @@ ${prev}`
           onChange={(e) => {
             setText(e.target.value)
             // The user edited a recalled item → leave history-browse mode.
-            if (histIdx !== -1 && e.target.value !== barHistory[histIdx]) setHistIdx(-1)
+            if (histIdx !== -1 && e.target.value !== paneHistory(activeSessionId)[histIdx])
+              setHistIdx(-1)
           }}
           onKeyDown={(e) => {
             // Shift+Enter / Ctrl+Enter insert a line break — a multi-line prompt
@@ -1412,7 +1422,7 @@ ${prev}`
             } else if ((e.ctrlKey || e.metaKey) && /^[iшI]$/i.test(e.key)) {
               // Ctrl+I → jump into Claude Code mode (and send if there's text).
               e.preventDefault()
-              if (mode !== 'claude-code') useUiStore.getState().set({ barMode: 'claude-code' })
+              if (mode !== 'claude-code') setBarModeOf(paneSessionId, 'claude-code')
               if (text.trim()) askAgent('claude-code')
             }
           }}
