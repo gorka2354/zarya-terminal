@@ -363,6 +363,8 @@ export class ClaudeCodeDriver implements AgentDriver {
     structuredQuestions: true,
     // resumeSessionAt + forkSession — см. rewindAfterInterrupt.
     rewind: true,
+    // Родной формат SDK: изображение уходит блоком в том же сообщении.
+    images: true,
     vendorFlags: [{ key: 'ultracode', label: 'ULTRACODE', desc: 'xhigh + оркестрация воркфлоу' }]
   }
   private sessions = new Map<string, Session>()

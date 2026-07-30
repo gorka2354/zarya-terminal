@@ -295,6 +295,20 @@ export type AiContentPart =
   | { type: 'text'; text: string }
   | { type: 'tool_use'; id: string; name: string; input: unknown }
   | { type: 'tool_result'; toolUseId: string; content: string; isError?: boolean }
+  /**
+   * Вставленное изображение. `data` — base64 без префикса data:. Пределы и
+   * допустимые типы живут в @shared/images: расползшийся предел это предел,
+   * который где-то не проверяется.
+   */
+  | {
+      type: 'image'
+      mediaType: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif'
+      data: string
+      bytes: number
+      width: number
+      height: number
+      name?: string
+    }
 
 export interface AiMessage {
   role: 'user' | 'assistant'
@@ -608,6 +622,11 @@ export interface AgentCapabilities {
   usage: boolean
   /** The driver can emit a 'permission' event carrying `questions` (AskUserQuestion-style). */
   structuredQuestions: boolean
+  /**
+   * Движок принимает изображения. Где false — вставка не должна создавать
+   * вложение: проглотить картинку и отправить запрос без неё значит соврать.
+   */
+  images?: boolean
   /**
    * Движок умеет отматывать отправленное сообщение из контекста (Esc над ходом,
    * на который агент ещё не ответил) — см. {@link AgentRewind}. Возможность, а
