@@ -533,7 +533,11 @@ function AgentMessage({
       .filter((t) => !t.startsWith('[Контекст:'))
       .join('\n')
       .trim()
-    if (!text) return null
+    const images = msg.content.filter(
+      (p): p is Extract<AiContentPart, { type: 'image' }> => p.type === 'image'
+    )
+    // Ход из одних картинок — законный: «что тут не так?» со скриншотом.
+    if (!text && !images.length) return null
     return (
       <div className="zy-mf-user">
         <span className="zy-mf-spark">
@@ -553,6 +557,23 @@ function AgentMessage({
           </span>
         )}
         {msg.ts != null && <span className="zy-mf-user-time">{fmtClock(msg.ts)}</span>}
+        {images.length > 0 && (
+          <div className="zy-mf-user-imgs">
+            {images.map((img, i) => (
+              <figure key={i} className="zy-mf-img">
+                <img
+                  src={`data:${img.mediaType};base64,${img.data}`}
+                  alt={img.name ?? `Изображение ${i + 1}`}
+                  loading="lazy"
+                />
+                <figcaption>
+                  #{i + 1} · {img.width}×{img.height}
+                  {img.name ? ` · ${img.name}` : ''}
+                </figcaption>
+              </figure>
+            ))}
+          </div>
+        )}
       </div>
     )
   }

@@ -785,3 +785,55 @@
     flex-basis: 100%;
   }
 }
+
+/**
+ * Вставленные картинки в ленте. Ширина ограничена самой лентой, а высота —
+ * отдельно: скриншот во весь экран иначе вытолкнул бы разговор за край панели,
+ * и человек не увидел бы ни ответа, ни кнопок решения.
+ */
+.zy-mf-user-imgs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+  margin-top: 6px;
+}
+.zy-mf-img {
+  margin: 0;
+  max-width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--bg-elev1);
+}
+.zy-mf-img img {
+  display: block;
+  max-width: 100%;
+  max-height: 220px;
+  object-fit: contain;
+}
+.zy-mf-img figcaption {
+  padding: 2px 6px;
+  font-size: 10px;
+  color: var(--fg-faint);
+  border-top: 1px solid var(--border);
+}
+/* В узкой панели картинка занимает всю ширину: две в ряд там нечитаемы. */
+@container pane (max-width: 620px) {
+  .zy-mf-img {
+    width: 100%;
+  }
+  .zy-mf-img img {
+    max-height: 140px;
+  }
+}
+
+/* Ход человека переносится по строкам: блок картинок шириной во всю ленту
+   сплющивал текст запроса до одной буквы в строке — он стоял в том же флексе. */
+.zy-mf-user {
+  flex-wrap: wrap;
+}
+.zy-mf-user-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
