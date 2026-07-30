@@ -166,6 +166,19 @@ export function registerCoreActions(): void {
       run: () => void sessions.splitActive('row')
     },
     {
+      id: 'terminal.split-folder',
+      title: 'Новая панель в папке…',
+      category: 'Терминал',
+      keywords: 'split folder проект панель папка другой',
+      // Сетка нужна для того, чтобы держать рядом РАЗНЫЕ проекты. Без этого
+      // деление панели давало ещё один сеанс той же папки.
+      run: () => {
+        void window.zarya.app.pickDirectory().then((dir) => {
+          if (dir) void sessions.splitActive('row', dir)
+        })
+      }
+    },
+    {
       id: 'terminal.split-down',
       title: 'Разделить вниз',
       category: 'Терминал',

@@ -90,7 +90,13 @@ interface SessionsState {
   setActiveTab: (tabId: string) => void
   nextTab: (delta: 1 | -1) => void
   setActiveSession: (sessionId: string) => void
-  splitActive: (dir: SplitDirection) => Promise<void>
+  /**
+   * Разделить активную панель. `cwd` — папка НОВОЙ панели: без него панели
+   * плодились в одном каталоге, то есть четыре панели давали четыре сеанса
+   * одного проекта. Сценарий «в каждой панели свой проект» требовал открывать
+   * папку вкладкой и терял смысл сетки.
+   */
+  splitActive: (dir: SplitDirection, cwd?: string) => Promise<void>
   setSplitRatio: (tabId: string, path: SplitNode, ratio: number) => void
   closeSession: (sessionId: string, opts?: { save?: boolean }) => Promise<void>
   restartSession: (sessionId: string) => Promise<void>
@@ -337,7 +343,7 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
       emitBus('terminal:focus', { sessionId })
     },
 
-    splitActive: async (dir) => {
+    splitActive: async (dir, cwd) => {
       const state = get()
       const tab = state.tabs.find((t) => t.id === state.activeTabId)
       if (!tab) return
@@ -346,7 +352,8 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
       const session = makeRuntime({
         id,
         profileId: current?.profileId ?? 'auto',
-        cwd: current?.cwd ?? ''
+        // Папка своя, если её указали; иначе — та же, что у делимой панели.
+        cwd: cwd || current?.cwd || ''
       })
       setPartial((s) => ({
         sessions: { ...s.sessions, [id]: session },
@@ -633,8 +640,10 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
 ;(window as unknown as { __zaryaFocusPane?: (sessionId: string) => void }).__zaryaFocusPane = (
   sessionId
 ) => useSessionsStore.getState().setActiveSession(sessionId)
-;(window as unknown as { __zaryaSplitActive?: (dir: SplitDirection) => Promise<void> }).__zaryaSplitActive =
-  (dir) => useSessionsStore.getState().splitActive(dir)
+;(
+  window as unknown as { __zaryaSplitActive?: (dir: SplitDirection, cwd?: string) => Promise<void> }
+).__zaryaSplitActive =
+  (dir, cwd) => useSessionsStore.getState().splitActive(dir, cwd)
 ;(window as unknown as { __zaryaCloseSession?: (sid: string) => Promise<void> }).__zaryaCloseSession = (sid) =>
   useSessionsStore.getState().closeSession(sid, { save: false })
 

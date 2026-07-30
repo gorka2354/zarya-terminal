@@ -83,11 +83,21 @@ export function SessionsPanel(): React.JSX.Element {
   const openNewMenu = (e: React.MouseEvent): void => {
     const items: MenuItem[] = [
       { label: 'Новый терминал', hint: 'Ctrl+Shift+T', onClick: () => void store.newTab() },
-      { label: 'Открыть папку…', hint: 'Ctrl+Shift+O', onClick: () => void openFolderAsTerminal() }
+      { label: 'Открыть папку…', hint: 'Ctrl+Shift+O', onClick: () => void openFolderAsTerminal() },
+      {
+        label: 'Новая панель в папке…',
+        onClick: () => {
+          void window.zarya.app.pickDirectory().then((dir) => {
+            if (dir) void store.splitActive('row', dir)
+          })
+        }
+      }
     ]
     if (bookmarks.length) {
       items.push({ separator: true }, { label: 'ПРОЕКТЫ', disabled: true })
       for (const b of bookmarks) {
+        // Подменю наше меню не умеет, поэтому «панелью рядом» живёт в
+        // контекстном меню проекта и в пункте «Новая панель в папке…» выше.
         items.push({ label: shortenPath(b, 40), onClick: () => void store.newTab(undefined, b) })
       }
     }
@@ -216,6 +226,7 @@ export function SessionsPanel(): React.JSX.Element {
           e.preventDefault()
           open(e.clientX, e.clientY, [
             { label: 'Открыть терминал здесь', onClick: () => void store.newTab(undefined, dir) },
+            { label: 'Открыть панелью рядом', onClick: () => void store.splitActive('row', dir) },
             { label: 'Открыть в проводнике', onClick: () => window.zarya.app.showItemInFolder(dir) },
             { separator: true },
             {
