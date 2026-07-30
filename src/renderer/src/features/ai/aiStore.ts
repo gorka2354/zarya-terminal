@@ -11,6 +11,7 @@ import type {
   ClaudeCliQuestion
 } from '@shared/types'
 import type { AiConversationsState } from '@shared/types'
+import type { ImageAttachment } from '@shared/images'
 import { EFFORT_TUNING } from '@shared/defaults'
 import { onBus } from '@/lib/bus'
 import { onQuitFlush } from '@/lib/quitFlush'
@@ -186,6 +187,13 @@ interface AiState {
    * возвращает спрашивание.
    */
   bypassBySession: Record<string, boolean>
+  /**
+   * Вложенные картинки, ждущие отправки, — по ПАНЕЛИ, а не по беседе. В момент
+   * вставки беседы у панели может ещё не быть, а курсор уже в конкретной панели.
+   * На диск не пишется: base64 скриншота в открытом файле истории — плохой
+   * размен (см. SECURITY.md).
+   */
+  pendingImages: Record<string, ImageAttachment[]>
 
   /** Load persisted conversations from disk (call once at boot, after sessions). */
   hydrate: () => Promise<void>
@@ -219,6 +227,12 @@ interface AiState {
    * первой же беседе этой панели.
    */
   setPaneBypass: (sessionId: string, on: boolean) => void
+  /** Приложить картинку к панели. Отказ (пределы) — на стороне вызывающего. */
+  attachImage: (sessionId: string, att: ImageAttachment) => void
+  /** Снять одно вложение — крестиком на чипе. */
+  dropImage: (sessionId: string, id: string) => void
+  /** Очистить вложения панели (после отправки). */
+  clearImages: (sessionId: string) => void
 
   /** Approve a pending tool by id (defaults to the first unsettled one). */
   approveTool: (conversationId?: string, toolId?: string) => Promise<void>
@@ -903,6 +917,7 @@ export const useAiStore = create<AiState>((set, get) => {
     activeBySession: {},
     commandBarSessionId: null,
   bypassBySession: {},
+  pendingImages: {},
 
     hydrate: async () => {
       const saved = await window.zarya.aiConversations.load()
@@ -1133,6 +1148,30 @@ export const useAiStore = create<AiState>((set, get) => {
         interrupted: (c.interrupted ?? []).filter((i) => i < c.messages.length - 1)
       }))
       return text
+    },
+
+    attachImage: (sessionId, att) => {
+      set((s) => ({
+        pendingImages: { ...s.pendingImages, [sessionId]: [...(s.pendingImages[sessionId] ?? []), att] }
+      }))
+    },
+
+    dropImage: (sessionId, id) => {
+      set((s) => ({
+        pendingImages: {
+          ...s.pendingImages,
+          [sessionId]: (s.pendingImages[sessionId] ?? []).filter((a) => a.id !== id)
+        }
+      }))
+    },
+
+    clearImages: (sessionId) => {
+      set((s) => {
+        if (!s.pendingImages[sessionId]?.length) return {}
+        const next = { ...s.pendingImages }
+        delete next[sessionId]
+        return { pendingImages: next }
+      })
     },
 
     setPaneBypass: (sessionId, on) => {
@@ -1505,6 +1544,17 @@ onBus('terminal:focus', ({ sessionId }) => {
       }
     : null
 }
+;(
+  window as unknown as { __zaryaPendingImages?: (sid: string) => unknown[] }
+).__zaryaPendingImages = (sid) =>
+  (useAiStore.getState().pendingImages[sid] ?? []).map((a) => ({
+    id: a.id,
+    mediaType: a.mediaType,
+    bytes: a.bytes,
+    width: a.width,
+    height: a.height,
+    name: a.name
+  }))
 ;(window as unknown as { __zaryaQueue?: (t: string) => void }).__zaryaQueue = (t) => {
   const c = useAiStore.getState().activeConversation()
   if (c) useAiStore.getState().queueMessage(c.id, t)
