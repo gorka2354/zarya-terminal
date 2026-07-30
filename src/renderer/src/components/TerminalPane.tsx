@@ -1,3 +1,4 @@
+import { PANE_DRAG_CWD } from '@shared/types'
 import { useEffect, useRef, useState } from 'react'
 import { XtermView } from '@/terminal/XtermView'
 import { MissionFeed } from './MissionFeed'
@@ -21,6 +22,7 @@ export function TerminalPane({ sessionId, active, visible }: Props): React.JSX.E
   const rightClickBehavior = useSettingsStore((s) => s.settings.terminal.rightClickBehavior)
   const { menu, open } = useContextMenu()
   const raw = useUiStore((s) => isRaw(s, sessionId))
+  const [dropHere, setDropHere] = useState(false)
   const multiPane = useSessionsStore((s) => {
     const tab = s.tabs.find((t) => t.id === s.activeTabId)
     return tab ? tab.layout.type !== 'leaf' : false
@@ -82,7 +84,7 @@ export function TerminalPane({ sessionId, active, visible }: Props): React.JSX.E
 
   return (
     <div
-      className={`zy-pane${active ? ' zy-pane--focused' : multiPane ? ' zy-pane--dim' : ''}`}
+      className={`zy-pane${active ? ' zy-pane--focused' : multiPane ? ' zy-pane--dim' : ''}${dropHere ? ' zy-pane--drop' : ''}`}
       // Рамка и адресат клавиш — ОДНА величина: активная сессия вкладки. Если
       // однажды они разойдутся, рамка начнёт врать о том, куда уйдёт Enter, —
       // а это одобрение запуска команды (см. features/ai/keyRouter).
@@ -91,6 +93,28 @@ export function TerminalPane({ sessionId, active, visible }: Props): React.JSX.E
         if (!active) store.setActiveSession(sessionId)
       }}
       onContextMenu={onContextMenu}
+      // Бросок проекта из сайдбара — новая панель рядом, в этой папке. Тип
+      // данных свой: файлы обрабатывает строка ввода, и пути не должны
+      // путаться с вложениями.
+      onDragOver={(e) => {
+        if (!e.dataTransfer.types.includes(PANE_DRAG_CWD)) return
+        e.preventDefault()
+        e.stopPropagation()
+        e.dataTransfer.dropEffect = 'copy'
+        setDropHere(true)
+      }}
+      onDragLeave={() => setDropHere(false)}
+      onDrop={(e) => {
+        const cwd = e.dataTransfer.getData(PANE_DRAG_CWD)
+        if (!cwd) return
+        e.preventDefault()
+        e.stopPropagation()
+        setDropHere(false)
+        // Делим ИМЕННО ту панель, на которую бросили: иначе новая появлялась бы
+        // у активной, а человек указал мышью совсем другое место.
+        store.setActiveSession(sessionId)
+        void store.splitActive('row', cwd)
+      }}
     >
       <PaneHeader sessionId={sessionId} />
       {/* Сцена — терминал и лента в одном слоистом контейнере. Лента лежит

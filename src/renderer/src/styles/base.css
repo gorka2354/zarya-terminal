@@ -1398,3 +1398,15 @@ body {
   text-transform: uppercase;
   color: var(--fg-faint);
 }
+
+/* Панель, на которую сейчас бросают проект: с четырьмя панелями это
+   единственный способ понять, где появится новая. */
+.zy-pane--drop::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 2px var(--accent-2);
+  background: color-mix(in srgb, var(--accent-2) 8%, transparent);
+}

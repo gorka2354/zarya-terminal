@@ -812,3 +812,9 @@ export type WindowCommand = 'minimize' | 'maximize' | 'close' | 'devtools'
 export interface PrepareQuitPayload {
   reason: 'quit' | 'close'
 }
+
+/**
+ * Тип данных перетаскивания «проект → панель». Свой, а не text/plain: файлы
+ * обрабатывает строка ввода, и пути не должны путаться с вложениями.
+ */
+export const PANE_DRAG_CWD = 'application/x-zarya-cwd'

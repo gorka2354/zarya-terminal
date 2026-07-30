@@ -1,3 +1,4 @@
+import { PANE_DRAG_CWD } from '@shared/types'
 import { useMemo, useState } from 'react'
 import type { SessionMeta, TabState } from '@shared/types'
 import { formatRelative, shortenPath } from '@/lib/ansi'
@@ -222,6 +223,13 @@ export function SessionsPanel(): React.JSX.Element {
         className="zy-item"
         title={`Открыть терминал в ${dir}`}
         onClick={() => void store.newTab(undefined, dir)}
+        // Схватить проект и бросить на рабочую область — получится панель рядом.
+        // Внутри одного окна перетаскивание штатное: это тот же документ.
+        draggable
+        onDragStart={(e) => {
+          e.dataTransfer.setData(PANE_DRAG_CWD, dir)
+          e.dataTransfer.effectAllowed = 'copy'
+        }}
         onContextMenu={(e) => {
           e.preventDefault()
           open(e.clientX, e.clientY, [
