@@ -1,4 +1,4 @@
-import { PANE_DRAG_CWD } from '@shared/types'
+import { PANE_DRAG_CWD, PANE_DRAG_SESSION } from '@shared/types'
 import { useMemo, useState } from 'react'
 import type { SessionMeta, TabState } from '@shared/types'
 import { formatRelative, shortenPath } from '@/lib/ansi'
@@ -310,6 +310,13 @@ export function SessionsPanel(): React.JSX.Element {
         onClick={() => store.setActiveTab(tab.id)}
         onContextMenu={(e) => openTabContext(e, tab)}
         title={session?.cwd}
+        // Открытый терминал тоже хватается: бросок на панель переносит его
+        // ТУДА. Процесс при этом не трогается — двигается лист в дереве.
+        draggable
+        onDragStart={(e) => {
+          e.dataTransfer.setData(PANE_DRAG_SESSION, tab.activeSessionId)
+          e.dataTransfer.effectAllowed = 'move'
+        }}
       >
         <span className="zy-item-icon">
           <ShellGlyph code={session?.shellIcon || '>_'} />

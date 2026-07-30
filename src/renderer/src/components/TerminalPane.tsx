@@ -1,4 +1,4 @@
-import { PANE_DRAG_CWD } from '@shared/types'
+import { PANE_DRAG_CWD, PANE_DRAG_SESSION } from '@shared/types'
 import { useEffect, useRef, useState } from 'react'
 import { XtermView } from '@/terminal/XtermView'
 import { MissionFeed } from './MissionFeed'
@@ -97,19 +97,26 @@ export function TerminalPane({ sessionId, active, visible }: Props): React.JSX.E
       // данных свой: файлы обрабатывает строка ввода, и пути не должны
       // путаться с вложениями.
       onDragOver={(e) => {
-        if (!e.dataTransfer.types.includes(PANE_DRAG_CWD)) return
+        const kinds = e.dataTransfer.types
+        if (!kinds.includes(PANE_DRAG_CWD) && !kinds.includes(PANE_DRAG_SESSION)) return
         e.preventDefault()
         e.stopPropagation()
-        e.dataTransfer.dropEffect = 'copy'
+        e.dataTransfer.dropEffect = kinds.includes(PANE_DRAG_SESSION) ? 'move' : 'copy'
         setDropHere(true)
       }}
       onDragLeave={() => setDropHere(false)}
       onDrop={(e) => {
+        const moved = e.dataTransfer.getData(PANE_DRAG_SESSION)
         const cwd = e.dataTransfer.getData(PANE_DRAG_CWD)
-        if (!cwd) return
+        if (!moved && !cwd) return
         e.preventDefault()
         e.stopPropagation()
         setDropHere(false)
+        if (moved) {
+          // Уже открытый терминал переезжает сюда: новый не создаём.
+          store.movePaneNextTo(moved, sessionId)
+          return
+        }
         // Делим ИМЕННО ту панель, на которую бросили: иначе новая появлялась бы
         // у активной, а человек указал мышью совсем другое место.
         store.setActiveSession(sessionId)

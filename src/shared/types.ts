@@ -818,3 +818,6 @@ export interface PrepareQuitPayload {
  * обрабатывает строка ввода, и пути не должны путаться с вложениями.
  */
 export const PANE_DRAG_CWD = 'application/x-zarya-cwd'
+
+/** Перетаскивание УЖЕ ОТКРЫТОГО терминала: переносим панель, а не создаём новую. */
+export const PANE_DRAG_SESSION = 'application/x-zarya-session'

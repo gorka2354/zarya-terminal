@@ -97,6 +97,13 @@ interface SessionsState {
    * папку вкладкой и терял смысл сетки.
    */
   splitActive: (dir: SplitDirection, cwd?: string) => Promise<void>
+  /**
+   * Перенести уже открытый терминал к другой панели. Процесс не трогаем совсем:
+   * двигается только лист в дереве раскладки, а pty живёт в главном процессе и
+   * про раскладку ничего не знает. Поэтому вкладка со сборкой или ssh переживает
+   * переезд — перерисовывается лишь картинка.
+   */
+  movePaneNextTo: (sessionId: string, targetSessionId: string) => void
   setSplitRatio: (tabId: string, path: SplitNode, ratio: number) => void
   closeSession: (sessionId: string, opts?: { save?: boolean }) => Promise<void>
   restartSession: (sessionId: string) => Promise<void>
@@ -386,6 +393,59 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
       schedulePersistWorkspace(get)
     },
 
+    movePaneNextTo: (sessionId, targetSessionId) => {
+      if (sessionId === targetSessionId) return
+      setPartial((s) => {
+        const from = s.tabs.find((t) => listLeaves(t.layout).includes(sessionId))
+        const to = s.tabs.find((t) => listLeaves(t.layout).includes(targetSessionId))
+        if (!from || !to) return {}
+        // Убираем лист из прежнего места и подставляем рядом с целью. Обе
+        // операции — на дереве: ни одна сессия не создаётся и не гасится.
+        const stripped = removeLeaf(from.layout, sessionId)
+        const tabs = s.tabs
+          .map((t) => {
+            if (t.id === from.id && t.id === to.id) {
+              // Внутри одной вкладки: сначала вынули, потом вставили рядом.
+              const base = stripped ?? { type: 'leaf' as const, sessionId: targetSessionId }
+              return {
+                ...t,
+                layout: replaceLeaf(base, targetSessionId, {
+                  type: 'split',
+                  dir: 'row',
+                  ratio: 0.5,
+                  a: { type: 'leaf', sessionId: targetSessionId },
+                  b: { type: 'leaf', sessionId }
+                }),
+                activeSessionId: sessionId
+              }
+            }
+            if (t.id === from.id) {
+              // Вкладка осталась пустой — она уйдёт ниже вместе с фильтром.
+              return stripped ? { ...t, layout: stripped, activeSessionId: listLeaves(stripped)[0] } : t
+            }
+            if (t.id === to.id) {
+              return {
+                ...t,
+                layout: replaceLeaf(t.layout, targetSessionId, {
+                  type: 'split',
+                  dir: 'row',
+                  ratio: 0.5,
+                  a: { type: 'leaf', sessionId: targetSessionId },
+                  b: { type: 'leaf', sessionId }
+                }),
+                activeSessionId: sessionId
+              }
+            }
+            return t
+          })
+          // Вкладка, из которой забрали последнюю панель, закрывается: пустая
+          // вкладка без единого терминала — мусор, а не место работы.
+          .filter((t) => !(t.id === from.id && from.id !== to.id && !stripped))
+        return { tabs, activeTabId: to.id }
+      })
+      schedulePersistWorkspace(get)
+    },
+
     setSplitRatio: (tabId, node, ratio) => {
       setPartial((s) => ({
         tabs: s.tabs.map((t) => {
@@ -644,6 +704,9 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
   window as unknown as { __zaryaSplitActive?: (dir: SplitDirection, cwd?: string) => Promise<void> }
 ).__zaryaSplitActive =
   (dir, cwd) => useSessionsStore.getState().splitActive(dir, cwd)
+;(
+  window as unknown as { __zaryaMovePane?: (sid: string, target: string) => void }
+).__zaryaMovePane = (sid, target) => useSessionsStore.getState().movePaneNextTo(sid, target)
 ;(window as unknown as { __zaryaCloseSession?: (sid: string) => Promise<void> }).__zaryaCloseSession = (sid) =>
   useSessionsStore.getState().closeSession(sid, { save: false })
 
