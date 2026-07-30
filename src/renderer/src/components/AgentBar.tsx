@@ -8,6 +8,8 @@ import { getTerminal } from '@/terminal/terminalRegistry'
 import { convForSession, useAiStore } from '@/features/ai/aiStore'
 import { nextGate } from '@/features/ai/gates'
 import { registerPaneKeys } from '@/features/ai/keyRouter'
+import { fileToAttachment, imageFilesFrom } from '@/features/ai/imageAttach'
+import { canAcceptMore, type ImageAttachment } from '@shared/images'
 import { Icon, EngineGlyph } from './Icon'
 import { PixelIcon } from './PixelIcon'
 import { isSilent, startRecording, type Recording } from '@/features/voice/dictation'
@@ -29,6 +31,8 @@ import { launchClaudeNative } from './AiCliLauncher'
 import './agentbar.css'
 
 const EFFORTS: AiEffort[] = ['low', 'medium', 'high', 'max']
+/** Стабильная пустая ссылка для селектора вложений — см. AgentBar. */
+const NO_IMAGES: ImageAttachment[] = []
 
 // Session-local input history for the bottom bar (↑/↓ recall, like a shell).
 // Module-level so it survives AgentBar remounts within the session.
@@ -338,6 +342,7 @@ export function AgentBar({ paneSessionId }: { paneSessionId?: string } = {}): Re
   const pttRef = useRef(false)
   // -1 = not browsing history; otherwise index into barHistory.
   const [histIdx, setHistIdx] = useState(-1)
+  const [dragOver, setDragOver] = useState(false)
   const draftRef = useRef('')
   const ref = useRef<HTMLTextAreaElement>(null)
 
@@ -368,6 +373,14 @@ export function AgentBar({ paneSessionId }: { paneSessionId?: string } = {}): Re
   // Микрофон занят другой панелью — кнопка обязана это сказать, а не молчать и
   // не начинать вторую запись.
   const micBusy = useMicBusyElsewhere(activeSessionId)
+  // Что именно уедет с этим ходом — видно до отправки.
+  //
+  // Пустой список — ОДНА И ТА ЖЕ ссылка: `?? []` в селекторе создавал новый
+  // массив на каждый рендер, zustand считал состояние изменившимся и перерисовка
+  // уходила в бесконечный цикл — приложение не поднималось вовсе.
+  const pendingImages = useAiStore((s) =>
+    activeSessionId ? s.pendingImages[activeSessionId] : undefined
+  ) ?? NO_IMAGES
 
   /**
    * Клавиши своей панели. Строка ввода БОЛЬШЕ НЕ СЛУШАЕТ ОКНО: она заявляет свои
@@ -610,6 +623,39 @@ ${prev}`
     const next = order[(order.indexOf(mode) + 1) % order.length] ?? 'shell'
     useUiStore.getState().set({ barMode: next })
     setTimeout(() => ref.current?.focus(), 0)
+  }
+
+  /**
+   * Принять картинки в СВОЮ панель. Общая точка для Ctrl+V и перетаскивания:
+   * оба жеста обязаны попадать туда, где стоит курсор, а не «в активную».
+   */
+  const acceptImages = async (files: File[]): Promise<number> => {
+    if (!activeSessionId || !files.length) return 0
+    // Движок, который картинок не принимает, не должен молча их проглатывать:
+    // отправить запрос без вложения — соврать о том, что агент их видел.
+    if (activeEngine && agentCaps[activeEngine]?.images !== true) {
+      useUiStore
+        .getState()
+        .toast(`${MODE_LABEL[mode]} не принимает изображения — вставьте текстом или путём`, 'error')
+      return 0
+    }
+    let added = 0
+    for (const file of files) {
+      const current = useAiStore.getState().pendingImages[activeSessionId] ?? []
+      const room = canAcceptMore(current, file.size)
+      if (!room.ok) {
+        useUiStore.getState().toast(room.reason, 'error')
+        break
+      }
+      const res = await fileToAttachment(file)
+      if (!res.ok) {
+        useUiStore.getState().toast(res.reason, 'error')
+        continue
+      }
+      useAiStore.getState().attachImage(activeSessionId, res.att)
+      added++
+    }
+    return added
   }
 
   const openLaunchPad = (): void => useUiStore.getState().set({ launchPadOpen: true })
@@ -1157,7 +1203,59 @@ ${prev}`
         </div>
       )}
 
-      <div className="zy-agentbar-row">
+      {pendingImages.length > 0 && (
+        <div className="zy-img-chips">
+          {pendingImages.map((img, i) => (
+            <span key={img.id} className="zy-img-chip" title={`${img.width}×${img.height} · ${Math.round(img.bytes / 1024)} КБ`}>
+              {img.thumb ? <img src={img.thumb} alt="" /> : null}
+              <span className="zy-img-chip-n">#{i + 1}</span>
+              <span className="zy-img-chip-name">{img.name ?? 'снимок'}</span>
+              <button
+                className="zy-img-chip-x"
+                title="Убрать"
+                onClick={() => activeSessionId && useAiStore.getState().dropImage(activeSessionId, img.id)}
+              >
+                ✕
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      <div
+        className={`zy-agentbar-row${dragOver ? ' zy-agentbar-row--drag' : ''}`}
+        onDragOver={(e) => {
+          if (!e.dataTransfer.types.includes('Files')) return
+          // stopPropagation обязателен: без него дроп всплывёт в общий
+          // обработчик окна и вместо вложения откроется новый терминал.
+          e.preventDefault()
+          e.stopPropagation()
+          setDragOver(true)
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => {
+          if (!e.dataTransfer.types.includes('Files')) return
+          e.preventDefault()
+          e.stopPropagation()
+          setDragOver(false)
+          const all = imageFilesFrom(e.dataTransfer)
+          const imgs = all.filter((f) => f.type.startsWith('image/'))
+          void acceptImages(imgs)
+          // Файл-не-картинка идёт ПУТЁМ, а не содержимым: агент прочитает его
+          // сам своим инструментом под гейтом и не потратит контекст на
+          // мегабайт, который может не понадобиться.
+          const others = all.filter((f) => !f.type.startsWith('image/'))
+          if (others.length) {
+            const paths = others
+              .map((f) => window.zarya.app.getPathForFile(f))
+              .filter(Boolean)
+              .map((x) => `"${x}"`)
+            if (paths.length) {
+              setText((prev) => (prev.trim() ? `${prev} ${paths.join(' ')}` : paths.join(' ')))
+              useUiStore.getState().toast('Файл добавлен путём — агент прочитает сам', 'success')
+            }
+          }
+        }}
+      >
         {/* Icon-only chips: the engine and the gate are permanent fixtures, and
             spelling them out in full caps ate the bar. The label lives in the
             tooltip; the gate additionally keeps its colour, because «will I be
@@ -1230,6 +1328,18 @@ ${prev}`
         {voiceNote && <span className="zy-agentbar-voicenote">{voiceNote}</span>}
         <textarea
           ref={ref}
+        onPaste={(e) => {
+          const files = imageFilesFrom(e.clipboardData).filter((f) =>
+            f.type.startsWith('image/')
+          )
+          if (!files.length) return
+          // Текстовую часть буфера вставляем сами: preventDefault отменил бы её
+          // вместе с картинкой, и человек потерял бы скопированный текст.
+          e.preventDefault()
+          const txt = e.clipboardData.getData('text/plain')
+          if (txt) setText((prev) => prev + txt)
+          void acceptImages(files)
+        }}
         // Курсор в поле — панель становится активной. Без этого «панель, куда я
         // печатаю» и «панель, на которую действует Enter» расходятся: можно
         // одобрить запуск команды, которую даже не видел.

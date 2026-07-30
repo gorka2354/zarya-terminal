@@ -159,12 +159,29 @@ function createInputQueue(): {
   }
 }
 
-function userMessage(text: string): SDKUserMessage {
+/**
+ * Сообщение пользователя для SDK. Без картинок — строкой, как было: менять
+ * форму там, где она не нужна, значит трогать путь, который работает.
+ *
+ * С картинками — массивом блоков: текст первым, изображения следом и в том же
+ * порядке, в каком их вставил человек. Плейсхолдеры «[Изображение #N]» уже стоят
+ * в тексте (их ставит рендерер), поэтому модель видит, к чему относится каждая.
+ */
+function userMessage(text: string, images?: ClaudeStartOpts['images']): SDKUserMessage {
+  const content = images?.length
+    ? [
+        ...(text ? [{ type: 'text', text }] : []),
+        ...images.map((img) => ({
+          type: 'image',
+          source: { type: 'base64', media_type: img.mediaType, data: img.data }
+        }))
+      ]
+    : text
   return {
     type: 'user',
-    message: { role: 'user', content: text },
+    message: { role: 'user', content },
     parent_tool_use_id: null
-  } as SDKUserMessage
+  } as unknown as SDKUserMessage
 }
 
 /** Map an Anthropic content-block array (from a message) to our AiContentPart[]. */
@@ -485,7 +502,7 @@ export class ClaudeCodeDriver implements AgentDriver {
       existing.interrupted = false
       // Last line of defence: if the queue closed between the check above and
       // here, don't pretend the turn started.
-      if (!existing.input.push(userMessage(opts.prompt))) {
+      if (!existing.input.push(userMessage(opts.prompt, opts.images))) {
         this.sessions.delete(requestId)
         this.emit(requestId, {
           type: 'error',
@@ -586,7 +603,7 @@ export class ClaudeCodeDriver implements AgentDriver {
     // Remember the effort override so init reports the effective value.
     const effortOverride = opts.effort
 
-    input.push(userMessage(opts.prompt))
+    input.push(userMessage(opts.prompt, opts.images))
     let query: Query
     try {
       query = sdk.query({ prompt: input.iterable, options })

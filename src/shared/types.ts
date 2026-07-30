@@ -428,6 +428,16 @@ export type AgentPermissionMode = 'default' | 'acceptEdits' | 'plan'
 export interface AgentStartOpts {
   /** The user's turn text. */
   prompt: string
+  /**
+   * Изображения этого хода. Отдельным полем, а не внутри prompt: строка их не
+   * вместит, а менять тип prompt значило бы трогать все движки разом. Драйвер,
+   * который картинки не умеет, просто их игнорирует — но интерфейс до этого не
+   * доводит: вставка у такого движка вложения не создаёт (capabilities.images).
+   */
+  images?: Array<{
+    mediaType: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif'
+    data: string
+  }>
   /** Working directory the agent operates in (the bound session's cwd). */
   cwd?: string
   /** Model id override; omit to use the driver's configured default. */

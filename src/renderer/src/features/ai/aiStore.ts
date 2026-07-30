@@ -11,7 +11,7 @@ import type {
   ClaudeCliQuestion
 } from '@shared/types'
 import type { AiConversationsState } from '@shared/types'
-import type { ImageAttachment } from '@shared/images'
+import { imagePlaceholder, type ImageAttachment } from '@shared/images'
 import { EFFORT_TUNING } from '@shared/defaults'
 import { onBus } from '@/lib/bus'
 import { onQuitFlush } from '@/lib/quitFlush'
@@ -577,7 +577,8 @@ export const useAiStore = create<AiState>((set, get) => {
       .map((p) => p.text)
       .join('\n')
       .trim()
-    if (!prompt) return
+    const hasImages = (lastUser?.content ?? []).some((p) => p.type === 'image')
+    if (!prompt && !hasImages) return
     const settings = getSettings()
     const sessionId = conv.sessionId || useSessionsStore.getState().activeSessionId()
     const cwd = sessionId ? useSessionsStore.getState().sessions[sessionId]?.cwd : undefined
@@ -589,8 +590,13 @@ export const useAiStore = create<AiState>((set, get) => {
     }))
     // Opts are Claude-sourced today (the only native engine); per-engine settings
     // (settings.ai.byEngine) arrive with Codex/Gemini in Ф4.
+    // Картинки последнего хода — отдельным полем: строка их не вместит.
+    const images = (lastUser?.content ?? [])
+      .filter((p): p is Extract<AiContentPart, { type: 'image' }> => p.type === 'image')
+      .map((p) => ({ mediaType: p.mediaType, data: p.data }))
     window.zarya.agent.start(engine, convId, {
       prompt,
+      ...(images.length ? { images } : {}),
       cwd: cwd || conv.cwd,
       // SECURITY: permissionMode is always 'default' and gate-weakening comes only
       // from АВТОПИЛОТ — see nativeGateOpts, which owns that invariant and is
@@ -1024,13 +1030,32 @@ export const useAiStore = create<AiState>((set, get) => {
       // provider rejects and which corrupts the conversation permanently.
       if (!conv || isConversationBusy(conv)) return
       const trimmed = text.trim()
-      if (!trimmed && !conv.pendingContext.length) return
+      // Вложения берём у ПАНЕЛИ этой беседы: вставляли их туда, где стоял курсор.
+      const images = (conv.sessionId ? get().pendingImages[conv.sessionId] : undefined) ?? []
+      // Сообщение из одних картинок — законное: «что тут не так?» со скриншотом.
+      if (!trimmed && !conv.pendingContext.length && !images.length) return
 
       const parts: AiContentPart[] = conv.pendingContext.map((ctx) => ({
         type: 'text',
         text: `[Контекст: ${ctx.label}]\n${ctx.content}`
       }))
-      if (trimmed) parts.push({ type: 'text', text: trimmed })
+      // Плейсхолдер в тексте, блоки следом и в том же порядке — так это делает
+      // настоящий CLI: модель видит ссылку на картинку там, где её вставили.
+      const marks = images.map((_, i) => imagePlaceholder(i)).join(' ')
+      const headText = [marks, trimmed].filter(Boolean).join(' ')
+      if (headText) parts.push({ type: 'text', text: headText })
+      for (const img of images) {
+        parts.push({
+          type: 'image',
+          mediaType: img.mediaType,
+          data: img.data,
+          bytes: img.bytes,
+          width: img.width,
+          height: img.height,
+          name: img.name
+        })
+      }
+      if (conv.sessionId && images.length) get().clearImages(conv.sessionId)
 
       patchConversation(conv.id, (c) => ({
         ...c,
