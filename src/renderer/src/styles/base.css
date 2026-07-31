@@ -770,6 +770,37 @@ body {
   margin-left: 6px;
   color: var(--fg-faint);
 }
+/**
+ * Приёмник «вернуть панель в список». Появляется на время перетаскивания —
+ * пунктиром, чтобы читаться как место, куда КЛАДУТ, а не как ещё одна строка.
+ * Раньше подсветка загоралась только под курсором: зону надо было угадать.
+ */
+.zy-drop-zone {
+  margin: 8px 2px 4px;
+  padding: 10px 8px;
+  border: 1px dashed color-mix(in srgb, var(--accent) 55%, transparent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  text-align: center;
+}
+.zy-drop-zone--over {
+  border-style: solid;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.zy-drop-zone-title {
+  font-family: var(--font-tech);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.zy-drop-zone-sub {
+  margin-top: 4px;
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: var(--fg-faint);
+}
+
 /* Куда упадёт перетаскиваемая панель — видно до того, как отпустил. */
 .zy-item--drop {
   border-color: var(--accent);
@@ -779,13 +810,36 @@ body {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
   border-radius: var(--radius-sm);
 }
-/* Шапка панели — ручка: за неё панель таскают. */
+/**
+ * Шапка панели — ручка: за неё панель таскают. Курсора мало: жест, о котором не
+ * знаешь, не ищут мышью. Поэтому при наведении слева проступают точки захвата —
+ * тот же знак, что и в любом перетаскиваемом списке.
+ */
 .zy-pane-grip {
   display: flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
   cursor: grab;
+}
+.zy-pane-grip::before {
+  content: '⠿';
+  flex-shrink: 0;
+  width: 0;
+  margin-right: -4px;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--fg-faint);
+  opacity: 0;
+  transition:
+    width 0.12s ease,
+    opacity 0.12s ease;
+}
+.zy-pane-grip:hover::before {
+  width: 10px;
+  margin-right: 0;
+  opacity: 1;
 }
 .zy-pane-grip:active {
   cursor: grabbing;

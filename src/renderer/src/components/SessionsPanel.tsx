@@ -1,5 +1,5 @@
 import { PANE_DRAG_CWD, PANE_DRAG_SESSION } from '@shared/types'
-import { Fragment, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import type { SessionMeta, TabState } from '@shared/types'
 import { closePaneAsking, closeTabAsking, setPaneMaximized } from '@/actions/panes'
 import { deskTitle } from '@shared/deskTitle'
@@ -66,8 +66,47 @@ export function SessionsPanel(): React.JSX.Element {
   const maxBeforeClick = useRef<string | null>(null)
   /** Строка (вкладки или панели), над которой сейчас держат перетаскиваемую панель. */
   const [dropTab, setDropTab] = useState<string | null>(null)
-  /** Панель тащат в пустоту списка — это «вынести в отдельную вкладку». */
+  /** Панель тащат над пустотой списка — тоже «вынести», но без своего приёмника. */
   const [dropDetach, setDropDetach] = useState(false)
+  /** Курсор над самим приёмником. Отдельно от пустоты: подсвечивать оба разом —
+   *  значит показать две цели там, где цель одна. */
+  const [zoneOver, setZoneOver] = useState(false)
+  /**
+   * Панель, которую тащат прямо сейчас (по всему окну, не только по сайдбару).
+   *
+   * Нужна, чтобы ПОКАЗАТЬ приёмник заранее. Пока подсветка появлялась только под
+   * курсором, зону надо было сначала угадать: человек тащил панель и не знал,
+   * куда её нести. Теперь приёмник виден с первого же движения.
+   */
+  const [dragPane, setDragPane] = useState<string | null>(null)
+
+  // Начало и конец перетаскивания панели ловим на окне: хватают её далеко от
+  // сайдбара — за шапку самой панели, — а показать приёмник надо здесь и сразу.
+  useEffect(() => {
+    const onStart = (e: DragEvent): void => {
+      const types = e.dataTransfer?.types
+      if (!types?.includes(PANE_DRAG_SESSION)) return
+      setDragPane(e.dataTransfer?.getData(PANE_DRAG_SESSION) || '')
+    }
+    const onEnd = (): void => {
+      setDragPane(null)
+      setDropDetach(false)
+      setZoneOver(false)
+      setDropTab(null)
+    }
+    window.addEventListener('dragstart', onStart)
+    window.addEventListener('dragend', onEnd)
+    window.addEventListener('drop', onEnd)
+    // Страховка: жест мог закончиться и без dragend (отпустили кнопку там, где
+    // браузер его не шлёт). Подсказка, повисшая насовсем, врёт о происходящем.
+    window.addEventListener('mouseup', onEnd)
+    return () => {
+      window.removeEventListener('dragstart', onStart)
+      window.removeEventListener('dragend', onEnd)
+      window.removeEventListener('drop', onEnd)
+      window.removeEventListener('mouseup', onEnd)
+    }
+  }, [])
 
   // Recent folders: distinct cwds from saved sessions, minus already-bookmarked.
   const recentFolders = useMemo(() => {
@@ -128,6 +167,43 @@ export function SessionsPanel(): React.JSX.Element {
     // mousedown и тут же открывало по click.
     open(r.left, r.bottom + 4, items, btn)
   }
+
+  /**
+   * Приёмник «вернуть панель в список».
+   *
+   * Появляется на время жеста и прямо говорит, что произойдёт: панель уедет из
+   * сетки в свой рабочий стол, процесс при этом не тронется. Показываем только
+   * когда выносить есть что: у панели-одиночки своей вкладки нет соседей, и
+   * зона предлагала бы жест, который ничего не делает.
+   */
+  const dragHome = dragPane ? tabs.find((t) => listLeaves(t.layout).includes(dragPane)) : undefined
+  const canDetach = !!dragHome && listLeaves(dragHome.layout).length > 1
+  const dropZone = canDetach ? (
+    <div
+      className={`zy-drop-zone${zoneOver ? ' zy-drop-zone--over' : ''}`}
+      onDragOver={(e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        e.dataTransfer.dropEffect = 'move'
+        setZoneOver(true)
+        setDropDetach(false)
+      }}
+      onDragLeave={() => setZoneOver(false)}
+      onDrop={(e) => {
+        const moved = e.dataTransfer.getData(PANE_DRAG_SESSION) || dragPane
+        e.preventDefault()
+        e.stopPropagation()
+        setZoneOver(false)
+        setDragPane(null)
+        if (moved) store.detachPane(moved)
+      }}
+    >
+      <div className="zy-drop-zone-title">↩ вернуть в список</div>
+      <div className="zy-drop-zone-sub">
+        отпусти здесь — панель уедет из сетки отдельной вкладкой, процесс не прервётся
+      </div>
+    </div>
+  ) : null
 
   const crewActive = conversations.filter((c) => c.streaming || c.pendingTools.length > 0)
 
@@ -736,6 +812,7 @@ export function SessionsPanel(): React.JSX.Element {
               Открытые
             </div>
             {shownTabs.map(renderOpenRow)}
+            {dropZone}
           </>
         )}
         {false && shownProjects.length > 0 && (

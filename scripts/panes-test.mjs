@@ -1072,8 +1072,103 @@ try {
   }, home32.leaves[0])
   ok('шапка панели — ручка', grip32.ok && grip32.draggable === true, grip32)
   ok('и несёт свою сессию', grip32.carried === home32.leaves[0], grip32)
+  // Жест закрываем: незавершённое перетаскивание тянуло бы подсказку в следующий раздел.
+  await page.evaluate(() =>
+    window.dispatchEvent(new DragEvent('dragend', { bubbles: true, cancelable: true }))
+  )
+  await page.waitForTimeout(300)
 
-  console.log('\n[33] Окно ни на что не жалуется')
+  console.log('\n[33] Приёмник виден с первого движения, а не после угадывания')
+  const st33 = await dump()
+  const home33 = st33.tabs.find((t) => t.id === st33.activeTabId)
+  while ((await dump()).tabs.find((t) => t.id === home33.id).leaves.length < 2) {
+    await page.evaluate(() => window.__zaryaSplitActive('row'))
+    await page.waitForTimeout(1600)
+  }
+  const pair33 = (await dump()).tabs.find((t) => t.id === home33.id).leaves
+  ok(
+    'пока ничего не тащат — приёмника нет',
+    (await page.evaluate(() => document.querySelectorAll('.zy-drop-zone').length)) === 0
+  )
+  const zone33 = await page.evaluate((sid) => {
+    const grip = document.querySelector(`.zy-pane[data-session="${sid}"] .zy-pane-grip`)
+    window.__dt = new DataTransfer()
+    grip.dispatchEvent(
+      new DragEvent('dragstart', { dataTransfer: window.__dt, bubbles: true, cancelable: true })
+    )
+    return true
+  }, pair33[1])
+  await page.waitForTimeout(400)
+  const shownZone = await page.evaluate(() => {
+    const z = document.querySelector('.zy-drop-zone')
+    if (!z) return null
+    const r = z.getBoundingClientRect()
+    return { text: z.textContent ?? '', w: Math.round(r.width), h: Math.round(r.height) }
+  })
+  ok('приёмник появился сам, как только схватили панель', !!shownZone && zone33, shownZone)
+  ok(
+    'и он говорит, что произойдёт',
+    /вернуть в список/i.test(shownZone?.text ?? '') && /процесс/i.test(shownZone?.text ?? ''),
+    shownZone?.text
+  )
+  ok('он видимого размера', (shownZone?.w ?? 0) > 100 && (shownZone?.h ?? 0) > 30, shownZone)
+  // Наведение усиливает ТОЛЬКО приёмник: две подсветки разом показывали бы две
+  // цели там, где цель одна.
+  await page.evaluate(() => {
+    document
+      .querySelector('.zy-drop-zone')
+      .dispatchEvent(
+        new DragEvent('dragover', { dataTransfer: window.__dt, bubbles: true, cancelable: true })
+      )
+  })
+  await page.waitForTimeout(300)
+  const lit33 = await page.evaluate(() => ({
+    zone: !!document.querySelector('.zy-drop-zone--over'),
+    body: !!document.querySelector('.zy-sidebar-body--drop')
+  }))
+  ok('под курсором горит приёмник', lit33.zone, lit33)
+  ok('и не горит весь список заодно', !lit33.body, lit33)
+  // Бросок в приёмник выносит панель, а конец жеста прибирает зону.
+  await page.evaluate(() => {
+    document
+      .querySelector('.zy-drop-zone')
+      .dispatchEvent(
+        new DragEvent('drop', { dataTransfer: window.__dt, bubbles: true, cancelable: true })
+      )
+  })
+  await page.waitForTimeout(1800)
+  const st33b = await dump()
+  ok(
+    'панель вынесена броском в приёмник',
+    !st33b.tabs.find((t) => t.id === home33.id)?.leaves.includes(pair33[1]),
+    st33b.tabs
+  )
+  ok(
+    'после жеста приёмника нет',
+    (await page.evaluate(() => document.querySelectorAll('.zy-drop-zone').length)) === 0
+  )
+  // Панель-одиночке выносить некуда — зону не показываем вовсе.
+  const alone33 = st33b.tabs.find((t) => t.leaves.length === 1)?.leaves[0]
+  if (alone33) {
+    await page.evaluate((sid) => {
+      const row = document.querySelector(`.zy-tab-row[data-tab]`)
+      const dt = new DataTransfer()
+      dt.setData('application/x-zarya-session', sid)
+      ;(row ?? document.body).dispatchEvent(
+        new DragEvent('dragstart', { dataTransfer: dt, bubbles: true, cancelable: true })
+      )
+    }, alone33)
+    await page.waitForTimeout(400)
+    ok(
+      'у панели-одиночки приёмника нет — выносить нечего',
+      (await page.evaluate(() => document.querySelectorAll('.zy-drop-zone').length)) === 0
+    )
+    await page.evaluate(() =>
+      window.dispatchEvent(new DragEvent('dragend', { bubbles: true, cancelable: true }))
+    )
+  }
+
+  console.log('\n[34] Окно ни на что не жалуется')
   // Ключи списка панелей, размонтирование, гонки эффектов — всё это React
   // проговаривает в консоли раньше, чем сломается видимое.
   const noise = complaints.filter((t) => !/Autofill|DevTools|Electron Security/i.test(t))
