@@ -1,6 +1,13 @@
 import { PANE_DRAG_CWD } from '@shared/types'
+import { samePath } from '@shared/projects'
 import { useState } from 'react'
 import { closeTabAsking } from '@/actions/panes'
+import {
+  forgetProject,
+  openFolderAsTab,
+  openProject,
+  openProjectBeside
+} from '@/actions/projects'
 import { t, useLang } from '@/lib/i18n'
 import { listLeaves, useSessionsStore } from '@/state/sessionsStore'
 import { useSettingsStore } from '@/state/settingsStore'
@@ -15,19 +22,6 @@ function shortTail(p: string): string {
   // Windows-пути с обратными слэшами тоже: в шапке нужен проект, а не диск.
   const parts = p.split(/[\\/]/).filter(Boolean)
   return parts[parts.length - 1] || p
-}
-
-/** Открыть папку новой вкладкой — тот же жест, что в сайдбаре. */
-async function openFolder(): Promise<void> {
-  const dir = await window.zarya.app.pickDirectory()
-  if (dir) await useSessionsStore.getState().newTab(undefined, dir)
-}
-
-/** Добавить папку в проекты. */
-async function addProject(): Promise<void> {
-  const dir = await window.zarya.app.pickDirectory()
-  const cur = useSettingsStore.getState().settings.bookmarks
-  if (dir && !cur.includes(dir)) await useSettingsStore.getState().update({ bookmarks: [...cur, dir] })
 }
 
 export function Titlebar(): React.JSX.Element {
@@ -134,9 +128,12 @@ export function Titlebar(): React.JSX.Element {
 ${t('title.projectsHint')}`}
         onClick={(e) => {
           const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
-          const store2 = useSessionsStore.getState()
           const items: MenuItem[] = [
-            { label: t('projects.openFolder'), hint: 'Ctrl+Shift+O', onClick: () => void openFolder() }
+            // Выбранная папка и открывается, и попадает в список ниже. Отдельный
+            // пункт «добавить папку в проекты» открывал ТО ЖЕ окно выбора и
+            // отличался лишь тем, что папку не открывал, — снаружи это читалось
+            // как один пункт, продублированный дважды.
+            { label: t('projects.openFolder'), hint: 'Ctrl+Shift+O', onClick: () => void openFolderAsTab() }
           ]
           if (bookmarks.length) {
             // Одна строка на проект. Раньше их было две: под каждым проектом
@@ -149,40 +146,32 @@ ${t('title.projectsHint')}`}
             )
             // Какие проекты уже открыты — видно точкой: список папок без этого
             // ничего не говорит о том, что происходит прямо сейчас.
-            const openCwds = new Set(Object.values(sessions).map((x) => x.cwd))
+            const openCwds = Object.values(sessions).map((x) => x.cwd)
             for (const b of bookmarks) {
+              const openNow = openCwds.some((c) => samePath(c, b))
               items.push({
-                label: `${openCwds.has(b) ? '● ' : ''}${shortTail(b)}`,
+                label: `${openNow ? '● ' : ''}${shortTail(b)}`,
                 // Проект можно утащить прямо отсюда на нужную панель — так он
                 // окажется ИМЕННО ТАМ, куда показали мышью, а не рядом с
                 // активной. Пока проекты жили в сайдбаре, их таскали оттуда.
                 drag: { type: PANE_DRAG_CWD, data: b },
-                onClick: () => void store2.newTab(undefined, b),
+                onClick: () => void openProject(b),
                 actions: [
                   {
                     title: t('projects.openBeside', { path: b }),
                     node: <Icon name="split-h" size={13} />,
-                    onClick: () => void store2.splitActive('row', b)
+                    onClick: () => void openProjectBeside(b)
                   },
                   {
                     title: t('projects.remove', { name: shortTail(b) }),
                     node: <Icon name="close" size={12} />,
                     danger: true,
-                    onClick: () => {
-                      const cur = useSettingsStore.getState().settings.bookmarks
-                      void useSettingsStore
-                        .getState()
-                        .update({ bookmarks: cur.filter((x) => x !== b) })
-                    }
+                    onClick: () => void forgetProject(b)
                   }
                 ]
               })
             }
           }
-          items.push(
-            { separator: true },
-            { label: t('projects.add'), onClick: () => void addProject() }
-          )
           open(r.left, r.bottom + 4, items, e.currentTarget as HTMLElement)
         }}
       >

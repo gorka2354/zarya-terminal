@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import { forgetProject, rememberProject } from '@/actions/projects'
+import { samePath } from '@shared/projects'
 import type { GitStatus } from '@shared/types'
 import { onBus } from '@/lib/bus'
 import { shortenPath, formatRelative } from '@/lib/ansi'
@@ -79,12 +81,11 @@ export function StatusBar(): React.JSX.Element {
       ...(cwd
         ? [
             {
-              label: t(bookmarks.includes(cwd) ? 'status.unbookmark' : 'status.bookmark'),
+              label: t(bookmarks.some((b) => samePath(b, cwd)) ? 'status.unbookmark' : 'status.bookmark'),
               onClick: () => {
-                const next = bookmarks.includes(cwd)
-                  ? bookmarks.filter((b) => b !== cwd)
-                  : [...bookmarks, cwd]
-                void useSettingsStore.getState().update({ bookmarks: next })
+                const known = bookmarks.find((b) => samePath(b, cwd))
+                if (known) void forgetProject(known)
+                else void rememberProject(cwd)
               }
             },
             {

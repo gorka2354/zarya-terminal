@@ -60,62 +60,66 @@ export const useBlocksStore = create<BlocksState>((set, get) => ({
   }
 }))
 
-/**
- * Прогону скорости: набить ленту так, как она выглядит к вечеру рабочего дня.
- *
- * Через настоящую оболочку сотня блоков набирается минуту, и мерили бы мы
- * скорость pty, а не скорость ленты. Здесь сцена собирается сразу и одинаково —
- * иначе цифры «до» и «после» не сравнить.
- */
-;(
-  window as unknown as {
-    __zaryaSeedBlocks?: (sessionId: string, count: number, lines: number) => number
+// QA-хуки ставятся только в окне: файл импортируют и юнит-тесты, где window
+// нет вовсе — без проверки падал бы сам импорт.
+if (typeof window !== 'undefined') {
+  /**
+   * Прогону скорости: набить ленту так, как она выглядит к вечеру рабочего дня.
+   *
+   * Через настоящую оболочку сотня блоков набирается минуту, и мерили бы мы
+   * скорость pty, а не скорость ленты. Здесь сцена собирается сразу и одинаково —
+   * иначе цифры «до» и «после» не сравнить.
+   */
+  ;(
+    window as unknown as {
+      __zaryaSeedBlocks?: (sessionId: string, count: number, lines: number) => number
+    }
+  ).__zaryaSeedBlocks = (sessionId, count, lines) => {
+    const now = Date.now()
+    // Папка — та же, что у самой панели: в снимках для README путь в блоке не
+    // должен спорить с путём в шапке.
+    const cwd = useSessionsStore.getState().sessions[sessionId]?.cwd || '~/code/project'
+    const CMDS = ['npm run build', 'git status', 'npm test -- --watch=false', 'git log --oneline -5']
+    const OUT = [
+      ['vite v7.2.4 building for production...', '✓ 412 modules transformed.', 'dist/index.js  184.20 kB', '✓ built in 3.14s'],
+      ['On branch main', "Your branch is up to date with 'origin/main'.", 'nothing to commit, working tree clean', ''],
+      ['✓ src/store.test.ts (14)', '✓ src/router.test.ts (9)', 'Test Files  2 passed (2)', '     Tests  23 passed (23)'],
+      ['a41c9f2 feat(store): batch writes', '7db3e10 fix(router): keep query on back', '2c8ee54 chore: bump deps', 'f10a993 docs: update readme']
+    ]
+    const list: BlockRecord[] = Array.from({ length: count }, (_, i) => ({
+      id: `seed-${sessionId}-${i}`,
+      sessionId,
+      command: CMDS[i % CMDS.length],
+      cwd,
+      startedAt: now - (count - i) * 1000,
+      endedAt: now - (count - i) * 1000 + 400,
+      exitCode: i % 7 === 0 ? 1 : 0,
+      // Вывод похож на настоящий и не на языке интерфейса: этими блоками
+      // заполняются кадры для витрины, а «строка вывода 3 блока 0» в кадре
+      // сообщает читателю только то, что это подделка.
+      output: OUT[i % OUT.length].slice(0, lines).join('\n'),
+      outputTruncated: false
+    }))
+    useBlocksStore.getState().setBlocks(sessionId, list)
+    return list.length
   }
-).__zaryaSeedBlocks = (sessionId, count, lines) => {
-  const now = Date.now()
-  // Папка — та же, что у самой панели: в снимках для README путь в блоке не
-  // должен спорить с путём в шапке.
-  const cwd = useSessionsStore.getState().sessions[sessionId]?.cwd || '~/code/project'
-  const CMDS = ['npm run build', 'git status', 'npm test -- --watch=false', 'git log --oneline -5']
-  const OUT = [
-    ['vite v7.2.4 building for production...', '✓ 412 modules transformed.', 'dist/index.js  184.20 kB', '✓ built in 3.14s'],
-    ['On branch main', "Your branch is up to date with 'origin/main'.", 'nothing to commit, working tree clean', ''],
-    ['✓ src/store.test.ts (14)', '✓ src/router.test.ts (9)', 'Test Files  2 passed (2)', '     Tests  23 passed (23)'],
-    ['a41c9f2 feat(store): batch writes', '7db3e10 fix(router): keep query on back', '2c8ee54 chore: bump deps', 'f10a993 docs: update readme']
-  ]
-  const list: BlockRecord[] = Array.from({ length: count }, (_, i) => ({
-    id: `seed-${sessionId}-${i}`,
-    sessionId,
-    command: CMDS[i % CMDS.length],
-    cwd,
-    startedAt: now - (count - i) * 1000,
-    endedAt: now - (count - i) * 1000 + 400,
-    exitCode: i % 7 === 0 ? 1 : 0,
-    // Вывод похож на настоящий и не на языке интерфейса: этими блоками
-    // заполняются кадры для витрины, а «строка вывода 3 блока 0» в кадре
-    // сообщает читателю только то, что это подделка.
-    output: OUT[i % OUT.length].slice(0, lines).join('\n'),
-    outputTruncated: false
-  }))
-  useBlocksStore.getState().setBlocks(sessionId, list)
-  return list.length
-}
 
-// QA hook: inspect command blocks (command/exitCode/cwd/output) per session from
-// the offscreen harness. Returns all sessions when no id is given.
-;(window as unknown as { __zaryaDumpBlocks?: (sessionId?: string) => unknown }).__zaryaDumpBlocks = (
-  sessionId
-) => {
-  const by = useBlocksStore.getState().bySession
-  const slim = (b: BlockRecord): unknown => ({
-    command: b.command,
-    cwd: b.cwd,
-    exitCode: b.exitCode,
-    output: (b.output || '').slice(0, 400),
-    endedAt: b.endedAt
-  })
-  if (sessionId) return (by[sessionId] ?? []).map(slim)
-  const out: Record<string, unknown[]> = {}
-  for (const [sid, list] of Object.entries(by)) out[sid] = list.map(slim)
-  return out
+  // QA hook: inspect command blocks (command/exitCode/cwd/output) per session from
+  // the offscreen harness. Returns all sessions when no id is given.
+  ;(window as unknown as { __zaryaDumpBlocks?: (sessionId?: string) => unknown }).__zaryaDumpBlocks = (
+    sessionId
+  ) => {
+    const by = useBlocksStore.getState().bySession
+    const slim = (b: BlockRecord): unknown => ({
+      command: b.command,
+      cwd: b.cwd,
+      exitCode: b.exitCode,
+      output: (b.output || '').slice(0, 400),
+      endedAt: b.endedAt
+    })
+    if (sessionId) return (by[sessionId] ?? []).map(slim)
+    const out: Record<string, unknown[]> = {}
+    for (const [sid, list] of Object.entries(by)) out[sid] = list.map(slim)
+    return out
+  }
 }

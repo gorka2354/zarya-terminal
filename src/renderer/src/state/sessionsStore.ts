@@ -889,70 +889,74 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
   }
 })
 
-// QA hook: force a full persist (terminal snapshots + workspace + conversations)
-// so a restart-restore test is deterministic without relying on graceful close.
-;(window as unknown as { __zaryaPersistAll?: () => Promise<void> }).__zaryaPersistAll = async () => {
-  await useSessionsStore.getState().snapshotAll()
-  const { tabs, activeTabId } = useSessionsStore.getState()
-  await window.zarya.sessions.saveWorkspace({ tabs, activeTabId })
-  await runQuitFlushers()
-}
-
-// QA hook: inspect the tab/session model from the offscreen harness.
-;(window as unknown as { __zaryaDumpSessions?: () => unknown }).__zaryaDumpSessions = () => {
-  const s = useSessionsStore.getState()
-  return {
-    activeTabId: s.activeTabId,
-    activeSessionId: s.activeSessionId(),
-    tabs: s.tabs.map((t) => ({ id: t.id, activeSessionId: t.activeSessionId, leaves: listLeaves(t.layout) })),
-    sessions: Object.values(s.sessions).map((x) => ({ id: x.id, title: x.title, cwd: x.cwd, status: x.status }))
+// QA-хуки ставятся только в окне: этот файл импортируют и юнит-тесты, где
+// window нет вовсе — без проверки падал бы сам импорт.
+if (typeof window !== 'undefined') {
+  // QA hook: force a full persist (terminal snapshots + workspace + conversations)
+  // so a restart-restore test is deterministic without relying on graceful close.
+  ;(window as unknown as { __zaryaPersistAll?: () => Promise<void> }).__zaryaPersistAll = async () => {
+    await useSessionsStore.getState().snapshotAll()
+    const { tabs, activeTabId } = useSessionsStore.getState()
+    await window.zarya.sessions.saveWorkspace({ tabs, activeTabId })
+    await runQuitFlushers()
   }
-}
 
-// QA hooks: drive terminals from the offscreen harness (create / run a shell
-// command / split / close) so a full-app QA sweep can exercise the real PTY.
-;(window as unknown as { __zaryaNewTerminal?: (cwd?: string) => Promise<string> }).__zaryaNewTerminal = (
-  cwd
-) => useSessionsStore.getState().newTab(undefined, cwd)
-;(window as unknown as { __zaryaRunShell?: (cmd: string, sessionId?: string) => string | null }).__zaryaRunShell =
-  (cmd, sessionId) => {
-    const sid = sessionId || useSessionsStore.getState().activeSessionId()
-    if (sid) window.zarya.pty.write(sid, cmd + '\r')
-    return sid
+  // QA hook: inspect the tab/session model from the offscreen harness.
+  ;(window as unknown as { __zaryaDumpSessions?: () => unknown }).__zaryaDumpSessions = () => {
+    const s = useSessionsStore.getState()
+    return {
+      activeTabId: s.activeTabId,
+      activeSessionId: s.activeSessionId(),
+      tabs: s.tabs.map((t) => ({ id: t.id, activeSessionId: t.activeSessionId, leaves: listLeaves(t.layout) })),
+      sessions: Object.values(s.sessions).map((x) => ({ id: x.id, title: x.title, cwd: x.cwd, status: x.status }))
+    }
   }
-/**
- * Текст терминала как его видит человек, и фокус конкретной панели. Нужны
- * многопанельным прогонам: «шелл ответил» проверяется тем, что он ОТВЕТИЛ, а
- * адресат клавиш — тем, что фокус переставили явно, а не догадкой.
- */
-;(window as unknown as { __zaryaTermText?: (sessionId: string) => string }).__zaryaTermText = (
-  sessionId
-) => getTerminal(sessionId)?.serialize(200) ?? ''
-;(window as unknown as { __zaryaFocusPane?: (sessionId: string) => void }).__zaryaFocusPane = (
-  sessionId
-) => useSessionsStore.getState().setActiveSession(sessionId)
-;(
-  window as unknown as { __zaryaSplitActive?: (dir: SplitDirection, cwd?: string) => Promise<void> }
-).__zaryaSplitActive =
-  (dir, cwd) => useSessionsStore.getState().splitActive(dir, cwd)
-;(
-  window as unknown as { __zaryaMovePane?: (sid: string, target: string) => void }
-).__zaryaMovePane = (sid, target) => useSessionsStore.getState().movePaneNextTo(sid, target)
-;(window as unknown as { __zaryaCloseSession?: (sid: string) => Promise<void> }).__zaryaCloseSession = (sid) =>
-  useSessionsStore.getState().closeSession(sid, { save: false })
-/**
- * Снимкам для README: подписать панель нейтрально. В документации не должно
- * быть ни чужих папок, ни личных путей — а настоящие берутся из настоящей
- * файловой системы, какая есть на машине.
- */
-;(
-  window as unknown as { __zaryaRenameForShot?: (sid: string, title: string, cwd: string) => void }
-).__zaryaRenameForShot = (sid, title, cwd) => {
-  useSessionsStore.setState((s) => {
-    const cur = s.sessions[sid]
-    if (!cur) return {}
-    return { sessions: { ...s.sessions, [sid]: { ...cur, title, customTitle: true, cwd } } }
-  })
+
+  // QA hooks: drive terminals from the offscreen harness (create / run a shell
+  // command / split / close) so a full-app QA sweep can exercise the real PTY.
+  ;(window as unknown as { __zaryaNewTerminal?: (cwd?: string) => Promise<string> }).__zaryaNewTerminal = (
+    cwd
+  ) => useSessionsStore.getState().newTab(undefined, cwd)
+  ;(window as unknown as { __zaryaRunShell?: (cmd: string, sessionId?: string) => string | null }).__zaryaRunShell =
+    (cmd, sessionId) => {
+      const sid = sessionId || useSessionsStore.getState().activeSessionId()
+      if (sid) window.zarya.pty.write(sid, cmd + '\r')
+      return sid
+    }
+  /**
+   * Текст терминала как его видит человек, и фокус конкретной панели. Нужны
+   * многопанельным прогонам: «шелл ответил» проверяется тем, что он ОТВЕТИЛ, а
+   * адресат клавиш — тем, что фокус переставили явно, а не догадкой.
+   */
+  ;(window as unknown as { __zaryaTermText?: (sessionId: string) => string }).__zaryaTermText = (
+    sessionId
+  ) => getTerminal(sessionId)?.serialize(200) ?? ''
+  ;(window as unknown as { __zaryaFocusPane?: (sessionId: string) => void }).__zaryaFocusPane = (
+    sessionId
+  ) => useSessionsStore.getState().setActiveSession(sessionId)
+  ;(
+    window as unknown as { __zaryaSplitActive?: (dir: SplitDirection, cwd?: string) => Promise<void> }
+  ).__zaryaSplitActive =
+    (dir, cwd) => useSessionsStore.getState().splitActive(dir, cwd)
+  ;(
+    window as unknown as { __zaryaMovePane?: (sid: string, target: string) => void }
+  ).__zaryaMovePane = (sid, target) => useSessionsStore.getState().movePaneNextTo(sid, target)
+  ;(window as unknown as { __zaryaCloseSession?: (sid: string) => Promise<void> }).__zaryaCloseSession = (sid) =>
+    useSessionsStore.getState().closeSession(sid, { save: false })
+  /**
+   * Снимкам для README: подписать панель нейтрально. В документации не должно
+   * быть ни чужих папок, ни личных путей — а настоящие берутся из настоящей
+   * файловой системы, какая есть на машине.
+   */
+  ;(
+    window as unknown as { __zaryaRenameForShot?: (sid: string, title: string, cwd: string) => void }
+  ).__zaryaRenameForShot = (sid, title, cwd) => {
+    useSessionsStore.setState((s) => {
+      const cur = s.sessions[sid]
+      if (!cur) return {}
+      return { sessions: { ...s.sessions, [sid]: { ...cur, title, customTitle: true, cwd } } }
+    })
+  }
 }
 
 async function restoreWorkspace(

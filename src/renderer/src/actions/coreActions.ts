@@ -1,6 +1,7 @@
 import { registerActions } from '@/lib/actionRegistry'
 import { onLangChange, t } from '@/lib/i18n'
 import { closePaneAsking, closeTabAsking } from '@/actions/panes'
+import { openFolderAsPane, openFolderAsTab } from '@/actions/projects'
 import { useBlocksStore } from '@/state/blocksStore'
 import { listLeaves, useSessionsStore } from '@/state/sessionsStore'
 import { getSettings, useSettingsStore } from '@/state/settingsStore'
@@ -123,11 +124,7 @@ export function registerCoreActions(): void {
       title: t('act.newTabFolder'),
       category: t('act.cat.tabs'),
       keywords: t('act.newTabFolderKw'),
-      run: () => {
-        void window.zarya.app.pickDirectory().then((dir) => {
-          if (dir) void sessions.newTab(undefined, dir)
-        })
-      }
+      run: () => void openFolderAsTab()
     },
     {
       id: 'tab.close',
@@ -184,9 +181,7 @@ export function registerCoreActions(): void {
       // Сетка нужна для того, чтобы держать рядом РАЗНЫЕ проекты. Без этого
       // деление панели давало ещё один сеанс той же папки.
       run: () => {
-        void window.zarya.app.pickDirectory().then((dir) => {
-          if (dir) void sessions.splitActive('row', dir)
-        })
+        void openFolderAsPane()
       }
     },
     {

@@ -2,6 +2,7 @@ import { PANE_DRAG_CWD, PANE_DRAG_SESSION } from '@shared/types'
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import type { SessionMeta, TabState } from '@shared/types'
 import { closePaneAsking, closeTabAsking, setPaneMaximized } from '@/actions/panes'
+import { forgetProject, openFolderAsPane, openFolderAsTab, openProject } from '@/actions/projects'
 import { deskTitle } from '@shared/deskTitle'
 import { t, useLang } from '@/lib/i18n'
 import { formatRelative, shortenPath } from '@/lib/ansi'
@@ -13,12 +14,6 @@ import { useSettingsStore } from '@/state/settingsStore'
 import { useUiStore } from '@/state/uiStore'
 import { useContextMenu, type MenuItem } from './ContextMenu'
 import { Icon, ShellGlyph } from './Icon'
-
-/** Open a native folder picker and start a new terminal there. */
-export async function openFolderAsTerminal(): Promise<void> {
-  const dir = await window.zarya.app.pickDirectory()
-  if (dir) await useSessionsStore.getState().newTab(undefined, dir)
-}
 
 const sectionLabelStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 6 }
 const enSubStyle: React.CSSProperties = {
@@ -113,59 +108,15 @@ export function SessionsPanel(): React.JSX.Element {
     }
   }, [])
 
-  // Recent folders: distinct cwds from saved sessions, minus already-bookmarked.
-  const recentFolders = useMemo(() => {
-    const seen = new Set(bookmarks)
-    const out: string[] = []
-    for (const m of savedList) {
-      if (m.cwd && !seen.has(m.cwd)) {
-        seen.add(m.cwd)
-        out.push(m.cwd)
-      }
-      if (out.length >= 6) break
-    }
-    return out
-  }, [savedList, bookmarks])
-
-  const addProject = async (): Promise<void> => {
-    const dir = await window.zarya.app.pickDirectory()
-    if (dir && !bookmarks.includes(dir)) {
-      await useSettingsStore.getState().update({ bookmarks: [...bookmarks, dir] })
-    }
-  }
-
-  // Dropdown on the header ▾: quick-new + open-in-folder + projects + recents.
+  // Меню ▾ — только про то, КАК завести новый терминал. Списка папок здесь
+  // больше нет: он жил и тут, и в шапке, причём здесь беднее — строки без
+  // «панелью рядом» и без крестика. Папки живут в одном месте — в шапке.
   const openNewMenu = (e: React.MouseEvent): void => {
     const items: MenuItem[] = [
       { label: t('projects.newTerminal'), hint: 'Ctrl+Shift+T', onClick: () => void store.newTab() },
-      { label: t('projects.openFolder'), hint: 'Ctrl+Shift+O', onClick: () => void openFolderAsTerminal() },
-      {
-        label: t('projects.newPaneIn'),
-        onClick: () => {
-          void window.zarya.app.pickDirectory().then((dir) => {
-            if (dir) void store.splitActive('row', dir)
-          })
-        }
-      }
+      { label: t('projects.openFolder'), hint: 'Ctrl+Shift+O', onClick: () => void openFolderAsTab() },
+      { label: t('projects.newPaneIn'), onClick: () => void openFolderAsPane() }
     ]
-    if (bookmarks.length) {
-      items.push({ separator: true }, { label: t('projects.section'), disabled: true })
-      for (const b of bookmarks) {
-        // Подменю наше меню не умеет, поэтому «панелью рядом» живёт в
-        // контекстном меню проекта и в пункте «Новая панель в папке…» выше.
-        items.push({ label: shortenPath(b, 40), onClick: () => void store.newTab(undefined, b) })
-      }
-    }
-    items.push(
-      { separator: true },
-      { label: t('projects.add'), onClick: () => void addProject() }
-    )
-    if (recentFolders.length) {
-      items.push({ separator: true }, { label: t('projects.recentFolders'), disabled: true })
-      for (const f of recentFolders) {
-        items.push({ label: shortenPath(f, 40), onClick: () => void store.newTab(undefined, f) })
-      }
-    }
     const btn = e.currentTarget as HTMLElement
     const r = btn.getBoundingClientRect()
     // Якорь: без него повторное нажатие по той же кнопке закрывало меню по
@@ -236,7 +187,6 @@ export function SessionsPanel(): React.JSX.Element {
   // Вкладка остаётся в списке, если под поиск подходит ЛЮБАЯ её панель: искать
   // по одной активной значило бы прятать вкладку, в которой искомое открыто.
   const shownTabs = q ? tabs.filter((t) => listLeaves(t.layout).some(paneMatches)) : tabs
-  const shownProjects = q ? bookmarks.filter((b) => b.toLowerCase().includes(q)) : bookmarks
 
   const openContext = (e: React.MouseEvent, m: SessionMeta): void => {
     e.preventDefault()
@@ -302,64 +252,6 @@ export function SessionsPanel(): React.JSX.Element {
             <span className={`zy-item-flag${m.favorite ? ' zy-item-flag--on' : ''}`}>
               <Icon name={m.favorite ? 'star' : 'star-outline'} size={13} />
             </span>
-          </button>
-        </div>
-      </div>
-    )
-  }
-
-  const renderProject = (dir: string): React.JSX.Element => {
-    const name = dir.split(/[\\/]/).filter(Boolean).pop() || dir
-    return (
-      <div
-        key={dir}
-        className="zy-item"
-        title={t('projects.openIn', { dir })}
-        onClick={() => void store.newTab(undefined, dir)}
-        // Схватить проект и бросить на рабочую область — получится панель рядом.
-        // Внутри одного окна перетаскивание штатное: это тот же документ.
-        draggable
-        onDragStart={(e) => {
-          e.dataTransfer.setData(PANE_DRAG_CWD, dir)
-          e.dataTransfer.effectAllowed = 'copy'
-        }}
-        onContextMenu={(e) => {
-          e.preventDefault()
-          open(e.clientX, e.clientY, [
-            { label: t('projects.openHere'), onClick: () => void store.newTab(undefined, dir) },
-            { label: t('pane.openBeside'), onClick: () => void store.splitActive('row', dir) },
-            { label: t('projects.showInExplorer'), onClick: () => window.zarya.app.showItemInFolder(dir) },
-            { separator: true },
-            {
-              label: t('projects.removeShort'),
-              danger: true,
-              onClick: () =>
-                void useSettingsStore
-                  .getState()
-                  .update({ bookmarks: bookmarks.filter((b) => b !== dir) })
-            }
-          ])
-        }}
-      >
-        <span className="zy-item-icon" style={{ color: 'var(--accent)' }}>
-          <Icon name="folder" size={15} />
-        </span>
-        <div className="zy-item-body">
-          <div className="zy-item-title">{name}</div>
-          <div className="zy-item-sub zy-item-sub--path">{shortenPath(dir, 34)}</div>
-        </div>
-        <div className="zy-item-actions">
-          <button
-            className="zy-icon-btn"
-            title={t('projects.removeShort')}
-            onClick={(e) => {
-              e.stopPropagation()
-              void useSettingsStore
-                .getState()
-                .update({ bookmarks: bookmarks.filter((b) => b !== dir) })
-            }}
-          >
-            <Icon name="close" size={13} />
           </button>
         </div>
       </div>
@@ -823,15 +715,6 @@ export function SessionsPanel(): React.JSX.Element {
             </div>
             {shownTabs.map(renderOpenRow)}
             {dropZone}
-          </>
-        )}
-        {false && shownProjects.length > 0 && (
-          <>
-            <div className="zy-section-label" style={sectionLabelStyle}>
-              <Icon name="folder" size={11} />
-              {t('projects.section')}
-            </div>
-            {shownProjects.map(renderProject)}
           </>
         )}
         {favorites.length > 0 && (

@@ -1,4 +1,5 @@
 import { PANE_DRAG_CWD, PANE_DRAG_SESSION } from '@shared/types'
+import { rememberProject } from '@/actions/projects'
 import type { DropSide } from '@shared/paneTree'
 import { memo, useEffect, useRef, useState } from 'react'
 import { XtermView } from '@/terminal/XtermView'
@@ -187,7 +188,9 @@ export const TerminalPane = memo(function TerminalPane({
         }
         // Делим ИМЕННО ту панель, на которую бросили, и с той стороны, куда
         // показали: иначе новая появлялась бы у активной и всегда справа.
-        void store.splitBeside(sessionId, side, cwd)
+        // Папка поднимается наверх списка проектов — работа с ней началась
+        // здесь, и в следующий раз она должна быть первой, а не там, где была.
+        void store.splitBeside(sessionId, side, cwd).then(() => rememberProject(cwd))
       }}
     >
       <PaneHeader sessionId={sessionId} maximized={maximized} multiPane={multiPane} />
