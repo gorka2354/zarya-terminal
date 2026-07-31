@@ -35,6 +35,8 @@ export const DEFAULT_KEYBINDINGS: Record<string, string> = {
 export const DEFAULT_SETTINGS: Settings = {
   appearance: {
     themeId: 'zarya-cosmos',
+    // По системе: русскоязычная машина получит русский, остальные — английский.
+    language: 'auto',
     fontFamily: "'JetBrains Mono', 'Cascadia Mono', Consolas, monospace",
     fontSize: 14,
     lineHeight: 1.35,

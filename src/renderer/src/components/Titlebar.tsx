@@ -1,6 +1,7 @@
 import { PANE_DRAG_CWD } from '@shared/types'
 import { useState } from 'react'
 import { closeTabAsking } from '@/actions/panes'
+import { t } from '@/lib/i18n'
 import { listLeaves, useSessionsStore } from '@/state/sessionsStore'
 import { useSettingsStore } from '@/state/settingsStore'
 import { useUiStore } from '@/state/uiStore'
@@ -53,7 +54,7 @@ export function Titlebar(): React.JSX.Element {
     const count = listLeaves(tab.layout).length
     return {
       icon: session?.shellIcon || '>_',
-      title: (session?.title || 'Терминал') + (count > 1 ? ` · ${count}` : ''),
+      title: (session?.title || t('desk.untitled')) + (count > 1 ? ` · ${count}` : ''),
       pinned: session?.pinned ?? false
     }
   }
@@ -75,24 +76,24 @@ export function Titlebar(): React.JSX.Element {
     const sid = tab.activeSessionId
     open(x, y, [
       {
-        label: 'Переименовать…',
+        label: t('common.rename'),
         onClick: () => {
           const cur = sessions[sid]
-          const title = window.prompt('Название сессии', cur?.title ?? '')
+          const title = window.prompt(t('common.sessionName'), cur?.title ?? '')
           if (title) void store.renameSession(sid, title)
         }
       },
       {
-        label: sessions[sid]?.pinned ? 'Открепить' : 'Закрепить',
+        label: t(sessions[sid]?.pinned ? 'common.unpin' : 'common.pin'),
         onClick: () => void store.toggleFlag(sid, 'pinned')
       },
       {
-        label: sessions[sid]?.favorite ? 'Убрать из избранного' : 'В избранное',
+        label: t(sessions[sid]?.favorite ? 'common.favoriteRemove' : 'common.favoriteAdd'),
         onClick: () => void store.toggleFlag(sid, 'favorite')
       },
       { separator: true },
       {
-        label: 'Закрыть другие вкладки',
+        label: t('tab.closeOthers'),
         onClick: () => {
           // По очереди и через вопрос: закрывать десяток терминалов пачкой,
           // не спросив ни про один недописанный запрос, — потеря без следа.
@@ -102,7 +103,7 @@ export function Titlebar(): React.JSX.Element {
         }
       },
       {
-        label: 'Закрыть вкладку',
+        label: t('tab.close'),
         hint: 'Ctrl+Shift+W',
         danger: true,
         onClick: () => void closeTabAsking(tabId)
@@ -112,10 +113,12 @@ export function Titlebar(): React.JSX.Element {
 
   return (
     <header className="zy-titlebar" onMouseEnter={() => setHover(true)}>
-      <div className="zy-logo" title="Заря · ОРБИТА-1 — космический CLI-агент">
-        <img className="zy-logo-mark" src={logoZarya} width={24} height={24} alt="Заря" />
-        <span className="zy-logo-text">ЗАРЯ</span>
-        <span className="zy-logo-tag">// ОРБИТА-1</span>
+      <div className="zy-logo" title={t('title.logoHint')}>
+        {/* Имя бренда одно, начертание — по языку: кириллица в русском несёт
+            характер, но в английском интерфейсе читается как шум. */}
+        <img className="zy-logo-mark" src={logoZarya} width={24} height={24} alt="Zarya" />
+        <span className="zy-logo-text">{t('brand')}</span>
+        <span className="zy-logo-tag">{t('title.tagline')}</span>
       </div>
 
       {/* Проекты — пусковая площадка, а не список происходящего, поэтому они
@@ -123,13 +126,13 @@ export function Titlebar(): React.JSX.Element {
           терминалов: чем больше проектов, тем ниже уезжала работа. */}
       <button
         className="zy-titlebar-proj"
-        title={`${activeCwd || 'Папка не выбрана'}
-Клик — проекты и папки`}
+        title={`${activeCwd || t('title.noFolder')}
+${t('title.projectsHint')}`}
         onClick={(e) => {
           const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
           const store2 = useSessionsStore.getState()
           const items: MenuItem[] = [
-            { label: 'Открыть папку…', hint: 'Ctrl+Shift+O', onClick: () => void openFolder() }
+            { label: t('projects.openFolder'), hint: 'Ctrl+Shift+O', onClick: () => void openFolder() }
           ]
           if (bookmarks.length) {
             // Одна строка на проект. Раньше их было две: под каждым проектом
@@ -138,7 +141,7 @@ export function Titlebar(): React.JSX.Element {
             // схлопывался в мусор, и понять, что к чему относится, было нельзя.
             items.push(
               { separator: true },
-              { label: 'ПРОЕКТЫ', hint: 'клик — вкладкой', disabled: true }
+              { label: t('projects.section'), hint: t('projects.clickHint'), disabled: true }
             )
             // Какие проекты уже открыты — видно точкой: список папок без этого
             // ничего не говорит о том, что происходит прямо сейчас.
@@ -153,13 +156,12 @@ export function Titlebar(): React.JSX.Element {
                 onClick: () => void store2.newTab(undefined, b),
                 actions: [
                   {
-                    title: `Открыть панелью рядом · ${b}
-Или перетащи проект на нужную панель`,
+                    title: t('projects.openBeside', { path: b }),
                     node: <Icon name="split-h" size={13} />,
                     onClick: () => void store2.splitActive('row', b)
                   },
                   {
-                    title: `Убрать «${shortTail(b)}» из проектов`,
+                    title: t('projects.remove', { name: shortTail(b) }),
                     node: <Icon name="close" size={12} />,
                     danger: true,
                     onClick: () => {
@@ -175,20 +177,20 @@ export function Titlebar(): React.JSX.Element {
           }
           items.push(
             { separator: true },
-            { label: 'Добавить папку в проекты…', onClick: () => void addProject() }
+            { label: t('projects.add'), onClick: () => void addProject() }
           )
           open(r.left, r.bottom + 4, items, e.currentTarget as HTMLElement)
         }}
       >
         <Icon name="folder" size={12} />
-        {activeCwd ? shortTail(activeCwd) : 'проекты'}
+        {activeCwd ? shortTail(activeCwd) : t('title.projects')}
         <Icon name="chevron-down" size={10} />
       </button>
       <div className="zy-titlebar-spacer" />
 
       <button
         className="zy-theme-btn"
-        title="Сменить тему борта"
+        title={t('title.themeHint')}
         onClick={() => {
           const themes = getThemes()
           const cur = useSettingsStore.getState().settings.appearance.themeId
@@ -198,27 +200,27 @@ export function Titlebar(): React.JSX.Element {
         }}
       >
         <Icon name="orbit" size={13} strokeWidth={1.5} />
-        ТЕМА
+        {t('title.theme')}
       </button>
 
       <div className="zy-win-controls">
         <button
           className="zy-win-btn"
-          title="Свернуть"
+          title={t('title.minimize')}
           onClick={() => window.zarya.app.windowCommand('minimize')}
         >
           <Icon name="minus" size={14} />
         </button>
         <button
           className="zy-win-btn"
-          title={maximized ? 'Восстановить' : 'Развернуть'}
+          title={t(maximized ? 'title.restore' : 'title.maximize')}
           onClick={() => window.zarya.app.windowCommand('maximize')}
         >
           <Icon name={maximized ? 'restore' : 'maximize'} size={13} />
         </button>
         <button
           className="zy-win-btn zy-win-btn--close"
-          title="Закрыть"
+          title={t('title.close')}
           onClick={() => window.zarya.app.windowCommand('close')}
         >
           <Icon name="close" size={14} />

@@ -31,6 +31,8 @@ import { useUpdateStore } from '@/features/updates/updateStore'
 import { useSettingsStore } from '@/state/settingsStore'
 import { useUiStore } from '@/state/uiStore'
 import './settings.css'
+import { t } from '@/lib/i18n'
+import type { UiLang } from '@shared/types'
 
 type TabId =
   | 'appearance'
@@ -574,7 +576,26 @@ function AppearanceTab(): React.JSX.Element {
   return (
     <>
       <section className="zy-set-section">
-        <div className="zy-section-label">Тема</div>
+        {/* Язык — первое, что ищет человек, открывший чужой по языку интерфейс,
+            поэтому он стоит выше темы и шрифта. Переключение мгновенное: оба
+            словаря лежат в приложении, перезапуск не нужен. */}
+        <div className="zy-section-label">{t('common.language')}</div>
+        <Row title={t('common.language')} sub="LANGUAGE">
+          <select
+            className="zy-select"
+            value={a.language ?? 'auto'}
+            onChange={(e) =>
+              void update({ appearance: { language: e.target.value as UiLang } as never })
+            }
+          >
+            <option value="auto">{t('common.langAuto')}</option>
+            <option value="en">{t('common.langEn')}</option>
+            <option value="ru">{t('common.langRu')}</option>
+          </select>
+        </Row>
+      </section>
+      <section className="zy-set-section">
+        <div className="zy-section-label">{t('settings.theme')}</div>
         <ThemeCardsGrid />
       </section>
       <section className="zy-set-section">

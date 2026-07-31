@@ -138,8 +138,17 @@ export interface WorkspaceState {
 // Settings
 // ---------------------------------------------------------------------------
 
+/** Язык интерфейса: 'auto' — по языку системы. */
+export type UiLang = 'auto' | 'ru' | 'en'
+
 export interface AppearanceSettings {
   themeId: string
+  /**
+   * Язык интерфейса. Не сборка, а настройка вида: оба словаря лежат в одном
+   * приложении, переключение мгновенное и без перезапуска — иначе пришлось бы
+   * держать два установщика и объяснять человеку, какой ему скачивать.
+   */
+  language: UiLang
   fontFamily: string
   fontSize: number
   lineHeight: number

@@ -1,4 +1,5 @@
 import { installKeyRouter } from '@/features/ai/keyRouter'
+import { t } from '@/lib/i18n'
 import { useEffect, useRef, useState } from 'react'
 import { registerCoreActions } from '@/actions/coreActions'
 import { ActivityBar } from '@/components/ActivityBar'
@@ -114,7 +115,7 @@ export default function App(): React.JSX.Element {
             alt=""
           />
         </div>
-        <div className="zy-splash-text">Заря · подготовка к старту</div>
+        <div className="zy-splash-text">{t('splash')}</div>
       </div>
     )
   }
@@ -215,7 +216,7 @@ function MainContent(): React.JSX.Element {
               панели показывали бы один разговор, а сплиты были бы не видны. */}
           {!activeSessionId && (
             <div className="zy-empty" style={{ margin: 'auto' }}>
-              Открой терминал кнопкой + в сайдбаре (Ctrl+Shift+T)
+              {t('workspace.empty')}
             </div>
           )}
         </div>
@@ -281,12 +282,12 @@ function RightPanels(): React.JSX.Element {
           <aside className="zy-ide-rail">
             <button
               className="zy-ide-rail-btn"
-              title="Открыть IDE-агента (второй пилот · свой ключ)"
+              title={t('ide.open')}
               onClick={() => useUiStore.getState().set({ aiPanelOpen: true })}
             >
               <Icon name="sputnik" size={16} strokeWidth={1.5} />
             </button>
-            <span className="zy-ide-rail-label">IDE-АГЕНТ</span>
+            <span className="zy-ide-rail-label">{t('ide.label')}</span>
           </aside>
         ))}
     </>

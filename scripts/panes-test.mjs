@@ -45,6 +45,11 @@ try {
   })
   await page.waitForLoadState('domcontentloaded')
   await page.waitForTimeout(3200)
+  // Прогон читает РУССКИЕ подписи, а язык по умолчанию идёт от системы: на
+  // английской машине (и на CI) интерфейс был бы английским, и половина
+  // проверок искала бы несуществующий текст.
+  await page.evaluate(() => window.__zaryaSetLang?.('ru'))
+  await page.waitForTimeout(500)
 
   console.log('\n[1] Четыре панели, у каждой своя лента и своя строка')
   for (let i = 0; i < 3; i++) {

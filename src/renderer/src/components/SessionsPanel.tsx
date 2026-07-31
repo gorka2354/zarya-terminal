@@ -3,6 +3,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import type { SessionMeta, TabState } from '@shared/types'
 import { closePaneAsking, closeTabAsking, setPaneMaximized } from '@/actions/panes'
 import { deskTitle } from '@shared/deskTitle'
+import { t } from '@/lib/i18n'
 import { formatRelative, shortenPath } from '@/lib/ansi'
 import { fuzzyFilter } from '@/lib/fuzzy'
 import { useAiStore } from '@/features/ai/aiStore'
@@ -132,10 +133,10 @@ export function SessionsPanel(): React.JSX.Element {
   // Dropdown on the header ▾: quick-new + open-in-folder + projects + recents.
   const openNewMenu = (e: React.MouseEvent): void => {
     const items: MenuItem[] = [
-      { label: 'Новый терминал', hint: 'Ctrl+Shift+T', onClick: () => void store.newTab() },
-      { label: 'Открыть папку…', hint: 'Ctrl+Shift+O', onClick: () => void openFolderAsTerminal() },
+      { label: t('projects.newTerminal'), hint: 'Ctrl+Shift+T', onClick: () => void store.newTab() },
+      { label: t('projects.openFolder'), hint: 'Ctrl+Shift+O', onClick: () => void openFolderAsTerminal() },
       {
-        label: 'Новая панель в папке…',
+        label: t('projects.newPaneIn'),
         onClick: () => {
           void window.zarya.app.pickDirectory().then((dir) => {
             if (dir) void store.splitActive('row', dir)
@@ -144,7 +145,7 @@ export function SessionsPanel(): React.JSX.Element {
       }
     ]
     if (bookmarks.length) {
-      items.push({ separator: true }, { label: 'ПРОЕКТЫ', disabled: true })
+      items.push({ separator: true }, { label: t('projects.section'), disabled: true })
       for (const b of bookmarks) {
         // Подменю наше меню не умеет, поэтому «панелью рядом» живёт в
         // контекстном меню проекта и в пункте «Новая панель в папке…» выше.
@@ -153,10 +154,10 @@ export function SessionsPanel(): React.JSX.Element {
     }
     items.push(
       { separator: true },
-      { label: 'Добавить папку в проекты…', onClick: () => void addProject() }
+      { label: t('projects.add'), onClick: () => void addProject() }
     )
     if (recentFolders.length) {
-      items.push({ separator: true }, { label: 'НЕДАВНИЕ ПАПКИ', disabled: true })
+      items.push({ separator: true }, { label: t('projects.recentFolders'), disabled: true })
       for (const f of recentFolders) {
         items.push({ label: shortenPath(f, 40), onClick: () => void store.newTab(undefined, f) })
       }
@@ -198,9 +199,9 @@ export function SessionsPanel(): React.JSX.Element {
         if (moved) store.detachPane(moved)
       }}
     >
-      <div className="zy-drop-zone-title">↩ вернуть в список</div>
+      <div className="zy-drop-zone-title">{t('pane.dropZoneTitle')}</div>
       <div className="zy-drop-zone-sub">
-        отпусти здесь — панель уедет из сетки отдельной вкладкой, процесс не прервётся
+        {t('pane.dropZoneSub')}
       </div>
     </div>
   ) : null
@@ -236,25 +237,25 @@ export function SessionsPanel(): React.JSX.Element {
   const openContext = (e: React.MouseEvent, m: SessionMeta): void => {
     e.preventDefault()
     open(e.clientX, e.clientY, [
-      { label: 'Открыть', onClick: () => void store.restoreSaved(m.id) },
+      { label: t('common.open'), onClick: () => void store.restoreSaved(m.id) },
       {
-        label: m.favorite ? 'Убрать из избранного' : 'В избранное',
+        label: t(m.favorite ? 'common.favoriteRemove' : 'common.favoriteAdd'),
         onClick: () => void store.toggleFlag(m.id, 'favorite')
       },
       {
-        label: 'Переименовать…',
+        label: t('common.rename'),
         onClick: () => {
-          const title = window.prompt('Название сессии', m.title)
+          const title = window.prompt(t('common.sessionName'), m.title)
           if (title) void store.renameSession(m.id, title)
         }
       },
       { separator: true },
       {
-        label: 'Удалить сессию',
+        label: t('common.delete'),
         danger: true,
         disabled: !!sessions[m.id],
         onClick: () => {
-          if (window.confirm(`Удалить сохранённую сессию «${m.title}»?`)) {
+          if (window.confirm(t('common.deleteAsk', { name: m.title }))) {
             void store.deleteSaved(m.id)
           }
         }
@@ -270,7 +271,7 @@ export function SessionsPanel(): React.JSX.Element {
         className={`zy-item${isOpen ? ' zy-item--active' : ''}`}
         onClick={() => void store.restoreSaved(m.id)}
         onContextMenu={(e) => openContext(e, m)}
-        title={`${m.cwd}\n${m.blocksCount} блоков · ${formatRelative(m.updatedAt)}`}
+        title={`${m.cwd}\n${t('sidebar.blocks', { n: m.blocksCount })} · ${formatRelative(m.updatedAt)}`}
       >
         <span className="zy-item-icon">
           <ShellGlyph code={m.shellIcon || '>_'} />
@@ -278,7 +279,7 @@ export function SessionsPanel(): React.JSX.Element {
         <div className="zy-item-body">
           <div className="zy-item-title">
             {m.title}
-            {isOpen && <span className="zy-badge zy-badge--ok" style={{ marginLeft: 6 }}>открыта</span>}
+            {isOpen && <span className="zy-badge zy-badge--ok" style={{ marginLeft: 6 }}>{t('sidebar.openBadge')}</span>}
           </div>
           <div className="zy-item-sub zy-item-sub--path">
             {m.lastCommand ? `❯ ${m.lastCommand}` : shortenPath(m.cwd, 34)} ·{' '}
@@ -288,7 +289,7 @@ export function SessionsPanel(): React.JSX.Element {
         <div className="zy-item-actions">
           <button
             className="zy-icon-btn"
-            title={m.favorite ? 'Убрать из избранного' : 'В избранное'}
+            title={t(m.favorite ? 'common.favoriteRemove' : 'common.favoriteAdd')}
             onClick={(e) => {
               e.stopPropagation()
               void store.toggleFlag(m.id, 'favorite')
@@ -309,7 +310,7 @@ export function SessionsPanel(): React.JSX.Element {
       <div
         key={dir}
         className="zy-item"
-        title={`Открыть терминал в ${dir}`}
+        title={t('projects.openIn', { dir })}
         onClick={() => void store.newTab(undefined, dir)}
         // Схватить проект и бросить на рабочую область — получится панель рядом.
         // Внутри одного окна перетаскивание штатное: это тот же документ.
@@ -321,12 +322,12 @@ export function SessionsPanel(): React.JSX.Element {
         onContextMenu={(e) => {
           e.preventDefault()
           open(e.clientX, e.clientY, [
-            { label: 'Открыть терминал здесь', onClick: () => void store.newTab(undefined, dir) },
-            { label: 'Открыть панелью рядом', onClick: () => void store.splitActive('row', dir) },
-            { label: 'Открыть в проводнике', onClick: () => window.zarya.app.showItemInFolder(dir) },
+            { label: t('projects.openHere'), onClick: () => void store.newTab(undefined, dir) },
+            { label: t('pane.openBeside'), onClick: () => void store.splitActive('row', dir) },
+            { label: t('projects.showInExplorer'), onClick: () => window.zarya.app.showItemInFolder(dir) },
             { separator: true },
             {
-              label: 'Убрать из проектов',
+              label: t('projects.removeShort'),
               danger: true,
               onClick: () =>
                 void useSettingsStore
@@ -346,7 +347,7 @@ export function SessionsPanel(): React.JSX.Element {
         <div className="zy-item-actions">
           <button
             className="zy-icon-btn"
-            title="Убрать из проектов"
+            title={t('projects.removeShort')}
             onClick={(e) => {
               e.stopPropagation()
               void useSettingsStore
@@ -368,23 +369,23 @@ export function SessionsPanel(): React.JSX.Element {
     if (!s) return
     open(e.clientX, e.clientY, [
       {
-        label: 'Переименовать…',
+        label: t('common.rename'),
         onClick: () => {
-          const title = window.prompt('Название сессии', s.title)
+          const title = window.prompt(t('common.sessionName'), s.title)
           if (title) void store.renameSession(sid, title)
         }
       },
       {
-        label: s.favorite ? 'Убрать из избранного' : 'В избранное',
+        label: t(s.favorite ? 'common.favoriteRemove' : 'common.favoriteAdd'),
         onClick: () => void store.toggleFlag(sid, 'favorite')
       },
       {
-        label: s.pinned ? 'Открепить' : 'Закрепить (защита от очистки)',
+        label: t(s.pinned ? 'common.unpin' : 'common.pin'),
         onClick: () => void store.toggleFlag(sid, 'pinned')
       },
       { separator: true },
       {
-        label: 'Разделить вправо',
+        label: t('pane.splitRight'),
         // Делим ТУ вкладку, по строке которой щёлкнули: раньше панель уезжала в
         // активную, а при её заполненности тост говорил про лимит вкладки,
         // которую человек даже не трогал.
@@ -393,7 +394,7 @@ export function SessionsPanel(): React.JSX.Element {
           void store.splitActive('row')
         }
       },
-      { label: 'Закрыть терминал', danger: true, onClick: () => void closeTabAsking(tab.id) }
+      { label: t('pane.closeTab'), danger: true, onClick: () => void closeTabAsking(tab.id) }
     ])
   }
 
@@ -405,24 +406,24 @@ export function SessionsPanel(): React.JSX.Element {
     open(e.clientX, e.clientY, [
       {
         label:
-          maximizedByTab[tab.id] === sessionId ? 'Свернуть к раскладке' : 'Развернуть на всю вкладку',
-        hint: '2×клик',
+          t(maximizedByTab[tab.id] === sessionId ? 'pane.restore' : 'pane.maximize'),
+        hint: t('pane.dblclick'),
         onClick: () => setPaneMaximized(sessionId, maximizedByTab[tab.id] !== sessionId)
       },
       {
-        label: 'Переименовать…',
+        label: t('common.rename'),
         onClick: () => {
-          const title = window.prompt('Название сессии', s.title)
+          const title = window.prompt(t('common.sessionName'), s.title)
           if (title) void store.renameSession(sessionId, title)
         }
       },
       {
-        label: s.favorite ? 'Убрать из избранного' : 'В избранное',
+        label: t(s.favorite ? 'common.favoriteRemove' : 'common.favoriteAdd'),
         onClick: () => void store.toggleFlag(sessionId, 'favorite')
       },
       { separator: true },
       {
-        label: 'Открыть панель рядом',
+        label: t('pane.openBeside'),
         // Делим ТУ панель, по которой щёлкнули: делить «активную» значило бы
         // открыть панель не там, куда показали мышью.
         onClick: () => {
@@ -433,23 +434,23 @@ export function SessionsPanel(): React.JSX.Element {
       {
         // Убрать CLI с разделённого экрана, не убивая его: панель уезжает в свой
         // рабочий стол и остаётся в списке свёрнутой строкой.
-        label: 'Вынести в отдельную вкладку',
-        hint: 'или перетащи в список',
+        label: t('pane.detach'),
+        hint: t('pane.detachHint'),
         disabled: panes < 2,
         onClick: () => store.detachPane(sessionId)
       },
       {
-        label: 'Переименовать рабочий стол…',
+        label: t('desk.renameBtn'),
         onClick: () => renameDesk(tab)
       },
-      { label: 'Закрыть панель', danger: true, onClick: () => void closePaneAsking(sessionId) },
+      { label: t('pane.close'), danger: true, onClick: () => void closePaneAsking(sessionId) },
       // Закрыть весь рабочий стол: у активной вкладки своей строки в списке нет
       // (она раскрыта панелями), и без этого пункта закрыть её целиком можно
       // было бы только горячей клавишей.
       ...(panes > 1
         ? [
             {
-              label: `Закрыть терминал целиком · ${panes} панели`,
+              label: `${t('pane.closeWhole')} · ${panes}`,
               danger: true,
               hint: 'Ctrl+Shift+W',
               onClick: () => void closeTabAsking(tab.id)
@@ -485,10 +486,10 @@ export function SessionsPanel(): React.JSX.Element {
         className={`zy-item zy-pane-row${onScreen ? ' zy-item--onscreen' : ''}${focused ? ' zy-item--focus' : ''}${dropTab === sessionId ? ' zy-item--drop' : ''}`}
         title={
           focused
-            ? `${session?.cwd ?? ''}\nПанель в фокусе — сюда уходят Enter и Esc`
+            ? `${session?.cwd ?? ''}\n${t('pane.focused')}`
             : onScreen
-              ? `${session?.cwd ?? ''}\nКлик — сделать активной · 2×клик — на всю вкладку`
-              : `${session?.cwd ?? ''}\nСейчас не видно — развёрнута другая панель. Клик — показать эту`
+              ? `${session?.cwd ?? ''}\n${t('pane.clickToFocus')}`
+              : `${session?.cwd ?? ''}\n${t('pane.hiddenByMax')}`
         }
         // Что было развёрнуто ДО жеста. Двойной клик — это click, click,
         // dblclick: первый клик уже переносит разворот на эту панель, и
@@ -540,11 +541,11 @@ export function SessionsPanel(): React.JSX.Element {
         </span>
         <div className="zy-item-body">
           <div className="zy-item-title">
-            {session?.pinned && <span className="zy-pin-dot" title="Закреплена" />}
-            {session?.title || 'Терминал'}
+            {session?.pinned && <span className="zy-pin-dot" title={t('session.pinned')} />}
+            {session?.title || t('desk.untitled')}
             {maxed && (
               <span className="zy-badge" style={{ marginLeft: 6 }}>
-                во весь экран
+                {t('pane.maximized')}
               </span>
             )}
           </div>
@@ -553,7 +554,7 @@ export function SessionsPanel(): React.JSX.Element {
         <div className="zy-item-actions">
           <button
             className="zy-icon-btn"
-            title={session?.favorite ? 'Убрать из избранного' : 'В избранное'}
+            title={t(session?.favorite ? 'common.favoriteRemove' : 'common.favoriteAdd')}
             onClick={(e) => {
               e.stopPropagation()
               void store.toggleFlag(sessionId, 'favorite')
@@ -563,7 +564,7 @@ export function SessionsPanel(): React.JSX.Element {
           </button>
           <button
             className="zy-icon-btn"
-            title="Закрыть панель"
+            title={t('pane.close')}
             onClick={(e) => {
               e.stopPropagation()
               void closePaneAsking(sessionId)
@@ -625,7 +626,7 @@ export function SessionsPanel(): React.JSX.Element {
         </span>
         <div className="zy-item-body">
           <div className="zy-item-title">
-            {session?.pinned && <span className="zy-pin-dot" title="Закреплена" />}
+            {session?.pinned && <span className="zy-pin-dot" title={t('session.pinned')} />}
             {deskTitle(
               leaves.map((sid) => sessions[sid]?.title ?? ''),
               tab.title
@@ -636,7 +637,7 @@ export function SessionsPanel(): React.JSX.Element {
         <div className="zy-item-actions">
           <button
             className="zy-icon-btn"
-            title={session?.favorite ? 'Убрать из избранного' : 'В избранное'}
+            title={t(session?.favorite ? 'common.favoriteRemove' : 'common.favoriteAdd')}
             onClick={(e) => {
               e.stopPropagation()
               void store.toggleFlag(tab.activeSessionId, 'favorite')
@@ -646,7 +647,7 @@ export function SessionsPanel(): React.JSX.Element {
           </button>
           <button
             className="zy-icon-btn"
-            title="Закрыть терминал"
+            title={t('pane.closeTab')}
             onClick={(e) => {
               e.stopPropagation()
               void closeTabAsking(tab.id)
@@ -685,7 +686,7 @@ export function SessionsPanel(): React.JSX.Element {
       listLeaves(tab.layout).map((sid) => sessions[sid]?.title ?? ''),
       tab.title
     )
-    const next = window.prompt('Название рабочего стола (пусто — по панелям)', tab.title ?? now)
+    const next = window.prompt(t('desk.renamePrompt'), tab.title ?? now)
     if (next !== null) store.renameTab(tab.id, next)
   }
 
@@ -707,7 +708,7 @@ export function SessionsPanel(): React.JSX.Element {
         key={`head:${tab.id}`}
         data-desk={tab.id}
         className="zy-item zy-desk-row"
-        title={'Рабочий стол · 2×клик — переименовать'}
+        title={t('desk.rename')}
         onDoubleClick={() => renameDesk(tab)}
         onContextMenu={(e) => openTabContext(e, tab)}
       >
@@ -721,7 +722,7 @@ export function SessionsPanel(): React.JSX.Element {
         <div className="zy-item-actions">
           <button
             className="zy-icon-btn"
-            title="Переименовать рабочий стол"
+            title={t('desk.renameBtn')}
             onClick={(e) => {
               e.stopPropagation()
               renameDesk(tab)
@@ -731,7 +732,7 @@ export function SessionsPanel(): React.JSX.Element {
           </button>
           <button
             className="zy-icon-btn"
-            title="Закрыть весь рабочий стол"
+            title={t('desk.closeAll')}
             onClick={(e) => {
               e.stopPropagation()
               void closeTabAsking(tab.id)
@@ -754,13 +755,13 @@ export function SessionsPanel(): React.JSX.Element {
       `}</style>
       <div className="zy-sidebar-header">
         <span>
-          Сессии
+          {t('sidebar.sessions')}
           <span style={enSubStyle}>SESSIONS</span>
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <button
             className="zy-icon-btn"
-            title="Новый терминал (Ctrl+Shift+T)"
+            title={t('sidebar.newTerminal')}
             onClick={() => void store.newTab()}
             onContextMenu={openNewMenu}
           >
@@ -768,7 +769,7 @@ export function SessionsPanel(): React.JSX.Element {
           </button>
           <button
             className="zy-icon-btn"
-            title="Открыть в папке / проект / недавние…"
+            title={t('sidebar.moreMenu')}
             onClick={openNewMenu}
           >
             <Icon name="chevron-down" size={12} />
@@ -778,7 +779,7 @@ export function SessionsPanel(): React.JSX.Element {
       <div className="zy-sidebar-search">
         <input
           className="zy-input"
-          placeholder="Поиск сессий…"
+          placeholder={t('sidebar.search')}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
@@ -809,7 +810,7 @@ export function SessionsPanel(): React.JSX.Element {
           <>
             <div className="zy-section-label" style={sectionLabelStyle}>
               <Icon name="terminal" size={11} />
-              Открытые
+              {t('sidebar.open')}
             </div>
             {shownTabs.map(renderOpenRow)}
             {dropZone}
@@ -819,7 +820,7 @@ export function SessionsPanel(): React.JSX.Element {
           <>
             <div className="zy-section-label" style={sectionLabelStyle}>
               <Icon name="folder" size={11} />
-              Проекты
+              {t('projects.section')}
             </div>
             {shownProjects.map(renderProject)}
           </>
@@ -828,28 +829,24 @@ export function SessionsPanel(): React.JSX.Element {
           <>
             <div className="zy-section-label" style={sectionLabelStyle}>
               <Icon name="star" size={11} />
-              Избранные
+              {t('sidebar.favorites')}
             </div>
             {favorites.map(renderItem)}
           </>
         )}
         {recent.length > 0 && (
           <>
-            <div className="zy-section-label">Недавние</div>
+            <div className="zy-section-label">{t('sidebar.recent')}</div>
             {recent.map(renderItem)}
           </>
         )}
         {!tabs.length && !favorites.length && !recent.length && (
-          <div className="zy-empty">
-            Открой новый терминал кнопкой <b>+</b> в заголовке (Ctrl+Shift+T).
-            <br />
-            <br />
-            Сессии переживают перезапуск и выключение — закрытые появятся здесь для
-            восстановления.
+          <div className="zy-empty" style={{ whiteSpace: 'pre-line' }}>
+            {t('sidebar.empty')}
           </div>
         )}
         <div className="zy-section-label" style={crewLabelStyle}>
-          Экипаж · агенты
+          {t('sidebar.crew')}
         </div>
         {crewActive.length > 0 ? (
           crewActive.map((conv) => (
@@ -868,7 +865,7 @@ export function SessionsPanel(): React.JSX.Element {
               <div className="zy-item-body">
                 <div className="zy-item-title">{conv.title}</div>
                 <div className="zy-item-sub" style={crewStatusStyle}>
-                  выполняется
+                  {t('sidebar.crewBusy')}
                 </div>
               </div>
             </div>
@@ -884,7 +881,7 @@ export function SessionsPanel(): React.JSX.Element {
                 background: 'var(--fg-faint)'
               }}
             />
-            <div className="zy-item-title">Борт-инженер / готов</div>
+            <div className="zy-item-title">{t('sidebar.crewIdle')}</div>
           </div>
         )}
       </div>
