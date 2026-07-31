@@ -180,6 +180,57 @@
   color: var(--danger);
 }
 
+/* строка скачивания ----------------------------------------------------- */
+/* Загрузчик перерисовывает свою строку возвратом каретки: в ленте это читается
+   как прыгающие цифры. Полоса показывает то же самое спокойно и на одном
+   месте — и появляется только когда в выводе действительно есть прогресс. */
+.zy-mf-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-left: 16px;
+  margin: 6px 0 2px;
+}
+.zy-mf-progress-bar {
+  position: relative;
+  flex: 1;
+  max-width: 320px;
+  height: 5px;
+  overflow: hidden;
+  background: var(--bg-elev2);
+  border: 1px solid var(--border);
+}
+.zy-mf-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.18s linear;
+}
+/* Процент неизвестен — ширину не выдумываем: бегунок честно говорит «идёт»,
+   не обещая доли пути. */
+.zy-mf-progress-fill--unknown {
+  width: 32%;
+  animation: zy-mf-progress-slide 1.1s ease-in-out infinite;
+}
+@keyframes zy-mf-progress-slide {
+  0% {
+    transform: translateX(-110%);
+  }
+  100% {
+    transform: translateX(330%);
+  }
+}
+.zy-mf-progress-text {
+  font-family: var(--font-tech);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--fg-faint);
+  white-space: nowrap;
+}
+.zy-mf-tool-elapsed {
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-faint);
+}
+
 /* agent divider -------------------------------------------------------- */
 .zy-mf-divider {
   display: flex;

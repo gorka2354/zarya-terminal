@@ -55,9 +55,13 @@ describe('orphanGates', () => {
     expect(orphanGates(c)).toEqual([])
   })
 
-  it('skips settled gates — they are executing, not awaiting a decision', () => {
+  it('keeps a settled gate — it is executing, and the screen must say so', () => {
+    // Раньше одобренный гейт отсеивался, и у движков без `tool_use` (Codex,
+    // Gemini, Kimi, Qwen) карточка исчезала в момент нажатия «ВЫПОЛНИТЬ»:
+    // команда шла, а лента молчала. Карточка живёт до результата — он удаляет
+    // сам pendingTool.
     const c = conv({ pendingTools: [gate({ settled: true })] })
-    expect(orphanGates(c)).toEqual([])
+    expect(orphanGates(c).map((t) => t.id)).toEqual(['p1'])
   })
 
   it('covers EVERY gate the Enter shortcut can approve', () => {

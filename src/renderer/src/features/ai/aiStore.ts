@@ -134,6 +134,15 @@ export interface Conversation {
    * blocks, so this is a queue keyed by tool_use id — never a single slot.
    */
   pendingTools: PendingTool[]
+  /**
+   * Когда начался инструмент, по его id.
+   *
+   * Пока команда идёт, карточка показывала только спиннер: «выполняется» — и
+   * ни слова о том, минуту это уже или десять. Вывод инструмента SDK отдаёт
+   * одним куском в конце, поэтому время — единственное, что мы честно знаем о
+   * происходящем, и единственное, что отличает работу от зависания.
+   */
+  toolStartedAt: Record<string, number>
   pendingContext: AiContextChip[]
   /** Message typed while the agent is working — queued, editable (↑), sent when it finishes. */
   queued?: string
@@ -349,6 +358,7 @@ function appendText(conv: Conversation, text: string): Conversation {
 
 function appendToolUse(conv: Conversation, id: string, name: string, input: unknown): Conversation {
   const part: AiContentPart = { type: 'tool_use', id, name, input }
+  const startedAt = { ...conv.toolStartedAt, [id]: Date.now() }
   const messages = [...conv.messages]
   const last = messages[messages.length - 1]
   if (last && last.role === 'assistant') {
@@ -356,7 +366,7 @@ function appendToolUse(conv: Conversation, id: string, name: string, input: unkn
   } else {
     messages.push({ role: 'assistant', content: [part] })
   }
-  return { ...conv, messages }
+  return { ...conv, messages, toolStartedAt: startedAt }
 }
 
 /** Waits for the first block that starts in `sessionId` after this call and finishes. */
@@ -963,6 +973,7 @@ export const useAiStore = create<AiState>((set, get) => {
         agentMode: p.engine !== 'builtin',
         streaming: false,
         pendingTools: [],
+        toolStartedAt: {},
         pendingContext: [],
         createdAt: p.createdAt
       }))
@@ -995,6 +1006,7 @@ export const useAiStore = create<AiState>((set, get) => {
         bypass: opts?.sessionId ? get().bypassBySession[opts.sessionId] : undefined,
         streaming: false,
         pendingTools: [],
+        toolStartedAt: {},
         pendingContext: [],
         createdAt: Date.now()
       }
@@ -1274,7 +1286,8 @@ export const useAiStore = create<AiState>((set, get) => {
       if (conv.engine !== 'builtin') {
         patchConversation(conv.id, (c) => ({
           ...c,
-          pendingTools: c.pendingTools.map((t) => (t.id === tool.id ? { ...t, settled: true } : t))
+          pendingTools: c.pendingTools.map((t) => (t.id === tool.id ? { ...t, settled: true } : t)),
+          toolStartedAt: { ...c.toolStartedAt, [tool.id]: Date.now() }
         }))
         // `always` передаётся ровно тогда, когда у гейта нет разового варианта —
         // и тогда кнопка, которую нажали, называлась «РАЗРЕШИТЬ ВСЕГДА». Без
@@ -1288,7 +1301,8 @@ export const useAiStore = create<AiState>((set, get) => {
       }
       patchConversation(conv.id, (c) => ({
         ...c,
-        pendingTools: c.pendingTools.map((t) => (t.id === tool.id ? { ...t, settled: true } : t))
+        pendingTools: c.pendingTools.map((t) => (t.id === tool.id ? { ...t, settled: true } : t)),
+        toolStartedAt: { ...c.toolStartedAt, [tool.id]: Date.now() }
       }))
       await enqueueTool(conv.id, { id: tool.id, name: tool.name, input: tool.input })
     },
@@ -1363,6 +1377,7 @@ export const useAiStore = create<AiState>((set, get) => {
         agentMode: true,
         streaming: false,
         pendingTools: [],
+        toolStartedAt: {},
         pendingContext: [],
         createdAt: Date.now()
       }

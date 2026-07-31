@@ -33,6 +33,8 @@ export class FakeAgentDriver implements AgentDriver {
    * что последним сказал агент и от какой точки эта ветка началась. Живёт между
    * ходами, как у настоящего драйвера (ключ — requestId, он же id беседы).
    */
+  /** Запросы, чей инструмент должен работать долго (прогон смотрит на «выполняется»). */
+  private slowTools = new Set<string>()
   private sessions = new Map<
     string,
     {
@@ -135,6 +137,7 @@ export class FakeAgentDriver implements AgentDriver {
         this.emit(requestId, { type: 'result', isError: false, models: [`${this.engine}-model`] })
       )
     } else if (/tool/i.test(opts.prompt)) {
+      if (/slow/i.test(opts.prompt)) this.slowTools.add(requestId)
       // Gate a tool so approve/deny + concurrent-gate behaviour is testable.
       this.schedule(requestId, 400, () =>
         this.emit(requestId, {
@@ -209,15 +212,24 @@ export class FakeAgentDriver implements AgentDriver {
   }
 
   resolvePermission(requestId: string, toolUseId: string, decision: AgentPermissionDecision): void {
-    this.emit(requestId, {
-      type: 'tool_result',
-      toolUseId,
-      content: decision.behavior === 'allow' ? 'fake tool output' : decision.message,
-      isError: decision.behavior === 'deny'
-    })
-    this.schedule(requestId, 120, () =>
-      this.emit(requestId, { type: 'result', isError: false, models: [`${this.engine}-model`] })
-    )
+    // «slow» в запросе — инструмент, который ДОЛГО работает. Настоящая команда
+    // агента (клонирование, установка пакетов) идёт секунды и минуты, и всё,
+    // что показывает лента в это время, проверить на мгновенном ответе нельзя:
+    // карточка исчезает раньше, чем прогон успевает на неё посмотреть.
+    const slow = decision.behavior === 'allow' && this.slowTools.has(requestId)
+    const emitResult = (): void => {
+      this.emit(requestId, {
+        type: 'tool_result',
+        toolUseId,
+        content: decision.behavior === 'allow' ? 'fake tool output' : decision.message,
+        isError: decision.behavior === 'deny'
+      })
+      this.schedule(requestId, 120, () =>
+        this.emit(requestId, { type: 'result', isError: false, models: [`${this.engine}-model`] })
+      )
+    }
+    if (slow) this.schedule(requestId, 6000, emitResult)
+    else emitResult()
   }
 
   resolveQuestion(requestId: string, toolUseId: string, answer: AgentQuestionAnswer): void {

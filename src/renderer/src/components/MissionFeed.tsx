@@ -21,6 +21,7 @@ import {
   fmtTokens as fmtWaveTokens,
   summarizeWave
 } from '@/features/ai/subagents'
+import { parseProgress, progressText } from '@shared/progress'
 import { renderMarkdown } from '@/features/ai/markdown'
 import { getTerminal } from '@/terminal/terminalRegistry'
 import { Icon } from './Icon'
@@ -360,8 +361,15 @@ const ShellBlock = memo(function ShellBlock({
   const running = block.exitCode === undefined && block.endedAt === undefined
   const failed = block.exitCode !== undefined && block.exitCode !== 0
   const dur = block.endedAt ? block.endedAt - block.startedAt : 0
-  const output = liveTail !== undefined ? liveTail : block.output
+  // Пустой снимок не стирает то, что уже видно: пока команда идёт, движок
+  // иногда отдаёт пустоту (экран прокрутился, блок ещё не начался), и лента
+  // мигала бы пустым местом вместо вывода, который у неё есть.
+  const output = liveTail ? liveTail : block.output
   const cwdShort = shortenPath(block.cwd || '', 30)
+  // Загрузчик перерисовывает одну строку возвратом каретки: в терминале это
+  // читается, а в ленте превращается в прыгающие цифры. Пока команда идёт,
+  // достаём из хвоста то, что там сказано, и показываем спокойно — полосой.
+  const progress = running ? parseProgress(output) : null
 
   return (
     <div className={`zy-mf-block${failed ? ' zy-mf-block--fail' : ''}`}>
@@ -391,6 +399,24 @@ const ShellBlock = memo(function ShellBlock({
           )}
         </span>
       </div>
+      {progress && (
+        <div className="zy-mf-progress" title={progress.label ?? undefined}>
+          <div className="zy-mf-progress-bar">
+            {/* Ширина только при известном проценте: полоса «примерно на треть»
+                у загрузки без процентов обещала бы знание, которого нет. */}
+            <div
+              className={`zy-mf-progress-fill${
+                progress.percent === null ? ' zy-mf-progress-fill--unknown' : ''
+              }`}
+              style={progress.percent === null ? undefined : { width: `${progress.percent}%` }}
+            />
+          </div>
+          <span className="zy-mf-progress-text">
+            {progress.label ? `${progress.label} · ` : ''}
+            {progressText(progress)}
+          </span>
+        </div>
+      )}
       {output.trim() !== '' && <OutputLines text={output} failed={failed} />}
     </div>
   )
@@ -731,6 +757,17 @@ const ToolCard = memo(function ToolCard({
   // отменяла бы memo у всех сообщений разом (см. FeedConvContext).
   const feed = useContext(FeedConvContext)
   const conv = feed?.conv
+  const result0 = feed?.results.get(id)
+  const startedAt = conv?.toolStartedAt?.[id]
+  // Пока идёт — перерисовываемся раз в секунду, чтобы время шло. Считать не от
+  // чего, кроме старта: вывод инструмента SDK отдаёт одним куском в конце.
+  const ticking = !!startedAt && !result0
+  const [, tickTool] = useState(0)
+  useEffect(() => {
+    if (!ticking) return
+    const t = window.setInterval(() => tickTool((v) => v + 1), 1000)
+    return () => clearInterval(t)
+  }, [ticking])
   if (!conv) return null
   const pending = conv.pendingTools.find((t) => t.id === id)
   const result = feed.results.get(id)
@@ -802,6 +839,11 @@ const ToolCard = memo(function ToolCard({
       <div className="zy-mf-tool-exec">
         <span className="zy-mf-spinner" />
         {verb.run}
+        {/* Сколько уже идёт. Единственное, что мы честно знаем о команде,
+            которую выполняет агент: её вывод придёт только в конце. */}
+        {startedAt && (
+          <span className="zy-mf-tool-elapsed">· {fmtElapsed(Date.now() - startedAt)}</span>
+        )}
       </div>
     )
   }
@@ -832,7 +874,12 @@ const ToolCard = memo(function ToolCard({
             {t('feed.lines', { n: view.lines })}
           </span>
         )}
-        {!view.mustShowFull && <span className="zy-mf-tool-note">{verb.want}</span>}
+        {/* «хочет выполнить» — только пока решение не принято. После одобрения
+            команда УЖЕ идёт, и та же подпись сообщала бы о выборе, которого
+            больше нет; после результата — тем более. */}
+        {!view.mustShowFull && !result && (pending ? !pending.settled : true) && (
+          <span className="zy-mf-tool-note">{verb.want}</span>
+        )}
       </div>
       {(view.mustShowFull || (open && view.isLong)) && (
         <pre className={`zy-mf-tool-full${view.mustShowFull ? ' zy-mf-tool-full--pinned' : ''}`}>

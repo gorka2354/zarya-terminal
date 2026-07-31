@@ -22,7 +22,11 @@ export function orphanGates(conv: Conversation): PendingTool[] {
       if (p.type === 'tool_use') described.add(p.id)
     }
   }
-  return conv.pendingTools.filter((t) => !t.settled && !described.has(t.id))
+  // Одобренный гейт остаётся карточкой, пока не придёт результат. Раньше он
+  // отсеивался по `settled`, и у движков без `tool_use` (Codex, Gemini, Kimi,
+  // Qwen) экран после «ВЫПОЛНИТЬ» становился пустым: команда шла минуту, а
+  // лента молчала, будто ничего не запускалось.
+  return conv.pendingTools.filter((t) => !described.has(t.id))
 }
 
 /**

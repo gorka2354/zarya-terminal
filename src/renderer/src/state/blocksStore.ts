@@ -122,4 +122,32 @@ if (typeof window !== 'undefined') {
     for (const [sid, list] of Object.entries(by)) out[sid] = list.map(slim)
     return out
   }
+  /**
+   * Прогону: блок, который ПРЯМО СЕЙЧАС выполняется, с заданным выводом.
+   *
+   * Проверять строку скачивания настоящим `git clone` значило бы завести тест,
+   * который ходит в сеть и зависит от чужого репозитория; а весь смысл проверки
+   * — в том, как лента показывает вывод, а не в том, откуда он взялся.
+   */
+  ;(
+    window as unknown as {
+      __zaryaSeedRunningBlock?: (sessionId: string, output: string, command?: string) => string
+    }
+  ).__zaryaSeedRunningBlock = (sessionId, output, command) => {
+    const id = `running-${sessionId}`
+    const cwd = useSessionsStore.getState().sessions[sessionId]?.cwd || '~/code/project'
+    useBlocksStore.getState().setBlocks(sessionId, [
+      {
+        id,
+        sessionId,
+        command: command || 'git clone https://example.com/repo.git',
+        cwd,
+        startedAt: Date.now() - 3000,
+        output,
+        outputTruncated: false
+      }
+    ])
+    return id
+  }
+
 }
