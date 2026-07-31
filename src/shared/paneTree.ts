@@ -1,4 +1,4 @@
-import type { SplitNode } from './types'
+import type { SplitDirection, SplitNode } from './types'
 import { autoLayout, isAutoLayout } from './autoLayout'
 
 /**
@@ -83,6 +83,50 @@ export function removeLeaf(node: SplitNode, sessionId: string): SplitNode | null
 export function mapLeaves(node: SplitNode, map: (id: string) => string): SplitNode {
   if (node.type === 'leaf') return { type: 'leaf', sessionId: map(node.sessionId) }
   return { ...node, a: mapLeaves(node.a, map), b: mapLeaves(node.b, map) }
+}
+
+/** С какой стороны от целевой панели встаёт принесённая. */
+export type DropSide = 'left' | 'right' | 'top' | 'bottom'
+
+/** Порядок листьев с новым — до или после цели. По нему собирается автораскладка. */
+export function orderWith(
+  leaves: string[],
+  targetId: string,
+  newId: string,
+  side: DropSide
+): string[] {
+  const rest = leaves.filter((id) => id !== newId)
+  const i = rest.indexOf(targetId)
+  if (i < 0) return [...rest, newId]
+  const before = side === 'left' || side === 'top'
+  return [...rest.slice(0, before ? i : i + 1), newId, ...rest.slice(before ? i : i + 1)]
+}
+
+/**
+ * Поставить панель ВПЛОТНУЮ к целевой с указанной стороны.
+ *
+ * Целевая делится пополам: сторона решает и ось (слева/справа — колонки,
+ * сверху/снизу — строки), и кто из двоих окажется первым. Раньше сторона не
+ * спрашивалась вовсе — принесённая панель всегда вставала справа, и человек,
+ * целившийся в левый край, получал её не там, куда показывал.
+ */
+export function insertBeside(
+  node: SplitNode,
+  targetId: string,
+  newId: string,
+  side: DropSide
+): SplitNode {
+  const dir: SplitDirection = side === 'left' || side === 'right' ? 'row' : 'col'
+  const first = side === 'left' || side === 'top'
+  const target: SplitNode = { type: 'leaf', sessionId: targetId }
+  const fresh: SplitNode = { type: 'leaf', sessionId: newId }
+  return replaceLeaf(node, targetId, {
+    type: 'split',
+    dir,
+    ratio: 0.5,
+    a: first ? fresh : target,
+    b: first ? target : fresh
+  })
 }
 
 /** Поставить пропорцию узлу по пути. Путь: 0 — ветка «a», 1 — ветка «b». */

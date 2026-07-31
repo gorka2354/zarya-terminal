@@ -1,4 +1,5 @@
 import { PANE_DRAG_CWD, PANE_DRAG_SESSION } from '@shared/types'
+import type { DropSide } from '@shared/paneTree'
 import { useEffect, useRef, useState } from 'react'
 import { XtermView } from '@/terminal/XtermView'
 import { MissionFeed } from './MissionFeed'
@@ -18,6 +19,26 @@ interface Props {
   visible: boolean
 }
 
+/**
+ * К какому ребру панели ближе курсор — туда и встанет принесённая.
+ *
+ * Считается по ДОЛЯМ, а не по пикселям: панель в сетке 2×2 вчетверо меньше
+ * окна, и фиксированная кромка в ней заняла бы половину. Ничья решается в
+ * пользу горизонтали — колонки для CLI привычнее строк.
+ */
+function sideAt(el: HTMLElement, x: number, y: number): DropSide {
+  const r = el.getBoundingClientRect()
+  const fx = (x - r.left) / (r.width || 1)
+  const fy = (y - r.top) / (r.height || 1)
+  const dist = [
+    { side: 'left' as const, d: fx },
+    { side: 'right' as const, d: 1 - fx },
+    { side: 'top' as const, d: fy },
+    { side: 'bottom' as const, d: 1 - fy }
+  ]
+  return dist.reduce((best, cur) => (cur.d < best.d ? cur : best)).side
+}
+
 export function TerminalPane({ sessionId, active, visible }: Props): React.JSX.Element {
   const store = useSessionsStore.getState()
   const searchOpenFor = useUiStore((s) => s.searchOpenFor)
@@ -29,7 +50,8 @@ export function TerminalPane({ sessionId, active, visible }: Props): React.JSX.E
     const tab = useSessionsStore.getState().tabs.find((t) => listLeaves(t.layout).includes(sessionId))
     return !!tab && s.maximizedByTab[tab.id] === sessionId
   })
-  const [dropHere, setDropHere] = useState(false)
+  /** Ребро, к которому встанет принесённая панель, пока её держат над этой. */
+  const [dropSide, setDropSide] = useState<DropSide | null>(null)
   // Соседи считаются по СВОЕЙ вкладке, а не по активной: панель скрытой вкладки
   // иначе приглушалась бы по чужой раскладке.
   const multiPane = useSessionsStore((s) => {
@@ -106,7 +128,7 @@ export function TerminalPane({ sessionId, active, visible }: Props): React.JSX.E
 
   return (
     <div
-      className={`zy-pane${active ? ' zy-pane--focused' : multiPane ? ' zy-pane--dim' : ''}${dropHere ? ' zy-pane--drop' : ''}`}
+      className={`zy-pane${active ? ' zy-pane--focused' : multiPane ? ' zy-pane--dim' : ''}${dropSide ? ' zy-pane--drop' : ''}`}
       // Чья это панель — видно в разметке. Нужно прогонам: «строка сайдбара
       // указывает на ЭТУ панель» иначе проверяется догадкой по порядку.
       data-session={sessionId}
@@ -121,34 +143,42 @@ export function TerminalPane({ sessionId, active, visible }: Props): React.JSX.E
       // Бросок проекта из сайдбара — новая панель рядом, в этой папке. Тип
       // данных свой: файлы обрабатывает строка ввода, и пути не должны
       // путаться с вложениями.
+      // Куда именно встанет принесённая панель, решает БЛИЖАЙШЕЕ РЕБРО: пока
+      // сторона не спрашивалась, всё вставало справа, и человек, целившийся в
+      // левый край, получал панель не там, куда показывал. Ребро подсвечивается
+      // до отпускания — иначе выбор виден только по результату.
       onDragOver={(e) => {
         const kinds = e.dataTransfer.types
         if (!kinds.includes(PANE_DRAG_CWD) && !kinds.includes(PANE_DRAG_SESSION)) return
         e.preventDefault()
         e.stopPropagation()
         e.dataTransfer.dropEffect = kinds.includes(PANE_DRAG_SESSION) ? 'move' : 'copy'
-        setDropHere(true)
+        setDropSide(sideAt(e.currentTarget as HTMLElement, e.clientX, e.clientY))
       }}
-      onDragLeave={() => setDropHere(false)}
+      onDragLeave={(e) => {
+        if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) setDropSide(null)
+      }}
       onDrop={(e) => {
         const moved = e.dataTransfer.getData(PANE_DRAG_SESSION)
         const cwd = e.dataTransfer.getData(PANE_DRAG_CWD)
         if (!moved && !cwd) return
         e.preventDefault()
         e.stopPropagation()
-        setDropHere(false)
+        const side = sideAt(e.currentTarget as HTMLElement, e.clientX, e.clientY)
+        setDropSide(null)
         if (moved) {
           // Уже открытый терминал переезжает сюда: новый не создаём.
-          store.movePaneNextTo(moved, sessionId)
+          store.movePaneNextTo(moved, sessionId, side)
           return
         }
-        // Делим ИМЕННО ту панель, на которую бросили: иначе новая появлялась бы
-        // у активной, а человек указал мышью совсем другое место.
-        store.setActiveSession(sessionId)
-        void store.splitActive('row', cwd)
+        // Делим ИМЕННО ту панель, на которую бросили, и с той стороны, куда
+        // показали: иначе новая появлялась бы у активной и всегда справа.
+        void store.splitBeside(sessionId, side, cwd)
       }}
     >
       <PaneHeader sessionId={sessionId} maximized={maximized} multiPane={multiPane} />
+      {/* Половина панели, которую займёт принесённая: выбор виден до броска. */}
+      {dropSide && <div className={`zy-pane-drop-hint zy-pane-drop-hint--${dropSide}`} />}
       {/* Сцена — терминал и лента в одном слоистом контейнере. Лента лежит
           абсолютным слоем, и без этой обёртки она накрыла бы строку ввода
           собой, как накрыла рамку панели. */}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { autoLayout } from '@shared/autoLayout'
-import { closePane, paneRects, setRatioAt } from '@shared/paneTree'
+import { closePane, insertBeside, orderWith, paneRects, setRatioAt } from '@shared/paneTree'
 import type { SplitNode } from '@shared/types'
 
 /**
@@ -118,5 +118,64 @@ describe('координаты панелей', () => {
 
   it('развёрнута панель ЧУЖОЙ вкладки — на эту раскладку это не влияет', () => {
     expect(paneRects(four, 'панель-другой-вкладки')).toEqual(paneRects(four))
+  })
+})
+
+/**
+ * Куда встаёт принесённая панель. Пока сторона не спрашивалась, всё вставало
+ * справа: человек целился в левый край и получал панель не там, куда показывал.
+ */
+describe('вставка панели с указанной стороны', () => {
+  const two = autoLayout(['s1', 's2']) as SplitNode
+
+  it('справа — цель первая, принесённая второй', () => {
+    const res = insertBeside(two, 's2', 'new', 'right') as Extract<SplitNode, { type: 'split' }>
+    expect(paneRects(res).panes.map((p) => p.sessionId)).toEqual(['s1', 's2', 'new'])
+    expect(res.dir).toBe('row')
+  })
+
+  it('слева — принесённая встаёт ПЕРЕД целью', () => {
+    const res = insertBeside(two, 's2', 'new', 'left')
+    expect(paneRects(res).panes.map((p) => p.sessionId)).toEqual(['s1', 'new', 's2'])
+  })
+
+  it('снизу — деление по горизонтали, а не по вертикали', () => {
+    const res = insertBeside(two, 's1', 'new', 'bottom')
+    const { panes } = paneRects(res)
+    const target = panes.find((p) => p.sessionId === 's1')
+    const fresh = panes.find((p) => p.sessionId === 'new')
+    expect(target?.rect.top).toBeLessThan(fresh?.rect.top ?? 0)
+    expect(target?.rect.left).toBeCloseTo(fresh?.rect.left ?? -1)
+  })
+
+  it('сверху — принесённая выше цели', () => {
+    const { panes } = paneRects(insertBeside(two, 's1', 'new', 'top'))
+    const target = panes.find((p) => p.sessionId === 's1')
+    const fresh = panes.find((p) => p.sessionId === 'new')
+    expect(fresh?.rect.top).toBeLessThan(target?.rect.top ?? 0)
+  })
+})
+
+/**
+ * Порядок листьев с новым — по нему пересобирается автораскладка. Без него
+ * перенос панели делил цель пополам, и три панели вставали как 50/25/25.
+ */
+describe('порядок панелей при вставке', () => {
+  it('справа — сразу за целью', () => {
+    expect(orderWith(['a', 'b', 'c'], 'b', 'x', 'right')).toEqual(['a', 'b', 'x', 'c'])
+  })
+
+  it('слева — прямо перед целью', () => {
+    expect(orderWith(['a', 'b', 'c'], 'b', 'x', 'left')).toEqual(['a', 'x', 'b', 'c'])
+  })
+
+  it('переезд ВНУТРИ вкладки не задваивает панель', () => {
+    expect(orderWith(['a', 'b', 'c'], 'a', 'c', 'right')).toEqual(['a', 'c', 'b'])
+  })
+
+  it('три панели после переезда — равные трети, а не 50/25/25', () => {
+    const order = orderWith(['s1', 's2'], 's2', 's3', 'right')
+    const { panes } = paneRects(autoLayout(order) as SplitNode)
+    for (const p of panes) expect(p.rect.width).toBeCloseTo(1 / 3)
   })
 })

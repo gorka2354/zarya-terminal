@@ -1168,7 +1168,156 @@ try {
     )
   }
 
-  console.log('\n[34] Окно ни на что не жалуется')
+  console.log('\n[34] Перенос панели не перекашивает раскладку и слушает ребро')
+  // Раньше перенос делил цель пополам: три панели вставали как 50/25/25, и
+  // человек видел перекос, не понимая, откуда он.
+  const st34 = await dump()
+  const host34 = st34.tabs.find((t) => t.id === st34.activeTabId)
+  // Сводим к двум панелям в активной вкладке.
+  while ((await dump()).tabs.find((t) => t.id === host34.id).leaves.length > 2) {
+    const t = (await dump()).tabs.find((x) => x.id === host34.id)
+    await page.evaluate((sid) => window.__zaryaCloseSession(sid), t.leaves[t.leaves.length - 1])
+    await page.waitForTimeout(1200)
+  }
+  while ((await dump()).tabs.find((t) => t.id === host34.id).leaves.length < 2) {
+    await page.evaluate(() => window.__zaryaSplitActive('row'))
+    await page.waitForTimeout(1600)
+  }
+  // Третью берём из соседней вкладки — как человек: перетаскиванием на панель.
+  let donor34 = (await dump()).tabs.find((t) => t.id !== host34.id)
+  if (!donor34) {
+    await page.evaluate(() => window.__zaryaNewTerminal())
+    await page.waitForTimeout(1800)
+    await page.click(`.zy-tab-row[data-tab="${host34.id}"]`)
+    await page.waitForTimeout(1000)
+    donor34 = (await dump()).tabs.find((t) => t.id !== host34.id)
+  }
+  const guest34 = donor34.leaves[0]
+  const target34 = (await dump()).tabs.find((t) => t.id === host34.id).leaves[1]
+  await page.evaluate(
+    ([moved, target]) => {
+      const dt = new DataTransfer()
+      dt.setData('application/x-zarya-session', moved)
+      const pane = document.querySelector(`.zy-pane[data-session="${target}"]`)
+      const r = pane.getBoundingClientRect()
+      // Целимся в ПРАВЫЙ край цели.
+      const at = { clientX: Math.round(r.right - 6), clientY: Math.round(r.top + r.height / 2) }
+      pane.dispatchEvent(
+        new DragEvent('dragover', { dataTransfer: dt, bubbles: true, cancelable: true, ...at })
+      )
+      pane.dispatchEvent(
+        new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true, ...at })
+      )
+    },
+    [guest34, target34]
+  )
+  await page.waitForTimeout(2000)
+  const widths34 = (await slots()).filter((s) => !s.hidden).map((s) => s.w)
+  ok('панелей стало три', widths34.length === 3, widths34)
+  ok(
+    'и все три одной ширины — раскладка пересобралась',
+    Math.max(...widths34) - Math.min(...widths34) <= 2,
+    widths34
+  )
+  const order34 = (await dump()).tabs.find((t) => t.id === host34.id).leaves
+  ok('принесённая встала справа от цели', order34[order34.indexOf(target34) + 1] === guest34, order34)
+
+  console.log('\n[35] Ребро подсвечивается до броска — видно, куда встанет')
+  const hint35 = await page.evaluate(
+    async ([target, guest]) => {
+      const dt = new DataTransfer()
+      dt.setData('application/x-zarya-session', guest)
+      const pane = document.querySelector(`.zy-pane[data-session="${target}"]`)
+      const r = pane.getBoundingClientRect()
+      const shot = async (x, y) => {
+        pane.dispatchEvent(
+          new DragEvent('dragover', {
+            dataTransfer: dt,
+            bubbles: true,
+            cancelable: true,
+            clientX: Math.round(x),
+            clientY: Math.round(y)
+          })
+        )
+        // Ждём перерисовку: подсказка — состояние React, а не то, что рисуется
+        // прямо внутри обработчика.
+        await new Promise((res) => setTimeout(res, 120))
+        const el = pane.querySelector('.zy-pane-drop-hint')
+        if (!el) return null
+        const hr = el.getBoundingClientRect()
+        return {
+          cls: el.className,
+          w: Math.round(hr.width),
+          h: Math.round(hr.height),
+          left: Math.round(hr.left - r.left),
+          top: Math.round(hr.top - r.top),
+          paneW: Math.round(r.width),
+          paneH: Math.round(r.height)
+        }
+      }
+      return {
+        left: await shot(r.left + 6, r.top + r.height / 2),
+        right: await shot(r.right - 6, r.top + r.height / 2),
+        top: await shot(r.left + r.width / 2, r.top + 6),
+        bottom: await shot(r.left + r.width / 2, r.bottom - 6)
+      }
+    },
+    [order34[0], guest34]
+  )
+  ok(
+    'у левого края подсвечена ЛЕВАЯ половина',
+    /--left/.test(hint35.left?.cls ?? '') && (hint35.left?.left ?? 9) <= 2,
+    hint35.left
+  )
+  ok(
+    'у правого — правая',
+    /--right/.test(hint35.right?.cls ?? '') &&
+      Math.abs(hint35.right.left + hint35.right.w - hint35.right.paneW) <= 2,
+    hint35.right
+  )
+  ok(
+    'у верхнего — верхняя',
+    /--top/.test(hint35.top?.cls ?? '') && (hint35.top?.top ?? 9) <= 2,
+    hint35.top
+  )
+  ok('у нижнего — нижняя', /--bottom/.test(hint35.bottom?.cls ?? ''), hint35.bottom)
+  ok(
+    'подсказка занимает ровно половину панели',
+    Math.abs(hint35.left.w * 2 - hint35.left.paneW) <= 3 &&
+      Math.abs(hint35.top.h * 2 - hint35.top.paneH) <= 3,
+    { left: hint35.left, top: hint35.top }
+  )
+  // Бросок у ЛЕВОГО края ставит панель слева от цели.
+  const before35 = (await dump()).tabs.find((t) => t.id === host34.id).leaves
+  await page.evaluate(
+    ([moved, target]) => {
+      const dt = new DataTransfer()
+      dt.setData('application/x-zarya-session', moved)
+      const pane = document.querySelector(`.zy-pane[data-session="${target}"]`)
+      const r = pane.getBoundingClientRect()
+      const at = { clientX: Math.round(r.left + 6), clientY: Math.round(r.top + r.height / 2) }
+      pane.dispatchEvent(
+        new DragEvent('dragover', { dataTransfer: dt, bubbles: true, cancelable: true, ...at })
+      )
+      pane.dispatchEvent(
+        new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true, ...at })
+      )
+    },
+    [before35[2], before35[0]]
+  )
+  await page.waitForTimeout(1800)
+  const after35 = (await dump()).tabs.find((t) => t.id === host34.id).leaves
+  ok('брошенная у левого края встала ПЕРЕД целью', after35[0] === before35[2], {
+    before: before35,
+    after: after35
+  })
+  const widths35 = (await slots()).filter((s) => !s.hidden).map((s) => s.w)
+  ok('ширины по-прежнему равны', Math.max(...widths35) - Math.min(...widths35) <= 2, widths35)
+  await page.evaluate(() =>
+    window.dispatchEvent(new DragEvent('dragend', { bubbles: true, cancelable: true }))
+  )
+
+  console.log('\n[36] Окно ни на что не жалуется')
   // Ключи списка панелей, размонтирование, гонки эффектов — всё это React
   // проговаривает в консоли раньше, чем сломается видимое.
   const noise = complaints.filter((t) => !/Autofill|DevTools|Electron Security/i.test(t))

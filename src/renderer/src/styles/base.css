@@ -1649,3 +1649,40 @@ body {
   color: var(--fg);
   border-color: var(--border-strong);
 }
+
+/**
+ * Куда встанет принесённая панель — показываем ПОЛОВИНОЙ, которую она займёт.
+ * Раньше подсвечивалась вся панель целиком: было понятно «сюда», но не понятно
+ * «с какой стороны», а вставало всегда справа.
+ */
+.zy-pane-drop-hint {
+  position: absolute;
+  z-index: 7;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  border: 1px solid var(--accent);
+}
+.zy-pane-drop-hint--left {
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 50%;
+}
+.zy-pane-drop-hint--right {
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 50%;
+}
+.zy-pane-drop-hint--top {
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 50%;
+}
+.zy-pane-drop-hint--bottom {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 50%;
+}

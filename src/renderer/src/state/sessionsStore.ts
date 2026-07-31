@@ -12,11 +12,14 @@ import { uid } from '@/lib/uid'
 import { MAX_PANES, autoLayout, isAutoLayout } from '@shared/autoLayout'
 import {
   closePane,
+  insertBeside,
   listLeaves,
   mapLeaves,
+  orderWith,
   removeLeaf,
   replaceLeaf,
-  setRatioAt
+  setRatioAt,
+  type DropSide
 } from '@shared/paneTree'
 import { emitBus, onBus } from '@/lib/bus'
 import { runQuitFlushers } from '@/lib/quitFlush'
@@ -62,6 +65,37 @@ export interface RuntimeSession {
 // сайдбара и шапки.
 export { listLeaves } from '@shared/paneTree'
 
+/**
+ * Поставить панель рядом с целевой — с оглядкой на то, чья раскладка.
+ *
+ * Пока раскладку не трогали руками, доли выбирает правило: три панели — равные
+ * трети, четыре — сетка. Без этого перенос панели делил цель пополам, и три
+ * панели вставали как 50/25/25 — человек видел перекос и не понимал, откуда он.
+ * Вертикальную вставку правило не выражает, поэтому «сверху/снизу» всегда режет
+ * цель: это уже ручная раскладка, и дальше её никто не пересобирает.
+ */
+function placeBeside(
+  layout: SplitNode,
+  targetId: string,
+  newId: string,
+  side: DropSide,
+  /**
+   * Была ли раскладка автоматической ДО правки. Спрашивается снаружи, потому что
+   * при переезде внутри вкладки лист сначала вынимают: промежуточное дерево уже
+   * не совпадает с автоматическим (три колонки минус одна — это не две равные),
+   * и проверка по нему решала бы, что раскладку трогали руками. Итог был виден
+   * глазами: панели вставали как 175/175/699 вместо равных третей.
+   */
+  wasAuto: boolean
+): SplitNode {
+  const horizontal = side === 'left' || side === 'right'
+  if (horizontal && wasAuto) {
+    const auto = autoLayout(orderWith(listLeaves(layout), targetId, newId, side))
+    if (auto) return auto
+  }
+  return insertBeside(layout, targetId, newId, side)
+}
+
 // -------------------------------------------------------------------- store
 
 interface SessionsState {
@@ -85,12 +119,20 @@ interface SessionsState {
    */
   splitActive: (dir: SplitDirection, cwd?: string) => Promise<void>
   /**
+   * Новая панель ВПЛОТНУЮ к указанной, с той стороны, куда показали мышью.
+   *
+   * `splitActive` делит активную панель и всегда ставит новую следом; при
+   * броске проекта человек указывает мышью КОНКРЕТНОЕ ребро, и вставать надо
+   * туда, а не «где-нибудь рядом».
+   */
+  splitBeside: (targetSessionId: string, side: DropSide, cwd?: string) => Promise<void>
+  /**
    * Перенести уже открытый терминал к другой панели. Процесс не трогаем совсем:
    * двигается только лист в дереве раскладки, а pty живёт в главном процессе и
    * про раскладку ничего не знает. Поэтому вкладка со сборкой или ssh переживает
    * переезд — перерисовывается лишь картинка.
    */
-  movePaneNextTo: (sessionId: string, targetSessionId: string) => void
+  movePaneNextTo: (sessionId: string, targetSessionId: string, side?: DropSide) => void
   /**
    * Вынести панель из сетки в СВОЙ рабочий стол.
    *
@@ -425,7 +467,45 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
       schedulePersistWorkspace(get)
     },
 
-    movePaneNextTo: (sessionId, targetSessionId) => {
+    splitBeside: async (targetSessionId, side, cwd) => {
+      const state = get()
+      const tab = state.tabs.find((t) => listLeaves(t.layout).includes(targetSessionId))
+      if (!tab) return
+      if (listLeaves(tab.layout).length >= MAX_PANES) {
+        useUiStore
+          .getState()
+          .toast(`В одной вкладке не больше ${MAX_PANES} панелей — открыл новой вкладкой`, 'info')
+        await get().newTab(undefined, cwd)
+        return
+      }
+      const current = state.sessions[targetSessionId]
+      const id = uid('s')
+      const session = makeRuntime({
+        id,
+        profileId: current?.profileId ?? 'auto',
+        cwd: cwd || current?.cwd || ''
+      })
+      setPartial((s) => ({
+        sessions: { ...s.sessions, [id]: session },
+        tabs: s.tabs.map((t) =>
+          t.id !== tab.id
+            ? t
+            : {
+                ...t,
+                layout: placeBeside(t.layout, targetSessionId, id, side, isAutoLayout(t.layout)),
+                activeSessionId: id
+              }
+        )
+      }))
+      // Просили ещё одну панель — значит, просили увидеть раскладку.
+      setMaximized(tab.id, null)
+      get().setActiveSession(id)
+      await spawnSession(setPartial, session)
+      focusPane(id)
+      schedulePersistWorkspace(get)
+    },
+
+    movePaneNextTo: (sessionId, targetSessionId, side = 'right') => {
       if (sessionId === targetSessionId) return
       // Переезд в ЧУЖУЮ вкладку добавляет ей панель — потолок тот же, что у
       // деления. Внутри своей вкладки число панелей не меняется: там можно.
@@ -457,13 +537,7 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
               const base = stripped ?? { type: 'leaf' as const, sessionId: targetSessionId }
               return {
                 ...t,
-                layout: replaceLeaf(base, targetSessionId, {
-                  type: 'split',
-                  dir: 'row',
-                  ratio: 0.5,
-                  a: { type: 'leaf', sessionId: targetSessionId },
-                  b: { type: 'leaf', sessionId }
-                }),
+                layout: placeBeside(base, targetSessionId, sessionId, side, isAutoLayout(t.layout)),
                 activeSessionId: sessionId
               }
             }
@@ -482,13 +556,7 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
             if (t.id === to.id) {
               return {
                 ...t,
-                layout: replaceLeaf(t.layout, targetSessionId, {
-                  type: 'split',
-                  dir: 'row',
-                  ratio: 0.5,
-                  a: { type: 'leaf', sessionId: targetSessionId },
-                  b: { type: 'leaf', sessionId }
-                }),
+                layout: placeBeside(t.layout, targetSessionId, sessionId, side, isAutoLayout(t.layout)),
                 activeSessionId: sessionId
               }
             }
