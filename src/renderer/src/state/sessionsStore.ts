@@ -91,6 +91,20 @@ interface SessionsState {
    * переезд — перерисовывается лишь картинка.
    */
   movePaneNextTo: (sessionId: string, targetSessionId: string) => void
+  /**
+   * Вынести панель из сетки в СВОЙ рабочий стол.
+   *
+   * Обратный жест к перетаскиванию панели на панель. До него убрать лишний CLI
+   * с разделённого экрана можно было только закрыв его — то есть убив живой
+   * процесс. Здесь процесс не трогается вовсе: лист переезжает в новую вкладку,
+   * панель исчезает с экрана и появляется в списке свёрнутой строкой.
+   *
+   * Активной остаётся ПРЕЖНЯЯ вкладка: человек убирал панель с глаз, а не
+   * просил себя туда увести.
+   */
+  detachPane: (sessionId: string) => void
+  /** Назвать рабочий стол. Пустое имя возвращает подпись «по панелям». */
+  renameTab: (tabId: string, title: string) => void
   /** Пропорция узла раскладки. Узел адресуется ПУТЁМ от корня (см. paneTree). */
   setSplitRatio: (tabId: string, path: number[], ratio: number) => void
   closeSession: (sessionId: string, opts?: { save?: boolean }) => Promise<void>
@@ -505,6 +519,63 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
       schedulePersistWorkspace(get)
     },
 
+    detachPane: (sessionId) => {
+      const state = get()
+      const from = state.tabs.find((t) => listLeaves(t.layout).includes(sessionId))
+      if (!from) return
+      // Единственная панель вкладки и так сама по себе — выносить нечего.
+      if (listLeaves(from.layout).length < 2) return
+      // Те же правила, что и при закрытии: нетронутая раскладка пересобирается,
+      // фокус уходит соседу. Разница одна — pty остаётся жить.
+      const { layout, focus } = closePane(from.layout, sessionId)
+      if (!layout) return
+      const fresh: TabState = {
+        id: uid('tab'),
+        layout: { type: 'leaf', sessionId },
+        activeSessionId: sessionId
+      }
+      setPartial((s) => {
+        const leaves = listLeaves(layout)
+        const wasFocused = from.activeSessionId === sessionId
+        const tabs: TabState[] = []
+        for (const t of s.tabs) {
+          if (t.id !== from.id) {
+            tabs.push(t)
+            continue
+          }
+          tabs.push({
+            ...t,
+            layout,
+            activeSessionId: wasFocused
+              ? (focus && leaves.includes(focus) ? focus : leaves[0])
+              : t.activeSessionId
+          })
+          // Новый стол встаёт СРАЗУ ЗА исходным: искать его будут рядом.
+          tabs.push(fresh)
+        }
+        return { tabs }
+      })
+      // Развёрнутой она была в прежней вкладке — там записи больше не место.
+      if (useUiStore.getState().maximizedByTab[from.id] === sessionId) {
+        setMaximized(from.id, null)
+      }
+      const stay = get().tabs.find((t) => t.id === from.id)?.activeSessionId
+      if (stay && state.activeTabId === from.id) {
+        emitBus('terminal:focus', { sessionId: stay })
+        focusPane(stay)
+      }
+      useUiStore.getState().toast('Панель вынесена в отдельную вкладку', 'success')
+      schedulePersistWorkspace(get)
+    },
+
+    renameTab: (tabId, title) => {
+      const own = title.trim()
+      setPartial((s) => ({
+        tabs: s.tabs.map((t) => (t.id === tabId ? { ...t, title: own || undefined } : t))
+      }))
+      schedulePersistWorkspace(get)
+    },
+
     setSplitRatio: (tabId, path, ratio) => {
       setPartial((s) => ({
         tabs: s.tabs.map((t) => (t.id === tabId ? { ...t, layout: setRatioAt(t.layout, path, ratio) } : t))
@@ -831,7 +902,10 @@ async function restoreWorkspace(
     const newTab: TabState = {
       id: uid('tab'),
       layout,
-      activeSessionId: idMap.get(tab.activeSessionId) ?? listLeaves(layout)[0]
+      activeSessionId: idMap.get(tab.activeSessionId) ?? listLeaves(layout)[0],
+      // Имя рабочего стола переживает перезапуск — иначе названные столы после
+      // возвращения снова становились безымянными.
+      title: tab.title
     }
     tabIdMap.set(tab.id, newTab.id)
     setPartial((s) => ({

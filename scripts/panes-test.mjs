@@ -963,7 +963,117 @@ try {
   )
   ok('Esc из своей строки гейт отклонил', gateOwn29 === 0, gateOwn29)
 
-  console.log('\n[30] Окно ни на что не жалуется')
+  console.log('\n[30] Панель выносится в свой рабочий стол — не убивая процесс')
+  // Обратный жест к перетаскиванию панели на панель. До него убрать лишний CLI с
+  // разделённого экрана можно было только закрыв его, то есть убив процесс.
+  const st30 = await dump()
+  const tab30 = st30.tabs.find((t) => t.id === st30.activeTabId)
+  while ((await dump()).tabs.find((t) => t.id === tab30.id).leaves.length < 3) {
+    await page.evaluate(() => window.__zaryaSplitActive('row'))
+    await page.waitForTimeout(1600)
+  }
+  const leaves30 = (await dump()).tabs.find((t) => t.id === tab30.id).leaves
+  const away = leaves30[1]
+  await page.evaluate(([id, i]) => window.__zaryaRunShell(`echo ВЫНОС-${i}`, id), [away, 1])
+  await page.waitForTimeout(1400)
+  const creations30 = await creations()
+  const tabsBefore30 = (await dump()).tabs.length
+  // Как человек: тащим строку панели в пустое место списка.
+  await page.evaluate((sid) => {
+    const dt = new DataTransfer()
+    const row = document.querySelector(`.zy-pane-row[data-session="${sid}"]`)
+    row.dispatchEvent(new DragEvent('dragstart', { dataTransfer: dt, bubbles: true, cancelable: true }))
+    const body = document.querySelector('.zy-sidebar-body')
+    body.dispatchEvent(new DragEvent('dragover', { dataTransfer: dt, bubbles: true, cancelable: true }))
+    body.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }))
+  }, away)
+  await page.waitForTimeout(1800)
+  const st30b = await dump()
+  const home30 = st30b.tabs.find((t) => t.id === tab30.id)
+  const fresh30 = st30b.tabs.find((t) => t.leaves.length === 1 && t.leaves[0] === away)
+  ok('панель ушла из прежнего стола', !home30.leaves.includes(away), home30.leaves)
+  ok('и получила свой', !!fresh30 && fresh30.id !== tab30.id, st30b.tabs)
+  ok('столов стало на один больше', st30b.tabs.length === tabsBefore30 + 1, {
+    was: tabsBefore30,
+    now: st30b.tabs.length
+  })
+  ok('процесс жив: сессия на месте', st30b.sessions.some((s) => s.id === away), away)
+  ok('терминал не пересоздан', (await creations())[away] === creations30[away], {
+    before: creations30[away],
+    after: (await creations())[away]
+  })
+  const text30 = await page.evaluate((id) => window.__zaryaTermText(id), away)
+  ok('и экран панели цел', /ВЫНОС-1/.test(text30), text30.slice(-60))
+  ok('человек остался в своём столе', st30b.activeTabId === tab30.id, st30b.activeTabId)
+  const shown30 = (await slots()).filter((s) => !s.hidden)
+  ok(
+    'на экране остались только панели своего стола',
+    shown30.length === home30.leaves.length && shown30.every((s) => home30.leaves.includes(s.sid)),
+    { shown: shown30.map((s) => s.sid), leaves: home30.leaves }
+  )
+  ok(
+    'вынесенная панель видна в списке свёрнутой строкой',
+    (await page.evaluate(
+      (id) => !!document.querySelector(`.zy-tab-row[data-tab="${id}"]`),
+      fresh30?.id
+    )) === true,
+    fresh30?.id
+  )
+
+  console.log('\n[31] Рабочий стол можно назвать')
+  const head31 = await page.evaluate(() => {
+    const el = document.querySelector('.zy-desk-row')
+    return { exists: !!el, title: el?.querySelector('.zy-item-title')?.textContent ?? '' }
+  })
+  ok('у развёрнутого стола есть заголовок', head31.exists, head31)
+  // Подпись по умолчанию собрана из панелей, а не взята у активной.
+  const names31 = (await dump()).sessions
+    .filter((s) => home30.leaves.includes(s.id))
+    .map((s) => s.title)
+  ok(
+    'подпись собрана из имён панелей',
+    names31.slice(0, 2).every((n) => head31.title.includes(n)),
+    { head: head31.title, names31 }
+  )
+  await page.evaluate(() => {
+    window.__origPrompt = window.prompt
+    window.prompt = () => 'СБОРКА 0.6'
+  })
+  await page.dblclick('.zy-desk-row')
+  await page.waitForTimeout(700)
+  const renamed31 = await page.evaluate(
+    () => document.querySelector('.zy-desk-row .zy-item-title')?.textContent ?? ''
+  )
+  ok('имя, заданное руками, встало в заголовок', /СБОРКА 0\.6/.test(renamed31), renamed31)
+  // И оно же — в строке свёрнутой вкладки, когда уйдём в другой стол.
+  await page.click(`.zy-tab-row[data-tab="${fresh30.id}"]`)
+  await page.waitForTimeout(1200)
+  const collapsed31 = await page.evaluate(
+    (id) =>
+      document.querySelector(`.zy-tab-row[data-tab="${id}"] .zy-item-title`)?.textContent ?? '',
+    tab30.id
+  )
+  ok('и в свёрнутой строке тоже', /СБОРКА 0\.6/.test(collapsed31), collapsed31)
+  await page.evaluate(() => {
+    window.prompt = window.__origPrompt
+  })
+  await page.click(`.zy-tab-row[data-tab="${tab30.id}"]`)
+  await page.waitForTimeout(1000)
+
+  console.log('\n[32] Панель хватается за свою шапку')
+  const st32 = await dump()
+  const home32 = st32.tabs.find((t) => t.id === st32.activeTabId)
+  const grip32 = await page.evaluate((sid) => {
+    const grip = document.querySelector(`.zy-pane[data-session="${sid}"] .zy-pane-grip`)
+    if (!grip) return { ok: false }
+    const dt = new DataTransfer()
+    grip.dispatchEvent(new DragEvent('dragstart', { dataTransfer: dt, bubbles: true, cancelable: true }))
+    return { ok: true, carried: dt.getData('application/x-zarya-session'), draggable: grip.draggable }
+  }, home32.leaves[0])
+  ok('шапка панели — ручка', grip32.ok && grip32.draggable === true, grip32)
+  ok('и несёт свою сессию', grip32.carried === home32.leaves[0], grip32)
+
+  console.log('\n[33] Окно ни на что не жалуется')
   // Ключи списка панелей, размонтирование, гонки эффектов — всё это React
   // проговаривает в консоли раньше, чем сломается видимое.
   const noise = complaints.filter((t) => !/Autofill|DevTools|Electron Security/i.test(t))

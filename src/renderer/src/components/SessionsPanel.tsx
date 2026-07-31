@@ -2,6 +2,7 @@ import { PANE_DRAG_CWD, PANE_DRAG_SESSION } from '@shared/types'
 import { Fragment, useMemo, useRef, useState } from 'react'
 import type { SessionMeta, TabState } from '@shared/types'
 import { closePaneAsking, closeTabAsking, setPaneMaximized } from '@/actions/panes'
+import { deskTitle } from '@shared/deskTitle'
 import { formatRelative, shortenPath } from '@/lib/ansi'
 import { fuzzyFilter } from '@/lib/fuzzy'
 import { useAiStore } from '@/features/ai/aiStore'
@@ -63,6 +64,10 @@ export function SessionsPanel(): React.JSX.Element {
   const store = useSessionsStore.getState()
   /** Что было развёрнуто до начала жеста мышью (см. строку панели). */
   const maxBeforeClick = useRef<string | null>(null)
+  /** Строка (вкладки или панели), над которой сейчас держат перетаскиваемую панель. */
+  const [dropTab, setDropTab] = useState<string | null>(null)
+  /** Панель тащат в пустоту списка — это «вынести в отдельную вкладку». */
+  const [dropDetach, setDropDetach] = useState(false)
 
   // Recent folders: distinct cwds from saved sessions, minus already-bookmarked.
   const recentFolders = useMemo(() => {
@@ -349,6 +354,18 @@ export function SessionsPanel(): React.JSX.Element {
           void store.splitActive('row')
         }
       },
+      {
+        // Убрать CLI с разделённого экрана, не убивая его: панель уезжает в свой
+        // рабочий стол и остаётся в списке свёрнутой строкой.
+        label: 'Вынести в отдельную вкладку',
+        hint: 'или перетащи в список',
+        disabled: panes < 2,
+        onClick: () => store.detachPane(sessionId)
+      },
+      {
+        label: 'Переименовать рабочий стол…',
+        onClick: () => renameDesk(tab)
+      },
       { label: 'Закрыть панель', danger: true, onClick: () => void closePaneAsking(sessionId) },
       // Закрыть весь рабочий стол: у активной вкладки своей строки в списке нет
       // (она раскрыта панелями), и без этого пункта закрыть её целиком можно
@@ -389,7 +406,7 @@ export function SessionsPanel(): React.JSX.Element {
       <div
         key={sessionId}
         data-session={sessionId}
-        className={`zy-item zy-pane-row${onScreen ? ' zy-item--onscreen' : ''}${focused ? ' zy-item--focus' : ''}`}
+        className={`zy-item zy-pane-row${onScreen ? ' zy-item--onscreen' : ''}${focused ? ' zy-item--focus' : ''}${dropTab === sessionId ? ' zy-item--drop' : ''}`}
         title={
           focused
             ? `${session?.cwd ?? ''}\nПанель в фокусе — сюда уходят Enter и Esc`
@@ -423,6 +440,23 @@ export function SessionsPanel(): React.JSX.Element {
         onDragStart={(e) => {
           e.dataTransfer.setData(PANE_DRAG_SESSION, sessionId)
           e.dataTransfer.effectAllowed = 'move'
+        }}
+        // Бросок на строку панели ставит принесённую РЯДОМ с этой.
+        onDragOver={(e) => {
+          if (!e.dataTransfer.types.includes(PANE_DRAG_SESSION)) return
+          e.preventDefault()
+          e.stopPropagation()
+          e.dataTransfer.dropEffect = 'move'
+          setDropTab(sessionId)
+        }}
+        onDragLeave={() => setDropTab(null)}
+        onDrop={(e) => {
+          const moved = e.dataTransfer.getData(PANE_DRAG_SESSION)
+          if (!moved) return
+          e.preventDefault()
+          e.stopPropagation()
+          setDropTab(null)
+          store.movePaneNextTo(moved, sessionId)
         }}
       >
         <span className="zy-item-icon">
@@ -474,21 +508,40 @@ export function SessionsPanel(): React.JSX.Element {
    */
   const renderOpenTab = (tab: TabState): React.JSX.Element => {
     const session = sessions[tab.activeSessionId]
-    const count = listLeaves(tab.layout).length
+    const leaves = listLeaves(tab.layout)
+    const count = leaves.length
     return (
       <div
         key={tab.id}
         data-tab={tab.id}
-        className="zy-item zy-tab-row"
+        className={`zy-item zy-tab-row${dropTab === tab.id ? ' zy-item--drop' : ''}`}
         onClick={() => store.setActiveTab(tab.id)}
+        onDoubleClick={() => renameDesk(tab)}
         onContextMenu={(e) => openTabContext(e, tab)}
-        title={`${session?.cwd ?? ''}\nКлик — открыть этот рабочий стол`}
+        title={`${session?.cwd ?? ''}\nКлик — открыть этот рабочий стол · 2×клик — переименовать\nБросьте сюда панель, чтобы перенести её в этот стол`}
         // Открытый терминал тоже хватается: бросок на панель переносит его
         // ТУДА. Процесс при этом не трогается — двигается лист в дереве.
         draggable
         onDragStart={(e) => {
           e.dataTransfer.setData(PANE_DRAG_SESSION, tab.activeSessionId)
           e.dataTransfer.effectAllowed = 'move'
+        }}
+        // Строка вкладки — цель для броска: панель переезжает в ЭТОТ стол.
+        onDragOver={(e) => {
+          if (!e.dataTransfer.types.includes(PANE_DRAG_SESSION)) return
+          e.preventDefault()
+          e.stopPropagation()
+          e.dataTransfer.dropEffect = 'move'
+          setDropTab(tab.id)
+        }}
+        onDragLeave={() => setDropTab(null)}
+        onDrop={(e) => {
+          const moved = e.dataTransfer.getData(PANE_DRAG_SESSION)
+          if (!moved) return
+          e.preventDefault()
+          e.stopPropagation()
+          setDropTab(null)
+          store.movePaneNextTo(moved, tab.activeSessionId)
         }}
       >
         <span className="zy-item-icon">
@@ -497,7 +550,10 @@ export function SessionsPanel(): React.JSX.Element {
         <div className="zy-item-body">
           <div className="zy-item-title">
             {session?.pinned && <span className="zy-pin-dot" title="Закреплена" />}
-            {(session?.title || 'Терминал') + (count > 1 ? ` · ${count}` : '')}
+            {deskTitle(
+              leaves.map((sid) => sessions[sid]?.title ?? ''),
+              tab.title
+            ) + (count > 1 ? ` · ${count}` : '')}
           </div>
           <div className="zy-item-sub zy-item-sub--path">{shortenPath(session?.cwd || '', 34)}</div>
         </div>
@@ -535,10 +591,81 @@ export function SessionsPanel(): React.JSX.Element {
    */
   const renderOpenRow = (tab: TabState): React.JSX.Element => {
     if (tab.id !== activeTabId) return renderOpenTab(tab)
-    const leaves = listLeaves(tab.layout).filter((sid) => !q || paneMatches(sid))
+    const all = listLeaves(tab.layout)
+    const leaves = all.filter((sid) => !q || paneMatches(sid))
     // Фрагмент с ключом вкладки: строки панелей — это раскрытая вкладка, и
     // React должен видеть их одной группой, а не безымянным вложенным списком.
-    return <Fragment key={tab.id}>{leaves.map((sid) => renderPane(sid, tab))}</Fragment>
+    return (
+      <Fragment key={tab.id}>
+        {renderDeskHead(tab, all)}
+        {leaves.map((sid) => renderPane(sid, tab))}
+      </Fragment>
+    )
+  }
+
+  /** Спросить имя рабочего стола. Пустой ответ возвращает подпись «по панелям». */
+  const renameDesk = (tab: TabState): void => {
+    const now = deskTitle(
+      listLeaves(tab.layout).map((sid) => sessions[sid]?.title ?? ''),
+      tab.title
+    )
+    const next = window.prompt('Название рабочего стола (пусто — по панелям)', tab.title ?? now)
+    if (next !== null) store.renameTab(tab.id, next)
+  }
+
+  /**
+   * Заголовок РАЗВЁРНУТОГО (активного) рабочего стола.
+   *
+   * У активной вкладки своей строки в списке нет — её место занимают панели, — и
+   * без заголовка получалось сразу две потери: имя стола негде показать и негде
+   * переименовать, а закрыть его целиком можно было только горячей клавишей.
+   * Одна строка на всю вкладку это чинит и заодно показывает, чьи это панели.
+   */
+  const renderDeskHead = (tab: TabState, leaves: string[]): React.JSX.Element => {
+    const name = deskTitle(
+      leaves.map((sid) => sessions[sid]?.title ?? ''),
+      tab.title
+    )
+    return (
+      <div
+        key={`head:${tab.id}`}
+        data-desk={tab.id}
+        className="zy-item zy-desk-row"
+        title={'Рабочий стол · 2×клик — переименовать'}
+        onDoubleClick={() => renameDesk(tab)}
+        onContextMenu={(e) => openTabContext(e, tab)}
+      >
+        <span className="zy-desk-caret">▾</span>
+        <div className="zy-item-body">
+          <div className="zy-item-title">
+            {name}
+            {leaves.length > 1 && <span className="zy-desk-count">· {leaves.length}</span>}
+          </div>
+        </div>
+        <div className="zy-item-actions">
+          <button
+            className="zy-icon-btn"
+            title="Переименовать рабочий стол"
+            onClick={(e) => {
+              e.stopPropagation()
+              renameDesk(tab)
+            }}
+          >
+            <Icon name="edit" size={12} />
+          </button>
+          <button
+            className="zy-icon-btn"
+            title="Закрыть весь рабочий стол"
+            onClick={(e) => {
+              e.stopPropagation()
+              void closeTabAsking(tab.id)
+            }}
+          >
+            <Icon name="close" size={13} />
+          </button>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -580,7 +707,28 @@ export function SessionsPanel(): React.JSX.Element {
           onChange={(e) => setQuery(e.target.value)}
         />
       </div>
-      <div className="zy-sidebar-body">
+      {/* Пустое место списка — зона «вынести»: панель, брошенная мимо строк,
+          уезжает в свой рабочий стол. Обратный жест к перетаскиванию панели на
+          панель; без него убрать лишний CLI можно было только убив процесс. */}
+      <div
+        className={`zy-sidebar-body${dropDetach ? ' zy-sidebar-body--drop' : ''}`}
+        onDragOver={(e) => {
+          if (!e.dataTransfer.types.includes(PANE_DRAG_SESSION)) return
+          e.preventDefault()
+          e.dataTransfer.dropEffect = 'move'
+          setDropDetach(true)
+        }}
+        onDragLeave={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropDetach(false)
+        }}
+        onDrop={(e) => {
+          const moved = e.dataTransfer.getData(PANE_DRAG_SESSION)
+          setDropDetach(false)
+          if (!moved) return
+          e.preventDefault()
+          store.detachPane(moved)
+        }}
+      >
         {shownTabs.length > 0 && (
           <>
             <div className="zy-section-label" style={sectionLabelStyle}>

@@ -742,6 +742,55 @@ body {
 .zy-pane-row {
   margin-left: 6px;
 }
+/**
+ * Заголовок развёрнутого рабочего стола: имя группы, счётчик панелей и выход из
+ * неё целиком. У активной вкладки своей строки в списке нет — её место заняли
+ * панели, — и без заголовка имя стола негде было показать, а закрыть его целиком
+ * можно было только горячей клавишей.
+ */
+.zy-desk-row {
+  cursor: default;
+  padding: 5px 9px;
+  gap: 6px;
+}
+.zy-desk-row .zy-item-title {
+  font-family: var(--font-tech);
+  font-size: 11.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+.zy-desk-caret {
+  flex-shrink: 0;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--accent);
+}
+.zy-desk-count {
+  margin-left: 6px;
+  color: var(--fg-faint);
+}
+/* Куда упадёт перетаскиваемая панель — видно до того, как отпустил. */
+.zy-item--drop {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.zy-sidebar-body--drop {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: var(--radius-sm);
+}
+/* Шапка панели — ручка: за неё панель таскают. */
+.zy-pane-grip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  cursor: grab;
+}
+.zy-pane-grip:active {
+  cursor: grabbing;
+}
+
 /* Свёрнутая вкладка — узел, который можно раскрыть. Без этого признака строка
    вкладки под курсором читалась так же, как строка открытой панели. */
 .zy-tab-row::before {

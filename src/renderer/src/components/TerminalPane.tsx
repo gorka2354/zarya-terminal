@@ -86,6 +86,13 @@ export function TerminalPane({ sessionId, active, visible }: Props): React.JSX.E
         label: maximized ? 'Свернуть к раскладке' : 'Развернуть на всю вкладку',
         onClick: () => toggleMaximizePane(sessionId)
       },
+      {
+        // Убрать панель с разделённого экрана, не убивая её процесс.
+        label: 'Вынести в отдельную вкладку',
+        hint: 'или перетащи шапку в список',
+        disabled: !multiPane,
+        onClick: () => store.detachPane(sessionId)
+      },
       { separator: true },
       {
         // Спрашиваем про несохранённый текст: закрыть панель с недописанным
@@ -193,7 +200,19 @@ function PaneHeader({
         borderBottom: '1px solid var(--border)'
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+      {/* Зона хватания: панель таскается за свою шапку. Бросок на другую панель
+          переносит её туда, бросок в список слева — выносит в отдельный рабочий
+          стол. До этого панель не хваталась вовсе, и убрать лишний CLI с
+          разделённого экрана можно было только убив процесс. */}
+      <div
+        className="zy-pane-grip"
+        title="Перетащи: на другую панель — перенести, в список слева — вынести в отдельную вкладку"
+        draggable
+        onDragStart={(e) => {
+          e.dataTransfer.setData(PANE_DRAG_SESSION, sessionId)
+          e.dataTransfer.effectAllowed = 'move'
+        }}
+      >
         <span style={{ display: 'inline-flex', color: 'var(--accent)', flexShrink: 0 }}>
           <Icon name="star" size={12} />
         </span>
