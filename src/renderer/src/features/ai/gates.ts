@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n'
 import type { Conversation, PendingTool } from './aiStore'
 
 /**
@@ -57,12 +58,12 @@ export function toolLabel(
   if (typeof o?.command === 'string' && o.command.trim()) return o.command
   const path =
     typeof o?.file_path === 'string' ? o.file_path : typeof o?.path === 'string' ? o.path : ''
-  if (path) return `${name || 'инструмент'} · ${path}`
+  if (path) return `${name || t('gates.tool')} · ${path}`
   // ACP (Gemini/Kimi/Qwen) carries the human description in `input.title` and in
   // `displayName`, never in a top-level `title` — without this the label decayed
   // to the bare tool name («Bash», «Edit») and the card described nothing.
   if (typeof o?.title === 'string' && o.title.trim()) return o.title.trim()
-  return title?.trim() || displayName?.trim() || name || 'запрос агента'
+  return title?.trim() || displayName?.trim() || name || t('gates.request')
 }
 
 /** Label for a gate that has no `tool_use` block to describe it. */

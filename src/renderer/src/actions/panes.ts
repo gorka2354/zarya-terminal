@@ -2,6 +2,7 @@ import { useAiStore } from '@/features/ai/aiStore'
 import { nextGate } from '@/features/ai/gates'
 import { listLeaves, useSessionsStore } from '@/state/sessionsStore'
 import { paneDraft } from '@/state/paneDrafts'
+import { t } from '@/lib/i18n'
 import { maximizedIn, setMaximized, useUiStore } from '@/state/uiStore'
 
 /** Короткая цитата из строки ввода — чтобы в вопросе было видно, чем рискуешь. */
@@ -20,24 +21,24 @@ function quote(text: string): string {
 function lossesOf(sessionId: string): string[] {
   const out: string[] = []
   const draft = paneDraft(sessionId).trim()
-  if (draft) out.push(`неотправленный текст: «${quote(draft)}»`)
+  if (draft) out.push(t('close.draft', { text: quote(draft) }))
   const ai = useAiStore.getState()
   // Беседы ВСЕ, а не последняя: чип «недавние сессии» заводит вторую, и гейт
   // первой иначе оставался бы неупомянутым — а гасить его всё равно придётся.
   const convs = ai.conversations.filter((c) => c.sessionId === sessionId)
   if (convs.some((c) => nextGate(c))) {
-    out.push('агент ждёт решения по инструменту — оно будет отклонено')
+    out.push(t('close.gate'))
   } else if (convs.some((c) => c.streaming)) {
-    out.push('агент выполняет ход — он будет прерван')
+    out.push(t('close.streaming'))
   }
   // Вложения и приписка в очереди у ВИДИМОЙ панели молчат намеренно: они на
   // экране, и человек закрывает панель, глядя на них. У невидимой этот довод не
   // работает — про неё и говорим.
   if (!isOnScreen(sessionId)) {
     const images = ai.pendingImages[sessionId]?.length ?? 0
-    if (images) out.push(`вложений: ${images}`)
+    if (images) out.push(t('close.images', { n: images }))
     const queued = convs.find((c) => c.queued)?.queued
-    if (queued) out.push(`приписка в очереди: «${quote(queued)}»`)
+    if (queued) out.push(t('close.queued', { text: quote(queued) }))
   }
   return out
 }
@@ -72,7 +73,10 @@ export async function closePaneAsking(sessionId: string): Promise<void> {
   closing.add(sessionId)
   try {
     const losses = lossesOf(sessionId)
-    if (losses.length && !window.confirm(`Закрыть панель?\n\nПропадёт:\n· ${losses.join('\n· ')}`)) {
+    if (
+      losses.length &&
+      !window.confirm(`${t('close.paneQuestion')}\n\n${t('close.willLose')}\n· ${losses.join('\n· ')}`)
+    ) {
       return
     }
     await useSessionsStore.getState().closeSession(sessionId)
@@ -93,8 +97,8 @@ export async function closeTabAsking(tabId: string): Promise<void> {
     const losses = leaves.flatMap((sid) => lossesOf(sid))
     if (losses.length) {
       const head =
-        leaves.length > 1 ? `Закрыть терминал целиком (${leaves.length} панели)?` : 'Закрыть панель?'
-      if (!window.confirm(`${head}\n\nПропадёт:\n· ${losses.join('\n· ')}`)) return
+        leaves.length > 1 ? t('close.tabQuestion', { n: leaves.length }) : t('close.paneQuestion')
+      if (!window.confirm(`${head}\n\n${t('close.willLose')}\n· ${losses.join('\n· ')}`)) return
     }
     await store.closeTab(tabId)
   } finally {

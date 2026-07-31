@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n'
 import { useEffect, useRef, useState } from 'react'
 import type { HistoryEntry } from '@shared/types'
 import { formatRelative, shortenPath } from '@/lib/ansi'
@@ -60,21 +61,21 @@ export default function HistoryPanel(): React.JSX.Element {
 
   const copy = (entry: HistoryEntry): void => {
     void navigator.clipboard.writeText(entry.command)
-    toast('Команда скопирована', 'success')
+    toast(t('hist.copied'), 'success')
   }
 
   return (
     <>
       <div className="zy-sidebar-header">
         <span>
-          История
+          {t('hist.title')}
           <span style={enSubStyle}>LOG</span>
         </span>
       </div>
       <div className="zy-sidebar-search">
         <input
           className="zy-input zy-input--mono"
-          placeholder="Поиск по истории…"
+          placeholder={t('hist.search')}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
@@ -86,7 +87,7 @@ export default function HistoryPanel(): React.JSX.Element {
             checked={errorsOnly}
             onChange={(e) => setErrorsOnly(e.target.checked)}
           />
-          Только ошибки
+          {t('hist.errorsOnly')}
         </label>
         <label className="zy-history-filter">
           <input
@@ -95,13 +96,13 @@ export default function HistoryPanel(): React.JSX.Element {
             onChange={(e) => setCurrentDirOnly(e.target.checked)}
             disabled={!currentCwd}
           />
-          Только текущая папка
+          {t('hist.thisFolder')}
         </label>
       </div>
-      <div className="zy-sidebar-body" role="listbox" aria-label="История команд">
+      <div className="zy-sidebar-body" role="listbox" aria-label={t('hist.aria')}>
         {!filtered.length && (
           <div className="zy-empty">
-            {results.length ? 'Ничего не подходит под фильтры' : 'История команд пуста'}
+            {results.length ? t('hist.noMatch') : t('hist.empty')}
           </div>
         )}
         {filtered.map((entry) => (
@@ -133,7 +134,7 @@ export default function HistoryPanel(): React.JSX.Element {
             <div className="zy-item-actions">
               <button
                 className="zy-icon-btn"
-                title="Запустить"
+                title={t('hist.run')}
                 onClick={(e) => {
                   e.stopPropagation()
                   insert(entry, true)
@@ -143,7 +144,7 @@ export default function HistoryPanel(): React.JSX.Element {
               </button>
               <button
                 className="zy-icon-btn"
-                title="Скопировать"
+                title={t('hist.copy')}
                 onClick={(e) => {
                   e.stopPropagation()
                   copy(entry)

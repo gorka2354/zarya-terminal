@@ -7,6 +7,8 @@
  * предел это предел, который где-то не проверяется.
  */
 
+import { ts } from './lang'
+
 /**
  * Что принимает сам API Anthropic (Base64ImageSource) — шире нельзя даже при
  * желании. HEIC, BMP, TIFF и SVG отклоняем: первые три API не понимает, а SVG
@@ -84,12 +86,15 @@ export function checkImageSource(
   if (size > IMAGE_SRC_MAX_BYTES) {
     return {
       ok: false,
-      reason: `файл ${Math.round(size / 1048576)} МБ — больше ${Math.round(IMAGE_SRC_MAX_BYTES / 1048576)} МБ не берём`
+      reason: ts('img.tooBig', {
+        mb: Math.round(size / 1048576),
+        max: Math.round(IMAGE_SRC_MAX_BYTES / 1048576)
+      })
     }
   }
   const mime = sniffImageMime(head)
   if (!mime) {
-    return { ok: false, reason: 'не похоже на PNG, JPEG, WebP или GIF — пересохраните в PNG' }
+    return { ok: false, reason: ts('img.badType') }
   }
   return { ok: true, mediaType: mime }
 }
@@ -103,13 +108,13 @@ export function canAcceptMore(
   addBytes: number
 ): { ok: true } | ImageReject {
   if (current.length >= IMAGE_MAX_PER_MSG) {
-    return { ok: false, reason: `не больше ${IMAGE_MAX_PER_MSG} изображений за один раз` }
+    return { ok: false, reason: ts('img.tooMany', { n: IMAGE_MAX_PER_MSG }) }
   }
   const total = current.reduce((n, a) => n + a.bytes, 0) + addBytes
   if (total > IMAGE_MAX_TOTAL_BYTES) {
     return {
       ok: false,
-      reason: `суммарно больше ${Math.round(IMAGE_MAX_TOTAL_BYTES / 1048576)} МБ — уберите одну из прежних`
+      reason: ts('img.totalBig', { mb: Math.round(IMAGE_MAX_TOTAL_BYTES / 1048576) })
     }
   }
   return { ok: true }
@@ -135,5 +140,5 @@ export function fitSize(width: number, height: number): { width: number; height:
  * модель о нём всё равно ничего не знает.
  */
 export function imagePlaceholder(index: number): string {
-  return `[Изображение #${index + 1}]`
+  return ts('img.placeholder', { n: index + 1 })
 }

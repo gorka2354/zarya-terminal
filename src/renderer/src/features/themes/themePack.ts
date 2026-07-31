@@ -16,7 +16,7 @@ import { registerThemes } from './themes'
 /** Заря · Спутник — cold graphite hull, brand red, brass telemetry. */
 const sputnik: ThemeDef = {
   id: 'zarya-sputnik',
-  name: 'Заря · Спутник',
+  nameKey: 'theme.sputnik',
   type: 'dark',
   ui: {
     bg: '#0d0f12',
@@ -62,7 +62,7 @@ const sputnik: ThemeDef = {
 /** Заря · Байконур — warm steppe night, sodium launch-pad amber. */
 const baikonur: ThemeDef = {
   id: 'zarya-baikonur',
-  name: 'Заря · Байконур',
+  nameKey: 'theme.baikonur',
   type: 'dark',
   ui: {
     bg: '#14100a',
@@ -110,7 +110,7 @@ const baikonur: ThemeDef = {
 /** Заря · Плакат — constructivist poster: cream paper, red + black ink. */
 const plakat: ThemeDef = {
   id: 'zarya-plakat',
-  name: 'Заря · Плакат',
+  nameKey: 'theme.poster',
   type: 'light',
   ui: {
     bg: '#efe7d4',
@@ -156,7 +156,7 @@ const plakat: ThemeDef = {
 /** Заря · Полдень — warm cosmonaut daylight, red + brass. */
 const polden: ThemeDef = {
   id: 'zarya-polden',
-  name: 'Заря · Полдень',
+  nameKey: 'theme.noon',
   type: 'light',
   ui: {
     bg: '#f4f0e8',
@@ -202,7 +202,7 @@ const polden: ThemeDef = {
 /** Заря · Чертёж — technical drawing on cool paper, navy lines + red notes. */
 const chertyozh: ThemeDef = {
   id: 'zarya-chertyozh',
-  name: 'Заря · Чертёж',
+  nameKey: 'theme.blueprint',
   type: 'light',
   ui: {
     bg: '#e8ecef',

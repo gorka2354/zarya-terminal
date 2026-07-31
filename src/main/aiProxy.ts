@@ -1,3 +1,4 @@
+import { tm } from './lang'
 import type { BrowserWindow } from 'electron'
 import { CH } from '@shared/ipc'
 import type { AiChatRequest, AiMessage, AiStreamEvent } from '@shared/types'
@@ -56,7 +57,7 @@ export class AiProxy {
     apiKey: string | undefined,
     signal: AbortSignal
   ): Promise<void> {
-    if (!apiKey) throw new Error('Не задан API-ключ Anthropic (Settings → AI).')
+    if (!apiKey) throw new Error(tm('main.err.noAnthropicKey'))
     const base = req.baseUrl?.trim() || 'https://api.anthropic.com'
     const body = {
       model: req.model,
@@ -155,11 +156,11 @@ export class AiProxy {
     let base: string
     if (req.provider === 'openai') {
       base = req.baseUrl?.trim() || 'https://api.openai.com/v1'
-      if (!apiKey) throw new Error('Не задан API-ключ OpenAI (Settings → AI).')
+      if (!apiKey) throw new Error(tm('main.err.noOpenaiKey'))
     } else if (req.provider === 'ollama') {
       base = (req.baseUrl?.trim() || OLLAMA_DEFAULT_URL).replace(/\/$/, '') + '/v1'
     } else {
-      if (!req.baseUrl?.trim()) throw new Error('Для OpenAI-compatible провайдера нужен Base URL.')
+      if (!req.baseUrl?.trim()) throw new Error(tm('main.err.noBaseUrl'))
       base = req.baseUrl.trim().replace(/\/$/, '')
     }
 

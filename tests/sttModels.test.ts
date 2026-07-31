@@ -8,6 +8,7 @@ import {
   STT_MODELS,
   type SttModelDef
 } from '@shared/sttModels'
+import { EN, RU } from '@shared/i18n'
 
 /**
  * Реестр моделей распознавания. Список закрытый и живёт в коде: настраиваемый
@@ -23,8 +24,13 @@ describe('целостность реестра', () => {
   it('у каждой модели есть всё, что нужно для показа и загрузки', () => {
     for (const m of STT_MODELS) {
       expect(m.id, 'id').toBeTruthy()
-      expect(m.label, `label у ${m.id}`).toBeTruthy()
-      expect(m.note, `note у ${m.id}`).toBeTruthy()
+      // Подпись и пояснение хранятся ключом: файл общий и языка не знает, но
+      // ключ обязан существовать в ОБОИХ словарях — иначе в списке моделей
+      // человек увидит «stt.gigaRu» вместо названия.
+      expect(RU[m.labelKey], `подпись у ${m.id}`).toBeTruthy()
+      expect(EN[m.labelKey], `label for ${m.id}`).toBeTruthy()
+      expect(RU[m.noteKey], `пояснение у ${m.id}`).toBeTruthy()
+      expect(EN[m.noteKey], `note for ${m.id}`).toBeTruthy()
       expect(m.license, `лицензия у ${m.id}`).toBeTruthy()
       expect(m.files.length, `файлы у ${m.id}`).toBeGreaterThan(0)
       expect(m.files.some((f) => f.name === 'tokens.txt'), `tokens у ${m.id}`).toBe(true)

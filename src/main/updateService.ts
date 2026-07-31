@@ -1,4 +1,5 @@
 import { get } from 'https'
+import { tm } from './lang'
 import { autoUpdater } from 'electron-updater'
 import { readFile, readdir, stat, unlink } from 'fs/promises'
 import { homedir } from 'os'
@@ -121,7 +122,7 @@ export class UpdateService {
     autoUpdater.on('error', (e) => {
       this.set({
         downloading: undefined,
-        installError: e instanceof Error ? e.message : 'не удалось скачать обновление'
+        installError: e instanceof Error ? e.message : tm('main.upd.downloadFail')
       })
     })
   }
@@ -191,7 +192,7 @@ export class UpdateService {
    */
   async download(): Promise<UpdateState> {
     if (!this.state.canInstall) {
-      this.set({ installError: 'эта сборка не умеет ставить обновление сама' })
+      this.set({ installError: tm('main.upd.noSelfInstall') })
       return this.state
     }
     // Без подписи ставить нечего: sha512 из latest.yml посчитал тот же CI, что и
@@ -201,8 +202,8 @@ export class UpdateService {
       this.set({
         installError:
           this.state.signature === 'bad'
-            ? 'подпись релиза не сходится — установка отменена, скачайте вручную со страницы релиза'
-            : 'релиз не подписан — установка одним нажатием недоступна, скачайте вручную со страницы релиза'
+            ? tm('main.upd.sigMismatch')
+            : tm('main.upd.unsigned')
       })
       return this.state
     }
@@ -223,7 +224,7 @@ export class UpdateService {
     } catch (e) {
       this.set({
         downloading: undefined,
-        installError: e instanceof Error ? e.message : 'не удалось скачать обновление'
+        installError: e instanceof Error ? e.message : tm('main.upd.downloadFail')
       })
     }
     return this.state
@@ -245,16 +246,16 @@ export class UpdateService {
     // скачивание отдаёт .blockmap и промежуточные файлы. Проверяем те, что
     // выглядят как сборка.
     const installers = files.filter((f) => /\.(exe|appimage|deb|dmg|zip)$/i.test(f))
-    if (!installers.length) return 'не удалось понять, что скачалось — установка отменена'
+    if (!installers.length) return tm('main.upd.unknownFiles')
     for (const file of installers) {
       const name = basename(file)
       const want = sums[name]
-      if (!want) return `файла ${name} нет в подписанном списке — установка отменена`
+      if (!want) return tm('main.upd.notInList', { name })
       let got: string
       try {
         got = sha256Hex(await readFile(file))
       } catch {
-        return `не удалось прочитать скачанный файл ${name}`
+        return tm('main.upd.unreadable', { name })
       }
       if (got !== want) {
         // Файл, не сошедшийся с подписанным списком, не должен остаться лежать
@@ -264,7 +265,7 @@ export class UpdateService {
         } catch {
           /* не вышло — хотя бы не ставим */
         }
-        return `контрольная сумма ${name} не совпала с подписанной — установка отменена`
+        return tm('main.upd.shaMismatch', { name })
       }
     }
     return undefined
@@ -278,8 +279,8 @@ export class UpdateService {
    * Иначе обновление стоило бы человеку открытых терминалов.
    */
   install(): { ok: boolean; error?: string } {
-    if (!this.state.downloaded) return { ok: false, error: 'обновление ещё не скачано' }
-    if (!this.quitForInstall) return { ok: false, error: 'нечем завершить приложение' }
+    if (!this.state.downloaded) return { ok: false, error: tm('main.upd.notDownloaded') }
+    if (!this.quitForInstall) return { ok: false, error: tm('main.upd.noQuit') }
     this.quitForInstall()
     return { ok: true }
   }
@@ -316,7 +317,7 @@ export class UpdateService {
         this.set({
           checking: false,
           checkedAt: Date.now(),
-          error: e instanceof Error ? e.message : 'не удалось проверить'
+          error: e instanceof Error ? e.message : tm('main.upd.checkFail')
         })
         return this.state
       })
@@ -330,7 +331,7 @@ export class UpdateService {
     const json = await this.fetchJson(latestReleaseApiUrl())
     const rel = parseRelease(json)
     if (!rel) {
-      this.set({ checking: false, checkedAt: Date.now(), error: 'релиз не распознан' })
+      this.set({ checking: false, checkedAt: Date.now(), error: tm('main.upd.badRelease') })
       return this.state
     }
     // Контрольные суммы — необязательная роскошь для ПОКАЗА: нет файла или не
@@ -376,19 +377,19 @@ export class UpdateService {
     try {
       return JSON.parse(text)
     } catch {
-      throw new Error('ответ не является JSON')
+      throw new Error(tm('main.upd.notJson'))
     }
   }
 
   /** https-only, с таймаутом, потолком на размер и ограничением на редиректы. */
   private fetchText(url: string, hops = 0): Promise<string> {
-    if (hops > 3) return Promise.reject(new Error('слишком много перенаправлений'))
-    if (!url.startsWith('https://')) return Promise.reject(new Error('только https'))
+    if (hops > 3) return Promise.reject(new Error(tm('main.upd.tooManyHops')))
+    if (!url.startsWith('https://')) return Promise.reject(new Error(tm('main.upd.httpsOnly')))
     // Ходим только к GitHub. Раньше редирект мог увести куда угодно: при
     // TLS-инспекции с локально доверенным корнем (корпоративный прокси,
     // заражённая машина) подменённый Location увёл бы проверку на чужой хост, и
     // приложение показало бы его ответ как «описание нового релиза».
-    if (!isTrustedHost(url)) return Promise.reject(new Error('недоверенный источник обновления'))
+    if (!isTrustedHost(url)) return Promise.reject(new Error(tm('main.upd.untrustedHost')))
     return new Promise((resolve, reject) => {
       const req = get(
         url,
@@ -419,7 +420,7 @@ export class UpdateService {
             size += c.length
             if (size > MAX_BODY) {
               req.destroy()
-              reject(new Error('ответ слишком большой'))
+              reject(new Error(tm('main.upd.tooBig')))
               return
             }
             chunks.push(c)
@@ -429,7 +430,7 @@ export class UpdateService {
         }
       )
       req.setTimeout(TIMEOUT_MS, () => {
-        req.destroy(new Error('таймаут проверки обновлений'))
+        req.destroy(new Error(tm('main.upd.timeout')))
       })
       req.on('error', reject)
     })

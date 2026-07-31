@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n'
 import { create } from 'zustand'
 import type { FileContent, GitDiff } from '@shared/types'
 import { emitBus } from '@/lib/bus'
@@ -119,20 +120,20 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     try {
       res = await window.zarya.fs.readFile(path)
     } catch (e) {
-      useUiStore.getState().toast(`Не удалось открыть «${name}»: ${String(e)}`, 'error')
+      useUiStore.getState().toast(t('ed.openFail', { name, err: String(e) }), 'error')
       set((s) => withoutFile(s.files, s.activeId, id))
       return
     }
 
     if (res.binary) {
-      useUiStore.getState().toast(`«${name}» — бинарный файл, редактор его не показывает`, 'error')
+      useUiStore.getState().toast(t('ed.binary', { name }), 'error')
       set((s) => withoutFile(s.files, s.activeId, id))
       return
     }
     if (res.truncated) {
       useUiStore
         .getState()
-        .toast(`«${name}» слишком большой — открыт только для чтения`, 'info')
+        .toast(t('ed.tooBig', { name }), 'info')
     }
 
     const loaded = res
@@ -181,12 +182,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     try {
       res = await window.zarya.git.diffFile(cwd, path)
     } catch (e) {
-      useUiStore.getState().toast(`Не удалось получить diff: ${String(e)}`, 'error')
+      useUiStore.getState().toast(t('ed.diffFail', { err: String(e) }), 'error')
       set((s) => withoutFile(s.files, s.activeId, id))
       return
     }
     if (!res) {
-      useUiStore.getState().toast(`Не удалось получить diff для «${name}»`, 'error')
+      useUiStore.getState().toast(t('ed.diffFailName', { name }), 'error')
       set((s) => withoutFile(s.files, s.activeId, id))
       return
     }
@@ -204,7 +205,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   closeFile: (id) => {
     const f = get().files.find((x) => x.id === id)
     if (!f) return
-    if (f.dirty && !window.confirm(`Закрыть «${f.name}» без сохранения изменений?`)) return
+    if (f.dirty && !window.confirm(t('ed.closeDirty', { name: f.name }))) return
     set((s) => withoutFile(s.files, s.activeId, id))
   },
 
@@ -224,9 +225,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         files: s.files.map((x) => (x.id === id ? { ...x, savedContent: x.content, dirty: false } : x))
       }))
       emitBus('editor:file-saved', { path: f.path })
-      useUiStore.getState().toast(`Сохранено: ${f.name}`, 'success')
+      useUiStore.getState().toast(t('ed.saved', { name: f.name }), 'success')
     } catch (e) {
-      useUiStore.getState().toast(`Не удалось сохранить «${f.name}»: ${String(e)}`, 'error')
+      useUiStore.getState().toast(t('ed.saveFail', { name: f.name, err: String(e) }), 'error')
     }
   },
 

@@ -4,6 +4,7 @@ import { onBus } from '@/lib/bus'
 import { shortenPath, formatRelative } from '@/lib/ansi'
 import { useSessionsStore } from '@/state/sessionsStore'
 import { useSettingsStore } from '@/state/settingsStore'
+import { t, useLang } from '@/lib/i18n'
 import { useUiStore } from '@/state/uiStore'
 import { getTerminal } from '@/terminal/terminalRegistry'
 import { useContextMenu } from './ContextMenu'
@@ -12,6 +13,10 @@ import { Icon } from './Icon'
 const sepStyle: React.CSSProperties = { borderLeft: '1px solid var(--border)', borderRadius: 0 }
 
 export function StatusBar(): React.JSX.Element {
+  // Подписка на язык: без неё надписи этого компонента сменились бы не в
+  // момент переключения, а при следующей перерисовке по другой причине.
+  useLang()
+
   const sessions = useSessionsStore((s) => s.sessions)
   const tabs = useSessionsStore((s) => s.tabs)
   const activeTabId = useSessionsStore((s) => s.activeTabId)
@@ -74,7 +79,7 @@ export function StatusBar(): React.JSX.Element {
       ...(cwd
         ? [
             {
-              label: bookmarks.includes(cwd) ? 'Убрать закладку' : 'Закладка на эту папку',
+              label: t(bookmarks.includes(cwd) ? 'status.unbookmark' : 'status.bookmark'),
               onClick: () => {
                 const next = bookmarks.includes(cwd)
                   ? bookmarks.filter((b) => b !== cwd)
@@ -83,7 +88,7 @@ export function StatusBar(): React.JSX.Element {
               }
             },
             {
-              label: 'Открыть в проводнике',
+              label: t('projects.showInExplorer'),
               onClick: () => window.zarya.app.showItemInFolder(cwd)
             },
             { separator: true as const }
@@ -110,7 +115,7 @@ export function StatusBar(): React.JSX.Element {
         <span
           className="zy-status-item"
           style={sepStyle}
-          title={`Ветка ${git.branch} · изменений: ${git.dirty}${git.ahead ? ` · ↑${git.ahead}` : ''}${git.behind ? ` · ↓${git.behind}` : ''}`}
+          title={`${t('status.branch', { name: git.branch })} · ${t('status.dirty', { n: git.dirty })}${git.ahead ? ` · ↑${git.ahead}` : ''}${git.behind ? ` · ↓${git.behind}` : ''}`}
         >
           <Icon name="branch" size={12.5} />
           {git.branch}
@@ -124,16 +129,16 @@ export function StatusBar(): React.JSX.Element {
         <span
           className="zy-status-item zy-status-saved"
           style={sepStyle}
-          title="Автосохранение сессий"
+          title={t('status.autosave')}
         >
-          сохранено · {formatRelative(savedAt)}
+          {t('status.saved')} · {formatRelative(savedAt)}
         </span>
       )}
       {session && (
         <span className="zy-status-item" style={sepStyle}>
           {session.shellName || '…'}
           {session.integration && (
-            <span title="Shell integration активна" style={{ color: 'var(--success)' }}>
+            <span title={t('status.shellIntegration')} style={{ color: 'var(--success)' }}>
               ●
             </span>
           )}

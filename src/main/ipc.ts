@@ -1,4 +1,5 @@
 import { BrowserWindow, app, dialog, ipcMain, shell } from 'electron'
+import { tm } from './lang'
 import { APP_VERSION } from './appVersion'
 import { existsSync } from 'fs'
 import { CH } from '@shared/ipc'
@@ -100,24 +101,24 @@ export function registerIpc(ctx: IpcContext): void {
     const win = getWindow()
     const opts = {
       type: 'warning' as const,
-      buttons: ['Отклонить', 'Добавить профиль'],
+      buttons: [tm('main.dlg.decline'), tm('main.dlg.addProfile')],
       defaultId: 0,
       cancelId: 0,
       noLink: true,
-      title: 'Заря — новый профиль терминала',
+      title: tm('main.dlg.title'),
       message:
         fresh.length === 1
-          ? 'Приложение просит добавить профиль терминала'
-          : `Приложение просит добавить профили терминала (${fresh.length})`,
+          ? tm('main.dlg.msgOne')
+          : tm('main.dlg.msgMany', { n: fresh.length }),
       // Native dialogs don't scroll: show a handful and say how many more there
       // are, rather than emitting a wall of text whose tail is unreachable.
       detail:
-        `Профиль запускает указанную программу при каждом открытии терминала — и остаётся после перезапуска.\n\n` +
+        `${tm('main.dlg.detailHead')}\n\n` +
         fresh.slice(0, SHOWN_PROFILES).map(describeProfile).join('\n\n') +
         (fresh.length > SHOWN_PROFILES
-          ? `\n\n…и ещё ${fresh.length - SHOWN_PROFILES} — будут добавлены все.`
+          ? `\n\n${tm('main.dlg.detailMore', { n: fresh.length - SHOWN_PROFILES })}`
           : '') +
-        `\n\nЕсли вы этого не делали, отклоните.`
+        `\n\n${tm('main.dlg.detailTail')}`
     }
     const { response } = win
       ? await dialog.showMessageBox(win, opts)
@@ -136,14 +137,14 @@ export function registerIpc(ctx: IpcContext): void {
       req.profileId === 'auto' ? settings.terminal.defaultProfileId : req.profileId,
       settings.terminal.customProfiles
     )
-    if (!profile) return { ok: false, error: 'Не найден ни один shell.' }
+    if (!profile) return { ok: false, error: tm('main.err.noShell') }
     // Defence in depth: the settings file is also editable by hand (and by
     // anything running as the user), so validate again at the point of spawn
     // rather than trusting that everything stored went through the gate above.
     // Detected profiles are re-checked too — they are cheap to validate and a
     // bad one would be just as executable.
     const safe = sanitizeProfile({ ...profile, detected: false }, existsSync)
-    if (!safe) return { ok: false, error: 'Профиль терминала отклонён проверкой безопасности.' }
+    if (!safe) return { ok: false, error: tm('main.err.profileUnsafe') }
     return ptyManager.spawn(req, { ...safe, detected: profile.detected })
   })
   ipcMain.on(CH.ptyWrite, (_e, sessionId: string, data: string) => {
@@ -216,10 +217,10 @@ export function registerIpc(ctx: IpcContext): void {
     // exhaust memory in the main process.
     const MAX_SAMPLES = 48000 * 300
     const rate = typeof sampleRate === 'number' && sampleRate >= 8000 && sampleRate <= 192000 ? sampleRate : 0
-    if (!rate) return { ok: false, error: 'Некорректная частота дискретизации' }
+    if (!rate) return { ok: false, error: tm('main.err.badRate') }
     if (!(samples instanceof Float32Array) || samples.length === 0)
-      return { ok: false, error: 'Пустая запись' }
-    if (samples.length > MAX_SAMPLES) return { ok: false, error: 'Запись слишком длинная' }
+      return { ok: false, error: tm('main.err.emptyRec') }
+    if (samples.length > MAX_SAMPLES) return { ok: false, error: tm('main.err.longRec') }
     try {
       const text = await ctx.stt.transcribe(samples, rate)
       return { ok: true, text }

@@ -114,11 +114,14 @@ export const DEFAULT_SETTINGS: Settings = {
 export const OLLAMA_DEFAULT_URL = 'http://127.0.0.1:11434'
 
 /** Reasoning thrust (тяга) → temperature + maxTokens. */
-export const EFFORT_TUNING: Record<string, { temperature: number; maxTokens: number; label: string }> = {
-  low: { temperature: 0.15, maxTokens: 2048, label: 'МАЛАЯ' },
-  medium: { temperature: 0.4, maxTokens: 4096, label: 'СРЕДНЯЯ' },
-  high: { temperature: 0.6, maxTokens: 6144, label: 'ВЫСОКАЯ' },
-  max: { temperature: 0.85, maxTokens: 8192, label: 'ФОРСАЖ' }
+export const EFFORT_TUNING: Record<
+  string,
+  { temperature: number; maxTokens: number; labelKey: string }
+> = {
+  low: { temperature: 0.15, maxTokens: 2048, labelKey: 'effort.low' },
+  medium: { temperature: 0.4, maxTokens: 4096, labelKey: 'effort.medium' },
+  high: { temperature: 0.6, maxTokens: 6144, labelKey: 'effort.high' },
+  max: { temperature: 0.85, maxTokens: 8192, labelKey: 'effort.max' }
 }
 
 export const AI_MODEL_PRESETS: Record<string, string[]> = {
@@ -141,18 +144,18 @@ export const OPENAI_COMPAT_PRESETS: { id: string; label: string; baseUrl: string
     id: 'kimi',
     label: 'Kimi (Moonshot)',
     baseUrl: 'https://api.moonshot.ai/v1',
-    hint: 'Ключ: platform.moonshot.ai · модели: kimi-k3, kimi-k2.7-code (см. platform.kimi.ai/docs/models)'
+    hint: 'Key: platform.moonshot.ai · models: kimi-k3, kimi-k2.7-code (see platform.kimi.ai/docs/models)'
   },
   {
     id: 'qwen',
     label: 'Qwen (DashScope)',
     baseUrl: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
-    hint: 'Ключ: Alibaba Cloud Model Studio · модели: qwen3-coder-plus, qwen-max'
+    hint: 'Key: Alibaba Cloud Model Studio · models: qwen3-coder-plus, qwen-max'
   },
   {
     id: 'deepseek',
     label: 'DeepSeek',
     baseUrl: 'https://api.deepseek.com/v1',
-    hint: 'Ключ: platform.deepseek.com · модели: deepseek-chat, deepseek-reasoner'
+    hint: 'Key: platform.deepseek.com · models: deepseek-chat, deepseek-reasoner'
   }
 ]

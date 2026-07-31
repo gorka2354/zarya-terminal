@@ -1,7 +1,7 @@
 import { PANE_DRAG_CWD } from '@shared/types'
 import { useState } from 'react'
 import { closeTabAsking } from '@/actions/panes'
-import { t } from '@/lib/i18n'
+import { t, useLang } from '@/lib/i18n'
 import { listLeaves, useSessionsStore } from '@/state/sessionsStore'
 import { useSettingsStore } from '@/state/settingsStore'
 import { useUiStore } from '@/state/uiStore'
@@ -31,6 +31,10 @@ async function addProject(): Promise<void> {
 }
 
 export function Titlebar(): React.JSX.Element {
+  // Подписка на язык: без неё надписи этого компонента сменились бы не в
+  // момент переключения, а при следующей перерисовке по другой причине.
+  useLang()
+
   const tabs = useSessionsStore((s) => s.tabs)
   const activeTabId = useSessionsStore((s) => s.activeTabId)
   const sessions = useSessionsStore((s) => s.sessions)

@@ -3,6 +3,7 @@ import type { ClaudeCliQuestion } from '@shared/types'
 import { useAiStore, type Conversation } from '@/features/ai/aiStore'
 import { Icon } from './Icon'
 import './claudequestionbar.css'
+import { t, useLang } from '@/lib/i18n'
 
 const OTHER = '__other__'
 
@@ -22,11 +23,15 @@ export function ClaudeQuestionBar({
   toolId: string
   questions: ClaudeCliQuestion[]
 }): React.JSX.Element {
+  // Подписка на язык: без неё надписи этого компонента сменились бы не в
+  // момент переключения, а при следующей перерисовке по другой причине.
+  useLang()
+
   // One "active" question at a time (claude usually asks a single one); extra
   // questions are answered in sequence before the whole set submits.
   const [qi, setQi] = useState(0)
   const q = questions[Math.min(qi, questions.length - 1)]
-  const options = useMemo(() => [...q.options, { label: OTHER, description: 'свой вариант' }], [q])
+  const options = useMemo(() => [...q.options, { label: OTHER, description: t('question.ownOption') }], [q])
 
   const [picked, setPicked] = useState<Record<number, string[]>>({})
   const [otherText, setOtherText] = useState<Record<number, string>>({})
@@ -49,7 +54,7 @@ export function ClaudeQuestionBar({
   const answersKeyed = (): Record<string, string[]> => {
     const out: Record<string, string[]> = {}
     questions.forEach((qq, i) => {
-      const labels = (picked[i] ?? []).map((l) => (l === OTHER ? otherText[i]?.trim() || 'Другое' : l))
+      const labels = (picked[i] ?? []).map((l) => (l === OTHER ? otherText[i]?.trim() || t('question.other') : l))
       if (labels.length) out[qq.question] = labels
     })
     return out
@@ -98,7 +103,7 @@ export function ClaudeQuestionBar({
           const out: Record<string, string[]> = {}
           questions.forEach((qq, i) => {
             const labels = i === qi ? [label] : picked[i] ?? []
-            if (labels.length) out[qq.question] = labels.map((l) => (l === OTHER ? otherText[i]?.trim() || 'Другое' : l))
+            if (labels.length) out[qq.question] = labels.map((l) => (l === OTHER ? otherText[i]?.trim() || t('question.other') : l))
           })
           return out
         })())
@@ -141,7 +146,7 @@ export function ClaudeQuestionBar({
       <div className="zy-cqb-head">
         <span className="zy-cqb-badge">
           <Icon name="bolt" size={12} />
-          {q.header || 'ВЫБОР'}
+          {q.header || t('question.header')}
         </span>
         <span className="zy-cqb-question">{q.question}</span>
         {questions.length > 1 && (
@@ -152,7 +157,7 @@ export function ClaudeQuestionBar({
         <span className="zy-cqb-spacer" />
         <button
           className="zy-cqb-skip"
-          title="Отклонить (Esc)"
+          title={t('question.deny')}
           onClick={() => useAiStore.getState().denyTool(conv.id, toolId)}
         >
           <Icon name="close" size={12} />
@@ -174,7 +179,7 @@ export function ClaudeQuestionBar({
                 <span className="zy-cqb-opt-num">{i + 1}</span>
                 {q.multiSelect && <span className={`zy-cqb-check${on ? ' zy-cqb-check--on' : ''}`} />}
                 <span className="zy-cqb-opt-body">
-                  <span className="zy-cqb-opt-label">{isOther ? 'Другое…' : o.label}</span>
+                  <span className="zy-cqb-opt-label">{isOther ? t('question.otherDots') : o.label}</span>
                   {o.description && !isOther && (
                     <span className="zy-cqb-opt-desc">{o.description}</span>
                   )}
@@ -186,7 +191,7 @@ export function ClaudeQuestionBar({
             <input
               ref={otherRef}
               className="zy-cqb-other"
-              placeholder="свой вариант…"
+              placeholder={t('question.ownPlaceholder')}
               value={otherText[qi] ?? ''}
               onChange={(e) => setOtherText((t) => ({ ...t, [qi]: e.target.value }))}
               onKeyDown={(e) => {
@@ -207,11 +212,11 @@ export function ClaudeQuestionBar({
 
       <div className="zy-cqb-foot">
         <span className="zy-cqb-hint">
-          {q.multiSelect ? '1–9 отметить · Enter — далее' : '1–9 или ↑↓ + Enter — выбрать'} · Esc — отклонить
+          {t(q.multiSelect ? 'question.hintMulti' : 'question.hintSingle')} · {t('question.hintDeny')}
         </span>
         {q.multiSelect && (
           <button className="zy-cqb-confirm" onClick={advanceOrCommit}>
-            {qi < questions.length - 1 ? 'Далее' : 'Подтвердить'}
+            {t(qi < questions.length - 1 ? 'question.next' : 'question.confirm')}
           </button>
         )}
       </div>

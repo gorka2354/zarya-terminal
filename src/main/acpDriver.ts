@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from 'child_process'
+import { tm } from './lang'
 import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'fs'
 import { dirname, isAbsolute, relative, resolve as resolvePath } from 'path'
 import { type BrowserWindow } from 'electron'
@@ -42,7 +43,7 @@ export interface AcpEngineConfig {
   args: string[]
   capabilities: AgentCapabilities
   /** Shown when the binary isn't installed. */
-  installHint: string
+  installHintKey: string
 }
 
 /**
@@ -97,10 +98,10 @@ interface AcpSession {
   model?: string
 }
 
-function friendlyError(e: unknown, installHint: string): string {
+function friendlyError(e: unknown, installHintKey: string): string {
   const msg = e instanceof Error ? e.message : String(e)
-  if (/ENOENT|not found|не найден/i.test(msg)) return installHint
-  if (/auth|login|unauthor|-32000/i.test(msg)) return 'Агент не авторизован — войди в аккаунт CLI и повтори.'
+  if (/ENOENT|not found|не найден/i.test(msg)) return tm(installHintKey)
+  if (/auth|login|unauthor|-32000/i.test(msg)) return tm('main.acp.noAuth')
   return msg
 }
 
@@ -209,7 +210,7 @@ export class AcpDriver implements AgentDriver {
       let timer: ReturnType<typeof setTimeout> | undefined
       if (timeoutMs != null) {
         timer = setTimeout(() => {
-          if (this.pending.delete(key)) reject(new Error(`${this.engine}: нет ответа на ${method} (таймаут)`))
+          if (this.pending.delete(key)) reject(new Error(tm('main.acp.noReply', { engine: this.engine, method })))
         }, timeoutMs)
       }
       this.pending.set(key, {
@@ -264,10 +265,12 @@ export class AcpDriver implements AgentDriver {
       proc.on('exit', () => {
         if (this.proc !== proc) return
         const tail = this.lastStderr.trim()
-        const err = new Error(tail ? `${this.engine} завершился: ${tail}` : `${this.engine} завершился`)
+        const err = new Error(
+        tail ? tm('main.acp.exitedTail', { engine: this.engine, tail }) : tm('main.acp.exited', { engine: this.engine })
+      )
         for (const w of this.pending.values()) w.reject(err)
         this.pending.clear()
-        const msg = friendlyError(err, this.cfg.installHint)
+        const msg = friendlyError(err, this.cfg.installHintKey)
         for (const requestId of this.sessions.keys()) this.emit(requestId, { type: 'error', message: msg })
         this.sessions.clear()
         this.sessionToRequest.clear()
@@ -418,7 +421,7 @@ export class AcpDriver implements AgentDriver {
     const p = c.params as AcpFsReadParams | undefined
     const abs = this.resolveInCwd(p?.sessionId, p?.path)
     if (!abs) {
-      this.respondError(c.id, -32000, 'Путь вне рабочей директории сессии')
+      this.respondError(c.id, -32000, tm('main.acp.outsideRead'))
       return
     }
     try {
@@ -430,7 +433,11 @@ export class AcpDriver implements AgentDriver {
       }
       this.respond(c.id, { content })
     } catch (e) {
-      this.respondError(c.id, -32000, `Чтение не удалось: ${e instanceof Error ? e.message : String(e)}`)
+      this.respondError(
+        c.id,
+        -32000,
+        tm('main.acp.readFail', { err: e instanceof Error ? e.message : String(e) })
+      )
     }
   }
 
@@ -443,7 +450,7 @@ export class AcpDriver implements AgentDriver {
     const p = c.params as AcpFsWriteParams | undefined
     const abs = this.resolveInCwd(p?.sessionId, p?.path)
     if (!abs) {
-      this.respondError(c.id, -32000, 'Запись вне рабочей директории сессии запрещена')
+      this.respondError(c.id, -32000, tm('main.acp.outsideWrite'))
       return
     }
     try {
@@ -451,7 +458,11 @@ export class AcpDriver implements AgentDriver {
       writeFileSync(abs, String(p?.content ?? ''))
       this.respond(c.id, null)
     } catch (e) {
-      this.respondError(c.id, -32000, `Запись не удалась: ${e instanceof Error ? e.message : String(e)}`)
+      this.respondError(
+        c.id,
+        -32000,
+        tm('main.acp.writeFail', { err: e instanceof Error ? e.message : String(e) })
+      )
     }
   }
 
@@ -484,7 +495,7 @@ export class AcpDriver implements AgentDriver {
         title: String(params!.toolCall.title ?? ''),
         kind: String(params!.toolCall.kind ?? '')
       },
-      displayName: String(params!.toolCall.title ?? 'Действие агента'),
+      displayName: String(params!.toolCall.title ?? tm('main.acp.action')),
       // Разового разрешения у этого гейта нет — кнопка должна сказать об этом.
       allowAlwaysOnly: !hasAllowOnce(params!.options ?? [])
     })
@@ -496,7 +507,7 @@ export class AcpDriver implements AgentDriver {
     try {
       await this.ensureServer()
     } catch (e) {
-      this.emit(requestId, { type: 'error', message: friendlyError(e, this.cfg.installHint) })
+      this.emit(requestId, { type: 'error', message: friendlyError(e, this.cfg.installHintKey) })
       return
     }
 
@@ -512,13 +523,13 @@ export class AcpDriver implements AgentDriver {
           : await this.request(ACP_METHOD.sessionNew, { cwd, mcpServers: [] })
       } catch (e) {
         this.sessions.delete(requestId)
-        this.emit(requestId, { type: 'error', message: friendlyError(e, this.cfg.installHint) })
+        this.emit(requestId, { type: 'error', message: friendlyError(e, this.cfg.installHintKey) })
         return
       }
       const sessionId = opts.resume || (res as AcpNewSessionResult)?.sessionId
       if (!sessionId) {
         this.sessions.delete(requestId)
-        this.emit(requestId, { type: 'error', message: `${this.engine} не вернул sessionId` })
+        this.emit(requestId, { type: 'error', message: tm('main.acp.noSessionId', { engine: this.engine }) })
         return
       }
       session.sessionId = sessionId
@@ -559,7 +570,7 @@ export class AcpDriver implements AgentDriver {
       // Skip if the session was already torn down (exit-handler emitted its own
       // error) — avoids a duplicate error event for the same conversation.
       if (this.sessions.has(requestId))
-        this.emit(requestId, { type: 'error', message: friendlyError(e, this.cfg.installHint) })
+        this.emit(requestId, { type: 'error', message: friendlyError(e, this.cfg.installHintKey) })
     } finally {
       session.inFlight = false
     }
@@ -636,7 +647,7 @@ export class AcpDriver implements AgentDriver {
   }
 
   killAll(): void {
-    for (const w of this.pending.values()) w.reject(new Error(`${this.engine} остановлен`))
+    for (const w of this.pending.values()) w.reject(new Error(tm('main.acp.stopped', { engine: this.engine })))
     this.pending.clear()
     this.sessions.clear()
     this.sessionToRequest.clear()

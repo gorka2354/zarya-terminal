@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n'
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from '@/components/Icon'
 import { uid } from '@/lib/uid'
@@ -76,8 +77,10 @@ export default function AiCommandBar(): React.JSX.Element | null {
     setError(null)
     setStreaming(true)
     const system =
-      `Ты — генератор shell-команд. ОС Windows, шелл ${session?.shellName || 'неизвестен'}, ` +
-      `cwd ${session?.cwd || 'неизвестна'}. Верни ТОЛЬКО команду одной строкой, без markdown и пояснений.`
+      t('acb.sys', {
+        shell: session?.shellName || t('ai.sys.unknownShell'),
+        cwd: session?.cwd || t('ai.sys.unknownCwd')
+      })
     window.zarya.ai.chat(requestId, {
       provider: settings.ai.provider,
       model: settings.ai.model,
@@ -140,7 +143,7 @@ export default function AiCommandBar(): React.JSX.Element | null {
           <input
             ref={inputRef}
             className="zy-ai-cmdbar-input"
-            placeholder="Опиши команду по-человечески… (Esc — закрыть)"
+            placeholder={t('acb.placeholder')}
             value={phrase}
             disabled={streaming}
             onChange={(e) => setPhrase(e.target.value)}
@@ -165,24 +168,24 @@ export default function AiCommandBar(): React.JSX.Element | null {
         <div className="zy-ai-cmdbar-hint">
           {!hasPreview && !streaming && (
             <span>
-              <span className="zy-kbd">Enter</span> сгенерировать
+              <span className="zy-kbd">Enter</span> {t('acb.generate')}
             </span>
           )}
           {hasPreview && !streaming && (
             <>
               <span>
-                <span className="zy-kbd">Enter</span> вставить
+                <span className="zy-kbd">Enter</span> {t('acb.insert')}
               </span>
               <span>
-                <span className="zy-kbd">Ctrl+Enter</span> выполнить
+                <span className="zy-kbd">Ctrl+Enter</span> {t('acb.run')}
               </span>
               <span>
-                <span className="zy-kbd">Tab</span> переформулировать
+                <span className="zy-kbd">Tab</span> {t('acb.rephrase')}
               </span>
             </>
           )}
           <span>
-            <span className="zy-kbd">Esc</span> закрыть
+            <span className="zy-kbd">Esc</span> {t('pal.close')}
           </span>
         </div>
       </div>

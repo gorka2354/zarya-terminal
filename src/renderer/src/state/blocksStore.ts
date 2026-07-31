@@ -77,6 +77,12 @@ export const useBlocksStore = create<BlocksState>((set, get) => ({
   // должен спорить с путём в шапке.
   const cwd = useSessionsStore.getState().sessions[sessionId]?.cwd || '~/code/project'
   const CMDS = ['npm run build', 'git status', 'npm test -- --watch=false', 'git log --oneline -5']
+  const OUT = [
+    ['vite v7.2.4 building for production...', '✓ 412 modules transformed.', 'dist/index.js  184.20 kB', '✓ built in 3.14s'],
+    ['On branch main', "Your branch is up to date with 'origin/main'.", 'nothing to commit, working tree clean', ''],
+    ['✓ src/store.test.ts (14)', '✓ src/router.test.ts (9)', 'Test Files  2 passed (2)', '     Tests  23 passed (23)'],
+    ['a41c9f2 feat(store): batch writes', '7db3e10 fix(router): keep query on back', '2c8ee54 chore: bump deps', 'f10a993 docs: update readme']
+  ]
   const list: BlockRecord[] = Array.from({ length: count }, (_, i) => ({
     id: `seed-${sessionId}-${i}`,
     sessionId,
@@ -85,7 +91,10 @@ export const useBlocksStore = create<BlocksState>((set, get) => ({
     startedAt: now - (count - i) * 1000,
     endedAt: now - (count - i) * 1000 + 400,
     exitCode: i % 7 === 0 ? 1 : 0,
-    output: Array.from({ length: lines }, (_, k) => `строка вывода ${k} блока ${i}`).join('\n'),
+    // Вывод похож на настоящий и не на языке интерфейса: этими блоками
+    // заполняются кадры для витрины, а «строка вывода 3 блока 0» в кадре
+    // сообщает читателю только то, что это подделка.
+    output: OUT[i % OUT.length].slice(0, lines).join('\n'),
     outputTruncated: false
   }))
   useBlocksStore.getState().setBlocks(sessionId, list)

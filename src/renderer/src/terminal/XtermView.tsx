@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n'
 import { memo, useEffect, useRef, useState } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
@@ -208,7 +209,7 @@ export const XtermView = memo(function XtermView({
         if (!text) return
         const st = useSettingsStore.getState().settings
         if (st.terminal.pasteWarnMultiline && text.includes('\n')) {
-          if (!window.confirm('Вставить многострочный текст? Он может выполниться сразу.')) return
+          if (!window.confirm(t('term.pasteAsk'))) return
         }
         term.paste(text)
       } catch {
@@ -317,7 +318,7 @@ export const XtermView = memo(function XtermView({
     const restored = takePendingRestore(sessionId)
     if (restored) {
       term.write(restored)
-      term.write('\r\n\x1b[2m╌╌╌╌╌  сессия восстановлена · новый shell  ╌╌╌╌╌\x1b[0m\r\n')
+      term.write(`\r\n\x1b[2m╌╌╌╌╌  ${t('term.restoredMark')}  ╌╌╌╌╌\x1b[0m\r\n`)
     }
 
     // A freshly spawned ConPTY shell begins with a full-screen repaint
@@ -446,20 +447,23 @@ export const XtermView = memo(function XtermView({
         <div className="zy-term-exited">
           <div className="zy-term-exited-card">
             <div className="zy-term-exited-title">
-              Процесс завершён{session?.exitCode !== undefined ? ` · код ${session.exitCode}` : ''}
+              {t('term.exited', {
+              code:
+                session?.exitCode !== undefined ? t('term.exitCode', { code: session.exitCode }) : ''
+            })}
             </div>
             <div className="zy-row">
               <button
                 className="zy-btn zy-btn--accent"
                 onClick={() => void useSessionsStore.getState().restartSession(sessionId)}
               >
-                Перезапустить
+                {t('term.restart')}
               </button>
               <button
                 className="zy-btn"
                 onClick={() => void closePaneAsking(sessionId)}
               >
-                Закрыть
+                {t('term.close')}
               </button>
             </div>
           </div>

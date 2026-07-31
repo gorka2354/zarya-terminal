@@ -1,4 +1,5 @@
 import { registerActions } from '@/lib/actionRegistry'
+import { onLangChange, t } from '@/lib/i18n'
 import { closePaneAsking, closeTabAsking } from '@/actions/panes'
 import { useBlocksStore } from '@/state/blocksStore'
 import { listLeaves, useSessionsStore } from '@/state/sessionsStore'
@@ -24,6 +25,13 @@ let registered = false
 export function registerCoreActions(): void {
   if (registered) return
   registered = true
+  // Названия команд — такой же текст интерфейса, как всё остальное. Реестр
+  // собирается один раз при старте, поэтому пересобираем его на смену языка:
+  // иначе палитра навсегда осталась бы на языке, который был при запуске.
+  onLangChange(() => {
+    registered = false
+    registerCoreActions()
+  })
   const ui = useUiStore.getState()
   const sessions = useSessionsStore.getState()
 
@@ -31,26 +39,26 @@ export function registerCoreActions(): void {
     // ------------------------------------------------------------------ app
     {
       id: 'app.command-palette',
-      title: 'Палитра команд',
-      category: 'Приложение',
+      title: t('act.palette'),
+      category: t('act.cat.app'),
       run: () => ui.set({ paletteOpen: true })
     },
     {
       id: 'app.quick-open',
-      title: 'Быстрое открытие файла',
-      category: 'Приложение',
+      title: t('act.quickOpen'),
+      category: t('act.cat.app'),
       run: () => ui.set({ quickOpenOpen: true })
     },
     {
       id: 'app.settings',
-      title: 'Настройки',
-      category: 'Приложение',
+      title: t('act.settings'),
+      category: t('act.cat.app'),
       run: () => ui.set({ settingsOpen: true })
     },
     {
       id: 'app.toggle-sidebar',
-      title: 'Показать/скрыть сайдбар',
-      category: 'Приложение',
+      title: t('act.sidebar'),
+      category: t('act.cat.app'),
       run: () => {
         const cur = useUiStore.getState().sidebarView
         ui.set({ sidebarView: cur ? null : 'sessions' })
@@ -58,14 +66,14 @@ export function registerCoreActions(): void {
     },
     {
       id: 'app.toggle-ide',
-      title: 'IDE-надстройка: вкл/выкл (Файлы · Редактор · Workflows · IDE-агент)',
-      category: 'Приложение',
-      keywords: 'ide редактор файлы workflows надстройка ide-агент editor',
+      title: t('act.ide'),
+      category: t('act.cat.app'),
+      keywords: t('act.ideKw'),
       run: () => toggleIdeMode()
     },
     {
       id: 'app.toggle-ai-panel',
-      title: 'IDE-агент: панель (второй пилот)',
+      title: t('act.idePanel'),
       category: 'IDE',
       run: () => {
         if (!getSettings().ideMode) setIdeMode(true)
@@ -76,14 +84,14 @@ export function registerCoreActions(): void {
     },
     {
       id: 'app.launch-pad',
-      title: 'Пусковой комплекс (модель · тяга)',
+      title: t('act.launchpad'),
       category: 'AI',
-      keywords: 'launch pad model effort тяга двигатель поехали',
+      keywords: t('act.launchpadKw'),
       run: () => ui.set({ launchPadOpen: !useUiStore.getState().launchPadOpen })
     },
     {
       id: 'ai.command-bar',
-      title: 'AI: сгенерировать команду (натуральный язык)',
+      title: t('act.aiCommand'),
       category: 'AI',
       run: () => {
         const id = activeSessionId()
@@ -92,29 +100,29 @@ export function registerCoreActions(): void {
     },
     {
       id: 'history.search',
-      title: 'История команд (все сессии)',
-      category: 'История',
+      title: t('act.history'),
+      category: t('act.cat.history'),
       run: () => ui.set({ historyOverlayOpen: true })
     },
     {
       id: 'blocks.panel',
-      title: 'Панель блоков',
-      category: 'Блоки',
+      title: t('act.blocksPanel'),
+      category: t('act.cat.blocks'),
       run: () => ui.set({ blocksPanelOpen: !useUiStore.getState().blocksPanelOpen })
     },
 
     // ----------------------------------------------------------------- tabs
     {
       id: 'tab.new',
-      title: 'Новая вкладка',
-      category: 'Вкладки',
+      title: t('act.newTab'),
+      category: t('act.cat.tabs'),
       run: () => void sessions.newTab()
     },
     {
       id: 'tab.new-in-folder',
-      title: 'Новый терминал в папке…',
-      category: 'Вкладки',
-      keywords: 'folder cwd папка проект open directory',
+      title: t('act.newTabFolder'),
+      category: t('act.cat.tabs'),
+      keywords: t('act.newTabFolderKw'),
       run: () => {
         void window.zarya.app.pickDirectory().then((dir) => {
           if (dir) void sessions.newTab(undefined, dir)
@@ -123,8 +131,8 @@ export function registerCoreActions(): void {
     },
     {
       id: 'tab.close',
-      title: 'Закрыть вкладку',
-      category: 'Вкладки',
+      title: t('act.closeTab'),
+      category: t('act.cat.tabs'),
       run: () => {
         const { activeTabId } = useSessionsStore.getState()
         // Через спрашивающую обёртку: горячая клавиша не должна выбрасывать
@@ -134,23 +142,23 @@ export function registerCoreActions(): void {
     },
     {
       id: 'tab.next',
-      title: 'Следующая вкладка',
-      category: 'Вкладки',
+      title: t('act.nextTab'),
+      category: t('act.cat.tabs'),
       run: () => sessions.nextTab(1)
     },
     {
       id: 'tab.prev',
-      title: 'Предыдущая вкладка',
-      category: 'Вкладки',
+      title: t('act.prevTab'),
+      category: t('act.cat.tabs'),
       run: () => sessions.nextTab(-1)
     },
 
     // ------------------------------------------------------------- terminal
     {
       id: 'terminal.toggle-raw',
-      title: 'Режим: Терминал ⇄ Блоки',
-      category: 'Терминал',
-      keywords: 'raw interactive интерактивный warp фид блоки claude vim tui',
+      title: t('act.mode'),
+      category: t('act.cat.terminal'),
+      keywords: t('act.modeKw'),
       run: () => {
         // Режим переключается у АКТИВНОЙ панели: соседние продолжают жить
         // своей жизнью, а не гаснут заодно.
@@ -164,15 +172,15 @@ export function registerCoreActions(): void {
     },
     {
       id: 'terminal.split-right',
-      title: 'Разделить вправо',
-      category: 'Терминал',
+      title: t('act.splitRight'),
+      category: t('act.cat.terminal'),
       run: () => void sessions.splitActive('row')
     },
     {
       id: 'terminal.split-folder',
-      title: 'Новая панель в папке…',
-      category: 'Терминал',
-      keywords: 'split folder проект панель папка другой',
+      title: t('act.splitFolder'),
+      category: t('act.cat.terminal'),
+      keywords: t('act.splitFolderKw'),
       // Сетка нужна для того, чтобы держать рядом РАЗНЫЕ проекты. Без этого
       // деление панели давало ещё один сеанс той же папки.
       run: () => {
@@ -183,14 +191,14 @@ export function registerCoreActions(): void {
     },
     {
       id: 'terminal.split-down',
-      title: 'Разделить вниз',
-      category: 'Терминал',
+      title: t('act.splitDown'),
+      category: t('act.cat.terminal'),
       run: () => void sessions.splitActive('col')
     },
     {
       id: 'terminal.close-pane',
-      title: 'Закрыть панель',
-      category: 'Терминал',
+      title: t('act.closePane'),
+      category: t('act.cat.terminal'),
       run: () => {
         const id = activeSessionId()
         if (id) void closePaneAsking(id)
@@ -198,26 +206,26 @@ export function registerCoreActions(): void {
     },
     {
       id: 'terminal.focus-next-pane',
-      title: 'Фокус: следующая панель',
-      category: 'Терминал',
+      title: t('act.focusNext'),
+      category: t('act.cat.terminal'),
       run: () => cyclePane(1)
     },
     {
       id: 'terminal.focus-prev-pane',
-      title: 'Фокус: предыдущая панель',
-      category: 'Терминал',
+      title: t('act.focusPrev'),
+      category: t('act.cat.terminal'),
       run: () => cyclePane(-1)
     },
     {
       id: 'terminal.clear',
-      title: 'Очистить терминал',
-      category: 'Терминал',
+      title: t('act.clear'),
+      category: t('act.cat.terminal'),
       run: () => withActiveTerm((h) => h.term.clear())
     },
     {
       id: 'terminal.search',
-      title: 'Найти в терминале',
-      category: 'Терминал',
+      title: t('act.find'),
+      category: t('act.cat.terminal'),
       run: () => {
         const id = activeSessionId()
         if (id) ui.set({ searchOpenFor: id })
@@ -225,8 +233,8 @@ export function registerCoreActions(): void {
     },
     {
       id: 'terminal.copy',
-      title: 'Копировать выделение',
-      category: 'Терминал',
+      title: t('act.copy'),
+      category: t('act.cat.terminal'),
       run: () =>
         withActiveTerm((h) => {
           const sel = h.term.getSelection()
@@ -235,8 +243,8 @@ export function registerCoreActions(): void {
     },
     {
       id: 'terminal.paste',
-      title: 'Вставить',
-      category: 'Терминал',
+      title: t('act.paste'),
+      category: t('act.cat.terminal'),
       run: () =>
         withActiveTerm((h) => {
           void navigator.clipboard.readText().then((t) => t && h.term.paste(t))
@@ -246,27 +254,27 @@ export function registerCoreActions(): void {
     // --------------------------------------------------------------- blocks
     {
       id: 'blocks.prev',
-      title: 'Предыдущий блок',
-      category: 'Блоки',
+      title: t('act.prevBlock'),
+      category: t('act.cat.blocks'),
       run: () => withActiveTerm((h) => h.engine.jumpBlock(-1))
     },
     {
       id: 'blocks.next',
-      title: 'Следующий блок',
-      category: 'Блоки',
+      title: t('act.nextBlock'),
+      category: t('act.cat.blocks'),
       run: () => withActiveTerm((h) => h.engine.jumpBlock(1))
     },
     {
       id: 'blocks.copy-last-output',
-      title: 'Скопировать вывод последней команды',
-      category: 'Блоки',
+      title: t('act.copyOutput'),
+      category: t('act.cat.blocks'),
       run: () => {
         const id = activeSessionId()
         if (!id) return
         const last = useBlocksStore.getState().lastBlock(id)
         if (last?.output) {
           void navigator.clipboard.writeText(last.output)
-          ui.toast('Вывод скопирован', 'success')
+          ui.toast(t('act.outputCopied'), 'success')
         }
       }
     },
@@ -274,20 +282,20 @@ export function registerCoreActions(): void {
     // ----------------------------------------------------------------- font
     {
       id: 'font.increase',
-      title: 'Шрифт крупнее',
-      category: 'Вид',
+      title: t('act.fontUp'),
+      category: t('act.cat.view'),
       run: () => bumpFont(1)
     },
     {
       id: 'font.decrease',
-      title: 'Шрифт мельче',
-      category: 'Вид',
+      title: t('act.fontDown'),
+      category: t('act.cat.view'),
       run: () => bumpFont(-1)
     },
     {
       id: 'font.reset',
-      title: 'Шрифт по умолчанию',
-      category: 'Вид',
+      title: t('act.fontReset'),
+      category: t('act.cat.view'),
       run: () => void useSettingsStore.getState().update({ appearance: { fontSize: 14 } as never })
     }
   ])

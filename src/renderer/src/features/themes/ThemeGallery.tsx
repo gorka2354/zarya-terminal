@@ -1,3 +1,4 @@
+import { t as tr } from '@/lib/i18n'
 import { Icon } from '@/components/Icon'
 import { useSettingsStore } from '@/state/settingsStore'
 import { getThemes } from './themes'
@@ -29,7 +30,7 @@ export default function ThemeGallery(): React.JSX.Element {
             type="button"
             className={`zy-theme-card${active ? ' zy-theme-card--active' : ''}`}
             onClick={() => select(t.id)}
-            title={t.name}
+            title={tr(t.nameKey)}
           >
             <div
               className="zy-theme-preview"
@@ -49,15 +50,15 @@ export default function ThemeGallery(): React.JSX.Element {
               </div>
             </div>
             <div className="zy-theme-card-foot">
-              <span className="zy-theme-card-name">{t.name}</span>
+              <span className="zy-theme-card-name">{tr(t.nameKey)}</span>
               <span className={`zy-badge ${t.type === 'dark' ? '' : 'zy-badge--accent'}`}>
-                {t.type === 'dark' ? 'тёмная' : 'светлая'}
+                {tr(t.type === 'dark' ? 'theme.dark' : 'theme.light')}
               </span>
             </div>
             {active && (
               <span className="zy-theme-card-check">
                 <Icon name="check" size={11} strokeWidth={1.8} />
-                активна
+                {tr('theme.active')}
               </span>
             )}
           </button>

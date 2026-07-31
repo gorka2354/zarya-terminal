@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n'
 import { create } from 'zustand'
 import type {
   BlockRecord,
@@ -193,7 +194,7 @@ async function spawnSession(
     const cur = s.sessions[session.id]
     if (!cur) return {}
     if (!res.ok) {
-      useUiStore.getState().toast(`Не удалось запустить shell: ${res.error ?? '?'}`, 'error')
+      useUiStore.getState().toast(t('sess.shellFail', { err: res.error ?? '?' }), 'error')
       return {
         sessions: {
           ...s.sessions,
@@ -219,10 +220,22 @@ async function spawnSession(
   })
 }
 
+/**
+ * Старые снапшоты хранят автоматическую подпись «Терминал» как обычные данные:
+ * до второго языка запасное имя было строкой, а не ключом. Пустое имя рисуется
+ * по языку, поэтому такое имя считаем незаданным — иначе английский интерфейс
+ * до конца жизни профиля показывал бы русское слово в списке панелей.
+ */
+const LEGACY_DEFAULT_TITLE = 'Терминал'
+
+function restoredTitle(title: string): string {
+  return title === LEGACY_DEFAULT_TITLE ? '' : title
+}
+
 function makeRuntime(partial: Partial<RuntimeSession> & { id: string }): RuntimeSession {
   const cwdBase = partial.cwd?.split(/[\\/]/).filter(Boolean).pop()
   return {
-    title: cwdBase ?? 'Терминал',
+    title: cwdBase ?? '',
     customTitle: false,
     profileId: getSettings().terminal.defaultProfileId || 'auto',
     shellName: '',
@@ -418,7 +431,7 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
       if (listLeaves(tab.layout).length >= MAX_PANES) {
         useUiStore
           .getState()
-          .toast(`В одной вкладке не больше ${MAX_PANES} панелей — открыл новой вкладкой`, 'info')
+          .toast(t('sess.maxPanesNewTab', { n: MAX_PANES }), 'info')
         await get().newTab(undefined, cwd)
         return
       }
@@ -474,7 +487,7 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
       if (listLeaves(tab.layout).length >= MAX_PANES) {
         useUiStore
           .getState()
-          .toast(`В одной вкладке не больше ${MAX_PANES} панелей — открыл новой вкладкой`, 'info')
+          .toast(t('sess.maxPanesNewTab', { n: MAX_PANES }), 'info')
         await get().newTab(undefined, cwd)
         return
       }
@@ -516,7 +529,7 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
       if (fromTab.id !== toTab.id && listLeaves(toTab.layout).length >= MAX_PANES) {
         useUiStore
           .getState()
-          .toast(`В этой вкладке уже ${MAX_PANES} панели — больше не влезет`, 'error')
+          .toast(t('sess.maxPanes', { n: MAX_PANES }), 'error')
         return
       }
       // Вкладка отдала последнюю панель — она закроется, и её разворот вместе
@@ -632,7 +645,7 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
         emitBus('terminal:focus', { sessionId: stay })
         focusPane(stay)
       }
-      useUiStore.getState().toast('Панель вынесена в отдельную вкладку', 'success')
+      useUiStore.getState().toast(t('sess.detached'), 'success')
       schedulePersistWorkspace(get)
     },
 
@@ -747,15 +760,15 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
       try {
         const snap = await window.zarya.sessions.loadSnapshot(savedId)
         if (!snap) {
-          useUiStore.getState().toast('Снапшот сессии не найден', 'error')
+          useUiStore.getState().toast(t('sess.snapshotMissing'), 'error')
           return
         }
         useBlocksStore.getState().setBlocks(savedId, snap.blocks)
         if (snap.scrollback) setPendingRestore(savedId, snap.scrollback)
         const session = makeRuntime({
           id: savedId,
-          title: snap.meta.title,
-          customTitle: true,
+          title: restoredTitle(snap.meta.title),
+          customTitle: snap.meta.title !== LEGACY_DEFAULT_TITLE,
           profileId: snap.meta.profileId,
           shellName: snap.meta.shellName,
           shellIcon: snap.meta.shellIcon,
@@ -962,8 +975,8 @@ async function restoreWorkspace(
         sessions.push(
           makeRuntime({
             id: sid,
-            title: snap.meta.title,
-            customTitle: true,
+            title: restoredTitle(snap.meta.title),
+            customTitle: snap.meta.title !== LEGACY_DEFAULT_TITLE,
             profileId: snap.meta.profileId,
             shellName: snap.meta.shellName,
             shellIcon: snap.meta.shellIcon,

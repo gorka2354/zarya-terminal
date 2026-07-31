@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n'
 import { useEffect, useMemo, useState } from 'react'
 import type { WorkflowDef, WorkflowParam } from '@shared/types'
 import { fuzzyFilter } from '@/lib/fuzzy'
@@ -81,7 +82,7 @@ export default function WorkflowsPanel(): React.JSX.Element {
   const groups = useMemo(() => {
     const map = new Map<string, WorkflowDef[]>()
     for (const wf of filtered) {
-      const tags = wf.tags.length ? wf.tags : ['другое']
+      const tags = wf.tags.length ? wf.tags : [t('wf.other')]
       for (const t of tags) {
         const list = map.get(t)
         if (list) list.push(wf)
@@ -109,7 +110,7 @@ export default function WorkflowsPanel(): React.JSX.Element {
   }
 
   const removeWorkflow = (wf: WorkflowDef): void => {
-    if (window.confirm(`Удалить workflow «${wf.name}»?`)) {
+    if (window.confirm(t('wf.deleteAsk', { name: wf.name }))) {
       void useWorkflowsStore.getState().remove(wf.id)
     }
   }
@@ -130,7 +131,7 @@ export default function WorkflowsPanel(): React.JSX.Element {
           {wf.name}
           {wf.builtin && (
             <span className="zy-badge" style={{ marginLeft: 6 }}>
-              встроенный
+              {t('wf.builtin')}
             </span>
           )}
         </div>
@@ -144,7 +145,7 @@ export default function WorkflowsPanel(): React.JSX.Element {
       <div className="zy-item-actions">
         <button
           className="zy-icon-btn"
-          title="Запустить"
+          title={t('wf.run')}
           onClick={(e) => {
             e.stopPropagation()
             useWorkflowsStore.getState().openRunDialog(wf.id)
@@ -156,7 +157,7 @@ export default function WorkflowsPanel(): React.JSX.Element {
           <>
             <button
               className="zy-icon-btn"
-              title="Редактировать"
+              title={t('wf.edit')}
               onClick={(e) => {
                 e.stopPropagation()
                 openEdit(wf)
@@ -166,7 +167,7 @@ export default function WorkflowsPanel(): React.JSX.Element {
             </button>
             <button
               className="zy-icon-btn"
-              title="Удалить"
+              title={t('wf.delete')}
               onClick={(e) => {
                 e.stopPropagation()
                 removeWorkflow(wf)
@@ -197,25 +198,25 @@ export default function WorkflowsPanel(): React.JSX.Element {
           Workflows
           <span style={enSubStyle}>FLOWS</span>
         </span>
-        <button className="zy-icon-btn" title="Новый workflow" onClick={openCreate}>
+        <button className="zy-icon-btn" title={t('wf.new')} onClick={openCreate}>
           <Icon name="plus" size={15} strokeWidth={1.6} />
         </button>
       </div>
       <div className="zy-sidebar-search">
         <input
           className="zy-input"
-          placeholder="Поиск workflow…"
+          placeholder={t('wf.search')}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
       </div>
       <div className="zy-sidebar-body">
-        {!loaded && <div className="zy-empty">Workflows загружаются…</div>}
+        {!loaded && <div className="zy-empty">{t('wf.loading')}</div>}
         {loaded && !groups.length && (
           <div className="zy-empty">
-            Ничего не найдено.
+            {t('wf.nothing')}
             <br />
-            Нажми «+», чтобы создать свой workflow.
+            {t('wf.createHint')}
           </div>
         )}
         {groups.map(([tag, items]) => (
@@ -260,7 +261,7 @@ function WorkflowFormModal({
     const name = local.name.trim()
     const command = local.command.trim()
     if (!name || !command) {
-      useUiStore.getState().toast('Укажи название и команду', 'error')
+      useUiStore.getState().toast(t('wf.needNameCmd'), 'error')
       return
     }
     const existingIds = new Set(useWorkflowsStore.getState().workflows.map((w) => w.id))
@@ -303,23 +304,23 @@ function WorkflowFormModal({
     >
       <div className="zy-modal wf-form-modal" onMouseDown={(e) => e.stopPropagation()}>
         <div className="zy-sidebar-header">
-          <span>{local.id ? 'Редактировать workflow' : 'Новый workflow'}</span>
-          <button className="zy-icon-btn" title="Закрыть" onClick={onClose}>
+          <span>{t(local.id ? 'wf.editTitle' : 'wf.new')}</span>
+          <button className="zy-icon-btn" title={t('wf.close')} onClick={onClose}>
             <Icon name="close" size={14} strokeWidth={1.6} />
           </button>
         </div>
         <div className="wf-form-body">
           <label className="wf-field">
-            <span className="wf-label">Название</span>
+            <span className="wf-label">{t('wf.name')}</span>
             <input
               className="zy-input"
               value={local.name}
               onChange={(e) => setLocal((s) => ({ ...s, name: e.target.value }))}
-              placeholder="Например: Отменить последний коммит"
+              placeholder={t('wf.namePh')}
             />
           </label>
           <label className="wf-field">
-            <span className="wf-label">Команда ({'{{param}}'} — параметр)</span>
+            <span className="wf-label">{t('wf.command', { param: '{{param}}' })}</span>
             <textarea
               className="zy-input zy-input--mono wf-command-input"
               rows={3}
@@ -330,19 +331,19 @@ function WorkflowFormModal({
           </label>
           {paramNames.length > 0 && (
             <div className="wf-params-editor">
-              <div className="wf-label">Параметры</div>
+              <div className="wf-label">{t('wf.params')}</div>
               {paramNames.map((pname) => (
                 <div key={pname} className="wf-param-row">
                   <span className="zy-kbd wf-param-kbd">{`{{${pname}}}`}</span>
                   <input
                     className="zy-input wf-input-sm"
-                    placeholder="описание"
+                    placeholder={t('wf.paramDesc')}
                     value={local.paramMeta[pname]?.description ?? ''}
                     onChange={(e) => setParamField(pname, 'description', e.target.value)}
                   />
                   <input
                     className="zy-input wf-input-sm"
-                    placeholder="по умолчанию"
+                    placeholder={t('wf.paramDefault')}
                     value={local.paramMeta[pname]?.default ?? ''}
                     onChange={(e) => setParamField(pname, 'default', e.target.value)}
                   />
@@ -351,30 +352,30 @@ function WorkflowFormModal({
             </div>
           )}
           <label className="wf-field">
-            <span className="wf-label">Описание</span>
+            <span className="wf-label">{t('wf.desc')}</span>
             <input
               className="zy-input"
               value={local.description}
               onChange={(e) => setLocal((s) => ({ ...s, description: e.target.value }))}
-              placeholder="Необязательно"
+              placeholder={t('wf.descPh')}
             />
           </label>
           <label className="wf-field">
-            <span className="wf-label">Теги (через запятую)</span>
+            <span className="wf-label">{t('wf.tags')}</span>
             <input
               className="zy-input"
               value={local.tagsText}
               onChange={(e) => setLocal((s) => ({ ...s, tagsText: e.target.value }))}
-              placeholder="git, полезное"
+              placeholder={t('wf.tagsPh')}
             />
           </label>
         </div>
         <div className="wf-form-actions">
           <button className="zy-btn zy-btn--ghost" onClick={onClose}>
-            Отмена
+            {t('wf.cancel')}
           </button>
           <button className="zy-btn zy-btn--accent" onClick={submit}>
-            Сохранить
+            {t('wf.save')}
           </button>
         </div>
       </div>

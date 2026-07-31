@@ -22,8 +22,8 @@ single-maintainer project, not a company with an SLA.
   a degrade path.
 
   **That degrade is stated in the UI, not hidden.** The badge over each key
-  reports one of three things: *Ключ в хранилище ОС* (green), *Ключ защищён
-  слабо* (amber) or *Ключ открытым текстом* (amber, with an explanation of what
+  reports one of three things: *Key in the OS store* (green), *Key is weakly
+  protected* (amber) or *Key in plain text* (amber, with an explanation of what
   to do). Two conditions are judged separately — how the key was written (the
   `enc:` / `b64:` prefix in `secrets.json`) and what the system can do right now
   (`safeStorage.isEncryptionAvailable()` and, on Linux, the selected backend).
@@ -80,12 +80,12 @@ prompt you approve without seeing is no better than no prompt. Three rules hold:
 
 - **One switch per engine, always displayed.** `autoApprove` (Settings → AI) governs
   only the built-in Zarya agent; native engines are weakened only by the explicit
-  **АВТОПИЛОТ** chip. Nothing else lowers a gate: `autoApprove` is never translated
+  **AUTOPILOT** chip. Nothing else lowers a gate: `autoApprove` is never translated
   into a driver permission mode, and the Codex sandbox follows the same chip rather
   than staying writable underneath it. The bar's chip is shown in every agent mode
   and reads whichever switch actually governs the active engine, so it cannot state
   a policy the driver isn't running; an engine with no bypass at all
-  (Gemini/Kimi/Qwen always ask) shows it locked on «РУЧНОЙ».
+  (Gemini/Kimi/Qwen always ask) shows it locked on “MANUAL”.
 - **Every gate has a card, and the card says what it is.** A request that arrives
   without a `tool_use` block still gets its own card, labelled from whatever the
   driver actually sent — command, path, or its own description — so a keyboard

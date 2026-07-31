@@ -15,12 +15,12 @@
 /** Сколько имён показываем, прежде чем схлопнуть остаток в «+N». */
 const SHOWN = 2
 
-export function deskTitle(paneNames: string[], custom?: string): string {
+export function deskTitle(paneNames: string[], custom?: string, fallback = 'Терминал'): string {
   const own = custom?.trim()
   if (own) return own
   // Повторы убираем: три панели одного проекта — это «Заря», а не «Заря + Заря».
   const names = [...new Set(paneNames.map((n) => n.trim()).filter(Boolean))]
-  if (!names.length) return 'Терминал'
+  if (!names.length) return fallback
   if (names.length <= SHOWN) return names.join(' + ')
   return `${names.slice(0, SHOWN).join(' + ')} +${names.length - SHOWN}`
 }

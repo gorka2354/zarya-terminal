@@ -1,3 +1,4 @@
+import { tm } from './lang'
 import { isAbsolute } from 'path'
 import type { ShellIntegrationKind, ShellProfile } from '@shared/types'
 
@@ -190,7 +191,7 @@ export function describeProfile(p: ShellProfile): string {
   const argv = p.args.length ? clip(` ${p.args.join(' ')}`, 200) : ''
   const env =
     p.env && Object.keys(p.env).length
-      ? '\nокружение:\n' +
+      ? `\n${tm('main.dlg.env')}\n` +
         Object.entries(p.env)
           .map(([k, v]) => `  ${clip(k, 64)}=${clip(v, 120)}`)
           .join('\n')

@@ -41,7 +41,21 @@ const app = await electron.launch({
 const CYR_SCAN = () => {
   const CYR = /[а-яА-ЯёЁ]/
   // Данные, а не интерфейс: терминал, путь в шапке панели, ответ агента, вывод.
-  const DATA = ['.zy-term', '.zy-mf-out', '.zy-mf-answer', '.zy-mf-cmd', '.zy-pane-header-cwd']
+  // Данные, а не интерфейс: вывод оболочки, ответ агента, пути и заголовки
+  // ПРОШЛЫХ бесед — они приходят из истории пользователя и написаны на том
+  // языке, на котором он работал.
+  const DATA = [
+    '.zy-term',
+    '.zy-mf-out',
+    '.zy-mf-answer',
+    '.zy-mf-cmd',
+    '.zy-mf-msg-user',
+    '.zy-resume',
+    '.zy-pane-header-cwd',
+    // Выбор языка: каждый язык подписан на себе самом — «Русский» в английском
+    // списке не ошибка, а единственный способ найти свой язык, не зная чужого.
+    '[data-lang-select]'
+  ]
   const found = []
   const where = (el) => {
     const parts = []

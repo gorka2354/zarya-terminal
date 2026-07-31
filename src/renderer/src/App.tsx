@@ -137,7 +137,7 @@ export default function App(): React.JSX.Element {
           const dir = st?.isDir ? path : path.replace(/[\\/][^\\/]*$/, '')
           if (dir) {
             void useSessionsStore.getState().newTab(undefined, dir)
-            useUiStore.getState().toast(`Терминал в ${dir}`, 'success')
+            useUiStore.getState().toast(t('sess.openedIn', { dir }), 'success')
           }
         })
       }}

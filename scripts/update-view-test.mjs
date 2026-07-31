@@ -54,7 +54,14 @@ const GOOD = {
 
 const app = await electron.launch({
   args: [join(root, 'out', 'main', 'index.js')],
-  env: { ...process.env, ZARYA_USER_DATA: userData, NODE_ENV: 'production' }
+  // Без похода в сеть: состояние релиза прогон задаёт сам, а живой ответ
+  // GitHub приходил бы поверх и гасил экран, который мы проверяем.
+  env: {
+    ...process.env,
+    ZARYA_USER_DATA: userData,
+    ZARYA_NO_UPDATE_CHECK: '1',
+    NODE_ENV: 'production'
+  }
 })
 
 try {

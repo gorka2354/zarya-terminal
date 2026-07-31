@@ -3,6 +3,7 @@ import type { AiEffort, AiProviderKind, ClaudeModelInfo } from '@shared/types'
 import { AI_MODEL_PRESETS, EFFORT_TUNING } from '@shared/defaults'
 import { useSettingsStore } from '@/state/settingsStore'
 import { useUiStore } from '@/state/uiStore'
+import { t, useLang } from '@/lib/i18n'
 import { useSessionsStore } from '@/state/sessionsStore'
 import { convForSession, useAiStore } from '@/features/ai/aiStore'
 import {
@@ -17,10 +18,10 @@ import './launchpad.css'
 const EFFORTS: AiEffort[] = ['low', 'medium', 'high', 'max']
 
 /** Account chips (БОРТ · АККАУНТ) mapped to providers, as in the design. */
-const ACCOUNTS: Array<{ tag: string; provider: AiProviderKind; full: string }> = [
-  { tag: 'АНТ-1', provider: 'anthropic', full: 'Anthropic' },
-  { tag: 'ГПТ-2', provider: 'openai', full: 'OpenAI' },
-  { tag: 'ЛУНА', provider: 'ollama', full: 'Ollama · локальный' }
+const ACCOUNTS: Array<{ tagKey: string; provider: AiProviderKind; full: string }> = [
+  { tagKey: 'lp.tag.anthropic', provider: 'anthropic', full: 'Anthropic' },
+  { tagKey: 'lp.tag.openai', provider: 'openai', full: 'OpenAI' },
+  { tagKey: 'lp.tag.ollama', provider: 'ollama', full: 'Ollama' }
 ]
 
 /**
@@ -37,30 +38,30 @@ const ACCOUNTS: Array<{ tag: string; provider: AiProviderKind; full: string }> =
  * live catalog (which does carry resolvedModel) supplies the exact version.
  */
 const CLAUDE_MODEL_FALLBACK: ClaudeModelInfo[] = [
-  { value: 'opus[1m]', displayName: 'Opus', description: '1M контекст', supportsEffort: true, supportedEffortLevels: ['low', 'medium', 'high', 'xhigh', 'max'] },
+  { value: 'opus[1m]', displayName: 'Opus', description: '1M context', supportsEffort: true, supportedEffortLevels: ['low', 'medium', 'high', 'xhigh', 'max'] },
   // No floating 'fable' alias is published — its own id already names the
   // version, so this one row is version-qualified by nature (and mirrors the
   // live catalog, where the [1m] value resolves to the plain id).
-  { value: 'claude-fable-5[1m]', resolvedModel: 'claude-fable-5', displayName: 'Fable', description: '1M контекст', supportsEffort: true, supportedEffortLevels: ['low', 'medium', 'high', 'xhigh', 'max'] },
+  { value: 'claude-fable-5[1m]', resolvedModel: 'claude-fable-5', displayName: 'Fable', description: '1M context', supportsEffort: true, supportedEffortLevels: ['low', 'medium', 'high', 'xhigh', 'max'] },
   { value: 'sonnet', displayName: 'Sonnet', description: '', supportsEffort: true, supportedEffortLevels: ['low', 'medium', 'high', 'xhigh', 'max'] },
   { value: 'haiku', displayName: 'Haiku', description: '' }
 ]
 
-/** Russian labels for Claude effort levels (display copy, not fetched). */
-const CLAUDE_EFFORT_LABELS: Record<string, string> = {
-  low: 'МАЛАЯ',
-  medium: 'СРЕДНЯЯ',
-  high: 'ВЫСОКАЯ',
-  xhigh: 'СВЕРХ',
-  max: 'ФОРСАЖ'
+/** Подписи тяги — интерфейс, а не данные движка: переводятся вместе со всем. */
+function effortLabel(id: string): string {
+  return t(`lp.effort.${id}`) || id.toUpperCase()
 }
 
-/** Short Russian purpose line per model family (SDK description is the fallback). */
+/**
+ * Ключ строки-назначения на семейство моделей (описание из SDK — запасной
+ * вариант). Именно КЛЮЧ: карточки собираются один раз, и готовая подпись
+ * застыла бы на языке, который был при сборке списка.
+ */
 const FAMILY_TAGLINE: Record<string, string> = {
-  opus: 'Сложные повседневные задачи',
-  fable: 'Максимум для трудных и долгих задач',
-  sonnet: 'Быстрая, для рутины',
-  haiku: 'Самая быстрая, короткие ответы'
+  opus: 'lp.model.opus',
+  fable: 'lp.model.fable',
+  sonnet: 'lp.model.sonnet',
+  haiku: 'lp.model.haiku'
 }
 
 // Model-identity rules (version-aware matching, row resolution) live in
@@ -81,7 +82,7 @@ function effortOffFor(info: ClaudeModelInfo): boolean {
 
 /** Prettify a model id for the non-Claude (builtin provider) console readout. */
 function prettyModel(id: string): string {
-  if (id === '') return 'ПО УМОЛЧАНИЮ'
+  if (id === '') return t('lp.byDefault')
   return id
     .replace(/^claude-/, '')
     .replace(/-\d{6,}$/, '')
@@ -108,6 +109,10 @@ interface Row {
  * idle strip (only re-expanding for the launch animation).
  */
 export function LaunchPad(): React.JSX.Element | null {
+  // Подписка на язык: без неё надписи этого компонента сменились бы не в
+  // момент переключения, а при следующей перерисовке по другой причине.
+  useLang()
+
   const open = useUiStore((s) => s.launchPadOpen)
   const claudeMode = useUiStore((s) => s.barMode) === 'claude-code'
   const claudeModels = useUiStore((s) => s.claudeModels)
@@ -192,7 +197,7 @@ export function LaunchPad(): React.JSX.Element | null {
           value: info.value,
           title: ver.name,
           ctx: ver.ctx,
-          desc: FAMILY_TAGLINE[fam] ?? info.description ?? '',
+          desc: FAMILY_TAGLINE[fam] ? t(FAMILY_TAGLINE[fam]) : (info.description ?? ''),
           effortOff: effortOffFor(info),
           selected: info.value === selRow,
           active: info.value === actRow
@@ -204,7 +209,7 @@ export function LaunchPad(): React.JSX.Element | null {
           value: model,
           title: parseVersion(model).name,
           ctx: /\[1m\]/i.test(model),
-          desc: 'Пользовательская модель',
+          desc: t('lp.customModel'),
           effortOff: false,
           selected: true,
           active: committed === model
@@ -217,7 +222,7 @@ export function LaunchPad(): React.JSX.Element | null {
     const list = [...preset]
     if (provider === ai.provider && ai.model && !list.includes(ai.model)) list.unshift(ai.model)
     if (model && !list.includes(model)) list.unshift(model)
-    const values = list.length ? list : [model || 'модель не задана']
+    const values = list.length ? list : [model || t('lp.noModel')]
     return values.map((v) => ({
       value: v,
       title: prettyModel(v),
@@ -246,7 +251,7 @@ export function LaunchPad(): React.JSX.Element | null {
   }, [claudeModels, model, claudeStatus.model])
 
   const accFull = claudeMode
-    ? 'Claude Code · подписка Max'
+    ? t('lp.claudePlan')
     : (ACCOUNTS.find((a) => a.provider === provider)?.full ?? provider)
 
   const effectiveEffort = claudeMode && ultracode ? 'xhigh' : effort
@@ -256,12 +261,12 @@ export function LaunchPad(): React.JSX.Element | null {
   const selIdx = Math.max(0, rows.findIndex((r) => r.selected))
   const rocketType = claudeMode ? Math.max(0, selIdx - 1) : selIdx
   const effortValueLabel = ultracode
-    ? 'ФОРСАЖ · ULTRACODE'
-    : (CLAUDE_EFFORT_LABELS[effort] ?? effort.toUpperCase())
+    ? `${t('lp.effort.max')} · ULTRACODE`
+    : effortLabel(effort)
   const launchPreview = claudeMode
     ? claudeEfforts.length === 0 && !ultracode
-      ? (rows[selIdx]?.title ?? 'модель')
-      : `${rows[selIdx]?.title ?? 'модель'} · ${ultracode ? 'ULTRACODE' : effortValueLabel}`
+      ? (rows[selIdx]?.title ?? t('lp.model'))
+      : `${rows[selIdx]?.title ?? t('lp.model')} · ${ultracode ? 'ULTRACODE' : effortValueLabel}`
     : ''
 
   // Publish a view-model snapshot for the QA harness (visual + functional tests).
@@ -344,7 +349,7 @@ export function LaunchPad(): React.JSX.Element | null {
           <div className="zy-lp-idle">
             <IdleRocket type={rocketType} />
             <div className="zy-lp-idle-meta">
-              <span className="zy-lp-idle-title">ПУСКОВОЙ КОМПЛЕКС</span>
+              <span className="zy-lp-idle-title">{t('lp.title')}</span>
               <span ref={clockRef} className="zy-lp-idle-clock" />
             </div>
             {launching && <span className="zy-lp-spark" aria-hidden />}
@@ -353,24 +358,24 @@ export function LaunchPad(): React.JSX.Element | null {
 
         <div className="zy-lp-body">
           <div className="zy-lp-head">
-            <span className="zy-lp-label zy-lp-label--inline">Борт · аккаунт</span>
+            <span className="zy-lp-label zy-lp-label--inline">{t('lp.account')}</span>
             <span className="zy-lp-acc-full">{accFull}</span>
           </div>
           {!claudeMode && (
             <div className="zy-lp-accounts">
               {ACCOUNTS.map((a) => (
                 <button
-                  key={a.tag}
+                  key={a.tagKey}
                   className={`zy-lp-acc${a.provider === provider ? ' zy-lp-acc--on' : ''}`}
                   onClick={() => pickProvider(a.provider)}
                 >
-                  {a.tag}
+                  {t(a.tagKey)}
                 </button>
               ))}
             </div>
           )}
 
-          <div className="zy-lp-label">Двигатель · модель</div>
+          <div className="zy-lp-label">{t('lp.engine')}</div>
           <div className="zy-lp-models">
             {rows.map((r) => (
               <button
@@ -384,8 +389,8 @@ export function LaunchPad(): React.JSX.Element | null {
                   <span className={`zy-lp-bullet${r.selected ? ' zy-lp-bullet--on' : ''}`} />
                   <span className="zy-lp-model-name">{r.title}</span>
                   {r.ctx && <span className="zy-lp-ver">1M</span>}
-                  {r.effortOff && <span className="zy-lp-ver zy-lp-ver--muted">без effort</span>}
-                  {r.active && <span className="zy-lp-tag-active">активна</span>}
+                  {r.effortOff && <span className="zy-lp-ver zy-lp-ver--muted">{t('lp.noEffort')}</span>}
+                  {r.active && <span className="zy-lp-tag-active">{t('lp.active')}</span>}
                 </div>
                 {r.desc && <span className="zy-lp-model-desc">{r.desc}</span>}
               </button>
@@ -395,14 +400,14 @@ export function LaunchPad(): React.JSX.Element | null {
           {claudeMode ? (
             <>
               <div className="zy-lp-eff-head">
-                <span className="zy-lp-label zy-lp-label--inline">Тяга · effort</span>
+                <span className="zy-lp-label zy-lp-label--inline">{t('lp.thrustEffort')}</span>
                 <span className={`zy-lp-eff-val${ultracode || effort === 'max' ? ' zy-lp-eff-val--hot' : ''}`}>
                   {claudeEfforts.length === 0 && !ultracode ? '—' : effortValueLabel}
                 </span>
               </div>
               <div className="zy-lp-cefforts">
                 {claudeEfforts.length === 0 && (
-                  <span className="zy-lp-ceff-none">Модель без настройки effort</span>
+                  <span className="zy-lp-ceff-none">{t('lp.modelNoEffort')}</span>
                 )}
                 {claudeEfforts.map((e) => (
                   <button
@@ -412,25 +417,25 @@ export function LaunchPad(): React.JSX.Element | null {
                     disabled={ultracode}
                     onClick={() => setEffort(e)}
                   >
-                    {CLAUDE_EFFORT_LABELS[e] ?? e.toUpperCase()}
+                    {effortLabel(e)}
                   </button>
                 ))}
               </div>
               {claudeEfforts.length > 1 && (
                 <div className="zy-lp-poles">
-                  <span>быстрее</span>
-                  <span>умнее</span>
+                  <span>{t('lp.faster')}</span>
+                  <span>{t('lp.smarter')}</span>
                 </div>
               )}
               <button
                 className={`zy-lp-switch-row${ultracode ? ' zy-lp-switch-row--on' : ''}`}
                 data-ultra={ultracode ? 'on' : 'off'}
                 onClick={() => setUltra((v) => !v)}
-                title="Ultracode: xhigh + оркестрация воркфлоу (рой субагентов). Требует включённых workflows в плане Claude."
+                title={t('lp.ultracodeHint')}
               >
                 <span className="zy-lp-switch-text">
                   <span className="zy-lp-switch-title">ULTRACODE</span>
-                  <span className="zy-lp-switch-desc">xhigh + оркестрация воркфлоу</span>
+                  <span className="zy-lp-switch-desc">{t('lp.ultracodeDesc')}</span>
                 </span>
                 <span className={`zy-lp-switch${ultracode ? ' zy-lp-switch--on' : ''}`}>
                   <span className="zy-lp-switch-thumb" />
@@ -439,28 +444,28 @@ export function LaunchPad(): React.JSX.Element | null {
             </>
           ) : (
             <div className="zy-lp-thrust">
-              <span className="zy-lp-label zy-lp-label--inline">Тяга</span>
+              <span className="zy-lp-label zy-lp-label--inline">{t('lp.thrust')}</span>
               <div className="zy-lp-bars">
                 {EFFORTS.map((e, i) => (
                   <button
                     key={e}
                     className={`zy-lp-bar${i <= effortIdx ? ' zy-lp-bar--on' : ''}`}
-                    title={EFFORT_TUNING[e].label}
+                    title={t(EFFORT_TUNING[e].labelKey)}
                     onClick={() => setEffort(e)}
                   />
                 ))}
               </div>
               <span className={`zy-lp-thrust-label${effort === 'max' ? ' zy-lp-thrust-label--max' : ''}`}>
-                {EFFORT_TUNING[effort as AiEffort].label}
+                {t(EFFORT_TUNING[effort as AiEffort].labelKey)}
               </span>
             </div>
           )}
 
           {claudeMode && launchPreview && (
-            <div className="zy-lp-preview">Применить: {launchPreview}</div>
+            <div className="zy-lp-preview">{t('lp.apply')}: {launchPreview}</div>
           )}
           <button className="zy-lp-launch" onClick={launch} disabled={launching}>
-            ПУСК · ПОЕХАЛИ
+            {t('lp.launch')}
           </button>
         </div>
       </div>

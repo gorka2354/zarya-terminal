@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { DirEntry } from '@shared/types'
 import { fuzzyFilter } from '@/lib/fuzzy'
@@ -138,13 +139,13 @@ export default function QuickOpen(): React.JSX.Element | null {
         if (e.target === e.currentTarget) useUiStore.getState().set({ quickOpenOpen: false })
       }}
     >
-      <div className="zy-modal" role="dialog" aria-label="Быстрое открытие файла">
+      <div className="zy-modal" role="dialog" aria-label={t('qo.aria')}>
         <div className="zy-palette-input-row">
           <span className="zy-palette-input-icon">⌕</span>
           <input
             ref={inputRef}
             className="zy-palette-input"
-            placeholder={root ? 'Имя файла…' : 'Нет активной сессии'}
+            placeholder={root ? t('qo.placeholder') : t('qo.noSession')}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKeyDown}
@@ -156,12 +157,12 @@ export default function QuickOpen(): React.JSX.Element | null {
               filtered[selectedIndex] ? `zy-quickopen-opt-${selectedIndex}` : undefined
             }
           />
-          {scanning && <span className="zy-palette-scanning">Сканирую…</span>}
+          {scanning && <span className="zy-palette-scanning">{t('qo.scanning')}</span>}
         </div>
         <div className="zy-palette-list" role="listbox" id="zy-quickopen-listbox">
-          {!root && <div className="zy-empty">Нет активной сессии для сканирования</div>}
+          {!root && <div className="zy-empty">{t('qo.noSessionLong')}</div>}
           {root && !scanning && !filtered.length && (
-            <div className="zy-empty">Файлы не найдены</div>
+            <div className="zy-empty">{t('qo.noFiles')}</div>
           )}
           {filtered.map((file, index) => {
             const dir = file.rel.slice(0, file.rel.length - file.name.length).replace(/\/$/, '')
@@ -188,13 +189,13 @@ export default function QuickOpen(): React.JSX.Element | null {
         </div>
         <div className="zy-palette-footer">
           <span className="zy-palette-footer-hint">
-            <span className="zy-kbd">↑↓</span> навигация
+            <span className="zy-kbd">↑↓</span> {t('qo.nav')}
           </span>
           <span className="zy-palette-footer-hint">
-            <span className="zy-kbd">Enter</span> открыть
+            <span className="zy-kbd">Enter</span> {t('qo.open')}
           </span>
           <span className="zy-palette-footer-hint">
-            <span className="zy-kbd">Esc</span> закрыть
+            <span className="zy-kbd">Esc</span> {t('pal.close')}
           </span>
         </div>
       </div>

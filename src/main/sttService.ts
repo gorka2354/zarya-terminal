@@ -1,4 +1,5 @@
 import { createHash } from 'crypto'
+import { tm } from './lang'
 import { createWriteStream, existsSync, mkdirSync, renameSync, rmSync, statSync } from 'fs'
 import { readFile } from 'fs/promises'
 import { get } from 'https'
@@ -36,10 +37,10 @@ export interface SttProgress {
 /** Одна строка списка моделей для настроек. */
 export interface SttModelState {
   id: string
-  label: string
+  labelKey: string
   lang: string
   license: string
-  note: string
+  noteKey: string
   bytes: number
   installed: boolean
   legacy: boolean
@@ -127,10 +128,10 @@ export class SttService {
       activeModelId: active?.id ?? null,
       models: STT_MODELS.filter((m) => !m.legacy || this.installed(m)).map((m) => ({
         id: m.id,
-        label: m.label,
+        labelKey: m.labelKey,
         lang: m.lang,
         license: m.license,
-        note: m.note,
+        noteKey: m.noteKey,
         bytes: sttModelBytes(m),
         installed: this.installed(m),
         legacy: !!m.legacy
@@ -144,13 +145,13 @@ export class SttService {
   /** Убрать скачанную модель с диска — она весит сотни мегабайт. */
   async removeModel(id: string): Promise<{ ok: boolean; error?: string }> {
     const m = findSttModel(id)
-    if (!m) return { ok: false, error: 'неизвестная модель' }
+    if (!m) return { ok: false, error: tm('main.stt.unknownModel') }
     if (this.active()?.id === id) this.recognizer = null
     try {
       rmSync(this.dirOf(m), { recursive: true, force: true })
       return { ok: true }
     } catch (e) {
-      return { ok: false, error: e instanceof Error ? e.message : 'не удалось удалить' }
+      return { ok: false, error: e instanceof Error ? e.message : tm('main.stt.deleteFail') }
     }
   }
 
@@ -161,8 +162,8 @@ export class SttService {
    */
   async ensureModel(onProgress?: (p: SttProgress) => void, id?: string): Promise<void> {
     const m = findSttModel(id ?? this.wantedId())
-    if (!m) throw new Error('неизвестная модель')
-    if (m.legacy) throw new Error('эта модель больше не скачивается')
+    if (!m) throw new Error(tm('main.stt.unknownModel'))
+    if (m.legacy) throw new Error(tm('main.stt.legacy'))
     if (this.installed(m)) return
     // Share one download between concurrent callers. Two of them would otherwise
     // write the same `.part` file at once and produce an interleaved blob that
@@ -181,7 +182,7 @@ export class SttService {
     const dir = this.dirOf(m)
     mkdirSync(dir, { recursive: true })
     for (const f of m.files) {
-      if (!f.url) throw new Error(`${f.name}: у этой модели нет источника`)
+      if (!f.url) throw new Error(tm('main.stt.noSource', { name: f.name }))
       const dest = join(dir, f.name)
       if (existsSync(dest) && statSync(dest).size === f.bytes) continue
       const tmp = `${dest}.part`
@@ -191,10 +192,10 @@ export class SttService {
           onProgress?.(this.downloading)
         })
         const size = statSync(tmp).size
-        if (size !== f.bytes) throw new Error(`${f.name}: получено ${size} байт вместо ${f.bytes}`)
+        if (size !== f.bytes) throw new Error(tm('main.stt.sizeMismatch', { name: f.name, got: size, want: f.bytes }))
         if (f.sha256) {
           const actual = createHash('sha256').update(await readFile(tmp)).digest('hex')
-          if (actual !== f.sha256) throw new Error(`${f.name}: контрольная сумма не сошлась`)
+          if (actual !== f.sha256) throw new Error(tm('main.stt.shaMismatch', { name: f.name }))
         }
         renameSync(tmp, dest)
       } catch (e) {
@@ -221,9 +222,9 @@ export class SttService {
   ): Promise<void> {
     // A redirect loop would otherwise recurse until the stack dies instead of
     // surfacing an error.
-    if (hops > 5) return Promise.reject(new Error('слишком много перенаправлений'))
+    if (hops > 5) return Promise.reject(new Error(tm('main.upd.tooManyHops')))
     if (!url.startsWith('https://'))
-      return Promise.reject(new Error('источник модели должен быть https'))
+      return Promise.reject(new Error(tm('main.stt.httpsOnly')))
     return new Promise((resolve, reject) => {
       const req = get(url, { headers: { 'user-agent': 'Zarya' } }, (res) => {
         // HuggingFace redirects to a CDN — and the Location can be RELATIVE
@@ -248,7 +249,7 @@ export class SttService {
           if (received > expected + 1024) {
             req.destroy()
             out.destroy()
-            reject(new Error('ответ длиннее ожидаемого'))
+            reject(new Error(tm('main.stt.tooLong')))
             return
           }
           onChunk(received)
@@ -261,7 +262,7 @@ export class SttService {
       req.on('error', reject)
       req.setTimeout(120_000, () => {
         req.destroy()
-        reject(new Error('таймаут загрузки'))
+        reject(new Error(tm('main.stt.timeout')))
       })
     })
   }
@@ -272,7 +273,7 @@ export class SttService {
     if (this.loading) return this.loading
     this.loading = (async () => {
       const m = this.active()
-      if (!m) throw new Error('Модель распознавания не установлена')
+      if (!m) throw new Error(tm('main.stt.notInstalled'))
       // Required lazily: loading the addon costs memory, and most sessions
       // never dictate anything.
       const sherpa = require('sherpa-onnx-node')
@@ -325,7 +326,7 @@ export class SttService {
    */
   async transcribe(samples: Float32Array, sampleRate: number): Promise<string> {
     await this.ensureEngine()
-    if (!this.recognizer) throw new Error('Распознаватель не готов')
+    if (!this.recognizer) throw new Error(tm('main.stt.notReady'))
     let pcm = samples
     if (sampleRate !== 16000) {
       const sherpa = require('sherpa-onnx-node')

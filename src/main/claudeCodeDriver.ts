@@ -1,3 +1,4 @@
+import { tm } from './lang'
 import { app, type BrowserWindow } from 'electron'
 import { existsSync, readFileSync } from 'fs'
 import { homedir } from 'os'
@@ -382,7 +383,7 @@ export class ClaudeCodeDriver implements AgentDriver {
     rewind: true,
     // Родной формат SDK: изображение уходит блоком в том же сообщении.
     images: true,
-    vendorFlags: [{ key: 'ultracode', label: 'ULTRACODE', desc: 'xhigh + оркестрация воркфлоу' }]
+    vendorFlags: [{ key: 'ultracode', label: 'ULTRACODE', desc: tm('drv.ultracode') }]
   }
   private sessions = new Map<string, Session>()
   private getWindow: () => BrowserWindow | null
@@ -506,7 +507,7 @@ export class ClaudeCodeDriver implements AgentDriver {
         this.sessions.delete(requestId)
         this.emit(requestId, {
           type: 'error',
-          message: 'Сессия завершилась — сообщение не отправлено, повторите'
+          message: tm('drv.sessionEnded')
         })
       }
       return
@@ -518,7 +519,7 @@ export class ClaudeCodeDriver implements AgentDriver {
     } catch (e) {
       this.emit(requestId, {
         type: 'error',
-        message: `Не удалось загрузить Claude Agent SDK: ${e instanceof Error ? e.message : String(e)}`
+        message: tm('drv.sdkFail', { err: e instanceof Error ? e.message : String(e) })
       })
       return
     }
@@ -555,7 +556,7 @@ export class ClaudeCodeDriver implements AgentDriver {
           questions: isQuestion ? extractQuestions(toolInput) : undefined
         })
         ctx.signal.addEventListener('abort', () => {
-          if (perms.delete(ctx.toolUseID)) resolve({ behavior: 'deny', message: 'Прервано' })
+          if (perms.delete(ctx.toolUseID)) resolve({ behavior: 'deny', message: tm('drv.aborted') })
         })
       })
 
@@ -610,7 +611,7 @@ export class ClaudeCodeDriver implements AgentDriver {
     } catch (e) {
       this.emit(requestId, {
         type: 'error',
-        message: `Claude Code не запустился: ${e instanceof Error ? e.message : String(e)}`
+        message: tm('drv.ccFail', { err: e instanceof Error ? e.message : String(e) })
       })
       return
     }
@@ -1219,7 +1220,7 @@ export class ClaudeCodeDriver implements AgentDriver {
       const list = await sdk.listSessions(cwd ? { dir: cwd, limit: 40 } : { limit: 40 })
       return list.map((s) => ({
         sessionId: s.sessionId,
-        summary: s.customTitle || s.summary || s.firstPrompt || 'Сессия',
+        summary: s.customTitle || s.summary || s.firstPrompt || tm('drv.session'),
         lastModified: s.lastModified,
         firstPrompt: s.firstPrompt,
         gitBranch: s.gitBranch

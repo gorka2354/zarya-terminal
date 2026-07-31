@@ -83,7 +83,7 @@ export function labelsHidden(devices: MicDevice[]): boolean {
 /** Читаемое имя строки списка: без доступа имени нет — нумеруем. */
 export function micName(d: MicDevice, index: number): string {
   const label = d.label.trim()
-  return label || `Микрофон ${index + 1}`
+  return label || t('voice.micN', { n: index + 1 })
 }
 
 /**
@@ -114,7 +114,7 @@ export function resolveMic(devices: MicDevice[], saved: SavedMic): MicPick {
   // быть на месте. Пробуем сохранённый id как есть, пусть решает getUserMedia.
   if (labelsHidden(devices)) return { kind: 'exact', deviceId: wantedId, label: wantedLabel }
 
-  return { kind: 'missing', label: wantedLabel || 'выбранный микрофон' }
+  return { kind: 'missing', label: wantedLabel || t('voice.chosenMic') }
 }
 
 /** Id для getUserMedia: у «системного» и «пропавшего» его нет. */
@@ -148,4 +148,5 @@ export function onDeviceChange(cb: () => void): () => void {
   if (!md?.addEventListener) return () => {}
   md.addEventListener('devicechange', cb)
   return () => md.removeEventListener('devicechange', cb)
-}
+}import { t } from '@/lib/i18n'
+

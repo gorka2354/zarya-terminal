@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n'
 import { useEffect, useRef, useState } from 'react'
 import type * as Monaco from 'monaco-editor'
 import { Icon } from '@/components/Icon'
@@ -284,10 +285,10 @@ export default function EditorPane(): React.JSX.Element {
             </span>
             <span className="zy-editor-tab-title">{f.name}</span>
             {f.kind === 'diff' && <span className="zy-editor-tab-badge">diff</span>}
-            {f.dirty && <span className="zy-editor-tab-dot" title="Есть несохранённые изменения" />}
+            {f.dirty && <span className="zy-editor-tab-dot" title={t('ed.dirty')} />}
             <button
               className="zy-tab-close"
-              title="Закрыть"
+              title={t('ed.close')}
               onClick={(e) => {
                 e.stopPropagation()
                 closeFile(f.id)
@@ -299,9 +300,9 @@ export default function EditorPane(): React.JSX.Element {
         ))}
       </div>
       <div className="zy-editor-body">
-        {!monacoApi && <div className="zy-editor-loading">Загрузка редактора…</div>}
+        {!monacoApi && <div className="zy-editor-loading">{t('ed.loading')}</div>}
         {monacoApi && activeFile?.kind === 'file' && activeFile.loading && (
-          <div className="zy-editor-loading">Открываю «{activeFile.name}»…</div>
+          <div className="zy-editor-loading">{t('ed.opening', { name: activeFile.name })}</div>
         )}
         <div ref={editorHostRef} className={`zy-editor-host${showDiff ? ' zy-editor-host--hidden' : ''}`} />
         <div ref={diffHostRef} className={`zy-editor-host${showDiff ? '' : ' zy-editor-host--hidden'}`} />

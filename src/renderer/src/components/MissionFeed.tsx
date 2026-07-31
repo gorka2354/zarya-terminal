@@ -1,6 +1,7 @@
 import { createContext, memo, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { AiContentPart, BlockRecord } from '@shared/types'
 import { onBus } from '@/lib/bus'
+import { t, useLang } from '@/lib/i18n'
 import { formatDuration, formatRelative, shortenPath } from '@/lib/ansi'
 import { useBlocksStore } from '@/state/blocksStore'
 import { useSessionsStore } from '@/state/sessionsStore'
@@ -58,6 +59,10 @@ export const MissionFeed = memo(function MissionFeed({
 }: {
   sessionId: string
 }): React.JSX.Element {
+  // Подписка на язык: без неё надписи этого компонента сменились бы не в
+  // момент переключения, а при следующей перерисовке по другой причине.
+  useLang()
+
   const blocks = useBlocksStore((s) => s.bySession[sessionId] ?? NO_BLOCKS)
   const cwd = useSessionsStore((s) => s.sessions[sessionId]?.cwd ?? '')
   // Each terminal shows its OWN agent conversation (bound by sessionId).
@@ -77,7 +82,7 @@ export const MissionFeed = memo(function MissionFeed({
         openMenu(
           r.left,
           r.bottom + 4,
-          [{ label: 'Нет прошлых сессий Claude в этой папке', disabled: true }],
+          [{ label: t('feed.noPastSessions'), disabled: true }],
           btn
         )
         return
@@ -87,13 +92,13 @@ export const MissionFeed = memo(function MissionFeed({
         // Обрезать заголовок здесь больше не нужно — пункт меню сам укладывается
         // в одну строку с многоточием. Резать по 46 символам значило бы решать
         // за вёрстку, сколько влезет, и терять хвост даже в широком окне.
-        label: s.summary || s.firstPrompt || 'Сессия',
+        label: s.summary || s.firstPrompt || t('feed.session'),
         hint: formatRelative(s.lastModified),
         onClick: () => {
           void window.zarya.claudeCode.sessionMessages(s.sessionId, folder).then((messages) => {
             useAiStore.getState().resumeClaudeSession({
               claudeSessionId: s.sessionId,
-              title: s.summary || 'Claude сессия',
+              title: s.summary || t('feed.claudeSession'),
               messages,
               cwd: folder,
               sessionId
@@ -109,7 +114,7 @@ export const MissionFeed = memo(function MissionFeed({
       if (list.length > SHOWN) {
         items.push({ separator: true })
         items.push({
-          label: `…и ещё ${list.length - SHOWN} сессий — показаны самые свежие`,
+          label: t('feed.moreSessions', { n: list.length - SHOWN }),
           disabled: true
         })
       }
@@ -123,7 +128,7 @@ export const MissionFeed = memo(function MissionFeed({
     const r = btn.getBoundingClientRect()
     void window.zarya.aiClis.detect().then((clis) => {
       const items = clis.map((c) => ({
-        label: c.detected ? c.name : `${c.name} · не установлен`,
+        label: c.detected ? c.name : t('feed.notInstalled', { name: c.name }),
         hint: c.detected ? c.cmd : undefined,
         disabled: !c.detected,
         onClick: () => launchAiCli(c)
@@ -241,7 +246,7 @@ export const MissionFeed = memo(function MissionFeed({
     const action = btn.dataset.codeAction
     if (action === 'copy') {
       void navigator.clipboard.writeText(code)
-      useUiStore.getState().toast('Скопировано', 'success')
+      useUiStore.getState().toast(t('common.copied'), 'success')
       return
     }
     if (action === 'insert') {
@@ -260,7 +265,7 @@ export const MissionFeed = memo(function MissionFeed({
       <div className="zy-mf-head">
         <span className="zy-mf-head-mark">
           <Icon name="star" size={12} />
-          CLI-АГЕНТ · ЗАРЯ
+          {t('feed.mark')}
         </span>
         {cwd && (
           <span className="zy-mf-head-cwd" title={cwd}>
@@ -270,14 +275,14 @@ export const MissionFeed = memo(function MissionFeed({
         <div className="zy-mf-head-spacer" />
         <button
           className="zy-mf-head-btn"
-          title="Сессии Claude в этой папке — возобновить прошлую"
+          title={t('feed.resumeHint')}
           onClick={openSessionsMenu}
         >
           <Icon name="history" size={13} />
         </button>
         <button
           className="zy-mf-head-btn"
-          title="Запустить ИИ-агента в терминале (Claude Code, Codex, Gemini…)"
+          title={t('feed.launchHint')}
           onClick={openCliMenu}
         >
           <Icon name="bolt" size={13} />
@@ -309,8 +314,8 @@ export const MissionFeed = memo(function MissionFeed({
             {conv?.queued && (
               <div className="zy-mf-queued">
                 <Icon name="chevron-up" size={11} />
-                <span className="zy-mf-queued-text">в очереди: {conv.queued}</span>
-                <span className="zy-mf-queued-hint">↑ или Esc — вернуть в строку</span>
+                <span className="zy-mf-queued-text">{t('feed.queued', { text: conv.queued })}</span>
+                <span className="zy-mf-queued-hint">{t('feed.queuedHint')}</span>
               </div>
             )}
             {/* The prompt line means «your turn». It must not sit under a
@@ -326,7 +331,7 @@ export const MissionFeed = memo(function MissionFeed({
                 <span className="zy-mf-chev">
                   <PixelIcon name="chevron-right" />
                 </span>
-                <span className="zy-mf-ready-text">готов · введите запрос в строку ниже ↓</span>
+                <span className="zy-mf-ready-text">{t('feed.ready')}</span>
               </div>
             )}
           </>
@@ -348,6 +353,10 @@ const ShellBlock = memo(function ShellBlock({
   branch: string
   liveTail?: string
 }): React.JSX.Element {
+  // Подписка на язык: без неё надписи этого компонента сменились бы не в
+  // момент переключения, а при следующей перерисовке по другой причине.
+  useLang()
+
   const running = block.exitCode === undefined && block.endedAt === undefined
   const failed = block.exitCode !== undefined && block.exitCode !== 0
   const dur = block.endedAt ? block.endedAt - block.startedAt : 0
@@ -391,14 +400,14 @@ const ShellBlock = memo(function ShellBlock({
 function toolVerb(name: string): { want: string; run: string } {
   const n = name.toLowerCase()
   if (n === 'read' || n === 'grep' || n === 'glob' || n === 'ls')
-    return { want: 'агент хочет прочитать', run: 'читает…' }
+    return { want: t('feed.wantsToRead'), run: t('feed.running.read') }
   if (n === 'edit' || n === 'write' || n === 'multiedit' || n === 'notebookedit')
-    return { want: 'агент хочет изменить файл', run: 'применяет правку…' }
+    return { want: t('feed.wantsToEdit'), run: t('feed.running.edit') }
   if (n === 'webfetch' || n === 'websearch')
-    return { want: 'агент хочет в сеть', run: 'запрос в сеть…' }
+    return { want: t('feed.wantsToFetch'), run: t('feed.running.fetch') }
   if (n === 'task' || n === 'agent')
-    return { want: 'агент хочет запустить субагента', run: 'субагент работает…' }
-  return { want: 'агент хочет выполнить', run: 'выполняется…' }
+    return { want: t('feed.wantsSubagent'), run: t('feed.running.subagent') }
+  return { want: t('feed.wantsToRun'), run: t('feed.running.run') }
 }
 
 const ERR_RE = /error|ошибк|failed|exception|not found|cannot|no such|traceback/i
@@ -450,7 +459,12 @@ function buildResultIndex(conv: Conversation): FeedConv['results'] {
 }
 
 
-function AgentSection({ conv, cwd }: { conv: Conversation; cwd: string }): React.JSX.Element {
+function AgentSection({
+ conv, cwd }: { conv: Conversation; cwd: string }): React.JSX.Element {
+  // Подписка на язык: без неё надписи этого компонента сменились бы не в
+  // момент переключения, а при следующей перерисовке по другой причине.
+  useLang()
+
   // Индекс результатов пересчитывается при изменении сообщений — один проход на
   // перерисовку вместо перебора всей беседы в каждой карточке.
   const feed = useMemo<FeedConv>(
@@ -468,7 +482,7 @@ function AgentSection({ conv, cwd }: { conv: Conversation; cwd: string }): React
         <span className="zy-mf-divider-line" />
         <span className="zy-mf-divider-label">
           <Icon name="bolt" size={11} />
-          ОТВЕТ АГЕНТА
+          {t('feed.agentAnswer')}
         </span>
         <span className="zy-mf-divider-line" />
       </div>
@@ -503,7 +517,7 @@ function AgentSection({ conv, cwd }: { conv: Conversation; cwd: string }): React
       {conv.streaming && conv.messages[conv.messages.length - 1]?.role === 'user' && (
         <div className="zy-mf-typing">
           <span className="zy-mf-spinner" />
-          агент отвечает…
+          {t('feed.typing')}
         </div>
       )}
       {conv.error && <div className="zy-mf-errbanner">✗ {conv.error}</div>}
@@ -519,7 +533,12 @@ function AgentSection({ conv, cwd }: { conv: Conversation; cwd: string }): React
  * showed N indistinguishable «субагент работает…» spinners and no way to tell
  * how many there were, how long they had run, or what they cost.
  */
-function SubagentWave({ conv }: { conv: Conversation }): React.JSX.Element | null {
+function SubagentWave({
+ conv }: { conv: Conversation }): React.JSX.Element | null {
+  // Подписка на язык: без неё надписи этого компонента сменились бы не в
+  // момент переключения, а при следующей перерисовке по другой причине.
+  useLang()
+
   const runs = conv.subagents
   // Re-render on a timer so the elapsed time ticks between SDK updates.
   const [, tick] = useState(0)
@@ -538,15 +557,15 @@ function SubagentWave({ conv }: { conv: Conversation }): React.JSX.Element | nul
       <div className="zy-mf-wave-head">
         {allDone ? <Icon name="check" size={12} /> : <span className="zy-mf-spinner" aria-hidden />}
         <span className="zy-mf-wave-count">
-          {w.done}/{w.total} {w.total === 1 ? 'агент' : 'агентов'}
+          {w.done}/{w.total} {t(w.total === 1 ? 'feed.agentOne' : 'feed.agentMany')}
         </span>
         <span className="zy-mf-wave-sep">·</span>
         <span className="zy-mf-wave-time">{fmtElapsed(w.elapsedMs)}</span>
         {w.tokens > 0 && (
           <>
             <span className="zy-mf-wave-sep">·</span>
-            <span className="zy-mf-wave-tokens" title="Токены, посчитанные самим Claude Code">
-              ↓{fmtWaveTokens(w.tokens)} токенов
+            <span className="zy-mf-wave-tokens" title={t('feed.tokensHint')}>
+              ↓{fmtWaveTokens(w.tokens)} {t('feed.tokens')}
             </span>
           </>
         )}
@@ -554,12 +573,12 @@ function SubagentWave({ conv }: { conv: Conversation }): React.JSX.Element | nul
       {w.running.slice(0, 4).map((r) => (
         <div key={r.taskId} className="zy-mf-wave-row">
           <span className="zy-mf-wave-dot" />
-          <span className="zy-mf-wave-what">{r.description ?? r.subagentType ?? 'субагент'}</span>
+          <span className="zy-mf-wave-what">{r.description ?? r.subagentType ?? t('feed.subagent')}</span>
           {r.lastTool && <span className="zy-mf-wave-tool">{r.lastTool}</span>}
         </div>
       ))}
       {w.running.length > 4 && (
-        <div className="zy-mf-wave-row zy-mf-wave-row--more">…и ещё {w.running.length - 4}</div>
+        <div className="zy-mf-wave-row zy-mf-wave-row--more">{t('feed.andMore', { n: w.running.length - 4 })}</div>
       )}
     </div>
   )
@@ -581,6 +600,10 @@ const AgentMessage = memo(function AgentMessage({
   /** This user turn was cut off with Esc — no answer is coming for it. */
   interrupted?: boolean
 }): React.JSX.Element | null {
+  // Подписка на язык: без неё надписи этого компонента сменились бы не в
+  // момент переключения, а при следующей перерисовке по другой причине.
+  useLang()
+
   if (msg.role === 'user') {
     const text = msg.content
       .filter((p): p is Extract<AiContentPart, { type: 'text' }> => p.type === 'text')
@@ -606,9 +629,9 @@ const AgentMessage = memo(function AgentMessage({
         {interrupted && (
           <span
             className="zy-mf-user-cut"
-            title="Ход прерван по Esc. Ответа не будет, но агент увидит это сообщение при продолжении беседы"
+            title={t('feed.interruptedHint')}
           >
-            прервано
+            {t('feed.interrupted')}
           </span>
         )}
         {msg.ts != null && <span className="zy-mf-user-time">{fmtClock(msg.ts)}</span>}
@@ -618,7 +641,7 @@ const AgentMessage = memo(function AgentMessage({
               <figure key={i} className="zy-mf-img">
                 <img
                   src={`data:${img.mediaType};base64,${img.data}`}
-                  alt={img.name ?? `Изображение ${i + 1}`}
+                  alt={img.name ?? t('feed.image', { n: i + 1 })}
                   loading="lazy"
                 />
                 <figcaption>
@@ -700,6 +723,10 @@ const ToolCard = memo(function ToolCard({
   /** This is the gate the Enter shortcut would approve (the first unsettled one). */
   isNextGate?: boolean
 }): React.JSX.Element | null {
+  // Подписка на язык: без неё надписи этого компонента сменились бы не в
+  // момент переключения, а при следующей перерисовке по другой причине.
+  useLang()
+
   // Беседа — из контекста: пропсом она пересоздавалась бы каждый кусок потока и
   // отменяла бы memo у всех сообщений разом (см. FeedConvContext).
   const feed = useContext(FeedConvContext)
@@ -729,16 +756,16 @@ const ToolCard = memo(function ToolCard({
   if (result) {
     const first = (result.content || '').split('\n')[0]
     body = result.isError ? (
-      <div className="zy-mf-tool-denied">✗ {first || 'отклонено оператором'}</div>
+      <div className="zy-mf-tool-denied">✗ {first || t('feed.denied')}</div>
     ) : (
-      <div className="zy-mf-tool-done">✓ {first || 'exit 0'} — готово</div>
+      <div className="zy-mf-tool-done">✓ {first || 'exit 0'} — {t('feed.done')}</div>
     )
   } else if (pending && !pending.settled && pending.kind === 'question') {
     // AskUserQuestion — the bottom bar morphs into the selector; just point down.
     body = (
       <div className="zy-mf-tool-exec">
         <Icon name="chevron-down" size={12} />
-        агент задал вопрос — выберите вариант в строке ниже
+        {t('feed.questionHint')}
       </div>
     )
   } else if (pending && !pending.settled) {
@@ -754,15 +781,15 @@ const ToolCard = memo(function ToolCard({
           className={`zy-mf-btn-run${always ? ' zy-mf-btn-run--always' : ''}`}
           title={
             always
-              ? 'У этого агента нет разового разрешения: согласие действует до конца сессии — он больше не будет спрашивать про это действие'
+              ? t('feed.alwaysOnlyHint')
               : undefined
           }
           onClick={() => void store.approveTool(conv.id, id)}
         >
-          {always ? 'РАЗРЕШИТЬ ВСЕГДА' : 'ВЫПОЛНИТЬ'}
+          {t(always ? 'feed.approveAlways' : 'feed.approve')}
         </button>
         <button className="zy-mf-btn-deny" onClick={() => store.denyTool(conv.id, id)}>
-          ОТКЛОНИТЬ
+          {t('feed.deny')}
         </button>
         {/* Enter/Esc act on the FIRST unsettled gate, so only that card may claim
             them — otherwise a second waiting card invites a keystroke that lands
@@ -796,13 +823,13 @@ const ToolCard = memo(function ToolCard({
           <code className="zy-mf-tool-cmd">{open ? view.firstLine : view.label}</code>
         )}
         {canFold && (
-          <span className="zy-mf-tool-expand" title={expanded ? 'Свернуть' : 'Развернуть команду'}>
+          <span className="zy-mf-tool-expand" title={t(expanded ? 'feed.collapse' : 'feed.expand')}>
             <Icon name={expanded ? 'chevron-up' : 'chevron-down'} size={11} />
           </span>
         )}
         {view.mustShowFull && view.lines > 1 && (
-          <span className="zy-mf-tool-lines" title="Команда показана целиком, без сворачивания">
-            {view.lines} стр.
+          <span className="zy-mf-tool-lines" title={t('feed.fullCmd')}>
+            {t('feed.lines', { n: view.lines })}
           </span>
         )}
         {!view.mustShowFull && <span className="zy-mf-tool-note">{verb.want}</span>}
@@ -819,7 +846,12 @@ const ToolCard = memo(function ToolCard({
 
 // -------------------------------------------------------------------- empty
 
-function EmptyHero({ sessionId }: { sessionId: string }): React.JSX.Element {
+function EmptyHero({
+ sessionId }: { sessionId: string }): React.JSX.Element {
+  // Подписка на язык: без неё надписи этого компонента сменились бы не в
+  // момент переключения, а при следующей перерисовке по другой причине.
+  useLang()
+
   return (
     <div className="zy-mf-empty">
       <div className="zy-mf-empty-mark">
@@ -831,8 +863,8 @@ function EmptyHero({ sessionId }: { sessionId: string }): React.JSX.Element {
           alt=""
         />
       </div>
-      <div className="zy-mf-empty-title">Борт готов к старту</div>
-      <div className="zy-mf-empty-hint">введите команду или запрос агенту в строку ниже ↓</div>
+      <div className="zy-mf-empty-title">{t('feed.heroTitle')}</div>
+      <div className="zy-mf-empty-hint">{t('feed.heroSub')}</div>
       <AiCliLauncher />
       <ClaudeResumeList sessionId={sessionId} />
     </div>
@@ -866,7 +898,7 @@ function ClaudeResumeList({ sessionId }: { sessionId: string }): React.JSX.Eleme
     void window.zarya.claudeCode.sessionMessages(s.sessionId, cwd).then((messages) => {
       useAiStore.getState().resumeClaudeSession({
         claudeSessionId: s.sessionId,
-        title: s.summary || 'Claude сессия',
+        title: s.summary || t('feed.claudeSession'),
         messages,
         cwd,
         sessionId
@@ -878,12 +910,12 @@ function ClaudeResumeList({ sessionId }: { sessionId: string }): React.JSX.Eleme
 
   return (
     <div className="zy-resume">
-      <div className="zy-resume-label">недавние сессии Claude в этой папке</div>
+      <div className="zy-resume-label">{t('feed.recentClaudeLower')}</div>
       <div className="zy-resume-list">
         {sessions.map((s) => (
           <button key={s.sessionId} className="zy-resume-item" onClick={() => resume(s)}>
             <Icon name="history" size={13} />
-            <span className="zy-resume-summary">{(s.summary || 'Сессия').slice(0, 52)}</span>
+            <span className="zy-resume-summary">{(s.summary || t('feed.session')).slice(0, 52)}</span>
             <span className="zy-resume-time">{formatRelative(s.lastModified)}</span>
           </button>
         ))}
@@ -907,7 +939,7 @@ function ClaudeResumeList({ sessionId }: { sessionId: string }): React.JSX.Eleme
       startedAt: t - 6000,
       endedAt: t - 5960,
       exitCode: 0,
-      output: 'On branch main\nизменено 3 файла: src/store.ts, App.tsx, package.json',
+      output: 'On branch main\n3 files changed: src/store.ts, App.tsx, package.json',
       outputTruncated: false
     },
     {
@@ -919,12 +951,12 @@ function ClaudeResumeList({ sessionId }: { sessionId: string }): React.JSX.Eleme
       endedAt: t - 3966,
       exitCode: 1,
       output:
-        "src/store.ts(42,7): error TS2531: Object is possibly 'null'.\nsrc/store.ts(58,3): error TS2532: Object is possibly 'undefined'.\n2 ошибки типов · сборка прервана",
+        "src/store.ts(42,7): error TS2531: Object is possibly 'null'.\nsrc/store.ts(58,3): error TS2532: Object is possibly 'undefined'.\n2 type errors · build failed",
       outputTruncated: false
     }
   ])
   const store = useAiStore.getState()
-  const convId = store.newConversation({ sessionId: sid, title: 'Демо-миссия' })
+  const convId = store.newConversation({ sessionId: sid, title: 'Demo mission' })
   useAiStore.setState((s) => ({
     conversations: s.conversations.map((c) =>
       c.id === convId
@@ -933,14 +965,14 @@ function ClaudeResumeList({ sessionId }: { sessionId: string }): React.JSX.Eleme
             messages: [
               {
                 role: 'user',
-                content: [{ type: 'text', text: 'собери проект и почини ошибки типов' }]
+                content: [{ type: 'text', text: 'build the project and fix the type errors' }]
               },
               {
                 role: 'assistant',
                 content: [
                   {
                     type: 'text',
-                    text: 'Запускаю сборку… нашёл **2 ошибки типов** в `src/store.ts` — значение может быть `null`. Готовлю патч.\n\n```diff\n--- a/src/store.ts\n+++ b/src/store.ts\n- const u = store.get(id).user\n+ const u = store.get(id)?.user ?? null\n```'
+                    text: 'Running the build… found **2 type errors** in `src/store.ts` — the value can be `null`. Preparing a patch.\n\n```diff\n--- a/src/store.ts\n+++ b/src/store.ts\n- const u = store.get(id).user\n+ const u = store.get(id)?.user ?? null\n```'
                   },
                   {
                     type: 'tool_use',

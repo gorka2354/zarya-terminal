@@ -3,559 +3,593 @@
 All notable changes to Zarya are documented here. This project uses
 [Semantic Versioning](https://semver.org/).
 
-## 0.6.5 — «Площадка» (2026-07-31)
+Русская версия этого файла — [CHANGELOG.ru.md](CHANGELOG.ru.md).
+
+## 0.7.0 — "Lexicon" (2026-07-31)
+
+### Added
+
+- **Zarya speaks English.** The whole interface exists in two languages now —
+  English and Russian — and switching between them is instant: both dictionaries
+  ship inside the app, so there is no second installer, no restart and no
+  re-login. On first launch Zarya follows your system language; Settings →
+  Appearance → Language pins it either way.
+
+  Translated, not stripped: the Soviet space-age framing survives the crossing.
+  Mission Control, the launch pad, thrust levels (LOW → AFTERBURNER), the ORBIT-1
+  tagline and the ship themes (Kosmos, Vostok, Baikonur, Blueprint) all read as
+  themselves in English rather than as a literal gloss.
+
+  The agent follows the interface: with English selected, the built-in assistant
+  is told to answer in English. So do the main-process texts — the terminal
+  profile dialog, update errors, driver hints — because a native dialog in the
+  wrong language is exactly where a person stops reading.
+
+  A pane that was never renamed no longer carries a hard-coded Russian name: the
+  default title is drawn from the language, and old saved sessions are migrated
+  in place.
+
+### Tested
+
+- `node scripts/i18n-test.mjs` — walks the header, sidebar, feed, input line,
+  pane menu, project menu, Mission Control and the launch pad in English and
+  fails on any Cyrillic left in the interface (terminal output, agent answers and
+  paths excluded — those are your data, not our labels). It also checks that both
+  dictionaries are complete and that Russian is untouched: 10 checks.
+
+### Fixed
+
+- **The update page test no longer depends on the network.** It set a release
+  state by hand while the real GitHub check arrived on top of it and blanked the
+  screen under test. Runs now start with `ZARYA_NO_UPDATE_CHECK`.
+
+## 0.6.5 — "Pad" (2026-07-31)
 
 ### Changed
 
-- **Проекты в шапке стали понятными.** Каждый проект занимал ДВЕ строки: сам
-  проект и приписку «панелью рядом» — подменю меню не умело, и приписка
-  выглядела отдельным непонятным пунктом (а её отступ со стрелкой схлопывался в
-  мусор вида «Ⴑ,»). Два проекта давали четыре строки, и что к чему относится,
-  прочитать было нельзя.
+- **Projects in the header make sense now.** Every project took TWO rows — the
+  project itself plus an "as a pane" line, because the menu has no submenus, so
+  the extra line read as a separate, meaningless entry (and its arrow indent
+  collapsed into junk like "Ⴑ,"). Two projects meant four rows, and which
+  belonged to what was unreadable.
 
-  Теперь одна строка на проект: клик открывает вкладкой, кнопка рядом —
-  панелью, крестик убирает из списка, а перетащить проект на нужную панель
-  можно как и раньше. У проектов, которые уже открыты, стоит точка — список
-  папок теперь говорит и о том, что происходит сейчас.
+  One row per project now: click opens it in a tab, the button next to it opens
+  it as a pane, the cross removes it from the list, and dragging a project onto
+  the pane you want still works. Projects that are already open carry a dot — the
+  folder list now also says what is happening right now.
 
-## 0.6.4 — «Ползунок» (2026-07-31)
-
-### Fixed
-
-- **Разделитель панелей тянется без рывков.** Живое изменение пропорций стоило
-  25.8 мс на движение мыши — полтора кадра, отсюда и рывки. Каждое движение
-  уходило в оболочку (`pty.resize` — это ConPTY в главном процессе, четыре раза
-  на кадр), обновляло раскладку чаще, чем экран успевает рисовать, и заставляло
-  ленту перекладывать себя целиком.
-
-  Теперь оболочке сообщается один размер — тот, на котором отпустили; раскладка
-  двигается раз в кадр; лента не считает раскладку у того, чего не видно.
-  Движение разделителя: 25.8 → 7.6 мс.
-
-## 0.6.3 — «Ход» (2026-07-31)
+## 0.6.4 — "Slider" (2026-07-31)
 
 ### Fixed
 
-- **Работа в трёх-четырёх панелях перестала тормозить.** Два узких места, оба
-  видны в числах (`npm run perf` — прогон собирает рабочий день: четыре панели,
-  по полсотни блоков и по 25 ходов беседы).
+- **The pane divider drags without stutter.** Resizing live cost 25.8 ms per
+  mouse move — a frame and a half, which is exactly what the stutter was. Every
+  move went down to the shell (`pty.resize` is ConPTY in the main process, four
+  times a frame), updated the layout more often than the screen can paint, and
+  made the feed re-lay itself in full.
 
-  Первое: разметка ответов разбиралась заново на КАЖДУЮ перерисовку — а зовут
-  перерисовку и движение мыши при перетаскивании, и каждый кусок ответа агента.
-  Теперь дописанное сообщение разбирается один раз.
+  The shell is now told one size — the one you released on; the layout moves once
+  per frame; the feed does not compute geometry for what is not visible. Divider
+  drag: 25.8 → 7.6 ms.
 
-  Второе: ни один компонент ленты не пропускал чужие перерисовки, а сама беседа
-  ехала вниз пропсом — на каждый кусок потока лента пересобиралась целиком, со
-  всеми блоками, строками вывода и карточками. Заодно каждая карточка искала
-  свой результат перебором всей беседы: чем длиннее разговор, тем медленнее.
+## 0.6.3 — "Turn" (2026-07-31)
 
-  Движение мыши при перетаскивании: 19.6 → 6.9 мс. Кусок ответа агента:
-  19.9 → 7.3 мс. Буква в строке ввода: 9.1 → 6.7 мс.
+### Fixed
 
-## 0.6.2 — «Ребро» (2026-07-31)
+- **Working in three or four panes stopped lagging.** Two bottlenecks, both
+  visible in numbers (`npm run perf` seeds a working day: four panes, fifty
+  blocks each, 25-turn conversations).
+
+  First: answer markup was re-parsed on EVERY render — and a render is called by
+  a mouse move during a drag and by every chunk of the agent's answer. A finished
+  message is now parsed once.
+
+  Second: no feed component skipped other people's renders, and the conversation
+  itself came down as a prop — so every stream chunk rebuilt the entire feed, with
+  all its blocks, output lines and tool cards. Each card also looked up its result
+  by scanning the whole conversation: the longer the talk, the slower it got.
+
+  Mouse move while dragging: 19.6 → 6.9 ms. Agent answer chunk: 19.9 → 7.3 ms.
+  A keystroke in the input line: 9.1 → 6.7 ms.
+
+## 0.6.2 — "Edge" (2026-07-31)
 
 ### Added
 
-- **Видно, к какому ребру встанет панель.** Пока сторона не спрашивалась, всё
-  вставало справа: человек целился в левый край панели и получал принесённую не
-  там, куда показывал. Теперь при перетаскивании подсвечивается ПОЛОВИНА панели,
-  которую займёт принесённая, — по ближайшему ребру, — и туда же она встаёт.
-  Работает и для панели, и для проекта из шапки; сверху и снизу делят панель по
-  горизонтали.
+- **You can see which edge a pane will land on.** While the side was never asked,
+  everything landed on the right: you aimed at a pane's left edge and got the
+  carried pane somewhere else. Dragging now highlights the HALF of the pane the
+  carried one will take — by the nearest edge — and that is where it lands. Works
+  for panes and for projects dragged from the header; top and bottom split the
+  pane horizontally.
 
 ### Fixed
 
-- **Три панели перестали быть кривыми.** Перенос панели делил цель пополам, и
-  раскладка из трёх вставала как 50/25/25, хотя правило обещает равные трети.
-  Правило теперь применяется и при переносе — пока раскладку не тянули руками.
-  Отдельно чинилась вторая половина той же ошибки: при переезде ВНУТРИ вкладки
-  «трогали ли раскладку руками» проверялось по уже урезанному дереву, и ответ
-  всегда был «трогали».
+- **Three panes stopped being lopsided.** Moving a pane split the target in half,
+  so a three-pane layout came out 50/25/25 while the rule promises equal thirds.
+  The rule now applies to moves as well — as long as the layout was never dragged
+  by hand. The other half of the same bug was fixed separately: for a move INSIDE
+  a tab, "was the layout touched by hand" was evaluated against the already
+  stripped tree, so the answer was always "yes".
 
-## 0.6.1 — «Приёмник» (2026-07-31)
+## 0.6.1 — "Dock" (2026-07-31)
 
 ### Changed
 
-- **Видно, куда тащить панель.** Зона, в которую панель возвращают из сетки в
-  список, подсвечивалась только под курсором — то есть её надо было сначала
-  угадать. Теперь приёмник появляется в списке с первого же движения, пунктиром
-  и с подписью: «вернуть в список — панель уедет из сетки отдельной вкладкой,
-  процесс не прервётся». Показывается он только когда выносить есть что: у
-  панели без соседей своей вкладки жест ничего не делал бы.
+- **You can see where to drag a pane.** The zone that returns a pane from the
+  grid back to the list only lit up under the cursor — so it had to be guessed
+  first. The dock now appears in the list from the very first movement, dashed and
+  labelled: "return to the list — the pane leaves the grid as its own tab, the
+  process keeps running". It only shows when there is something to detach: for a
+  lone pane in its own tab the gesture would do nothing.
 
-  Заодно шапка панели перестала быть немой ручкой: при наведении в ней
-  проступают точки захвата — знак, по которому перетаскивание вообще ищут.
+  The pane header also stopped being a mute handle: hovering brings out grip dots,
+  the sign people actually look for before dragging.
 
-## 0.6.0 — «Сетка» (2026-07-31)
+## 0.6.0 — "Grid" (2026-07-31)
 
 ### Added
 
-- **Каждая панель — самостоятельный CLI.** Раньше окно делилось надвое, но
-  разговор, строка ввода, лента и режим были общими: две панели показывали одну
-  беседу, а один Enter мог одобрить запуск команды сразу в нескольких. Теперь у
-  панели своя лента, своя строка ввода, свой режим и свой автопилот, а клавиши
-  раздаёт единый диспетчер — ровно одному адресату. Активная панель обведена
-  рамкой, и эта рамка означает буквально одно: сюда уйдут Enter и Esc.
+- **Every pane is a CLI of its own.** The window used to split in two, but the
+  conversation, the input line, the feed and the mode were shared: two panes showed
+  one talk, and a single Enter could approve a command in more than one of them.
+  Now a pane has its own feed, its own input line, its own mode and its own
+  autopilot, and keys are handed out by one dispatcher — to exactly one addressee.
+  The focused pane is outlined, and that outline means literally one thing: Enter
+  and Esc go here.
 
-  Раскладка выбирается по числу панелей: одна — во весь экран, две-три —
-  колонками, четыре — сетка 2×2. Пятая уходит новой вкладкой: больше четырёх в
-  одной вкладке не показываем, потому что на пяти лента превращается в пять
-  строк и упирается это молча.
+  The layout follows the pane count: one fills the screen, two or three are
+  columns, four make a 2×2 grid. A fifth goes to a new tab — more than four in one
+  tab turns the feed into five lines, and it would hit that limit silently.
 
-- **Панели активной вкладки — строками в сайдбаре.** «Открытые» перечисляли
-  вкладки: четыре панели давали одну строку с припиской «· 4», и попасть мышью в
-  конкретную панель было нельзя. Теперь активная вкладка раскрыта панелями,
-  остальные — свёрнутыми строками со счётчиком. Две степени выделения не
-  путаются: «на экране» (панель видна) и «в фокусе» (панели достаются Enter и
-  Esc, такая ровно одна, и метится она тем же акцентом, что рамка на экране).
+- **The active tab's panes are rows in the sidebar.** "Open" used to list tabs:
+  four panes were one row with a "· 4" suffix, and you could not click your way
+  into a specific pane. The active tab is now expanded into panes, the rest are
+  collapsed rows with a counter. Two degrees of highlight never get confused: "on
+  screen" (the pane is visible) and "focused" (the pane gets Enter and Esc — there
+  is exactly one, marked with the same accent as the outline on screen).
 
-  Двойной клик по строке разворачивает панель на всю вкладку и возвращает
-  обратно; соседи при этом живы и просто не видны.
+  Double-clicking a row maximizes the pane to the whole tab and back; its
+  neighbours stay alive, just out of sight.
 
-- **Панель можно перенести и вынести.** Панель хватается за свою шапку: бросок
-  на другую панель переносит её туда, бросок в список слева выносит в отдельный
-  рабочий стол. Процесс не трогается ни в том, ни в другом случае — раньше убрать
-  лишний CLI с разделённого экрана можно было только закрыв его, то есть убив.
+- **A pane can be moved and detached.** A pane is grabbed by its header: drop it
+  on another pane to move it there, drop it in the list on the left to send it to
+  its own desk. The process is not touched either way — removing a spare CLI from
+  a split screen used to mean closing it, which means killing it.
 
-- **У рабочего стола есть имя.** Группировка и была вкладкой, но подписывалась
-  именем той панели, что в ней активна: четыре разных проекта — одно имя, да ещё
-  и меняющееся. Теперь имя собирается из панелей («Заря + quiz-funnel +2») и
-  переименовывается двойным кликом.
+- **A desk has a name.** The grouping was already the tab, but it was labelled
+  with the name of whichever pane happened to be active in it: four different
+  projects, one name, and a name that kept changing. It is now assembled from the
+  panes ("Zarya + quiz-funnel +2") and renamed with a double click.
 
-- **Картинки — в свою панель.** Ctrl+V и перетаскивание кладут изображение в ту
-  панель, где стоит курсор, показывают чипом до отправки и уменьшают до предела
-  модели. Движок, который картинок не принимает, говорит об этом вслух, а не
-  проглатывает вложение молча.
+- **Images go to their own pane.** Ctrl+V and drag-and-drop put an image into the
+  pane the cursor is in, show it as a chip before sending and downscale it to the
+  model's limit. An engine that does not accept images says so out loud instead of
+  swallowing the attachment.
 
 ### Fixed
 
-- **Панель теряла экран при перестройке раскладки.** Место панели в разметке
-  зависело от места в дереве: стоило закрыть одну из четырёх, соседняя переезжала
-  на другой уровень, и её терминал создавался заново. Заметить это почти нельзя —
-  оболочка перерисовывает видимую часть, — но прокрутка и вывод агента исчезали.
-  Теперь дерево задаёт только координаты, панель живёт в списке по своей сессии и
-  переживает любую перестройку, переезд в другую вкладку и разворот.
+- **A pane lost its screen when the layout was rebuilt.** A pane's place in the
+  markup depended on its place in the tree: close one of four and a neighbour moved
+  to a different level, and its terminal was created anew. Almost impossible to
+  notice — the shell repaints the visible part — but the scrollback and the agent's
+  output were gone. The tree now supplies coordinates only; a pane lives in a flat
+  list keyed by its session and survives any rebuild, a move to another tab and
+  maximizing.
 
-- **Пятая панель уходила в никуда**: заводилась живая сессия, которой не было
-  места в дереве, — терминал работал, в списке не значился, а Enter и Esc
-  адресовались именно ему.
+- **A fifth pane went nowhere**: a live session was created with no slot in the
+  tree — the terminal was running, absent from the list, and yet Enter and Esc
+  were addressed to it.
 
-- **Закрытие панели не спрашивало и не убирало за собой.** Теперь оно
-  предупреждает о том, что пропадёт (недописанный запрос, ожидающее решение
-  агента, идущий ход), гасит гейт и прерывает ход, чтобы счётчик «ждут решения»
-  не застревал навсегда, и чистит следы: вложения и автопилот мёртвой панели
-  больше не воскресают при восстановлении сессии.
+- **Closing a pane neither asked nor cleaned up.** It now warns about what is
+  about to be lost (an unsent prompt, a pending agent decision, a turn in flight),
+  closes the gate and aborts the turn so the "waiting for a decision" counter does
+  not stick forever, and cleans up after itself: attachments and the autopilot of a
+  dead pane no longer come back when a session is restored.
 
-- **Esc из чужого поля ввода прерывал работу панели** — например тот, которым
-  бросают поиск сессий в сайдбаре.
+- **Esc from someone else's input field interrupted the pane's work** — the one
+  you dismiss the sidebar session search with, for instance.
 
-- **Режим строки и история ↑ были общими на окно.** Агент, начавший ход в
-  соседней панели, переключал чип здесь, и Enter уводил набранную команду
-  терминала в модель. Стрелка вверх доставала команду чужого проекта и выполняла
-  её в другой папке. И то, и другое теперь принадлежит панели.
+- **The input mode and ↑ history were shared window-wide.** An agent that started
+  a turn in a neighbouring pane flipped the chip here, and Enter sent a typed
+  terminal command to the model. The up arrow fetched a command from another
+  project and ran it in a different folder. Both now belong to the pane.
 
-- **Микрофон** держится одним замком на приложение: четыре панели больше не
-  открывают четыре записи одной фразы, а диктовка уходит в ту панель, где курсор.
+- **The microphone** is held by one lock per app: four panes no longer open four
+  recordings of one phrase, and dictation goes to the pane the cursor is in.
 
-## 0.5.8 — «Печать» (2026-07-29)
+## 0.5.8 — "Seal" (2026-07-29)
 
 ### Added
 
-- **Подпись релизов.** Установка одним нажатием теперь требует подписи: список
-  контрольных сумм каждого релиза подписывается Ed25519-ключом, которого нет в
-  CI — он живёт на машине мейнтейнера. Приложение проверяет обе вещи: подпись
-  списка сходится с зашитым открытым ключом И sha256 скачанного файла совпадает
-  со строкой в этом списке. Не сошлось — файл удаляется, установка отменяется.
+- **Signed releases.** One-click install now requires a signature: each release's
+  checksum list is signed with an Ed25519 key that is not in CI — it lives on the
+  maintainer's machine. The app verifies both things: the list's signature matches
+  the built-in public key AND the sha256 of the downloaded file matches its line in
+  that list. Mismatch — the file is deleted and the install is cancelled.
 
-  Зачем: до сих пор вся цепочка держалась на том, что CI ручается сам за себя.
-  `latest.yml` и `SHA256SUMS` считает та же машина, что и собирает, — при захвате
-  конвейера хеш был бы валидным, потому что его посчитала бы уже подменённая
-  сборка. С автообновлением это тихое выполнение кода у всех, без единого клика.
+  Why: until now the whole chain rested on CI vouching for itself. `latest.yml` and
+  `SHA256SUMS` are computed by the same machine that builds — with the pipeline
+  compromised the hash would be valid, because it would be computed by the already
+  substituted build. With auto-update that is silent code execution for everyone,
+  without a single click.
 
-  Релиз без подписи не прячется: он виден, его можно скачать вручную, и
-  приложение прямо говорит, почему не ставит само. Это **не** Authenticode —
-  SmartScreen при ручной установке предупреждать не перестанет; закрывается
-  подмена обновления, а не предупреждение Windows.
+  An unsigned release is not hidden: it is visible, it can be downloaded by hand,
+  and the app says plainly why it will not install it itself. This is **not**
+  Authenticode — SmartScreen will still warn on a manual install; what is closed is
+  update substitution, not the Windows warning.
 
 ### Changed
 
-- **Esc над отправленным сообщением убирает его и из памяти агента.** Раньше
-  сообщение оставалось в ленте с пометкой «прервано», и агент видел его на
-  следующем ходу. Теперь оно исчезает и возвращается в строку ввода — как в
-  настоящем Claude Code.
+- **Esc over a sent message removes it from the agent's memory too.** The message
+  used to stay in the feed marked "interrupted", and the agent saw it on the next
+  turn. It now disappears and returns to the input line — as in the real Claude
+  Code.
 
-  Механизм оттуда же: транскрипты CLI — не журнал, а дерево, и отмена продолжает
-  беседу от РОДИТЕЛЯ отменённой записи. Agent SDK даёт ровно это
-  (`resumeSessionAt` + `forkSession`): следующий ход уходит веткой от последнего
-  ответа агента, отменённое остаётся в файле мёртвой веткой.
+  The mechanism comes from there as well: CLI transcripts are a tree, not a log,
+  and cancelling continues the conversation from the PARENT of the cancelled entry.
+  The Agent SDK gives exactly that (`resumeSessionAt` + `forkSession`): the next
+  turn branches off the last agent answer, and the cancelled entry stays in the
+  file as a dead branch.
 
-  Работает это только с Claude Code. У Codex и ACP-движков такого механизма нет —
-  там сообщение по-прежнему остаётся с пометкой «прервано», и это честно: убрать
-  с глаз то, что агент помнит, было бы враньём.
+  This works with Claude Code only. Codex and the ACP engines have no such
+  mechanism — there the message still stays marked "interrupted", and that is
+  honest: hiding what the agent remembers would be a lie.
 
 ### Fixed
 
-- **Ответ на отменённое сообщение больше не долетает в ленту.** Прерванная
-  сессия успевала договорить, и её ответ появлялся уже после того, как вопрос
-  исчез.
-- **Второй Esc подряд не помечает «прервано» уже отвеченный ход.** Первый ещё
-  летел по IPC, беседа в это мгновение выглядела незанятой, и метка садилась на
-  предыдущий, честно отвеченный вопрос.
-- **Обводка иконки папки** в панели слева — два пикселя, как у соседей; была
-  заметно тоньше остальных.
+- **An answer to a cancelled message no longer lands in the feed.** The
+  interrupted session finished talking, and its answer appeared after the question
+  was already gone.
+- **A second Esc no longer marks an already answered turn as "interrupted".** The
+  first was still in flight over IPC, the conversation looked idle for that
+  instant, and the mark landed on the previous, honestly answered question.
+- **The folder icon outline** in the left bar is two pixels, like its neighbours;
+  it was visibly thinner than the rest.
 
-## 0.5.7 — «Слово» (2026-07-28)
+## 0.5.7 — "Word" (2026-07-28)
 
 ### Added
 
-- **Выбор модели распознавания.** Модель была захардкожена одной константой —
-  теперь это закрытый реестр: **GigaAM v3** (русский, 225 МБ), **GigaAM v3
-  RNN-T** (русский, 232 МБ, точнее на длинных фразах) и **Moonshine tiny**
-  (английский, 124 МБ). Все три под MIT. Каждую можно скачать, выбрать и
-  удалить — три штуки рядом весят больше полугигабайта.
+- **Choice of speech model.** The model used to be one hard-coded constant — it is
+  now a closed registry: **GigaAM v3** (Russian, 225 MB), **GigaAM v3 RNN-T**
+  (Russian, 232 MB, better on long phrases) and **Moonshine tiny** (English,
+  124 MB). All three MIT. Each can be downloaded, selected and deleted — three of
+  them side by side weigh over half a gigabyte.
 
-  Moonshine выбран для английского не за точность: Whisper добивает любой вход
-  нулями до 30 секунд, поэтому фраза на три секунды стоит столько же, сколько на
-  тридцать. Moonshine считает пропорционально длине.
+  Moonshine was picked for English not for accuracy: Whisper pads any input with
+  zeros to 30 seconds, so a three-second phrase costs the same as a thirty-second
+  one. Moonshine scales with length.
 
-  Список остался **закрытым**: настраиваемый адрес модели был бы примитивом
-  «скачай что угодно откуда угодно», а скачанное отдаётся нативному движку.
-
-### Fixed
-
-- **Диктовка теперь умеет цифры, латиницу и знаки препинания.** У прежней модели
-  словарь состоял из 34 токенов: пробел и 33 строчные русские буквы. Ни цифр, ни
-  латиницы, ни заглавных — то есть продиктовать «git commit» или «cd 2» было
-  физически невозможно. В новой 257 токенов. Прежняя модель продолжает работать:
-  ничего не качается само, обновление предлагается кнопкой.
-- **Иконки в панели слева одного размера.** Стояли глифы 16×16 рядом с 8×8 —
-  «папка» и «обновление» рисовались вдвое мельче соседей.
-- **На странице обновления только нужные файлы.** Служебные `latest*.yml` и
-  `.blockmap`, поехавшие в релизы с 0.5.5, попадали в список наравне со
-  сборками: одиннадцать строк там, где полезны две. Сборки для чужих систем
-  убраны под кат.
-- **Обновление убирает за собой.** После установки в кеше оставались две копии
-  установщика — 382 МБ, и так после каждого обновления. Чистится при запуске, и
-  только то, что старше установленной версии: скачанное, но ещё не поставленное
-  обновление не трогается.
-
-## 0.5.6 — «Шаг-2» (2026-07-28)
+  The list stays **closed**: a configurable model URL would be a "download
+  anything from anywhere" primitive, and what is downloaded is handed to a native
+  engine.
 
 ### Fixed
 
-- **Переносимая сборка больше не предлагает обновиться сама.** Для portable
-  electron-builder намеренно не пишет метаданные обновления, и установщик
-  поставил бы рядом вторую, обычную копию приложения вместо обновления
-  запущенного файла. Проверка «умеет ли эта сборка ставить обновление»
-  возвращала «да» для любой Windows-сборки — кнопка врала бы. Найдено разведкой
-  уже после выпуска 0.5.5.
+- **Dictation now knows digits, Latin letters and punctuation.** The previous
+  model's vocabulary was 34 tokens: a space and 33 lowercase Russian letters. No
+  digits, no Latin, no capitals — dictating "git commit" or "cd 2" was physically
+  impossible. The new one has 257 tokens. The old model keeps working: nothing is
+  downloaded on its own, the upgrade is offered as a button.
+- **Icons in the left bar are one size.** 16×16 glyphs stood next to 8×8 ones —
+  "folder" and "update" were drawn at half the size of their neighbours.
+- **Only the useful files on the update page.** The housekeeping `latest*.yml` and
+  `.blockmap` files, which started shipping in 0.5.5, were listed alongside the
+  builds: eleven rows where two are useful. Builds for other systems moved behind
+  a fold.
+- **Updating cleans up after itself.** Two copies of the installer stayed in the
+  cache after installing — 382 MB, after every update. Cleaned at launch, and only
+  what is older than the installed version: a downloaded but not yet installed
+  update is left alone.
 
-## 0.5.5 — «Шаг» (2026-07-28)
+## 0.5.6 — "Step 2" (2026-07-28)
+
+### Fixed
+
+- **The portable build no longer offers to update itself.** electron-builder
+  deliberately writes no update metadata for portable, and the installer would put
+  a second, regular copy of the app next to it instead of updating the running
+  file. The "can this build install an update" check answered "yes" for any Windows
+  build — the button would have lied. Found by reconnaissance right after 0.5.5
+  shipped.
+
+## 0.5.5 — "Step" (2026-07-28)
 
 ### Added
 
-- **Обновление в одно нажатие.** Раньше «обновиться» значило: открыть браузер,
-  скачать 190 МБ, сверить хеш руками (чего никто не делает), пройти мастер
-  установки. Теперь — кнопка «Установить обновление», полоса скачивания прямо в
-  ней и «Перезапустить и установить». Целостность проверяется автоматически по
-  sha512 из метаданных релиза.
+- **One-click update.** "Updating" used to mean: open a browser, download 190 MB,
+  check the hash by hand (nobody does), walk through the installer. Now there is an
+  "Install the update" button, a download bar inside it and "Restart and install".
+  Integrity is verified automatically against the sha512 from the release metadata.
 
-  Что **не** делается: скачивание и установка в фоне. `autoDownload` и
-  `autoInstallOnAppQuit` выключены явно — разница между «нажал кнопку» и «оно
-  само подменило исполняемый файл, пока ты работал» принципиальна, тем более для
-  неподписанной сборки.
+  What is **not** done: downloading and installing in the background. `autoDownload`
+  and `autoInstallOnAppQuit` are off explicitly — the difference between "I pressed
+  a button" and "it swapped the executable while I was working" is fundamental, all
+  the more so for an unsigned build.
 
-  Установка идёт через штатный выход: рендерер снимает сессии, настройки
-  сбрасываются на диск, pty и агенты гасятся — и только потом запускается
-  установщик. Обновление не должно стоить открытых терминалов.
+  Installing goes through the regular exit: the renderer snapshots sessions,
+  settings are flushed to disk, ptys and agents are shut down — and only then the
+  installer starts. An update must not cost you your open terminals.
 
-  Платформы разделены честно: Windows — да; Linux — только AppImage (`.deb`
-  ставится менеджером пакетов); macOS — нет, Squirrel.Mac требует подписи и
-  нотаризации. Где нельзя — кнопки нет, и текст объясняет почему. Ручной путь с
-  файлами и SHA256 никуда не делся.
-
-### Fixed
-
-- **Релизы не содержали `latest.yml`.** В конфигурации стоял `publish: null`,
-  поэтому метаданные обновления не генерировались вовсе. Теперь они собираются и
-  выкладываются вместе с дистрибутивами, а публикация падает, если их нет: релиз
-  без метаданных выглядит нормальным, но молча ломает обновление у всех, кто уже
-  поставил приложение.
-- **Источник обновления задан явной константой** (`setFeedURL`), редиректы при
-  проверке ограничены списком хостов GitHub, а в настройках виден возраст
-  последней удачной проверки — молчащий прокси может бесконечно отвечать «у вас
-  последняя версия», и без даты это неотличимо от правды.
-
-## 0.5.4 — «Затвор» (2026-07-28)
-
-Релиз про то, чтобы интерфейс не успокаивал там, где успокаивать нечем, и не
-терял то, что показывает.
+  Platforms are separated honestly: Windows — yes; Linux — AppImage only (`.deb` is
+  the package manager's job); macOS — no, Squirrel.Mac requires signing and
+  notarization. Where it cannot, there is no button, and the text explains why. The
+  manual path with files and SHA256 is still there.
 
 ### Fixed
 
-- **Разовое «ВЫПОЛНИТЬ» больше не становится постоянным разрешением.** Часть
-  ACP-агентов не предлагает разового разрешения — только `allow_always`. Драйвер
-  молча подставлял его на обычное одобрение: человек имел в виду один запуск, а
-  агент получал разрешение на всю сессию и переставал спрашивать. Ни в
-  интерфейсе, ни в ответе об этом не было ни слова. Теперь такой гейт помечен,
-  кнопка называется «РАЗРЕШИТЬ ВСЕГДА» и предупреждает цветом, а постоянное
-  разрешение уходит агенту только с явным согласием. Отказ по-прежнему
-  повышается свободно: «всегда отклонять» строже разового.
-- **Бейдж над API-ключом говорит правду.** Раньше он был один на все случаи —
-  зелёное «Ключ сохранён» и над ключом в хранилище ОС, и над ключом, лежащим в
-  `secrets.json` открытым текстом. Состояний стало три, с объяснением прямо в
-  строке. Защита считается по двум обстоятельствам сразу: как ключ записан и что
-  система умеет сейчас — на Linux без keyring `encryptString` ставит `enc:`, не
-  защищая ничего.
-- **Выпадающее меню помещается в окно.** Список сессий (до 25 строк с длинными
-  заголовками) вылезал за кромку, причём за ВЕРХНЮЮ: позиция клампилась только с
-  одной стороны, и верхние пункты становились недоступны вообще. Теперь потолок
-  высоты с прокруткой, кламп с обеих сторон, строка на пункт с подсказкой
-  полного текста. Молчаливое усечение списка до 25 названо вслух.
-- **Повторное нажатие по кнопке закрывает попап, а не мигает им.** Панель
-  расхода и меню закрывались по `mousedown`, а кнопки переключались по `click`:
-  первое событие закрывало, второе тут же открывало заново.
-- **Esc закрывает меню, даже когда фокус в терминале.** xterm вешает свой
-  обработчик в фазе захвата и глушит Escape — до слушателя меню событие не
-  доходило вовсе.
-- **Права на файлы данных сужены до `0600`** (каталог — `0700`). В `userData`
-  лежат ключи провайдеров, история команд и переписки с агентом; Node создавал
-  их с правами по умолчанию, на Linux это 0644. Файлы, созданные прошлыми
-  версиями, чинятся отдельно: `history.jsonl` только дописывается и сам никогда
-  не пересоздаётся.
+- **Releases contained no `latest.yml`.** The config had `publish: null`, so update
+  metadata was not generated at all. It is now built and published together with
+  the distributables, and publishing fails without it: a release with no metadata
+  looks fine but silently breaks updating for everyone who already installed the
+  app.
+- **The update source is an explicit constant** (`setFeedURL`), redirects during a
+  check are limited to a list of GitHub hosts, and the settings show the age of the
+  last successful check — a silent proxy can answer "you are on the latest version"
+  forever, and without a date that is indistinguishable from the truth.
+
+## 0.5.4 — "Shutter" (2026-07-28)
+
+A release about the interface not reassuring where there is nothing to reassure
+with, and not losing what it shows.
+
+### Fixed
+
+- **A one-off "RUN" no longer becomes a standing permission.** Some ACP agents
+  offer no one-off permission — only `allow_always`. The driver silently
+  substituted it for an ordinary approval: the person meant one run, the agent got
+  permission for the whole session and stopped asking. Neither the interface nor the
+  reply said a word about it. Such a gate is now marked, the button says "ALLOW
+  ALWAYS" and warns by colour, and a standing permission reaches the agent only with
+  explicit consent. Denial is still escalated freely: "always deny" is stricter than
+  a one-off.
+- **The badge over an API key tells the truth.** It used to be one badge for every
+  case — a green "Key saved" both over a key in the OS store and over a key sitting
+  in `secrets.json` in plain text. There are three states now, explained right in
+  the row. Protection is computed from two circumstances at once: how the key is
+  written and what the system can do right now — on Linux without a keyring
+  `encryptString` sets `enc:` while protecting nothing.
+- **The dropdown fits in the window.** The session list (up to 25 rows with long
+  titles) overflowed the edge — the TOP one at that: the position was clamped on one
+  side only, and the top entries became unreachable. There is now a height ceiling
+  with scrolling, clamping on both sides, one row per entry with the full text in a
+  tooltip. The silent truncation of the list at 25 is now said out loud.
+- **Pressing a button again closes the popup instead of blinking it.** The usage
+  panel and the menu closed on `mousedown` while buttons toggled on `click`: the
+  first event closed, the second immediately reopened.
+- **Esc closes the menu even when focus is in the terminal.** xterm installs its
+  handler in the capture phase and swallows Escape — the event never reached the
+  menu listener.
+- **Data file permissions narrowed to `0600`** (the directory to `0700`). `userData`
+  holds provider keys, command history and conversations with the agent; Node created
+  them with default permissions, which is 0644 on Linux. Files created by earlier
+  versions are repaired separately: `history.jsonl` is append-only and never
+  recreated by itself.
 
 ### Added
 
-- **История команд под контролем.** Файл рос без ограничений, выключить запись
-  было нельзя, стереть тоже — а команды регулярно содержат секреты. Появились
-  выключатель (срабатывает немедленно; при выключенной записи история не
-  читается с диска вовсе), потолок «хранить не больше N» с уплотнением самого
-  файла и кнопка очистки рядом со строкой о том, сколько накоплено.
+- **Command history under control.** The file grew without limit, recording could
+  not be turned off and could not be erased — and commands regularly contain
+  secrets. There is now a switch (effective immediately; with recording off the
+  history is not read from disk at all), a "keep at most N" ceiling that compacts the
+  file itself, and a clear button next to the line telling you how much has piled up.
 
-## 0.5.3 — «Маяк» (2026-07-27)
+## 0.5.3 — "Beacon" (2026-07-27)
 
 ### Added
 
-- **Выбор микрофона для диктовки.** Правый клик по кнопке микрофона или
-  «Настройки → Голос». Хранится не только `deviceId`, но и имя устройства:
-  Chromium солит идентификаторы по профилю, и после их смены выбор чинится по
-  имени молча — но только при ровно одном совпадении, потому что две одинаковые
-  гарнитуры это уже гадание. Псевдо-устройства Windows (`default`,
-  `communications`) отфильтрованы, иначе один микрофон стоял бы в списке трижды.
-  Пропажу устройства видно везде: строкой «не найден» в настройках и в меню,
-  пометкой в подсказке на кнопке и разовым сообщением
+- **Microphone selection for dictation.** Right-click the microphone button or
+  Settings → Voice. Not only the `deviceId` is stored but the device name as well:
+  Chromium salts identifiers per profile, and after they change the choice is
+  repaired by name silently — but only on exactly one match, because two identical
+  headsets is already guesswork. Windows pseudo-devices (`default`,
+  `communications`) are filtered out, otherwise one microphone would appear three
+  times. A missing device is visible everywhere: a "not found" row in settings and
+  in the menu, a note in the button tooltip and a one-off message
   (`src/renderer/src/features/voice/devices.ts`).
-- **Проверка обновлений и страница «Что нового».** Один анонимный запрос к
-  GitHub при запуске — без токена, без идентификаторов, с таймаутом. Есть
-  новее — в панели появляется кнопка с точкой, а за ней отдельная страница:
-  переход версий, changelog из тела релиза, файлы с размерами и SHA256 под
-  каждым. Приложение ничего не скачивает и не запускает само: сборки не
-  подписаны, и тихо подсунуть неподписанный установщик было бы хуже, чем дать
-  скачать осознанно (`src/main/updateService.ts`,
-  `src/renderer/src/features/updates/`).
-- **Волна субагентов в ленте.** Вместо стопки одинаковых «субагент работает…» —
-  одна строка «3/3 агентов · 32с · ↓103.8K токенов» и по строке на каждую живую
-  задачу с инструментом, на котором она сейчас. Все числа — собственная
-  телеметрия Claude Code, ничего не выдумано (`src/renderer/src/features/ai/subagents.ts`).
+- **Update check and a "What's new" page.** One anonymous request to GitHub at
+  launch — no token, no identifiers, with a timeout. If something newer exists, a
+  button with a dot appears in the bar, and behind it a page of its own: the version
+  step, the changelog from the release body, files with sizes and SHA256 under each.
+  The app downloads and starts nothing on its own: the builds are unsigned, and
+  quietly slipping in an unsigned installer would be worse than letting you download
+  it knowingly (`src/main/updateService.ts`, `src/renderer/src/features/updates/`).
+- **Subagent wave in the feed.** Instead of a stack of identical "subagent
+  working…" lines — one line, "3/3 agents · 32s · ↓103.8K tokens", plus a line per
+  live task with the tool it is on. Every number is Claude Code's own telemetry,
+  nothing invented (`src/renderer/src/features/ai/subagents.ts`).
 
 ### Changed
 
-- **Esc над очередью — как в CLI.** Семантика снята с транскриптов настоящего
-  CLI: там отмена своей приписки и прерывание хода — разные жесты (во всех 103
-  пользовательских `queue-operation: remove` нет маркера прерывания). Заря
-  делала наоборот: Esc прерывал агента, а приписка оставалась в очереди и
-  уходила ему сама после конца хода. Теперь очередь непуста — Esc возвращает
-  текст в строку и не трогает агента; очереди нет — Esc прерывает.
-- **Строка «готов · введите запрос» больше не врёт.** Она рисовалась
-  безусловно и висела прямо под «агент отвечает…» — один экран утверждал, что
-  агент и работает, и свободен. Теперь появляется, только когда ход
-  действительно за человеком.
-- **Electron 43.1.1 → 43.2.0** — патчи безопасности Chromium той же ветки.
-- **Страница релиза публикуется автоматически** вместе с контрольными суммами,
-  посчитанными на том же раннере, что собрал файлы. Раньше её создавали руками,
-  из-за чего тег v0.5.2 остался без релиза.
+- **Esc over the queue behaves like the CLI.** The semantics were taken from real
+  CLI transcripts: there, cancelling your own queued note and interrupting a turn
+  are different gestures (none of the 103 user `queue-operation: remove` entries
+  carries an interrupt marker). Zarya did the opposite: Esc interrupted the agent
+  while the queued note stayed and went to it by itself once the turn ended. Now: a
+  non-empty queue — Esc returns the text to the input line and leaves the agent
+  alone; no queue — Esc interrupts.
+- **The "ready · type a prompt" line stopped lying.** It was drawn
+  unconditionally and sat right under "the agent is answering…" — one screen
+  claiming the agent was both working and free. It now appears only when the turn
+  is genuinely the human's.
+- **Electron 43.1.1 → 43.2.0** — Chromium security patches on the same branch.
+- **The release page is published automatically** together with checksums computed
+  on the same runner that built the files. It used to be created by hand, which is
+  why tag v0.5.2 was left without a release.
 
 ### Fixed
 
-- **Диктовка после Esc молча не начиналась.** Флаг отмены не сбрасывался:
-  следующее нажатие открывало микрофон и тут же само себя отменяло, работало
-  лишь третье. Найдено ревью на Opus.
-- **Push-to-talk писал в прежний микрофон.** Слушатель горячей клавиши держал
-  устаревшие настройки, и первая же диктовка после смены устройства шла в
-  старое, пока подсказка показывала новое. Ровно та тихая подмена, ради которой
-  и делался выбор микрофона.
-- **Микрофон оставался открытым навсегда**, если бар уходил с экрана посреди
-  открытия устройства: его очистка уже прошла, а поток приходил после.
-- **Шаги субагентов больше не засоряют ленту** — они приходят помеченными
-  `parent_tool_use_id` и выглядели так, будто главный агент сам сделал дюжину
-  поисков.
+- **Dictation silently failed to start after Esc.** The cancel flag was not
+  cleared: the next press opened the microphone and immediately cancelled itself,
+  and only the third worked. Found by an Opus review.
+- **Push-to-talk recorded into the previous microphone.** The hotkey listener held
+  stale settings, so the first dictation after switching devices went to the old one
+  while the tooltip showed the new. Exactly the silent substitution microphone
+  selection was built for.
+- **The microphone stayed open forever** if the bar left the screen in the middle
+  of opening the device: its cleanup had already run and the stream arrived
+  afterwards.
+- **Subagent steps no longer litter the feed** — they arrive tagged with
+  `parent_tool_use_id` and looked as if the main agent had run a dozen searches
+  itself.
 
-## 0.5.2 — «Шлюз» (2026-07-27)
+## 0.5.2 — "Airlock" (2026-07-27)
 
 ### Added
 
-- **Голосовой ввод — диктовка прямо в строку.** Локально и без сети: sherpa-onnx
-  с моделью GigaAM v3 от Сбера для русского. Кнопка микрофона в баре или
-  удержание `Ctrl+Shift+Space`; текст **вставляется** в поле, а не отправляется —
-  распознавание ошибается, а бар выполняет команды, так что последнее слово за
-  человеком. Пока идёт запись, кнопка сама становится индикатором: пульсирует и
-  показывает уровень. Клик-режим останавливается сам после полутора секунд
-  тишины, Esc отменяет. Модель (225 МБ) качается по требованию с проверкой
-  контрольной суммы, а не лежит в дистрибутиве. Аудио не пишется на диск и
-  никуда не уходит (`src/main/sttService.ts`,
-  `src/renderer/src/features/voice/dictation.ts`).
-- **Разрешения браузерного слоя ограничены явным списком.** Обработчика не было
-  вовсе, а Electron без него выдаёт разрешения по умолчанию. Теперь микрофон и
-  буфер обмена — и только нашему окну (`src/main/index.ts`).
+- **Voice input — dictation straight into the input line.** Local and offline:
+  sherpa-onnx with Sber's GigaAM v3 model for Russian. The microphone button in the
+  bar or holding `Ctrl+Shift+Space`; the text is **inserted** into the field rather
+  than sent — recognition makes mistakes and the bar runs commands, so the last word
+  is the human's. While recording, the button becomes the indicator: it pulses and
+  shows the level. Click mode stops itself after a second and a half of silence, Esc
+  cancels. The model (225 MB) is downloaded on demand with a checksum check instead
+  of riding in the distributable. Audio is never written to disk and goes nowhere
+  (`src/main/sttService.ts`, `src/renderer/src/features/voice/dictation.ts`).
+- **Browser-layer permissions limited to an explicit list.** There was no handler
+  at all, and Electron without one grants permissions by default. Now the microphone
+  and the clipboard — and only for our window (`src/main/index.ts`).
 
 ### Changed
 
-- **Нижний бар переделан.** Лимиты больше не стоят в очередь на одной строке: в
-  баре одна цифра — то окно, что ближе к исчерпанию, остальное раскрывается
-  панелью со строкой на каждый лимит. Движок и режим гейта свёрнуты в иконки
-  (искра, кольцо, звезда, полумесяц), названия — в подсказках; цвет гейта
-  сохранён, чтобы «спросят ли меня» читалось без наведения. Статус-бар с путём и
-  веткой приведён к тому же языку чипов.
-- **Поле ввода стало многострочным.** `Shift+Enter` и `Ctrl+Enter` вставляют
-  перенос, поле растёт под текст, `Enter` по-прежнему отправляет.
+- **The bottom bar was rebuilt.** Limits no longer queue up on one line: the bar
+  shows one number — the window closest to exhaustion — and the rest expands into a
+  panel with a row per limit. The engine and the gate mode are folded into icons
+  (spark, ring, star, crescent) with names in tooltips; the gate colour is kept so
+  "will I be asked" reads without hovering. The status bar with path and branch was
+  brought to the same chip language.
+- **The input field became multi-line.** `Shift+Enter` and `Ctrl+Enter` insert a
+  line break, the field grows with the text, `Enter` still sends.
 
 ### Fixed
 
-- **Esc прерывает ход, а не рвёт сессию.** У Claude Code отмена закрывала
-  входную очередь целиком — процесс выходил, и собственная отмена возвращалась
-  красным «process exited with code 1». Codex и ACP всегда прерывали только ход;
-  теперь семантика одна на все борта. Сообщение, отправленное сразу после Esc,
-  больше не теряется молча в закрытой очереди, а прерванный ход помечается
-  «прервано»: ответа не будет, но агент увидит его при возобновлении сессии.
-- **Настройки шрифта доходят до того, что видно.** «Размер шрифта»,
-  «Межстрочный интервал» и «Отступы терминала» уходили только в xterm, который в
-  режиме «Блоки» рисуется за кадром, — на экране не менялось ничего. Теперь ими
-  управляется и лента. Ответ агента набран другим шрифтом, чем реплика
-  пользователя, поэтому при равных пикселях выглядел мельче — размеры выровнены
-  оптически.
-- **Иконка приложения перестала мылиться.** В `.ico` было четыре размера, и 48px
-  (тот, что берёт рабочий стол) оказался уменьшенной копией 256px. Теперь десять
-  нативных размеров, включая 96px для крупных значков.
+- **Esc interrupts the turn instead of tearing down the session.** With Claude Code,
+  cancelling closed the whole input queue — the process exited, and your own cancel
+  came back as a red "process exited with code 1". Codex and ACP always interrupted
+  the turn only; the semantics are now one across all engines. A message sent right
+  after Esc is no longer lost silently in a closed queue, and an interrupted turn is
+  marked "interrupted": there will be no answer, but the agent will see it when the
+  session resumes.
+- **Font settings reach what you actually see.** "Font size", "Line height" and
+  "Terminal padding" only went to xterm, which is drawn offscreen in Blocks mode —
+  nothing changed on screen. They now drive the feed as well. The agent's answer is
+  set in a different typeface than the user's line, so at equal pixel sizes it looked
+  smaller — the sizes are now matched optically.
+- **The app icon stopped looking blurry.** The `.ico` had four sizes, and 48px (the
+  one the desktop takes) was a downscale of 256px. There are ten native sizes now,
+  including 96px for large icons.
 
 ### Security
 
-Продолжение разбора того же аудита — MEDIUM-находки про гейт одобрения.
+A continuation of the same audit — MEDIUM findings about the approval gate.
 
-- **«Автоподтверждение команд» больше не снимает гейт с правки файлов.** Настройка
-  задумана для встроенного борта Зари и его единственного инструмента
-  `run_command`, но передавалась и нативным драйверам как
-  `permissionMode: 'acceptEdits'` — это собственный режим Claude Agent SDK
-  «auto-accept file edit operations». Правки Write/Edit проходили **ниже**
-  `canUseTool`, то есть мимо всей системы одобрения приложения, при этом
-  «АВТОПИЛОТ» был выключен, а чип в баре уверял, что борт спрашивает. Теперь
-  нативным драйверам всегда уходит `permissionMode: 'default'`; ослабить гейт
-  можно ровно одним явным переключателем — «АВТОПИЛОТ»
-  (`src/renderer/src/features/ai/aiStore.ts`, `src/shared/types.ts`).
-- **Карточка одобрения больше не прячет то, что просит одобрить.** Длинная или
-  многострочная команда сворачивалась до первых 88 символов первой строки —
-  опасная часть (`&& rm -rf …`, вторая и третья строки) оставалась под
-  сворачиванием, пока «ВЫПОЛНИТЬ» и Enter были в одно нажатие. Пока гейт ждёт
-  решения, команда закреплена целиком в отдельном блоке: свернуть нельзя, обрезки
-  нет, внутреннего скролла, прячущего хвост, — тоже, многострочность подписана
-  счётчиком строк. Строке заголовка текст не доверяем: она делит одну строку с
-  подписью инструмента и обрезается примерно на половине порога, так что решение
-  «по длине» оставляло полосу команд, срезанных вёрсткой без возможности
-  развернуть. Лента при этом прокручивается к ждущему гейту — Enter одобряет из
-  любого места окна, поэтому карточка за краем экрана была бы тем же слепым «да».
-  После решения карточка снова сворачивается: это уже история, а не выбор
-  (`src/renderer/src/features/ai/gates.ts`,
+- **"Auto-approve commands" no longer lifts the gate on file edits.** The setting is
+  meant for Zarya's built-in agent and its single `run_command` tool, but it was also
+  passed to the native drivers as `permissionMode: 'acceptEdits'` — that is the Claude
+  Agent SDK's own "auto-accept file edit operations" mode. Write/Edit calls went
+  **below** `canUseTool`, i.e. past the app's entire approval system, while AUTOPILOT
+  was off and the chip in the bar insisted the agent asks. Native drivers are now
+  always given `permissionMode: 'default'`; the gate can be loosened by exactly one
+  explicit switch — AUTOPILOT (`src/renderer/src/features/ai/aiStore.ts`,
+  `src/shared/types.ts`).
+- **The approval card no longer hides what it asks you to approve.** A long or
+  multi-line command was collapsed to the first 88 characters of its first line — the
+  dangerous part (`&& rm -rf …`, the second and third lines) stayed under the fold
+  while "RUN" and Enter were one keystroke away. While a gate is pending, the command
+  is pinned in full in a block of its own: it cannot be collapsed, there is no
+  truncation and no inner scroll hiding the tail, and multi-line commands are labelled
+  with a line count. The title line is not trusted with the text: it shares a row with
+  the tool label and truncates at about half the threshold, so a length-based decision
+  left a band of commands cut by layout with no way to expand. The feed also scrolls to
+  the pending gate — Enter approves from anywhere in the window, so a card off screen
+  would be the same blind yes. After a decision the card collapses again: that is
+  history now, not a choice (`src/renderer/src/features/ai/gates.ts`,
   `src/renderer/src/components/MissionFeed.tsx`, `tests/gates.test.ts`).
-- **Чип режима больше не молчит и не врёт.** В режиме встроенного борта чипа не
-  было вовсе — включённое автоподтверждение выглядело неотличимо от ручного
-  режима. У Gemini/Kimi/Qwen, наоборот, рисовался живой переключатель
-  «АВТОПИЛОТ», который физически ничего не делал (`setBypass()` — заглушка, эти
-  борта спрашивают всегда). Теперь чип есть во всех агентских режимах и
-  показывает тот переключатель, который реально управляет активным бортом, а у
-  бортов без bypass он заперт на «РУЧНОЙ». Пока возможности драйверов ещё не
-  загрузились, чип показывает настройку, которая реально уйдёт в драйвер, а не
-  «автопилот не поддерживается» (`src/renderer/src/components/AgentBar.tsx`,
-  `src/main/acpDriver.ts`).
-- **Песочница Codex больше не снимает гейт в обход «АВТОПИЛОТА».** Тред
-  открывался с `sandbox: 'workspaceWrite'` намертво, а `on-request` в такой связке
-  спрашивает только про то, что выходит ЗА песочницу: правку внутри открытой папки
-  Codex одобрял сам, без запроса, без карточки и без следа в ленте, пока чип
-  показывал «РУЧНОЙ». Теперь песочница следует тому же переключателю, что и
-  политика одобрения; при расхождении с той, с которой открыт тред, уходит
-  оверрайд на ход — иначе выключение автопилота посреди разговора оставляло тред
-  писабельным. Оверрайд шлётся только при расхождении: он заменяет политику
-  целиком, и на каждом ходу затирал бы пользовательский
-  `[sandbox_workspace_write]` из `~/.codex/config.toml` (`src/main/codexDriver.ts`).
-- **Карточка правки в Codex называет файлы.** Запрос на одобрение патча не несёт
-  пути — они приходят отдельным событием, и карточка показывала безликое
-  «Изменение файлов». После перевода песочницы в read-only через этот гейт пошли
-  ВСЕ правки внутри проекта, так что правка `src/` стала неотличима от правки
-  `~/.codex/config.toml` — а частый безымянный гейт как раз и вырабатывает слепое
-  «Enter». Пути запоминаются из `item/started` и попадают в подпись; когда пути нет
-  вовсе, карточка так и говорит, вместо уверенной константы
-  (`src/main/codexDriver.ts`, `src/main/codexProtocol.ts`,
-  `scripts/mock-codex-app-server.mjs`).
-- **Лента ведёт к тому гейту, который одобрит Enter.** Прокрутка шла в конец
-  ленты, а Enter одобряет ПЕРВЫЙ неулаженный гейт: при параллельных вызовах
-  инструментов на экране оказывалась одна карточка, а подтверждалась другая.
-  Теперь якорь — сама карточка, и подпись «Enter · Esc» стоит только на ней
-  (`src/renderer/src/components/MissionFeed.tsx`,
+- **The mode chip no longer stays silent or lies.** In built-in agent mode there was
+  no chip at all — auto-approve turned on looked exactly like manual mode. With
+  Gemini/Kimi/Qwen the opposite: a live "AUTOPILOT" switch was drawn that did
+  physically nothing (`setBypass()` is a stub, these engines always ask). The chip now
+  exists in every agent mode and shows the switch that actually governs the active
+  engine, and for engines without bypass it is locked to "MANUAL". While driver
+  capabilities are still loading, the chip shows the setting that will really reach the
+  driver rather than "autopilot not supported"
+  (`src/renderer/src/components/AgentBar.tsx`, `src/main/acpDriver.ts`).
+- **The Codex sandbox no longer lifts the gate behind AUTOPILOT's back.** The thread
+  was opened with `sandbox: 'workspaceWrite'` permanently, and `on-request` in that
+  combination only asks about what leaves the sandbox: an edit inside the open folder
+  was approved by Codex itself, with no request, no card and no trace in the feed,
+  while the chip showed "MANUAL". The sandbox now follows the same switch as the
+  approval policy; if it differs from the one the thread was opened with, a per-turn
+  override is sent — otherwise turning autopilot off mid-conversation left the thread
+  writable. The override is sent only on a mismatch: it replaces the policy wholesale
+  and would overwrite the user's `[sandbox_workspace_write]` from `~/.codex/config.toml`
+  on every turn (`src/main/codexDriver.ts`).
+- **The Codex edit card names the files.** A patch approval request carries no paths —
+  they arrive in a separate event, and the card showed a faceless "File changes". After
+  the sandbox went read-only, ALL edits inside the project started flowing through this
+  gate, so editing `src/` became indistinguishable from editing `~/.codex/config.toml` —
+  and a frequent nameless gate is exactly what breeds a blind "Enter". Paths are now
+  remembered from `item/started` and go into the label; when there is no path at all,
+  the card says so instead of a confident constant (`src/main/codexDriver.ts`,
+  `src/main/codexProtocol.ts`, `scripts/mock-codex-app-server.mjs`).
+- **The feed leads to the gate Enter will approve.** Scrolling went to the end of the
+  feed while Enter approves the FIRST unsettled gate: with parallel tool calls one card
+  was on screen and a different one got confirmed. The anchor is now the card itself,
+  and the "Enter · Esc" hint sits only on it (`src/renderer/src/components/MissionFeed.tsx`,
   `src/renderer/src/features/ai/gates.ts`).
-- **Гейты Gemini/Kimi/Qwen перестали быть безымянными.** Эти борта присылают
-  человеческое описание только в `displayName`/`input.title`, а карточка в ленте
-  собирала подпись без них — и показывала голое «Bash» или «Edit». То есть
-  подтверждение команды, текста которой не было на экране вообще. Подпись теперь
-  собирается из самого гейта, одинаково в ленте и в панели
-  (`src/renderer/src/features/ai/gates.ts`,
+- **Gemini/Kimi/Qwen gates stopped being nameless.** These engines send a human
+  description only in `displayName`/`input.title`, and the card in the feed assembled
+  its label without them — showing a bare "Bash" or "Edit". That is confirming a command
+  whose text was never on screen. The label is now assembled from the gate itself,
+  identically in the feed and in the panel (`src/renderer/src/features/ai/gates.ts`,
   `src/renderer/src/components/MissionFeed.tsx`).
-- **Профиль терминала больше не добавляется молча.** `terminal.customProfiles` —
-  это список программ, которые приложение запускает, а канал настроек доступен
-  из renderer: скомпрометированный renderer мог прописать свой бинарник и
-  получить запуск при каждом старте, то есть **персистентность**, переживающую
-  перезапуск. Теперь профиль проходит структурную проверку (абсолютный путь к
-  существующему файлу, без управляющих символов, ограниченный argv), из
-  окружения пропускаются только локаль, таймзона и прокси — по белому списку,
-  потому что чёрный не замыкается: `PROMPT_COMMAND`, `PS0`, `BASH_FUNC_*`,
-  `PSModulePath`, `HOME` дают исполнение, а наши же скрипты интеграции читают
-  `$HOME/.bashrc`. Всё, что начнёт исполняться заново, дополнительно требует
-  явного подтверждения с показом пути, аргументов и значений переменных; отказ
-  оставляет прежний список. Профиль перепроверяется ещё раз в момент запуска —
-  файл настроек правится и руками (`src/main/shellProfileGuard.ts`,
-  `src/main/ipc.ts`, `tests/shellProfileGuard.test.ts`).
-- **Найденные шеллы резолвятся в абсолютный путь.** WSL-профили держали голое
-  `wsl.exe`, а на Windows загрузчик ищет программу сначала в рабочем каталоге
-  дочернего процесса — та же ловушка порядка поиска, что уже закрыта для git.
-  Заодно найденные профили теперь имеют приоритет над пользовательскими: профиль
-  с чужим id (`pwsh`, `cmd`) больше не подменяет системный шелл, на который
-  указывает «авто» (`src/main/shellProfiles.ts`).
+- **A terminal profile is no longer added silently.** `terminal.customProfiles` is a
+  list of programs the app launches, and the settings channel is reachable from the
+  renderer: a compromised renderer could register its own binary and get it started on
+  every launch — that is **persistence** surviving a restart. A profile now passes a
+  structural check (an absolute path to an existing file, no control characters, bounded
+  argv), and only locale, timezone and proxy are let through from the environment — by
+  allowlist, because a blocklist does not close: `PROMPT_COMMAND`, `PS0`, `BASH_FUNC_*`,
+  `PSModulePath`, `HOME` all give execution, and our own integration scripts read
+  `$HOME/.bashrc`. Anything that will start executing anew additionally requires explicit
+  confirmation showing the path, the arguments and the variable values; a refusal keeps
+  the old list. The profile is re-checked at launch time as well — the settings file is
+  also edited by hand (`src/main/shellProfileGuard.ts`, `src/main/ipc.ts`,
+  `tests/shellProfileGuard.test.ts`).
+- **Detected shells resolve to an absolute path.** WSL profiles held a bare `wsl.exe`,
+  and on Windows the loader looks for a program in the child process's working directory
+  first — the same search-order trap already closed for git. Detected profiles now also
+  take precedence over user ones: a profile with a borrowed id (`pwsh`, `cmd`) no longer
+  shadows the system shell that "auto" points at (`src/main/shellProfiles.ts`).
 
 ### Changed
 
-- **Сборочная цепочка обновлена: electron-builder 24.13.3 → 26.15.3.** Все
-  `app-builder-lib < 26.15.0` генерируют AppRun с висящим двоеточием в
-  `LD_LIBRARY_PATH` (GHSA-7g7r-gx96-252g), а линковщик трактует его как текущий
-  каталог — дефект уходил в поставляемый AppImage. Апгрейд закрывает и всю
-  dev-цепочку: `critical` в `npm audit` больше нет (было 1), `high` — 16 вместо
-  22. Требует Node ≥ 20.19 (26.x читает ESM-зависимость через `require`),
-  поэтому в `engines` зафиксирована нижняя граница.
+- **Build chain updated: electron-builder 24.13.3 → 26.15.3.** Every
+  `app-builder-lib < 26.15.0` generates an AppRun with a trailing colon in
+  `LD_LIBRARY_PATH` (GHSA-7g7r-gx96-252g), and the linker reads that as the current
+  directory — the defect shipped inside the AppImage. The upgrade also cleans the whole
+  dev chain: no more `critical` in `npm audit` (was 1), `high` down to 16 from 22.
+  Requires Node ≥ 20.19 (26.x loads an ESM dependency through `require`), so the lower
+  bound is pinned in `engines`.
 
 ### Fixed
 
-- **Гейт на правку файла в боковой панели больше не пустой.** Панель «IDE-агент»
-  подписывала карточку только из `input.command`, поэтому запрос Edit/Write/Read
-  показывался как «—»: подтверждение без единого слова о том, что подтверждаешь.
-  Подпись теперь общая с главной лентой, и многострочная команда сохраняет
-  переводы строк (`src/renderer/src/features/ai/AiPanel.tsx`,
-  `src/renderer/src/features/ai/gates.ts`).
-- **Иконка на рабочем столе больше не мылится.** Заря рисуется нативно на каждом
-  размере, но собранный `.ico` держал всего четыре записи (16/32/48/256), и его
-  48px был даунскейлом с 256 — а рабочий стол берёт ровно 48px. На «крупные
-  значки» (96px) такого размера не было вовсе: система брала 48 и растягивала.
-  Теперь в `.ico` десять нативных размеров (16, 20, 24, 32, 40, 48, 64, 96, 128,
-  256), а генератор переписан на Node без Aseprite и без новых зависимостей — он
-  сверяется с закоммиченными PNG и отказывается работать при расхождении, так что
-  рисунок гарантированно тот же (`scripts/gen-zarya-icon.mjs`, `build/icon.ico`).
+- **The file-edit gate in the side panel is no longer empty.** The "IDE agent" panel
+  labelled the card from `input.command` only, so an Edit/Write/Read request showed as
+  "—": a confirmation without a single word about what is being confirmed. The label is
+  now shared with the main feed, and a multi-line command keeps its line breaks
+  (`src/renderer/src/features/ai/AiPanel.tsx`, `src/renderer/src/features/ai/gates.ts`).
+- **The desktop icon is no longer blurry.** Zarya is drawn natively at every size, but
+  the built `.ico` held only four entries (16/32/48/256), and its 48px was a downscale
+  from 256 — while the desktop takes exactly 48px. For "large icons" (96px) that size did
+  not exist at all: the system took 48 and stretched it. The `.ico` now holds ten native
+  sizes (16, 20, 24, 32, 40, 48, 64, 96, 128, 256), and the generator was rewritten in
+  Node without Aseprite and without new dependencies — it verifies against the committed
+  PNGs and refuses to run on a mismatch, so the drawing is guaranteed to be the same
+  (`scripts/gen-zarya-icon.mjs`, `build/icon.ico`).
 
-## 0.5.1 — «Часовой» (2026-07-25)
+## 0.5.1 — "Sentry" (2026-07-25)
 
 A security + freshness release. An adversarial audit of the whole attack surface
 (process spawning, the Electron/IPC boundary, approval gates, secrets, supply
@@ -568,42 +602,40 @@ own, without rebuilding or restarting Zarya.
 Found by an adversarial audit of the whole attack surface (process spawning,
 Electron/IPC boundary, approval gates, secrets, supply chain).
 
-- **Опасная папка больше не выполняет код просто от того, что её открыли.**
-  `git` запускался по голому имени, а рабочим каталогом был любой каталог,
-  который пользователь открыл. На Windows libuv резолвит имя программы из cwd
-  дочернего процесса **раньше PATH**, поэтому `git.exe`, положенный в репозиторий,
-  zip или расшаренную папку, выполнялся в main-процессе — без гейта одобрения и
-  без следа в интерфейсе, автоматически при первом же опросе git-панели.
-  Воспроизведено экспериментально; `NoDefaultCurrentDirectoryInExePath` не
-  спасает. Теперь путь к git резолвится один раз из доверенных мест, а если
-  доверенный git не найден — git-функции просто выключаются, без отката на
-  голое имя (`src/main/gitService.ts`, `tests/gitExe.test.ts`).
-- **Ссылка в ответе агента больше не может увести окно на произвольный `file://`.**
-  Навигационный гейт считал своим origin любой `file:` URL, а лента ответов не
-  перехватывала клики по ссылкам — относительная ссылка в markdown резолвилась
-  относительно нашего же документа и загружала подсунутую локальную страницу с
-  полным доступом к preload-API (pty.write, файлы, управление агентом), то есть
-  RCE в обход всех гейтов. Теперь разрешён ровно наш документ, а ссылки из ленты
-  уходят во внешний браузер (`src/main/index.ts`,
-  `src/renderer/src/components/MissionFeed.tsx`).
-- **Гейт одобрения больше не бывает невидимым.** Карточка с командой рисовалась
-  только из блоков `tool_use`, которые шлёт один Claude Code. У Codex, Gemini,
-  Kimi и Qwen запрос прилетал голым событием — карточки не было **нигде**, но
-  Enter его исправно одобрял. То есть пользователь подтверждал команду, которую
-  не видел. Теперь любой запрос без описания получает свою карточку в ленте и в
-  панели (`src/renderer/src/features/ai/gates.ts`).
-- **Рабочий каталог сессии больше не подделывается выводом терминала.** Каталог
-  отслеживался по OSC 7 / 9;9 / 1337 / 633;P — а это обычный вывод, который
-  может напечатать любая программа. Каталог при этом становится рабочим
-  каталогом агента и корнем, которым ограничен его доступ к файлам, так что
-  подделка молча расширяла песочницу. Интеграция оболочки теперь сообщает
-  каталог по приватному каналу с посессионным nonce (в дочерние процессы он не
-  попадает), и после первого доверенного сообщения все неподписанные
-  игнорируются. Оболочки без интеграции (cmd.exe, свои профили) работают как
-  раньше — защита включается сама, без настроек
+- **A hostile folder no longer executes code just because you opened it.** `git` was
+  launched by bare name while the working directory was any directory the user opened.
+  On Windows libuv resolves a program name from the child process's cwd **before PATH**,
+  so a `git.exe` dropped into a repository, a zip or a shared folder ran in the main
+  process — with no approval gate and no trace in the interface, automatically on the
+  first git-panel poll. Reproduced experimentally;
+  `NoDefaultCurrentDirectoryInExePath` does not help. The path to git is now resolved
+  once from trusted locations, and if no trusted git is found the git features are simply
+  turned off, with no fallback to a bare name (`src/main/gitService.ts`,
+  `tests/gitExe.test.ts`).
+- **A link in an agent's answer can no longer take the window to an arbitrary
+  `file://`.** The navigation gate treated any `file:` URL as its own origin, and the
+  answer feed did not intercept link clicks — a relative link in markdown resolved
+  against our own document and loaded a planted local page with full access to the
+  preload API (pty.write, files, agent control), i.e. RCE past every gate. Exactly our
+  document is now allowed, and links from the feed go to the external browser
+  (`src/main/index.ts`, `src/renderer/src/components/MissionFeed.tsx`).
+- **An approval gate is never invisible.** The card with the command was drawn only
+  from `tool_use` blocks, which only Claude Code sends. With Codex, Gemini, Kimi and
+  Qwen the request arrived as a bare event — there was no card **anywhere**, and yet
+  Enter approved it faithfully. That is a user confirming a command they never saw. Any
+  request without a description now gets its own card in the feed and in the panel
+  (`src/renderer/src/features/ai/gates.ts`).
+- **A session's working directory can no longer be forged by terminal output.** The
+  directory was tracked via OSC 7 / 9;9 / 1337 / 633;P — ordinary output that any
+  program can print. That directory becomes the agent's working directory and the root
+  its file access is confined to, so a forgery silently widened the sandbox. Shell
+  integration now reports the directory over a private channel with a per-session nonce
+  (which never reaches child processes), and after the first trusted message all
+  unsigned ones are ignored. Shells without integration (cmd.exe, custom profiles) work
+  as before — the protection turns itself on, with no settings
   (`src/renderer/src/terminal/cwdTrust.ts`).
-- **Dev-сервер сверяется по origin, а не по префиксу строки** — префиксная
-  проверка принимала `http://localhost:5920@evil.com/` за свой origin.
+- **The dev server is matched by origin, not by string prefix** — a prefix check
+  accepted `http://localhost:5920@evil.com/` as our own origin.
 
 ### Fixed
 
@@ -655,7 +687,7 @@ Electron/IPC boundary, approval gates, secrets, supply chain).
 - Bundled Claude Agent SDK `0.3.217` → `0.3.220` (ships CLI 2.1.220, which knows
   Opus 5).
 
-## 0.5.0 — «Созвездие» (2026-07-24)
+## 0.5.0 — "Constellation" (2026-07-24)
 
 A multi-agent release. Zarya is no longer tied to a single AI backend: a driver
 abstraction now lets **five native agent engines** live side by side —
@@ -705,7 +737,7 @@ presets for Kimi/Qwen/DeepSeek and macOS packaging.
   fs-proxy + traversal, crash/recovery, quit teardown). Every increment was
   reviewed adversarially before landing.
 
-## 0.4.0 — «Орбита» (2026-07-21)
+## 0.4.0 — "Orbit" (2026-07-21)
 
 A large "cosmic CLI agent" redesign — Soviet-space pixel-constructivism. The whole
 shell now reads like a launch console: pixel type, a drifting starfield, a launch
@@ -722,31 +754,31 @@ pad for the AI engine, and a bilingual "mission control" settings surface.
   stars sitting behind the whole app (`StarBackdrop.tsx`); pointer-events-none,
   DPR-capped, theme-aware (dark stars on light "poster" themes), and paused under
   `prefers-reduced-motion`.
-- **Pixel logo** — "ЗАРЯ // ОРБИТА-1" wordmark in the titlebar (`Titlebar.tsx`).
-- **Launch Pad ("Пусковой комплекс")** — a rocket-console overlay for picking the
-  AI **engine (model)** and **thrust (effort)**, with a live mission clock and a
-  pixel launch-pad scene; **ПУСК · ПОЕХАЛИ** applies both to settings and fires the
-  launch animation (`LaunchPad.tsx`). Opened via `Ctrl+Alt+M` (`app.launch-pad`),
-  the command palette, or a button in Settings → AI.
-- **Reasoning thrust ("тяга")** — a new `AiSettings.effort` (`AiEffort`:
+- **Pixel logo** — a "ZARYA // ORBIT-1" wordmark in the titlebar (`Titlebar.tsx`).
+- **Launch Pad** — a rocket-console overlay for picking the AI **engine (model)**
+  and **thrust (effort)**, with a live mission clock and a pixel launch-pad scene;
+  **LAUNCH · POYEKHALI** applies both to settings and fires the launch animation
+  (`LaunchPad.tsx`). Opened via `Ctrl+Alt+M` (`app.launch-pad`), the command
+  palette, or a button in Settings → AI.
+- **Reasoning thrust** — a new `AiSettings.effort` (`AiEffort`:
   `low` / `medium` / `high` / `max`) that drives temperature **and** token budget
   through `EFFORT_TUNING` (`src/shared/defaults.ts`). Surfaced as a 4-segment
   thrust bar in both the Launch Pad and Settings → AI.
-- **Rocket-launch overlay** — a cinematic "ПОЕХАЛИ!" liftoff (countdown, parallax
+- **Rocket-launch overlay** — a cinematic "POYEKHALI!" liftoff (countdown, parallax
   star streaks, exhaust embers, screen shake) fired on engine/thrust and
   provider/model changes (`RocketLaunch.tsx`).
-- **"Центр управления" (Mission Control) settings** — the settings view is
-  restyled as a control room with bilingual RU + EN labels, a 2-column theme-card
-  picker, a gold −/+ font-size stepper, and a dedicated "rocket" toggle reserved for
-  the dangerous auto-approve switch (`SettingsView.tsx`).
+- **Mission Control settings** — the settings view is restyled as a control room
+  with bilingual labels, a 2-column theme-card picker, a gold −/+ font-size stepper,
+  and a dedicated "rocket" toggle reserved for the dangerous auto-approve switch
+  (`SettingsView.tsx`).
 - **Expanded theme collection** — 9 cosmic-constructivist themes replacing the
-  original two: 6 dark (**Заря · Космос** default, **Восток**, **Орбита**,
-  **Спутник**, **Байконур**, **Рассвет**) and 3 light "poster paper" themes
-  (**Плакат**, **Полдень**, **Чертёж**). See [docs/themes.md](docs/themes.md).
+  original two: 6 dark (**Kosmos** default, **Vostok**, **Orbit**, **Sputnik**,
+  **Baikonur**, **Dawn**) and 3 light "poster paper" themes (**Poster**, **Noon**,
+  **Blueprint**). See [docs/themes.md](docs/themes.md).
 - **Terminal instrument-panel header** — a thin per-pane strip above each xterm
-  surface ("★ CLI-АГЕНТ · ЗАРЯ" + the pane's own cwd) (`TerminalPane.tsx`).
-- **"Топливо" fuel strip** — a launch-themed status line in the AI panel
-  (`AiPanel.tsx`) and a matching fuel status item in the bottom status bar.
+  surface ("★ CLI AGENT · ZARYA" + the pane's own cwd) (`TerminalPane.tsx`).
+- **Fuel strip** — a launch-themed status line in the AI panel (`AiPanel.tsx`) and
+  a matching fuel status item in the bottom status bar.
 - **Offscreen QA harness** — `scripts/shoot.mjs`, a coverage-independent visual-QA
   tool that boots Zarya in an isolated throwaway instance (Playwright's Electron
   driver, its own `userData`, no single-instance lock, no user sessions) and
@@ -755,7 +787,7 @@ pad for the AI engine, and a bilingual "mission control" settings surface.
 
 ### Changed
 
-- **Default theme** is now `zarya-cosmos` (Заря · Космос).
+- **Default theme** is now `zarya-cosmos` (Zarya · Kosmos).
 - **Exit-code badges, block separators and command blocks** restyled to match the
   new console aesthetic (behaviour unchanged).
 - **Prepare-quit safety timer** raised from 2s to **8s** so session

@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n'
 import {
   IMAGE_MAX_BYTES,
   checkImageSource,
@@ -42,7 +43,7 @@ async function encode(
 ): Promise<{ blob: Blob; mediaType: ImageMime }> {
   const canvas = new OffscreenCanvas(width, height)
   const ctx = canvas.getContext('2d')
-  if (!ctx) throw new Error('нет 2d-контекста')
+  if (!ctx) throw new Error(t('img.no2d'))
   ctx.drawImage(bitmap, 0, 0, width, height)
   // WebP для картинок с прозрачностью, JPEG для непрозрачных: он заметно легче
   // на скриншотах, а прозрачность на них не нужна.
@@ -63,7 +64,7 @@ export async function fileToAttachment(
   try {
     bitmap = await createImageBitmap(file)
   } catch {
-    return { ok: false, reason: 'не удалось прочитать изображение' }
+    return { ok: false, reason: t('img.unreadable') }
   }
 
   const hasAlpha = check.mediaType === 'image/png' || check.mediaType === 'image/webp'
@@ -80,7 +81,7 @@ export async function fileToAttachment(
       bitmap.close()
       return {
         ok: false,
-        reason: 'картинка слишком тяжёлая даже после уменьшения — сохраните её меньше'
+        reason: t('img.stillHeavy')
       }
     }
     mediaType = mt

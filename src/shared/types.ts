@@ -805,7 +805,8 @@ export interface ThemeUiColors {
 
 export interface ThemeDef {
   id: string
-  name: string
+  /** Ключ подписи: имя темы рисуется на языке интерфейса. */
+  nameKey: string
   type: 'dark' | 'light'
   ui: ThemeUiColors
   terminal: ThemeTerminalColors

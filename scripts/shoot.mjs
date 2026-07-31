@@ -15,6 +15,7 @@
  *
  * Flags:
  *   --theme <id>   force a theme before capturing
+ *   --lang <ru|en> force the interface language (default: as in settings)
  *   --rocket       fire the launchRocket() overlay and capture mid-animation
  *   --out <path>   output PNG (default shots/shot.png)
  *   --wait <ms>    extra settle time before capture (default 1500)
@@ -34,6 +35,9 @@ function arg(name, def) {
 }
 
 const theme = arg('theme', null)
+// Язык снимка задаётся явно: витрина показывает интерфейс, а он теперь бывает
+// двух видов, и «какой попадётся» — не тот выбор, который делают за читателя.
+const lang = arg('lang', null)
 const rocket = !!arg('rocket', false)
 const out = resolve(String(arg('out', 'shots/shot.png')))
 const wait = Number(arg('wait', 1500))
@@ -41,10 +45,13 @@ const wait = Number(arg('wait', 1500))
 const userData = mkdtempSync(join(tmpdir(), 'zarya-shot-'))
 // Seed an isolated settings file so the instance boots on the requested theme
 // with no restored sessions.
-if (theme) {
+if (theme || lang) {
+  const appearance = {}
+  if (theme) appearance.themeId = String(theme)
+  if (lang) appearance.language = String(lang)
   writeFileSync(
     join(userData, 'settings.json'),
-    JSON.stringify({ appearance: { themeId: theme }, sessions: { restoreOnLaunch: 'none' } }, null, 2)
+    JSON.stringify({ appearance, sessions: { restoreOnLaunch: 'none' } }, null, 2)
   )
 }
 

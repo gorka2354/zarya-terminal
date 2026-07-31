@@ -186,10 +186,10 @@ export interface ZaryaApi {
       /** Список моделей для настроек. */
       models?: Array<{
         id: string
-        label: string
+        labelKey: string
         lang: string
         license: string
-        note: string
+        noteKey: string
         bytes: number
         installed: boolean
         legacy: boolean

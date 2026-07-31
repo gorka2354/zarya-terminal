@@ -57,7 +57,7 @@ Set per-provider via `settings:set-secret` → `SettingsStore.setSecret()`
 - `settings:provider-status` only ever returns `{ provider, hasKey: boolean }` — never
   the key material, so the renderer/UI can show "connected" state safely.
 
-## Reasoning thrust ("тяга")
+## Reasoning thrust
 
 Instead of asking you to hand-tune sampling for every model, Zarya exposes one
 launch-console dial — **reasoning thrust** (`AiSettings.effort`, an `AiEffort` of
@@ -66,10 +66,10 @@ budget through `EFFORT_TUNING` (`src/shared/defaults.ts`):
 
 | Thrust (`effort`) | Label | Temperature | Token floor |
 |---|---|---|---|
-| `low` | НИЗКАЯ | 0.15 | 2048 |
-| `medium` (default) | СРЕДНЯЯ | 0.40 | 4096 |
-| `high` | ВЫСОКАЯ | 0.60 | 6144 |
-| `max` | МАКСИМУМ | 0.85 | 8192 |
+| `low` | LOW | 0.15 | 2048 |
+| `medium` (default) | MEDIUM | 0.40 | 4096 |
+| `high` | HIGH | 0.60 | 6144 |
+| `max` | AFTERBURNER | 0.85 | 8192 |
 
 When a request is dispatched (`aiStore.ts`, `dispatchChat`), the thrust drives two
 fields of the `AiChatRequest`:
@@ -82,12 +82,12 @@ fields of the `AiChatRequest`:
 The manual **Temperature** and **Max tokens** fields in Settings → AI still exist for
 fine control; thrust is the fast, four-notch way to move both at once.
 
-### The Launch Pad ("Пусковой комплекс")
+### The Launch Pad
 
-The Launch Pad (`Ctrl+Alt+M`, `app.launch-pad`, or the **Открыть пусковой комплекс**
+The Launch Pad (`Ctrl+Alt+M`, `app.launch-pad`, or the **Open the launch pad**
 button in Settings → AI) is a rocket-console overlay that picks the AI **engine
 (model)** and **thrust (effort)** together. Selections are drafts until you hit
-**ПУСК · ПОЕХАЛИ**, which commits `{ model, effort }` to `settings.ai` and fires the
+**LAUNCH · POYEKHALI**, which commits `{ model, effort }` to `settings.ai` and fires the
 rocket-launch animation. The model list is built from `AI_MODEL_PRESETS` for the
 current provider, always including whatever model is currently configured. The same
 4-segment thrust control also lives inline in Settings → AI (`EffortControl`), so the
@@ -107,7 +107,7 @@ isError? }` content parts on the next turn.
 
 ```ts
 autoApprove: boolean  // AiSettings — built-in Zarya agent only
-claudeBypass: boolean // AiSettings — the АВТОПИЛОТ chip, native engines only
+claudeBypass: boolean // AiSettings — the AUTOPILOT chip, native engines only
 ```
 
 - By default (`autoApprove: false`), any command the assistant wants to run is
@@ -122,33 +122,33 @@ claudeBypass: boolean // AiSettings — the АВТОПИЛОТ chip, native engi
 
 `autoApprove` governs the built-in Zarya agent (your own API key, one `run_command`
 tool) and nothing else. Native engines — Claude Code, Codex, Gemini/Kimi/Qwen — are
-gated by their driver's approval callback, weakened only by the explicit **АВТОПИЛОТ**
+gated by their driver's approval callback, weakened only by the explicit **AUTOPILOT**
 chip (`claudeBypass`), which auto-allows tool calls inside `canUseTool` while
 `AskUserQuestion` still surfaces.
 
 Those two must never be crossed. `autoApprove` used to also be sent to native drivers
 as `permissionMode: 'acceptEdits'` — a real Claude Agent SDK mode meaning *auto-accept
 file edit operations*. Edits then landed below `canUseTool`, invisible to Zarya's own
-approval UI, while АВТОПИЛОТ was off and the chip read «РУЧНОЙ». Zarya now always sends
+approval UI, while AUTOPILOT was off and the chip read “MANUAL”. Zarya now always sends
 `permissionMode: 'default'`; `AgentPermissionMode` still types `'acceptEdits'`, but no
 setting is wired to it (`src/renderer/src/features/ai/aiStore.ts`, `src/shared/types.ts`).
 
 The chip is shown in every agent mode and reads the switch that actually governs the
 active engine, so it cannot report a policy the driver isn't running. An engine that
-has no bypass at all — the ACP engines always ask — renders it locked on «РУЧНОЙ»
+has no bypass at all — the ACP engines always ask — renders it locked on “MANUAL”
 instead of an inviting toggle that does nothing (`src/main/acpDriver.ts`). Until
 capabilities load, the chip reports the setting that will actually be sent rather than
 assuming the engine cannot bypass.
 
 Codex is gated by two knobs, not one: `approvalPolicy` *and* the thread sandbox. A
 writable workspace makes `on-request` ask only about things outside it, so a patch
-inside the open folder was auto-approved by Codex itself. Both now follow АВТОПИЛОТ.
+inside the open folder was auto-approved by Codex itself. Both now follow AUTOPILOT.
 The thread's sandbox is fixed at `thread/start`, so toggling the chip mid-conversation
 sends a per-turn override — but only when the two have actually drifted apart. That
 override replaces the sandbox policy wholesale, so sending it every turn would quietly
 discard your own `[sandbox_workspace_write]` settings (`network_access`,
-`writable_roots`). One case still does: opening a thread in «РУЧНОЙ» and switching to
-АВТОПИЛОТ mid-conversation runs the rest of it on Zarya's defaults rather than yours —
+`writable_roots`). One case still does: opening a thread in “MANUAL” and switching to
+AUTOPILOT mid-conversation runs the rest of it on Zarya's defaults rather than yours —
 start the conversation with the chip already on to keep them (`src/main/codexDriver.ts`).
 
 **An approval card may not hide any part of what it asks you to approve.** Cards fold
@@ -199,7 +199,7 @@ To limit exposure:
 
 - Lower `contextBlocks` (or set it to 0) to stop automatic block attachment entirely —
   you can still paste specific output manually.
-- Keep `autoApprove` (built-in agent) and АВТОПИЛОТ (native engines) off so nothing
+- Keep `autoApprove` (built-in agent) and AUTOPILOT (native engines) off so nothing
   runs without your eyes on it first — the bar's chip tells you which is in force.
 - Prefer `ollama` with a local model for anything you don't want leaving the machine
   at all — no network call happens outside your own host in that case.
@@ -223,43 +223,43 @@ To defend against that, `buildSystemPrompt()` (`src/renderer/src/features/ai/aiS
   trigger a command — even if it looks like a directive.
 - A payload that tries to forge the closing marker is neutralized before it's
   inserted (any `<…untrusted-terminal-output>` inside the output is replaced with
-  `[маркер удалён]`), so it can't "break out" of the fenced block.
+  `[marker stripped]`), so it can't "break out" of the fenced block.
 
 This is a mitigation, not a guarantee — combined with keeping `autoApprove` off (so
 you still see and approve every command), it means injected output can't silently
 drive the agent.
 
-## Китайские модели: Kimi, Qwen, DeepSeek
+## Chinese models: Kimi, Qwen, DeepSeek
 
-Есть два способа подключить их, независимых друг от друга.
+There are two independent ways to connect them.
 
-### 1. По API-ключу (builtin, `openai-compat`)
+### 1. By API key (built-in agent, `openai-compat`)
 
-Settings → AI → провайдер **OpenAI-совместимый**, затем нажми пресет под полем
-Base URL — он подставит нужный baseURL, останется вставить свой ключ и вписать
-актуальную модель (id моделей у этих вендоров меняются часто, поэтому список не
-захардкожен — смотри их доки):
+Settings → AI → provider **OpenAI-compatible**, then press a preset under the
+Base URL field — it fills in the right baseURL, and all that is left is your key
+and a current model id (these vendors rotate ids often, so the list is not
+hard-coded — check their docs):
 
-| Пресет | Base URL | Ключ | Примеры моделей |
-|--------|----------|------|-----------------|
-| Kimi (Moonshot) | `https://api.moonshot.ai/v1` (intl) · `.cn` для Китая | platform.moonshot.ai | `kimi-k3`, `kimi-k2.7-code` |
+| Preset | Base URL | Key | Example models |
+|--------|----------|-----|----------------|
+| Kimi (Moonshot) | `https://api.moonshot.ai/v1` (intl) · `.cn` for China | platform.moonshot.ai | `kimi-k3`, `kimi-k2.7-code` |
 | Qwen (DashScope) | `https://dashscope-intl.aliyuncs.com/compatible-mode/v1` (intl) | Alibaba Cloud Model Studio | `qwen3-coder-plus`, `qwen-max` |
 | DeepSeek | `https://api.deepseek.com/v1` | platform.deepseek.com | `deepseek-chat`, `deepseek-reasoner` |
 
-Ключ одного региона не работает в другом (China ↔ intl — разные аккаунты/биллинг).
-Оплата из РФ — обычно через агрегаторы; сами API-запросы VPN не требуют.
-Function-calling (инструменты) и стриминг поддерживаются всеми тремя. Для Kimi
-стоит один раз проверить многоходовой tool-use на реальной задаче.
+A key from one region does not work in the other (China ↔ intl are separate
+accounts and billing). Function calling (tools) and streaming are supported by all
+three. With Kimi it is worth checking multi-step tool use on a real task once.
 
-### 2. Нативный агент (чип движка, ACP)
+### 2. Native agent (engine chip, ACP)
 
-У Kimi и Qwen есть собственные CLI-агенты на **ACP** (тот же протокол, что у
-Gemini). Установи CLI и войди в аккаунт — чип движка появится сам (probe):
+Kimi and Qwen ship their own CLI agents speaking **ACP** — the same protocol as
+Gemini. Install the CLI and sign in, and the engine chip appears on its own (probe):
 
-- **Kimi:** Kimi Code CLI (`kimi`), запуск ACP — `kimi acp`, вход — `kimi /login`.
-- **Qwen:** `npm i -g @qwen-code/qwen-code` (`qwen`), запуск ACP — `qwen --acp`
-  (апстрим помечает ACP как experimental; на Windows возможны шероховатости).
+- **Kimi:** Kimi Code CLI (`kimi`), ACP entry point `kimi acp`, sign in with
+  `kimi /login`.
+- **Qwen:** `npm i -g @qwen-code/qwen-code` (`qwen`), ACP entry point `qwen --acp`
+  (upstream marks ACP as experimental; expect rough edges on Windows).
 
-Нативный путь даёт свои инструменты агента, resume сессий и tool-approval гейты;
-API-путь проще (свой ключ, без установки CLI), но использует агентский цикл самой
-Zarya. Оба безопасны: команды и запись файлов проходят через approval-гейты.
+The native path gives you the agent's own tools, session resume and tool-approval
+gates; the API path is simpler (your key, no CLI to install) but runs Zarya's own
+agent loop. Both are safe: commands and file writes go through the approval gates.

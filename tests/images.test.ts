@@ -11,6 +11,7 @@ import {
   sniffImageMime,
   type ImageAttachment
 } from '@shared/images'
+import { setLangProvider } from '@shared/lang'
 
 /**
  * Вставка картинки — первое место, где в приложение попадают чужие БАЙТЫ, а не
@@ -70,7 +71,13 @@ describe('пределы приёма', () => {
   it('слишком большой файл отклоняется ДО декодирования', () => {
     const r = checkImageSource(IMAGE_SRC_MAX_BYTES + 1, PNG)
     expect(r.ok).toBe(false)
-    if (!r.ok) expect(r.reason).toMatch(/МБ/)
+    // Отказ переведён на оба языка: подставленный вместо текста ключ выглядел бы
+    // в интерфейсе как «img.tooBig» — сломано, но незаметно для типов.
+    if (!r.ok) expect(r.reason).toMatch(/\d+ MB/)
+    setLangProvider(() => 'ru')
+    const ru = checkImageSource(IMAGE_SRC_MAX_BYTES + 1, PNG)
+    if (!ru.ok) expect(ru.reason).toMatch(/\d+ МБ/)
+    setLangProvider(() => 'en')
   })
 
   it('нормальный PNG проходит', () => {
@@ -115,7 +122,10 @@ describe('нормализация размера', () => {
 describe('плейсхолдер', () => {
   it('нумерация с единицы и по порядку', () => {
     // Модель видит ссылку там, где человек вставил картинку, а блоки идут следом.
+    expect(imagePlaceholder(0)).toBe('[Image #1]')
+    expect(imagePlaceholder(3)).toBe('[Image #4]')
+    setLangProvider(() => 'ru')
     expect(imagePlaceholder(0)).toBe('[Изображение #1]')
-    expect(imagePlaceholder(3)).toBe('[Изображение #4]')
+    setLangProvider(() => 'en')
   })
 })

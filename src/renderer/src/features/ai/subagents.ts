@@ -106,7 +106,7 @@ export function fmtElapsed(ms: number): string {
   const total = Math.max(0, Math.round(ms / 1000))
   const m = Math.floor(total / 60)
   const s = total % 60
-  return m ? `${m}м ${s}с` : `${s}с`
+  return m ? t('sub.min', { m, s }) : t('sub.sec', { s })
 }
 
 /**
@@ -118,4 +118,5 @@ export function coveredToolUseIds(runs: Record<string, SubagentRun>): Set<string
   const out = new Set<string>()
   for (const r of Object.values(runs)) if (r.toolUseId) out.add(r.toolUseId)
   return out
-}
+}import { t } from '@/lib/i18n'
+

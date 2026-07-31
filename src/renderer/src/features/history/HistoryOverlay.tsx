@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n'
 import { useEffect, useRef, useState } from 'react'
 import type { HistoryEntry } from '@shared/types'
 import { formatRelative, shortenPath } from '@/lib/ansi'
@@ -88,7 +89,7 @@ export default function HistoryOverlay(): React.JSX.Element | null {
         if (e.target === e.currentTarget) useUiStore.getState().set({ historyOverlayOpen: false })
       }}
     >
-      <div className="zy-modal zy-modal--wide" role="dialog" aria-label="История команд">
+      <div className="zy-modal zy-modal--wide" role="dialog" aria-label={t('hist.aria')}>
         <div className="zy-palette-input-row">
           <span className="zy-palette-input-icon">
             <Icon name="history" size={15} strokeWidth={1.6} />
@@ -96,7 +97,7 @@ export default function HistoryOverlay(): React.JSX.Element | null {
           <input
             ref={inputRef}
             className="zy-palette-input zy-palette-input--mono"
-            placeholder="Поиск по истории команд, во всех сессиях…"
+            placeholder={t('hist.overlaySearch')}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKeyDown}
@@ -109,7 +110,7 @@ export default function HistoryOverlay(): React.JSX.Element | null {
           />
         </div>
         <div className="zy-palette-list" role="listbox" id="zy-history-listbox">
-          {!results.length && <div className="zy-empty">Совпадений не найдено</div>}
+          {!results.length && <div className="zy-empty">{t('hist.noHits')}</div>}
           {results.map((entry, index) => (
             <div
               key={entry.id}
@@ -143,16 +144,16 @@ export default function HistoryOverlay(): React.JSX.Element | null {
         </div>
         <div className="zy-palette-footer">
           <span className="zy-palette-footer-hint">
-            <span className="zy-kbd">↑↓</span> навигация
+            <span className="zy-kbd">↑↓</span> {t('qo.nav')}
           </span>
           <span className="zy-palette-footer-hint">
-            <span className="zy-kbd">Enter</span> вставить
+            <span className="zy-kbd">Enter</span> {t('hist.insert')}
           </span>
           <span className="zy-palette-footer-hint">
-            <span className="zy-kbd">Ctrl+Enter</span> вставить и запустить
+            <span className="zy-kbd">Ctrl+Enter</span> {t('hist.insertRun')}
           </span>
           <span className="zy-palette-footer-hint">
-            <span className="zy-kbd">Esc</span> закрыть
+            <span className="zy-kbd">Esc</span> {t('pal.close')}
           </span>
         </div>
       </div>

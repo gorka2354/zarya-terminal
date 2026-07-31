@@ -7,6 +7,7 @@ import { AgentBar } from './AgentBar'
 import { getTerminal } from '@/terminal/terminalRegistry'
 import { closePaneAsking, toggleMaximizePane } from '@/actions/panes'
 import { focusPane } from '@/terminal/paneFocus'
+import { t, useLang } from '@/lib/i18n'
 import { listLeaves, useSessionsStore } from '@/state/sessionsStore'
 import { useSettingsStore } from '@/state/settingsStore'
 import { isRaw, setRaw, useUiStore } from '@/state/uiStore'
@@ -49,6 +50,10 @@ export const TerminalPane = memo(function TerminalPane({
   active,
   visible
 }: Props): React.JSX.Element {
+  // Подписка на язык: без неё надписи этого компонента сменились бы не в
+  // момент переключения, а при следующей перерисовке по другой причине.
+  useLang()
+
   const store = useSessionsStore.getState()
   const searchOpenFor = useUiStore((s) => s.searchOpenFor)
   const rightClickBehavior = useSettingsStore((s) => s.settings.terminal.rightClickBehavior)
@@ -78,7 +83,7 @@ export const TerminalPane = memo(function TerminalPane({
     const hasSelection = !!handle?.term.getSelection()
     open(e.clientX, e.clientY, [
       {
-        label: 'Копировать',
+        label: t('common.copy'),
         hint: 'Ctrl+Shift+C',
         disabled: !hasSelection,
         onClick: () => {
@@ -87,40 +92,40 @@ export const TerminalPane = memo(function TerminalPane({
         }
       },
       {
-        label: 'Вставить',
+        label: t('common.paste'),
         hint: 'Ctrl+Shift+V',
         onClick: () => void navigator.clipboard.readText().then((t) => t && handle?.term.paste(t))
       },
       { separator: true },
       {
-        label: 'Найти в терминале',
+        label: t('feed.findInTerminal'),
         hint: 'Ctrl+Shift+F',
         onClick: () => useUiStore.getState().set({ searchOpenFor: sessionId })
       },
       {
-        label: 'Очистить',
+        label: t('common.clear'),
         hint: 'Ctrl+Shift+K',
         onClick: () => handle?.term.clear()
       },
       { separator: true },
       {
-        label: 'Разделить вправо',
+        label: t('pane.splitRight'),
         hint: 'Ctrl+Shift+D',
         onClick: () => void store.splitActive('row')
       },
       {
-        label: 'Разделить вниз',
+        label: t('pane.splitDown'),
         hint: 'Ctrl+Shift+S',
         onClick: () => void store.splitActive('col')
       },
       {
-        label: maximized ? 'Свернуть к раскладке' : 'Развернуть на всю вкладку',
+        label: t(maximized ? 'pane.restore' : 'pane.maximize'),
         onClick: () => toggleMaximizePane(sessionId)
       },
       {
         // Убрать панель с разделённого экрана, не убивая её процесс.
-        label: 'Вынести в отдельную вкладку',
-        hint: 'или перетащи шапку в список',
+        label: t('pane.detach'),
+        hint: t('pane.detachHintHeader'),
         disabled: !multiPane,
         onClick: () => store.detachPane(sessionId)
       },
@@ -128,7 +133,7 @@ export const TerminalPane = memo(function TerminalPane({
       {
         // Спрашиваем про несохранённый текст: закрыть панель с недописанным
         // запросом молча — то же, что закрыть редактор без вопроса.
-        label: 'Закрыть панель',
+        label: t('pane.close'),
         danger: true,
         onClick: () => void closePaneAsking(sessionId)
       }
@@ -144,7 +149,7 @@ export const TerminalPane = memo(function TerminalPane({
       // Рамка и адресат клавиш — ОДНА величина: активная сессия вкладки. Если
       // однажды они разойдутся, рамка начнёт врать о том, куда уйдёт Enter, —
       // а это одобрение запуска команды (см. features/ai/keyRouter).
-      title={multiPane && active ? 'Активная панель — сюда уходят Enter и Esc' : undefined}
+      title={multiPane && active ? t('pane.activeHint') : undefined}
       onMouseDown={() => {
         if (!active) store.setActiveSession(sessionId)
       }}
@@ -223,6 +228,10 @@ const PaneHeader = memo(function PaneHeader({
   maximized: boolean
   multiPane: boolean
 }): React.JSX.Element {
+  // Подписка на язык: без неё надписи этого компонента сменились бы не в
+  // момент переключения, а при следующей перерисовке по другой причине.
+  useLang()
+
   const cwd = useSessionsStore((s) => s.sessions[sessionId]?.cwd)
   const searchOpenFor = useUiStore((s) => s.searchOpenFor)
 
@@ -245,7 +254,7 @@ const PaneHeader = memo(function PaneHeader({
           разделённого экрана можно было только убив процесс. */}
       <div
         className="zy-pane-grip"
-        title="Перетащи: на другую панель — перенести, в список слева — вынести в отдельную вкладку"
+        title={t('pane.grip')}
         draggable
         onDragStart={(e) => {
           e.dataTransfer.setData(PANE_DRAG_SESSION, sessionId)
@@ -265,7 +274,7 @@ const PaneHeader = memo(function PaneHeader({
             flexShrink: 0
           }}
         >
-          CLI-АГЕНТ · ЗАРЯ
+          {t('feed.mark')}
         </span>
         {cwd && (
           <span
@@ -287,14 +296,14 @@ const PaneHeader = memo(function PaneHeader({
       <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
         <button
           className="zy-icon-btn"
-          title="Вернуться к блокам (Warp-фид)"
+          title={t('feed.toBlocks')}
           onClick={() => setRaw(sessionId, false)}
         >
           <Icon name="sessions" size={13} />
         </button>
         <button
           className="zy-icon-btn"
-          title="Разделить вправо"
+          title={t('pane.splitRight')}
           onClick={() => void useSessionsStore.getState().splitActive('row')}
         >
           <Icon name="split-h" size={13} />
@@ -304,7 +313,7 @@ const PaneHeader = memo(function PaneHeader({
         {(multiPane || maximized) && (
           <button
             className={`zy-icon-btn${maximized ? ' zy-icon-btn--active' : ''}`}
-            title={maximized ? 'Свернуть к раскладке' : 'Развернуть на всю вкладку'}
+            title={t(maximized ? 'pane.restore' : 'pane.maximize')}
             onClick={() => toggleMaximizePane(sessionId)}
           >
             <Icon name={maximized ? 'restore' : 'maximize'} size={13} />
@@ -312,7 +321,7 @@ const PaneHeader = memo(function PaneHeader({
         )}
         <button
           className={`zy-icon-btn${searchOpenFor === sessionId ? ' zy-icon-btn--active' : ''}`}
-          title="Найти в терминале"
+          title={t('feed.findInTerminal')}
           onClick={() =>
             useUiStore
               .getState()
@@ -326,7 +335,12 @@ const PaneHeader = memo(function PaneHeader({
   )
 })
 
-function TermSearchBar({ sessionId }: { sessionId: string }): React.JSX.Element {
+function TermSearchBar({
+ sessionId }: { sessionId: string }): React.JSX.Element {
+  // Подписка на язык: без неё надписи этого компонента сменились бы не в
+  // момент переключения, а при следующей перерисовке по другой причине.
+  useLang()
+
   const [query, setQuery] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -357,20 +371,20 @@ function TermSearchBar({ sessionId }: { sessionId: string }): React.JSX.Element 
       <input
         ref={inputRef}
         value={query}
-        placeholder="Поиск…"
+        placeholder={t('search.placeholder')}
         onChange={(e) => setQuery(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === 'Enter') find(e.shiftKey ? -1 : 1)
           if (e.key === 'Escape') close()
         }}
       />
-      <button className="zy-icon-btn" title="Назад (Shift+Enter)" onClick={() => find(-1)}>
+      <button className="zy-icon-btn" title={t('search.prev')} onClick={() => find(-1)}>
         <Icon name="chevron-up" size={13} />
       </button>
-      <button className="zy-icon-btn" title="Далее (Enter)" onClick={() => find(1)}>
+      <button className="zy-icon-btn" title={t('search.next')} onClick={() => find(1)}>
         <Icon name="chevron-down" size={13} />
       </button>
-      <button className="zy-icon-btn" title="Закрыть (Esc)" onClick={close}>
+      <button className="zy-icon-btn" title={t('search.close')} onClick={close}>
         <Icon name="close" size={13} />
       </button>
     </div>

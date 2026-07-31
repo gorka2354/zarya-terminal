@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DirEntry, GitStatus } from '@shared/types'
 import { type MenuItem, useContextMenu } from '@/components/ContextMenu'
@@ -83,13 +84,13 @@ interface GitMarker {
 function gitMarkerFor(rawCode: string | undefined): GitMarker | null {
   if (!rawCode) return null
   const kind = classifyStatus(rawCode)
-  if (kind === 'new') return { glyph: '+', color: 'var(--success)', label: 'новый файл' }
-  if (kind === 'del') return { glyph: '−', color: 'var(--danger)', label: 'удалён' }
+  if (kind === 'new') return { glyph: '+', color: 'var(--success)', label: t('ft.new') }
+  if (kind === 'del') return { glyph: '−', color: 'var(--danger)', label: t('ft.deleted') }
   if (kind === 'mod') {
     const staged = rawCode.length > 0 && rawCode[0] !== ' ' && rawCode[0] !== '?'
     return staged
-      ? { glyph: '★', color: 'var(--accent-2)', label: 'изменён (в индексе)' }
-      : { glyph: '±', color: 'var(--warn)', label: 'изменён' }
+      ? { glyph: '★', color: 'var(--accent-2)', label: t('ft.stagedMod') }
+      : { glyph: '±', color: 'var(--warn)', label: t('ft.mod') }
   }
   return null
 }
@@ -219,7 +220,7 @@ export default function FileTree(): React.JSX.Element {
   }
 
   const createEntry = async (dirPath: string, isDir: boolean): Promise<void> => {
-    const name = window.prompt(isDir ? 'Имя новой папки' : 'Имя нового файла')
+    const name = window.prompt(t(isDir ? 'ft.newDirName' : 'ft.newFileName'))
     if (!name) return
     const path = joinPath(dirPath, name)
     try {
@@ -227,29 +228,29 @@ export default function FileTree(): React.JSX.Element {
       await loadChildren(dirPath, true)
       if (!isDir) void useEditorStore.getState().openFile(path)
     } catch (e) {
-      useUiStore.getState().toast(`Не удалось создать: ${String(e)}`, 'error')
+      useUiStore.getState().toast(t('ft.createFail', { err: String(e) }), 'error')
     }
   }
 
   const renameEntry = async (entry: DirEntry): Promise<void> => {
-    const name = window.prompt('Новое имя', entry.name)
+    const name = window.prompt(t('ft.newName'), entry.name)
     if (!name || name === entry.name) return
     const parent = parentOf(entry.path)
     try {
       await window.zarya.fs.rename(entry.path, joinPath(parent, name))
       await loadChildren(parent, true)
     } catch (e) {
-      useUiStore.getState().toast(`Не удалось переименовать: ${String(e)}`, 'error')
+      useUiStore.getState().toast(t('ft.renameFail', { err: String(e) }), 'error')
     }
   }
 
   const deleteEntry = async (entry: DirEntry): Promise<void> => {
-    if (!window.confirm(`Удалить «${entry.name}» в корзину?`)) return
+    if (!window.confirm(t('ft.deleteAsk', { name: entry.name }))) return
     try {
       await window.zarya.fs.delete(entry.path)
       await loadChildren(parentOf(entry.path), true)
     } catch (e) {
-      useUiStore.getState().toast(`Не удалось удалить: ${String(e)}`, 'error')
+      useUiStore.getState().toast(t('ft.deleteFail', { err: String(e) }), 'error')
     }
   }
 
@@ -258,10 +259,10 @@ export default function FileTree(): React.JSX.Element {
     e.stopPropagation()
     const items: MenuItem[] = []
     if (!entry.isDir) {
-      items.push({ label: 'Открыть', onClick: () => void useEditorStore.getState().openFile(entry.path) })
+      items.push({ label: t('ft.open'), onClick: () => void useEditorStore.getState().openFile(entry.path) })
       if (gitCode && root) {
         items.push({
-          label: 'Diff с HEAD',
+          label: t('ft.diffHead'),
           onClick: () => void useEditorStore.getState().openDiff(root, entry.path)
         })
       }
@@ -269,14 +270,14 @@ export default function FileTree(): React.JSX.Element {
     }
     const targetDir = entry.isDir ? entry.path : parentOf(entry.path)
     items.push(
-      { label: 'Новый файл…', onClick: () => void createEntry(targetDir, false) },
-      { label: 'Новая папка…', onClick: () => void createEntry(targetDir, true) },
-      { label: 'Переименовать…', onClick: () => void renameEntry(entry) },
+      { label: t('ft.newFile'), onClick: () => void createEntry(targetDir, false) },
+      { label: t('ft.newDir'), onClick: () => void createEntry(targetDir, true) },
+      { label: t('ft.rename'), onClick: () => void renameEntry(entry) },
       { separator: true },
-      { label: 'Показать в проводнике', onClick: () => window.zarya.app.showItemInFolder(entry.path) },
-      { label: 'Копировать путь', onClick: () => void navigator.clipboard.writeText(entry.path) },
+      { label: t('ft.reveal'), onClick: () => window.zarya.app.showItemInFolder(entry.path) },
+      { label: t('ft.copyPath'), onClick: () => void navigator.clipboard.writeText(entry.path) },
       { separator: true },
-      { label: 'Удалить', danger: true, onClick: () => void deleteEntry(entry) }
+      { label: t('ft.delete'), danger: true, onClick: () => void deleteEntry(entry) }
     )
     open(e.clientX, e.clientY, items)
   }
@@ -285,11 +286,11 @@ export default function FileTree(): React.JSX.Element {
     if (e.target !== e.currentTarget || !root) return
     e.preventDefault()
     open(e.clientX, e.clientY, [
-      { label: 'Новый файл…', onClick: () => void createEntry(root, false) },
-      { label: 'Новая папка…', onClick: () => void createEntry(root, true) },
+      { label: t('ft.newFile'), onClick: () => void createEntry(root, false) },
+      { label: t('ft.newDir'), onClick: () => void createEntry(root, true) },
       { separator: true },
-      { label: 'Показать в проводнике', onClick: () => window.zarya.app.showItemInFolder(root) },
-      { label: 'Копировать путь', onClick: () => void navigator.clipboard.writeText(root) }
+      { label: t('ft.reveal'), onClick: () => window.zarya.app.showItemInFolder(root) },
+      { label: t('ft.copyPath'), onClick: () => void navigator.clipboard.writeText(root) }
     ])
   }
 
@@ -297,18 +298,18 @@ export default function FileTree(): React.JSX.Element {
     <>
       <div className="zy-sidebar-header">
         <span>
-          Файлы
+          {t('ft.title')}
           <span style={enSubStyle}>FILES</span>
         </span>
         <div className="zy-row" style={{ gap: 2 }}>
           <button
             className={`zy-icon-btn${followTerminal ? ' zy-icon-btn--active' : ''}`}
-            title="Следовать за активным терминалом"
+            title={t('ft.follow')}
             onClick={() => setFollowTerminal((v) => !v)}
           >
             <Icon name="pin" size={14} />
           </button>
-          <button className="zy-icon-btn" title="Обновить" onClick={() => void refresh()} disabled={!root}>
+          <button className="zy-icon-btn" title={t('ft.refresh')} onClick={() => void refresh()} disabled={!root}>
             <Icon name="refresh" size={14} />
           </button>
         </div>
@@ -316,7 +317,7 @@ export default function FileTree(): React.JSX.Element {
       {!followTerminal && (
         <div className="zy-sidebar-search">
           <button className="zy-btn zy-btn--sm" style={{ width: '100%' }} onClick={() => void pickRoot()}>
-            {pinnedRoot ? shortenPath(pinnedRoot, 30) : 'Выбрать папку…'}
+            {pinnedRoot ? shortenPath(pinnedRoot, 30) : t('ft.pickFolder')}
           </button>
         </div>
       )}
@@ -324,8 +325,8 @@ export default function FileTree(): React.JSX.Element {
         {!root && (
           <div className="zy-empty">
             {followTerminal
-              ? 'Ждём, пока определится рабочая папка терминала…'
-              : 'Выбери папку, чтобы открыть дерево файлов.'}
+              ? t('ft.waiting')
+              : t('ft.pickHint')}
           </div>
         )}
         {root && (
@@ -365,10 +366,10 @@ interface TreeChildrenProps {
 function TreeChildren({ parentPath, depth, nodes, ...handlers }: TreeChildrenProps): React.JSX.Element | null {
   const state = nodes[parentPath]
   if (!state?.expanded && depth > 0) return null
-  if (state?.loading && !state.children) return <div className="zy-tree-empty">Загрузка…</div>
-  if (state?.error) return <div className="zy-tree-empty">Не удалось прочитать папку</div>
-  if (!state?.children) return depth === 0 ? <div className="zy-tree-empty">Загрузка…</div> : null
-  if (!state.children.length) return <div className="zy-tree-empty">Пусто</div>
+  if (state?.loading && !state.children) return <div className="zy-tree-empty">{t('ft.loading')}</div>
+  if (state?.error) return <div className="zy-tree-empty">{t('ft.readFail')}</div>
+  if (!state?.children) return depth === 0 ? <div className="zy-tree-empty">{t('ft.loading')}</div> : null
+  if (!state.children.length) return <div className="zy-tree-empty">{t('ft.empty')}</div>
   return (
     <>
       {state.children.map((entry) => (

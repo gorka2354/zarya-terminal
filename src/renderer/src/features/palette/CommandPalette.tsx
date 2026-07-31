@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { fuzzyFilter } from '@/lib/fuzzy'
 import { type AppAction, getAllActions, onActionsChanged, runAction } from '@/lib/actionRegistry'
@@ -97,7 +98,7 @@ export default function CommandPalette(): React.JSX.Element | null {
         if (e.target === e.currentTarget) useUiStore.getState().set({ paletteOpen: false })
       }}
     >
-      <div className="zy-modal" role="dialog" aria-label="Палитра команд">
+      <div className="zy-modal" role="dialog" aria-label={t('pal.aria')}>
         <div className="zy-palette-input-row">
           <span className="zy-palette-input-icon zy-palette-input-icon--accent">
             <Icon name="search" size={14} strokeWidth={1.8} />
@@ -105,7 +106,7 @@ export default function CommandPalette(): React.JSX.Element | null {
           <input
             ref={inputRef}
             className="zy-palette-input"
-            placeholder="Введите команду…"
+            placeholder={t('pal.placeholder')}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKeyDown}
@@ -114,10 +115,10 @@ export default function CommandPalette(): React.JSX.Element | null {
             aria-controls="zy-palette-listbox"
             aria-activedescendant={flat[selectedIndex] ? `zy-palette-opt-${flat[selectedIndex].id}` : undefined}
           />
-          <span className="zy-palette-title">Палитра</span>
+          <span className="zy-palette-title">{t('pal.title')}</span>
         </div>
         <div className="zy-palette-list" role="listbox" id="zy-palette-listbox">
-          {!flat.length && <div className="zy-empty">Ничего не найдено</div>}
+          {!flat.length && <div className="zy-empty">{t('pal.nothing')}</div>}
           {groups.map(([category, items]) => (
             <div key={category}>
               <div className="zy-palette-group-label">{category}</div>
@@ -151,13 +152,13 @@ export default function CommandPalette(): React.JSX.Element | null {
         </div>
         <div className="zy-palette-footer">
           <span className="zy-palette-footer-hint">
-            <span className="zy-kbd">↑↓</span> выбор
+            <span className="zy-kbd">↑↓</span> {t('pal.navigate')}
           </span>
           <span className="zy-palette-footer-hint">
-            <span className="zy-kbd">↵</span> запуск
+            <span className="zy-kbd">↵</span> {t('pal.run')}
           </span>
           <span className="zy-palette-footer-hint">
-            <span className="zy-kbd">esc</span> закрыть
+            <span className="zy-kbd">esc</span> {t('pal.close')}
           </span>
         </div>
       </div>

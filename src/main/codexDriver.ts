@@ -1,3 +1,4 @@
+import { tm } from './lang'
 import { spawn, type ChildProcess } from 'child_process'
 import { type BrowserWindow } from 'electron'
 import { CH } from '@shared/ipc'
@@ -72,9 +73,9 @@ interface CodexSession {
 function friendlyError(e: unknown): string {
   const msg = e instanceof Error ? e.message : String(e)
   if (/ENOENT|not found|не найден/i.test(msg))
-    return 'Codex CLI не найден. Установи: `npm i -g @openai/codex`, затем `codex login`.'
+    return tm('drv.codexMissing')
   if (/auth|login|unauthor/i.test(msg))
-    return 'Codex не авторизован. Выполни `codex login` в терминале и повтори.'
+    return tm('drv.codexAuth')
   return `Codex: ${msg}`
 }
 
@@ -130,7 +131,7 @@ export class CodexDriver implements AgentDriver {
     const key = String(id)
     return new Promise<unknown>((resolve, reject) => {
       const timer = setTimeout(() => {
-        if (this.pending.delete(key)) reject(new Error(`codex: нет ответа на ${method} (таймаут)`))
+        if (this.pending.delete(key)) reject(new Error(tm('drv.codexNoReply', { method })))
       }, REQUEST_TIMEOUT_MS)
       this.pending.set(key, {
         resolve: (v) => {
@@ -183,7 +184,7 @@ export class CodexDriver implements AgentDriver {
       proc.on('exit', () => {
         if (this.proc !== proc) return // stale: killAll already replaced/cleared it
         const tail = this.lastStderr.trim()
-        const err = new Error(tail ? `codex app-server завершился: ${tail}` : 'codex app-server завершился')
+        const err = new Error(tail ? tm('drv.codexExitedTail', { tail }) : tm('drv.codexExited'))
         for (const w of this.pending.values()) w.reject(err)
         this.pending.clear()
         // The turns in flight stream via notifications, not pending requests, so
@@ -304,7 +305,7 @@ export class CodexDriver implements AgentDriver {
         const turn = (params as CodexTurnNotification).turn
         const failed = turn?.status === 'failed'
         if (failed)
-          this.emit(requestId, { type: 'error', message: turn?.error?.message ?? 'Ход завершился ошибкой' })
+          this.emit(requestId, { type: 'error', message: turn?.error?.message ?? tm('drv.turnFailed') })
         const model = this.sessions.get(requestId)?.model
         this.emit(requestId, {
           type: 'result',
@@ -377,7 +378,7 @@ export class CodexDriver implements AgentDriver {
         toolUseId,
         toolName: 'Bash',
         input: { command, cwd },
-        displayName: command || 'Команда'
+        displayName: command || tm('drv.command')
       })
     } else if (c.method === CODEX_APPROVAL.fileChange) {
       const p = params as CodexFileChangeApprovalParams
@@ -390,7 +391,7 @@ export class CodexDriver implements AgentDriver {
       const paths = session.filePaths.get(toolUseId) ?? []
       const root = p.grantRoot == null ? '' : String(p.grantRoot)
       const what = paths.length ? paths.join(', ') : root
-      const label = what ? `Изменение файлов: ${what}` : 'Изменение файлов — путь не указан'
+      const label = what ? tm('drv.fileChange', { what }) : tm('drv.fileChangeNoPath')
       this.emit(requestId, {
         type: 'permission',
         toolUseId,
@@ -464,7 +465,7 @@ export class CodexDriver implements AgentDriver {
         // No usable thread → drop the session (symmetric to the catch above) so a
         // retry re-opens a thread instead of forever sending turns on undefined.
         this.sessions.delete(requestId)
-        this.emit(requestId, { type: 'error', message: 'Codex не вернул идентификатор треда' })
+        this.emit(requestId, { type: 'error', message: tm('drv.codexNoThread') })
         return
       }
       session.threadId = threadId
@@ -626,7 +627,7 @@ export class CodexDriver implements AgentDriver {
   }
 
   killAll(): void {
-    for (const w of this.pending.values()) w.reject(new Error('Codex остановлен'))
+    for (const w of this.pending.values()) w.reject(new Error(tm('drv.codexStopped')))
     this.pending.clear()
     this.sessions.clear()
     this.threadToRequest.clear()

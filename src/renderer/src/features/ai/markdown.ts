@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n'
 import DOMPurify from 'dompurify'
 import { marked } from 'marked'
 
@@ -11,10 +12,10 @@ import { marked } from 'marked'
  * delegation without re-parsing rendered/escaped HTML.
  */
 
-const ACTIONS: Array<{ action: string; icon: string; title: string }> = [
-  { action: 'copy', icon: '⧉', title: 'Скопировать' },
-  { action: 'insert', icon: '⏎', title: 'Вставить в терминал' },
-  { action: 'run', icon: '▶', title: 'Выполнить в терминале' }
+const ACTIONS: Array<{ action: string; icon: string; titleKey: string }> = [
+  { action: 'copy', icon: '⧉', titleKey: 'md.copy' },
+  { action: 'insert', icon: '⏎', titleKey: 'md.insert' },
+  { action: 'run', icon: '▶', titleKey: 'md.run' }
 ]
 
 /**
@@ -65,7 +66,7 @@ function decorateCodeBlocks(html: string): string {
     // Patch header: «ПАТЧ · <file>» if the diff names a target file.
     if (isDiff) {
       const fileMatch = /^\+\+\+\s+b?\/?(\S+)/m.exec(codeText) || /^diff --git a\/\S+ b\/(\S+)/m.exec(codeText)
-      langSpan.textContent = fileMatch ? `ПАТЧ · ${fileMatch[1]}` : 'ПАТЧ'
+      langSpan.textContent = fileMatch ? t('md.patchFile', { file: fileMatch[1] }) : t('md.patch')
     } else {
       langSpan.textContent = lang
     }
@@ -73,12 +74,12 @@ function decorateCodeBlocks(html: string): string {
 
     const actions = doc.createElement('span')
     actions.className = 'zy-md-code-actions'
-    for (const { action, icon, title } of ACTIONS) {
+    for (const { action, icon, titleKey } of ACTIONS) {
       const btn = doc.createElement('button')
       btn.type = 'button'
       btn.className = 'zy-md-code-btn'
       btn.dataset.codeAction = action
-      btn.title = title
+      btn.title = t(titleKey)
       btn.textContent = icon
       actions.appendChild(btn)
     }

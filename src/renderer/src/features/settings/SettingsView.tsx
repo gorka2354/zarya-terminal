@@ -31,7 +31,7 @@ import { useUpdateStore } from '@/features/updates/updateStore'
 import { useSettingsStore } from '@/state/settingsStore'
 import { useUiStore } from '@/state/uiStore'
 import './settings.css'
-import { t } from '@/lib/i18n'
+import { t, useLang } from '@/lib/i18n'
 import type { UiLang } from '@shared/types'
 
 type TabId =
@@ -46,31 +46,41 @@ type TabId =
   | 'about'
 
 type TabGroup = 'base' | 'ide' | 'meta'
-const TABS: Array<{ id: TabId; label: string; sub: string; icon: IconName; group: TabGroup }> = [
-  { id: 'appearance', label: 'Внешний вид', sub: 'APPEARANCE', icon: 'star', group: 'base' },
-  { id: 'terminal', label: 'Терминал', sub: 'TERMINAL', icon: 'terminal', group: 'base' },
-  { id: 'blocks', label: 'Блоки', sub: 'BLOCKS', icon: 'split-h', group: 'base' },
-  { id: 'voice', label: 'Голос', sub: 'VOICE', icon: 'mic', group: 'base' },
-  { id: 'sessions', label: 'Сессии', sub: 'SESSIONS', icon: 'save', group: 'base' },
-  { id: 'keybindings', label: 'Клавиши', sub: 'KEYBINDINGS', icon: 'gear', group: 'base' },
+const TABS: Array<{ id: TabId; labelKey: string; sub: string; icon: IconName; group: TabGroup }> = [
+  { id: 'appearance', labelKey: 'set.tab.appearance', sub: 'APPEARANCE', icon: 'star', group: 'base' },
+  { id: 'terminal', labelKey: 'set.tab.terminal', sub: 'TERMINAL', icon: 'terminal', group: 'base' },
+  { id: 'blocks', labelKey: 'set.tab.blocks', sub: 'BLOCKS', icon: 'split-h', group: 'base' },
+  { id: 'voice', labelKey: 'set.tab.voice', sub: 'VOICE', icon: 'mic', group: 'base' },
+  { id: 'sessions', labelKey: 'set.tab.sessions', sub: 'SESSIONS', icon: 'save', group: 'base' },
+  { id: 'keybindings', labelKey: 'set.tab.keys', sub: 'KEYBINDINGS', icon: 'gear', group: 'base' },
   // IDE superstructure — only shown when the IDE layer is enabled.
-  { id: 'ai', label: 'AI-агент', sub: 'IDE · AGENT', icon: 'sputnik', group: 'ide' },
-  { id: 'editor', label: 'Редактор', sub: 'IDE · EDITOR', icon: 'edit', group: 'ide' },
-  { id: 'about', label: 'О программе', sub: 'ABOUT', icon: 'orbit', group: 'meta' }
+  { id: 'ai', labelKey: 'set.tab.ai', sub: 'IDE · AGENT', icon: 'sputnik', group: 'ide' },
+  { id: 'editor', labelKey: 'set.tab.editor', sub: 'IDE · EDITOR', icon: 'edit', group: 'ide' },
+  { id: 'about', labelKey: 'set.tab.about', sub: 'ABOUT', icon: 'orbit', group: 'meta' }
 ]
 
-const PROVIDERS: Array<{ id: AiProviderKind; label: string }> = [
+const PROVIDERS: Array<{ id: AiProviderKind; label: string; labelKey?: string }> = [
   { id: 'anthropic', label: 'Anthropic (Claude)' },
   { id: 'openai', label: 'OpenAI' },
-  { id: 'ollama', label: 'Ollama (локально)' },
-  { id: 'openai-compat', label: 'OpenAI-совместимый' }
+  { id: 'ollama', label: 'Ollama', labelKey: 'set.prov.ollama' },
+  { id: 'openai-compat', label: 'OpenAI', labelKey: 'set.prov.compat' }
 ]
 
 const EFFORTS: AiEffort[] = ['low', 'medium', 'high', 'max']
 
 /** Full-screen settings modal: vertical tabs on the left, content on the right. */
 export default function SettingsView(): React.JSX.Element | null {
+  // Подписка на язык: без неё надписи этого компонента сменились бы не в
+  // момент переключения, а при следующей перерисовке по другой причине.
+  useLang()
+
   const open = useUiStore((s) => s.settingsOpen)
+  // Версия в подписи — настоящая: зашитая строкой, она отстаёт от сборки и
+  // тихо врёт ровно в том месте, куда идут смотреть версию.
+  const [appInfo, setAppInfo] = useState<AppInfo | null>(null)
+  useEffect(() => {
+    if (open) void window.zarya.app.info().then(setAppInfo)
+  }, [open])
   const ideMode = useSettingsStore((s) => s.settings.ideMode)
   const [tab, setTab] = useState<TabId>('appearance')
 
@@ -95,21 +105,23 @@ export default function SettingsView(): React.JSX.Element | null {
 
   const close = (): void => useUiStore.getState().set({ settingsOpen: false })
   // Hide IDE-layer tabs when the IDE superstructure is off.
-  const visibleTabs = TABS.filter((t) => t.group !== 'ide' || ideMode)
-  const activeTab = visibleTabs.find((t) => t.id === tab) ?? visibleTabs[0]
-  const renderNavItem = (t: (typeof TABS)[number]): React.JSX.Element => (
+  const visibleTabs = TABS.filter((x) => x.group !== 'ide' || ideMode)
+  const activeTab = visibleTabs.find((x) => x.id === tab) ?? visibleTabs[0]
+  const renderNavItem = (nav: (typeof TABS)[number]): React.JSX.Element => (
     <button
-      key={t.id}
+      key={nav.id}
       type="button"
-      className={`zy-settings-nav-item${tab === t.id ? ' zy-settings-nav-item--active' : ''}`}
-      onClick={() => setTab(t.id)}
+      className={`zy-settings-nav-item${tab === nav.id ? ' zy-settings-nav-item--active' : ''}`}
+      onClick={() => setTab(nav.id)}
     >
       <span className="zy-settings-nav-icon">
-        <Icon name={t.icon} size={17} strokeWidth={1.5} />
+        <Icon name={nav.icon} size={17} strokeWidth={1.5} />
       </span>
       <span className="zy-settings-nav-item-text">
-        <span className="zy-settings-nav-item-label">{t.label}</span>
-        <span className="zy-settings-nav-item-sub">{t.sub}</span>
+        <span className="zy-settings-nav-item-label">{t(nav.labelKey)}</span>
+        {showSub(t(nav.labelKey), nav.sub) && (
+          <span className="zy-settings-nav-item-sub">{nav.sub}</span>
+        )}
       </span>
     </button>
   )
@@ -118,42 +130,46 @@ export default function SettingsView(): React.JSX.Element | null {
     <div className="zy-overlay-backdrop zy-overlay-backdrop--center" onMouseDown={close}>
       <div className="zy-settings-panel" onMouseDown={(e) => e.stopPropagation()}>
         <nav className="zy-settings-nav">
-          <div className="zy-settings-nav-title">ЦЕНТР УПРАВЛЕНИЯ</div>
+          <div className="zy-settings-nav-title">{t('set.navTitle')}</div>
           <div className="zy-settings-nav-list">
-            <div className="zy-settings-nav-group">ТЕРМИНАЛ · база</div>
-            {visibleTabs.filter((t) => t.group === 'base').map(renderNavItem)}
+            <div className="zy-settings-nav-group">{t('set.groupBase')}</div>
+            {visibleTabs.filter((x) => x.group === 'base').map(renderNavItem)}
 
             <div className="zy-settings-nav-group zy-settings-nav-group--ide">
-              <span>IDE · надстройка</span>
+              <span>{t('set.groupIde')}</span>
               <button
                 type="button"
                 className={`zy-settings-ide-switch${ideMode ? ' zy-settings-ide-switch--on' : ''}`}
-                title={ideMode ? 'IDE-надстройка включена' : 'Включить IDE-надстройку'}
+                title={t(ideMode ? 'set.ideOn' : 'set.ideOff')}
                 onClick={() => setIdeMode(!ideMode)}
               >
                 <span className="zy-settings-ide-knob" />
               </button>
             </div>
             {ideMode ? (
-              visibleTabs.filter((t) => t.group === 'ide').map(renderNavItem)
+              visibleTabs.filter((x) => x.group === 'ide').map(renderNavItem)
             ) : (
               <div className="zy-settings-nav-hint">
-                Файлы, редактор, workflows и IDE-агент. Выключено — база чистая.
+                {t('set.ideHint')}
               </div>
             )}
 
             <div className="zy-settings-nav-group" />
-            {visibleTabs.filter((t) => t.group === 'meta').map(renderNavItem)}
+            {visibleTabs.filter((x) => x.group === 'meta').map(renderNavItem)}
           </div>
-          <div className="zy-settings-nav-footer">ЗАРЯ v0.5 · СОЗВЕЗДИЕ</div>
+          <div className="zy-settings-nav-footer">
+            {t('set.navFooter', { v: appInfo?.version ?? '' })}
+          </div>
         </nav>
         <div className="zy-settings-content">
           <header className="zy-settings-content-header">
             <div className="zy-settings-content-title-wrap">
-              <h2 className="zy-settings-content-title">{activeTab?.label}</h2>
-              {activeTab?.sub && <span className="zy-settings-content-sub">{activeTab.sub}</span>}
+              <h2 className="zy-settings-content-title">{activeTab ? t(activeTab.labelKey) : null}</h2>
+              {activeTab && showSub(t(activeTab.labelKey), activeTab.sub) && (
+                <span className="zy-settings-content-sub">{activeTab.sub}</span>
+              )}
             </div>
-            <button type="button" className="zy-icon-btn" onClick={close} title="Закрыть (Esc)">
+            <button type="button" className="zy-icon-btn" onClick={close} title={t('common.closeEsc')}>
               <Icon name="close" size={16} />
             </button>
           </header>
@@ -185,6 +201,16 @@ function clamp(n: number, min?: number, max?: number): number {
   return v
 }
 
+/**
+ * Латинская микро-подпись под названием — часть двуязычного пульта: под «Внешний
+ * вид» стоит APPEARANCE. В английском интерфейсе она превращается в то же слово
+ * дважды, поэтому показываем её, только когда она что-то добавляет.
+ */
+function showSub(title: string, sub?: string): boolean {
+  if (!sub) return false
+  return sub.trim().toLowerCase() !== title.trim().toLowerCase()
+}
+
 function Row({
   title,
   sub,
@@ -203,7 +229,7 @@ function Row({
     <div className={`zy-set-row${stack ? ' zy-set-row--stack' : ''}`}>
       <div className="zy-set-row-label">
         <div className="zy-set-row-title">{title}</div>
-        {sub && <div className="zy-set-row-sub">{sub}</div>}
+        {showSub(title, sub) && <div className="zy-set-row-sub">{sub}</div>}
         {desc && <div className="zy-item-sub">{desc}</div>}
       </div>
       <div className="zy-set-row-control">{children}</div>
@@ -311,7 +337,7 @@ function FontSizeStepper({
       <button
         type="button"
         className="zy-stepper-btn"
-        aria-label="Уменьшить размер шрифта"
+        aria-label={t('set.fontDec')}
         disabled={value <= min}
         onClick={() => set(value - 1)}
       >
@@ -321,7 +347,7 @@ function FontSizeStepper({
       <button
         type="button"
         className="zy-stepper-btn"
-        aria-label="Увеличить размер шрифта"
+        aria-label={t('set.fontInc')}
         disabled={value >= max}
         onClick={() => set(value + 1)}
       >
@@ -517,12 +543,12 @@ function EffortControl({
             key={e}
             type="button"
             className={`zy-effort-bar${i <= idx ? ' zy-effort-bar--on' : ''}`}
-            title={EFFORT_TUNING[e].label}
+            title={t(EFFORT_TUNING[e].labelKey)}
             onClick={() => onChange(e)}
           />
         ))}
       </div>
-      <span className="zy-effort-value">{EFFORT_TUNING[value].label}</span>
+      <span className="zy-effort-value">{t(EFFORT_TUNING[value].labelKey)}</span>
     </div>
   )
 }
@@ -538,26 +564,26 @@ function ThemeCardsGrid(): React.JSX.Element {
 
   return (
     <div className="zy-set-theme-grid">
-      {themes.map((t) => {
-        const active = t.id === themeId
+      {themes.map((th) => {
+        const active = th.id === themeId
         return (
           <button
-            key={t.id}
+            key={th.id}
             type="button"
             className={`zy-set-theme-card${active ? ' zy-set-theme-card--active' : ''}`}
-            onClick={() => select(t.id)}
-            title={t.name}
+            onClick={() => select(th.id)}
+            title={t(th.nameKey)}
           >
             <div className="zy-set-theme-swatches">
-              <span className="zy-set-theme-swatch" style={{ background: t.ui.bg }} />
-              <span className="zy-set-theme-swatch" style={{ background: t.ui.accent }} />
-              <span className="zy-set-theme-swatch" style={{ background: t.ui.accent2 }} />
+              <span className="zy-set-theme-swatch" style={{ background: th.ui.bg }} />
+              <span className="zy-set-theme-swatch" style={{ background: th.ui.accent }} />
+              <span className="zy-set-theme-swatch" style={{ background: th.ui.accent2 }} />
             </div>
             <div className="zy-set-theme-info">
-              <div className="zy-set-theme-name">{t.name}</div>
-              <div className="zy-set-theme-type">{t.type === 'dark' ? 'ТЁМНАЯ · DARK' : 'СВЕТЛАЯ · LIGHT'}</div>
+              <div className="zy-set-theme-name">{t(th.nameKey)}</div>
+              <div className="zy-set-theme-type">{t(th.type === 'dark' ? 'set.themeDark' : 'set.themeLight')}</div>
             </div>
-            {active && <span className="zy-set-theme-active">● АКТИВНА</span>}
+            {active && <span className="zy-set-theme-active">{t('set.themeActive')}</span>}
           </button>
         )
       })}
@@ -570,6 +596,10 @@ function ThemeCardsGrid(): React.JSX.Element {
 // ---------------------------------------------------------------------------
 
 function AppearanceTab(): React.JSX.Element {
+  // Подписка на язык: без неё надписи этого компонента сменились бы не в
+  // момент переключения, а при следующей перерисовке по другой причине.
+  useLang()
+
   const a = useSettingsStore((s) => s.settings.appearance)
   const update = useSettingsStore((s) => s.update)
 
@@ -583,6 +613,7 @@ function AppearanceTab(): React.JSX.Element {
         <Row title={t('common.language')} sub="LANGUAGE">
           <select
             className="zy-select"
+            data-lang-select
             value={a.language ?? 'auto'}
             onChange={(e) =>
               void update({ appearance: { language: e.target.value as UiLang } as never })
@@ -599,21 +630,21 @@ function AppearanceTab(): React.JSX.Element {
         <ThemeCardsGrid />
       </section>
       <section className="zy-set-section">
-        <div className="zy-section-label">Шрифт и терминал</div>
-        <Row title="Шрифт" sub="FONT FAMILY" desc="Семейство шрифтов терминала (CSS font-family).">
+        <div className="zy-section-label">{t('set.fontSection')}</div>
+        <Row title={t('set.font')} sub="FONT FAMILY" desc={t('set.fontDesc')}>
           <TextField
             value={a.fontFamily}
             mono
             onCommit={(v) => void update({ appearance: { fontFamily: v } as never })}
           />
         </Row>
-        <Row title="Размер шрифта" sub="FONT SIZE">
+        <Row title={t('set.fontSize')} sub="FONT SIZE">
           <FontSizeStepper
             value={a.fontSize}
             onChange={(v) => void update({ appearance: { fontSize: v } as never })}
           />
         </Row>
-        <Row title="Межстрочный интервал" sub="LINE HEIGHT">
+        <Row title={t('set.lineHeight')} sub="LINE HEIGHT">
           <NumberField
             value={a.lineHeight}
             min={1}
@@ -622,7 +653,7 @@ function AppearanceTab(): React.JSX.Element {
             onCommit={(v) => void update({ appearance: { lineHeight: v } as never })}
           />
         </Row>
-        <Row title="Отступы терминала" sub="TERMINAL PADDING" desc="Внутренний отступ вокруг текста, в пикселях.">
+        <Row title={t('set.padding')} sub="TERMINAL PADDING" desc={t('set.paddingDesc')}>
           <NumberField
             value={a.terminalPadding}
             min={0}
@@ -630,18 +661,18 @@ function AppearanceTab(): React.JSX.Element {
             onCommit={(v) => void update({ appearance: { terminalPadding: v } as never })}
           />
         </Row>
-        <Row title="Стиль курсора" sub="CURSOR STYLE">
+        <Row title={t('set.cursorStyle')} sub="CURSOR STYLE">
           <SelectField
             value={a.cursorStyle}
             options={[
-              { value: 'block', label: 'Блок' },
-              { value: 'bar', label: 'Полоска' },
-              { value: 'underline', label: 'Подчёркивание' }
+              { value: 'block', label: t('set.cursorBlock') },
+              { value: 'bar', label: t('set.cursorBar') },
+              { value: 'underline', label: t('set.cursorUnderline') }
             ]}
             onChange={(v) => void update({ appearance: { cursorStyle: v } as never })}
           />
         </Row>
-        <Row title="Мигание курсора" sub="CURSOR BLINK">
+        <Row title={t('set.cursorBlink')} sub="CURSOR BLINK">
           <Toggle
             checked={a.cursorBlink}
             onChange={(v) => void update({ appearance: { cursorBlink: v } as never })}
@@ -649,8 +680,8 @@ function AppearanceTab(): React.JSX.Element {
         </Row>
       </section>
       <section className="zy-set-section">
-        <div className="zy-section-label">Окно</div>
-        <Row title="Прозрачность окна" sub="WINDOW OPACITY">
+        <div className="zy-section-label">{t('set.window')}</div>
+        <Row title={t('set.opacity')} sub="WINDOW OPACITY">
           <RangeField
             value={a.windowOpacity}
             min={0.5}
@@ -661,18 +692,18 @@ function AppearanceTab(): React.JSX.Element {
           />
         </Row>
         <Row
-          title="Акриловый эффект (Windows 11)"
+          title={t('set.acrylic')}
           sub="ACRYLIC BLUR"
-          desc="Полупрозрачный размытый фон окна. Нужен перезапуск приложения."
+          desc={t('set.acrylicDesc')}
         >
           <Toggle checked={a.acrylic} onChange={(v) => void update({ appearance: { acrylic: v } as never })} />
         </Row>
-        <Row title="Плотность интерфейса" sub="UI DENSITY">
+        <Row title={t('set.density')} sub="UI DENSITY">
           <SegmentedField
             value={a.uiDensity}
             options={[
-              { value: 'cozy', label: 'Уютно' },
-              { value: 'compact', label: 'Компактно' }
+              { value: 'cozy', label: t('set.densityCozy') },
+              { value: 'compact', label: t('set.densityCompact') }
             ]}
             onChange={(v) => void update({ appearance: { uiDensity: v } as never })}
           />
@@ -683,75 +714,75 @@ function AppearanceTab(): React.JSX.Element {
 }
 
 function TerminalTab(): React.JSX.Element {
-  const t = useSettingsStore((s) => s.settings.terminal)
+  const term = useSettingsStore((s) => s.settings.terminal)
   const profiles = useSettingsStore((s) => s.profiles)
   const update = useSettingsStore((s) => s.update)
 
   const profileOptions = [
-    { value: 'auto', label: 'Автоматически' },
+    { value: 'auto', label: t('set.auto') },
     ...profiles.map((p) => ({ value: p.id, label: `${p.icon} ${p.name}` }))
   ]
 
   return (
     <section className="zy-set-section">
-      <Row title="Профиль по умолчанию" sub="DEFAULT PROFILE" desc="Какая оболочка открывается для новых вкладок.">
+      <Row title={t('set.defaultProfile')} sub="DEFAULT PROFILE" desc={t('set.defaultProfileDesc')}>
         <SelectField
-          value={t.defaultProfileId}
+          value={term.defaultProfileId}
           options={profileOptions}
           onChange={(v) => void update({ terminal: { defaultProfileId: v } as never })}
         />
       </Row>
-      <Row title="Буфер прокрутки" sub="SCROLLBACK" desc="Количество строк истории терминала на сессию.">
+      <Row title={t('set.scrollback')} sub="SCROLLBACK" desc={t('set.scrollbackDesc')}>
         <NumberField
-          value={t.scrollback}
+          value={term.scrollback}
           min={100}
           max={1000000}
           step={100}
           onCommit={(v) => void update({ terminal: { scrollback: v } as never })}
         />
       </Row>
-      <Row title="Копировать при выделении" sub="COPY ON SELECT">
+      <Row title={t('set.copyOnSelect')} sub="COPY ON SELECT">
         <Toggle
-          checked={t.copyOnSelect}
+          checked={term.copyOnSelect}
           onChange={(v) => void update({ terminal: { copyOnSelect: v } as never })}
         />
       </Row>
-      <Row title="Клик правой кнопкой" sub="RIGHT CLICK" desc="Что делает правый клик по терминалу.">
+      <Row title={t('set.rightClick')} sub="RIGHT CLICK" desc={t('set.rightClickDesc')}>
         <SelectField
-          value={t.rightClickBehavior}
+          value={term.rightClickBehavior}
           options={[
-            { value: 'paste', label: 'Вставить' },
-            { value: 'menu', label: 'Контекстное меню' }
+            { value: 'paste', label: t('set.rcPaste') },
+            { value: 'menu', label: t('set.rcMenu') }
           ]}
           onChange={(v) => void update({ terminal: { rightClickBehavior: v } as never })}
         />
       </Row>
-      <Row title="Предупреждать при вставке многострочного текста" sub="PASTE WARNING">
+      <Row title={t('set.pasteWarn')} sub="PASTE WARNING">
         <Toggle
-          checked={t.pasteWarnMultiline}
+          checked={term.pasteWarnMultiline}
           onChange={(v) => void update({ terminal: { pasteWarnMultiline: v } as never })}
         />
       </Row>
       <Row
-        title="Ускорение WebGL"
+        title={t('set.webgl')}
         sub="WEBGL RENDERER"
-        desc="Рендер терминала через WebGL — быстрее, но может не работать на некоторых GPU."
+        desc={t('set.webglDesc')}
       >
-        <Toggle checked={t.webgl} onChange={(v) => void update({ terminal: { webgl: v } as never })} />
+        <Toggle checked={term.webgl} onChange={(v) => void update({ terminal: { webgl: v } as never })} />
       </Row>
-      <Row title="Звуковой сигнал (bell)" sub="BELL">
+      <Row title={t('set.bell')} sub="BELL">
         <SelectField
-          value={t.bell}
+          value={term.bell}
           options={[
-            { value: 'none', label: 'Отключён' },
-            { value: 'visual', label: 'Визуальный' }
+            { value: 'none', label: t('set.bellNone') },
+            { value: 'visual', label: t('set.bellVisual') }
           ]}
           onChange={(v) => void update({ terminal: { bell: v } as never })}
         />
       </Row>
-      <Row title="Подтверждать закрытие при работающем процессе" sub="CONFIRM CLOSE">
+      <Row title={t('set.confirmClose')} sub="CONFIRM CLOSE">
         <Toggle
-          checked={t.confirmCloseRunning}
+          checked={term.confirmCloseRunning}
           onChange={(v) => void update({ terminal: { confirmCloseRunning: v } as never })}
         />
       </Row>
@@ -765,13 +796,13 @@ function BlocksTab(): React.JSX.Element {
   return (
     <section className="zy-set-section">
       <Row
-        title="Блоки команд"
+        title={t('set.blocks')}
         sub="COMMAND BLOCKS"
-        desc="Группировать вывод терминала в блоки по командам (в стиле Warp)."
+        desc={t('set.blocksDesc')}
       >
         <Toggle checked={b.enabled} onChange={(v) => void update({ blocks: { enabled: v } as never })} />
       </Row>
-      <Row title="Разделители" sub="SEPARATORS" desc="Тонкая линия-граница между соседними блоками.">
+      <Row title={t('set.separators')} sub="SEPARATORS" desc={t('set.separatorsDesc')}>
         <Toggle
           checked={b.separators}
           disabled={!b.enabled}
@@ -779,9 +810,9 @@ function BlocksTab(): React.JSX.Element {
         />
       </Row>
       <Row
-        title="Бейджи кода выхода"
+        title={t('set.exitBadges')}
         sub="EXIT BADGES"
-        desc="Показывать код завершения команды (успех/ошибка) рядом с блоком."
+        desc={t('set.exitBadgesDesc')}
       >
         <Toggle
           checked={b.exitBadges}
@@ -790,9 +821,9 @@ function BlocksTab(): React.JSX.Element {
         />
       </Row>
       <Row
-        title="Автоподсказки"
+        title={t('set.ghost')}
         sub="AUTOSUGGEST"
-        desc="Полупрозрачные подсказки команд из истории (в стиле fish shell)."
+        desc={t('set.ghostDesc')}
       >
         <Toggle
           checked={b.autosuggest}
@@ -822,9 +853,9 @@ function AiTab(): React.JSX.Element {
       const url = ai.baseUrl || OLLAMA_DEFAULT_URL
       const models = await window.zarya.ai.listOllamaModels(url)
       setOllamaModels(models)
-      useUiStore.getState().toast(`Найдено моделей: ${models.length}`, 'success')
+      useUiStore.getState().toast(t('set.modelsFound', { n: models.length }), 'success')
     } catch {
-      useUiStore.getState().toast('Не удалось получить список моделей Ollama', 'error')
+      useUiStore.getState().toast(t('set.modelsFail'), 'error')
     } finally {
       setOllamaBusy(false)
     }
@@ -833,17 +864,17 @@ function AiTab(): React.JSX.Element {
   return (
     <>
       <section className="zy-set-section">
-        <Row title="Провайдер" sub="PROVIDER">
+        <Row title={t('set.provider')} sub="PROVIDER">
           <SelectField
             value={ai.provider}
-            options={PROVIDERS.map((p) => ({ value: p.id, label: p.label }))}
+            options={PROVIDERS.map((p) => ({ value: p.id, label: p.labelKey ? t(p.labelKey) : p.label }))}
             onChange={(v) => void update({ ai: { provider: v } as never })}
           />
         </Row>
         <Row
-          title="Модель"
+          title={t('set.model')}
           sub="MODEL"
-          desc="Можно ввести своё название или выбрать из списка пресетов."
+          desc={t('set.modelDesc')}
           stack
         >
           <div className="zy-inline-group zy-inline-group--wrap">
@@ -859,7 +890,7 @@ function AiTab(): React.JSX.Element {
                 disabled={ollamaBusy}
                 onClick={() => void refreshOllamaModels()}
               >
-                {ollamaBusy ? '…' : 'Обновить список'}
+                {ollamaBusy ? '…' : t('set.refreshList')}
               </button>
             )}
             <button
@@ -868,7 +899,7 @@ function AiTab(): React.JSX.Element {
               onClick={() => useUiStore.getState().set({ launchPadOpen: true })}
             >
               <Icon name="rocket" size={13} strokeWidth={1.6} />
-              Открыть пусковой комплекс
+              {t('set.openLaunchpad')}
             </button>
           </div>
         </Row>
@@ -877,8 +908,8 @@ function AiTab(): React.JSX.Element {
           sub="BASE URL"
           desc={
             ai.provider === 'ollama'
-              ? `По умолчанию: ${OLLAMA_DEFAULT_URL}`
-              : 'Нужен для ollama и openai-compat, для остальных — необязателен.'
+              ? t('set.baseUrlDefault', { url: OLLAMA_DEFAULT_URL })
+              : t('set.baseUrlDesc')
           }
         >
           <TextField
@@ -903,10 +934,10 @@ function AiTab(): React.JSX.Element {
             </div>
           )}
         </Row>
-        <Row title="Тяга рассуждений" sub={`REASONING EFFORT · ${EFFORT_TUNING[ai.effort].label}`}>
+        <Row title={t('set.effort')} sub={`REASONING EFFORT · ${t(EFFORT_TUNING[ai.effort].labelKey)}`}>
           <EffortControl value={ai.effort} onChange={(v) => void update({ ai: { effort: v } as never })} />
         </Row>
-        <Row title="Температура" sub="TEMPERATURE" desc="Выше — разнообразнее и менее предсказуемо.">
+        <Row title={t('set.temperature')} sub="TEMPERATURE" desc={t('set.temperatureDesc')}>
           <RangeField
             value={ai.temperature}
             min={0}
@@ -915,7 +946,7 @@ function AiTab(): React.JSX.Element {
             onChange={(v) => void update({ ai: { temperature: v } as never })}
           />
         </Row>
-        <Row title="Макс. токенов ответа" sub="MAX TOKENS">
+        <Row title={t('set.maxTokens')} sub="MAX TOKENS">
           <NumberField
             value={ai.maxTokens}
             min={256}
@@ -925,9 +956,9 @@ function AiTab(): React.JSX.Element {
           />
         </Row>
         <Row
-          title="Блоков контекста"
+          title={t('set.ctxBlocks')}
           sub="CONTEXT BLOCKS"
-          desc="Сколько последних блоков терминала прикреплять к запросу автоматически."
+          desc={t('set.ctxBlocksDesc')}
         >
           <NumberField
             value={ai.contextBlocks}
@@ -937,9 +968,9 @@ function AiTab(): React.JSX.Element {
           />
         </Row>
         <Row
-          title="Автоподтверждение команд"
-          sub="AUTO-APPROVE · опасно"
-          desc="Встроенный борт Зари (свой ключ) будет выполнять команды в терминале без запроса подтверждения. На Claude Code / Codex / Gemini не влияет — там гейт снимает только «АВТОПИЛОТ» в баре."
+          title={t('set.autoApprove')}
+          sub={t('set.autoApproveSub')}
+          desc={t('set.autoApproveDesc')}
         >
           <RocketToggle
             checked={ai.autoApprove}
@@ -948,26 +979,25 @@ function AiTab(): React.JSX.Element {
         </Row>
         {ai.autoApprove && (
           <div className="zy-set-warning">
-            ⚠ Опасно: встроенный борт сможет выполнять команды в терминале без вашего одобрения, включая
-            деструктивные. Пока включено, чип в баре в режиме «Zarya» горит «⚠ АВТОПИЛОТ».
+            {t('set.autoApproveWarn')}
           </div>
         )}
         <Row
-          title="Доп. системный промпт"
+          title={t('set.sysPrompt')}
           sub="SYSTEM PROMPT"
           stack
-          desc="Добавляется к системному промпту ИИ-агента при каждом запросе."
+          desc={t('set.sysPromptDesc')}
         >
           <TextAreaField
             value={ai.systemPromptExtra}
             rows={4}
-            placeholder="Например: всегда отвечай на русском, предпочитай pnpm вместо npm…"
+            placeholder={t('set.sysPromptPh')}
             onCommit={(v) => void update({ ai: { systemPromptExtra: v } as never })}
           />
         </Row>
       </section>
       <section className="zy-set-section">
-        <div className="zy-section-label">API-ключи</div>
+        <div className="zy-section-label">{t('set.apiKeys')}</div>
         <ApiKeysBlock />
       </section>
     </>
@@ -1008,9 +1038,9 @@ function ApiKeysBlock(): React.JSX.Element {
       await window.zarya.settings.setSecret(id, key)
       setInputs((s) => ({ ...s, [id]: '' }))
       await refresh()
-      useUiStore.getState().toast('Ключ сохранён', 'success')
+      useUiStore.getState().toast(t('set.keySaved'), 'success')
     } catch {
-      useUiStore.getState().toast('Не удалось сохранить ключ', 'error')
+      useUiStore.getState().toast(t('set.keySaveFail'), 'error')
     } finally {
       setBusy(null)
     }
@@ -1021,9 +1051,9 @@ function ApiKeysBlock(): React.JSX.Element {
     try {
       await window.zarya.settings.setSecret(id, '')
       await refresh()
-      useUiStore.getState().toast('Ключ удалён')
+      useUiStore.getState().toast(t('set.keyDeleted'))
     } catch {
-      useUiStore.getState().toast('Не удалось удалить ключ', 'error')
+      useUiStore.getState().toast(t('set.keyDeleteFail'), 'error')
     } finally {
       setBusy(null)
     }
@@ -1034,7 +1064,7 @@ function ApiKeysBlock(): React.JSX.Element {
       {PROVIDERS.map((p) => (
         <div key={p.id} className="zy-apikey-row">
           <div className="zy-apikey-head">
-            <span className="zy-set-row-title">{p.label}</span>
+            <span className="zy-set-row-title">{p.labelKey ? t(p.labelKey) : p.label}</span>
             <span
               className={`zy-badge${
                 protectionOf(p.id) === 'os'
@@ -1055,7 +1085,7 @@ function ApiKeysBlock(): React.JSX.Element {
             <input
               type="password"
               className="zy-input zy-input--mono"
-              placeholder={p.id === 'ollama' ? 'Обычно не требуется' : 'sk-…'}
+              placeholder={p.id === 'ollama' ? t('set.keyNotNeeded') : 'sk-…'}
               value={inputs[p.id] ?? ''}
               onChange={(e) => setInputs((s) => ({ ...s, [p.id]: e.target.value }))}
             />
@@ -1065,7 +1095,7 @@ function ApiKeysBlock(): React.JSX.Element {
               disabled={busy === p.id || !(inputs[p.id] ?? '').trim()}
               onClick={() => void save(p.id)}
             >
-              Сохранить
+              {t('common.save')}
             </button>
             <button
               type="button"
@@ -1073,7 +1103,7 @@ function ApiKeysBlock(): React.JSX.Element {
               disabled={busy === p.id || !hasKey(p.id)}
               onClick={() => void remove(p.id)}
             >
-              Удалить
+              {t('common.deleteShort')}
             </button>
           </div>
         </div>
@@ -1087,17 +1117,17 @@ function SessionsTab(): React.JSX.Element {
   const update = useSettingsStore((st) => st.update)
   return (
     <section className="zy-set-section">
-      <Row title="Восстановление при запуске" sub="RESTORE ON LAUNCH">
+      <Row title={t('set.restore')} sub="RESTORE ON LAUNCH">
         <SelectField
           value={s.restoreOnLaunch}
           options={[
-            { value: 'workspace', label: 'Восстанавливать рабочее пространство' },
-            { value: 'none', label: 'Не восстанавливать' }
+            { value: 'workspace', label: t('set.restoreWorkspace') },
+            { value: 'none', label: t('set.restoreNone') }
           ]}
           onChange={(v) => void update({ sessions: { restoreOnLaunch: v } as never })}
         />
       </Row>
-      <Row title="Автосохранение, сек" sub="AUTOSAVE INTERVAL">
+      <Row title={t('set.autosave')} sub="AUTOSAVE INTERVAL">
         <NumberField
           value={s.autosaveSec}
           min={5}
@@ -1106,9 +1136,9 @@ function SessionsTab(): React.JSX.Element {
         />
       </Row>
       <Row
-        title="Строк истории на сессию"
+        title={t('set.histLines')}
         sub="SCROLLBACK LINES"
-        desc="Сколько строк вывода терминала сохраняется на диск для каждой сессии."
+        desc={t('set.histLinesDesc')}
       >
         <NumberField
           value={s.scrollbackSaveLines}
@@ -1119,9 +1149,9 @@ function SessionsTab(): React.JSX.Element {
         />
       </Row>
       <div className="zy-item-sub zy-set-footnote">
-        Сессии сохраняются локально и переживают перезагрузку устройства.
+        {t('set.sessionsNote')}
       </div>
-      <div className="zy-section-label">История команд</div>
+      <div className="zy-section-label">{t('set.cmdHistory')}</div>
       <HistoryRows />
     </section>
   )
@@ -1148,16 +1178,16 @@ function HistoryRows(): React.JSX.Element {
 
   const size = stats
     ? stats.bytes >= 1_000_000
-      ? `${(stats.bytes / 1_000_000).toFixed(1)} МБ`
-      : `${Math.max(1, Math.round(stats.bytes / 1000))} КБ`
+      ? `${(stats.bytes / 1_000_000).toFixed(1)} ${t('unit.mb')}`
+      : `${Math.max(1, Math.round(stats.bytes / 1000))} ${t('unit.kb')}`
     : '…'
 
   return (
     <>
       <Row
-        title="Вести историю команд"
+        title={t('set.keepHistory')}
         sub="RECORD HISTORY"
-        desc="Выключено — команды не записываются и не попадают в поиск по Ctrl+R. Уже накопленное остаётся на диске, пока не сотрёте."
+        desc={t('set.keepHistoryDesc')}
       >
         <Toggle
           checked={h.record}
@@ -1165,9 +1195,9 @@ function HistoryRows(): React.JSX.Element {
         />
       </Row>
       <Row
-        title="Хранить не больше"
+        title={t('set.histCap')}
         sub="MAX ENTRIES"
-        desc="Команд в истории. Лишние старые удаляются из файла пачками, так что он не превышает потолок больше чем на десятую часть. Ноль — без ограничения."
+        desc={t('set.histCapDesc')}
       >
         <NumberField
           value={h.maxEntries}
@@ -1178,9 +1208,9 @@ function HistoryRows(): React.JSX.Element {
         />
       </Row>
       <Row
-        title="Сейчас в истории"
+        title={t('set.histNow')}
         sub="STORED"
-        desc={stats ? `${stats.entries} команд · файл ${size}` : 'считаю…'}
+        desc={stats ? t('set.histStats', { n: stats.entries, size }) : t('set.counting')}
       >
         <button
           type="button"
@@ -1192,12 +1222,12 @@ function HistoryRows(): React.JSX.Element {
               .clear()
               .then(() => {
                 refresh()
-                useUiStore.getState().toast('История команд стёрта', 'success')
+                useUiStore.getState().toast(t('set.histCleared'), 'success')
               })
               .finally(() => setBusy(false))
           }}
         >
-          Очистить историю
+          {t('set.clearHistory')}
         </button>
       </Row>
     </>
@@ -1209,7 +1239,7 @@ function EditorTab(): React.JSX.Element {
   const update = useSettingsStore((s) => s.update)
   return (
     <section className="zy-set-section">
-      <Row title="Размер шрифта" sub="FONT SIZE">
+      <Row title={t('set.fontSize')} sub="FONT SIZE">
         <NumberField
           value={e.fontSize}
           min={8}
@@ -1217,13 +1247,13 @@ function EditorTab(): React.JSX.Element {
           onCommit={(v) => void update({ editor: { fontSize: v } as never })}
         />
       </Row>
-      <Row title="Перенос строк" sub="WORD WRAP">
+      <Row title={t('set.wordWrap')} sub="WORD WRAP">
         <Toggle checked={e.wordWrap} onChange={(v) => void update({ editor: { wordWrap: v } as never })} />
       </Row>
-      <Row title="Миникарта" sub="MINIMAP">
+      <Row title={t('set.minimap')} sub="MINIMAP">
         <Toggle checked={e.minimap} onChange={(v) => void update({ editor: { minimap: v } as never })} />
       </Row>
-      <Row title="Размер табуляции" sub="TAB SIZE">
+      <Row title={t('set.tabSize')} sub="TAB SIZE">
         <NumberField
           value={e.tabSize}
           min={1}
@@ -1269,7 +1299,7 @@ function VoiceTab(): React.JSX.Element {
   const list = usableMics(mics)
   const hidden = labelsHidden(mics)
   const options = [
-    { value: '', label: 'Системный по умолчанию' },
+    { value: '', label: t('set.micSystem') },
     ...list.map((d, i) => ({ value: d.deviceId, label: micName(d, i) }))
   ]
   // Сохранённого устройства нет в списке: без этой строки <select> показал бы
@@ -1278,17 +1308,17 @@ function VoiceTab(): React.JSX.Element {
   if (missing) {
     options.push({
       value: voice.deviceId,
-      label: `${voice.deviceLabel || 'Выбранный микрофон'} · не найден`
+      label: t('set.micMissing', { name: voice.deviceLabel || t('set.micChosen') })
     })
   }
 
   return (
     <section className="zy-set-section">
-      <div className="zy-section-label">Диктовка</div>
+      <div className="zy-section-label">{t('set.dictation')}</div>
       <Row
-        title="Микрофон"
+        title={t('set.mic')}
         sub="INPUT DEVICE"
-        desc="«Системный по умолчанию» следует за настройкой ОС."
+        desc={t('set.micDesc')}
       >
         <SelectField
           value={voice.deviceId}
@@ -1303,9 +1333,9 @@ function VoiceTab(): React.JSX.Element {
       </Row>
       {hidden && (
         <Row
-          title="Названия устройств скрыты"
+          title={t('set.micHidden')}
           sub="PERMISSION NEEDED"
-          desc="Браузерный слой не показывает названия микрофонов, пока не выдан доступ. Нажми — микрофон включится на мгновение и сразу закроется."
+          desc={t('set.micHiddenDesc')}
         >
           <button
             type="button"
@@ -1313,32 +1343,31 @@ function VoiceTab(): React.JSX.Element {
             onClick={() =>
               void revealMicLabels()
                 .then(setMics)
-                .catch(() => useUiStore.getState().toast('Доступ к микрофону не выдан', 'error'))
+                .catch(() => useUiStore.getState().toast(t('set.micDenied'), 'error'))
             }
           >
-            Показать названия
+            {t('set.micReveal')}
           </button>
         </Row>
       )}
       {missing && (
         <Row
-          title="Выбранное устройство не найдено"
+          title={t('set.micGone')}
           sub="DEVICE MISSING"
-          desc="Пока его нет, диктовка пишет в системный микрофон и говорит об этом. Настройка сохранена — устройство подхватится, когда вернётся."
+          desc={t('set.micGoneDesc')}
         >
           <button
             type="button"
             className="zy-btn"
             onClick={() => void update({ voice: { deviceId: '', deviceLabel: '' } as never })}
           >
-            Вернуть системный
+            {t('set.micBackToSystem')}
           </button>
         </Row>
       )}
       <SttModels />
       <div className="zy-item-sub zy-set-footnote">
-        Микрофон открывается только на время диктовки и закрывается сразу после фразы. Звук
-        распознаётся на этой машине и никуда не отправляется.
+        {t('set.micNote')}
       </div>
     </section>
   )
@@ -1366,13 +1395,13 @@ function SttModels(): React.JSX.Element {
     return window.zarya.stt.onProgress(() => refresh())
   }, [refresh])
 
-  const mb = (b: number): string => `${Math.round(b / 1_000_000)} МБ`
+  const mb = (b: number): string => `${Math.round(b / 1_000_000)} ${t('unit.mb')}`
   const models = st?.models ?? []
   const activeId = st?.activeModelId ?? null
 
   return (
     <>
-      <div className="zy-section-label">Модель распознавания</div>
+      <div className="zy-section-label">{t('set.sttModel')}</div>
       {models.length === 0 && <div className="zy-set-hint">…</div>}
       {models.map((m) => {
         const isChosen = (chosen || activeId) === m.id
@@ -1380,14 +1409,14 @@ function SttModels(): React.JSX.Element {
           <div key={m.id} className="zy-set-row">
             <div className="zy-set-row-label">
               <div className="zy-set-row-title">
-                {m.label}
-                {m.id === activeId && <span className="zy-badge zy-badge--ok">активна</span>}
-                {m.legacy && <span className="zy-badge zy-badge--warn">устарела</span>}
+                {t(m.labelKey)}
+                {m.id === activeId && <span className="zy-badge zy-badge--ok">{t('set.badgeActive')}</span>}
+                {m.legacy && <span className="zy-badge zy-badge--warn">{t('set.badgeLegacy')}</span>}
               </div>
               <div className="zy-set-row-sub">
                 {m.lang} · {mb(m.bytes)} · {m.license}
               </div>
-              <div className="zy-item-sub">{m.note}</div>
+              <div className="zy-item-sub">{t(m.noteKey)}</div>
             </div>
             <div className="zy-set-row-control">
               <div className="zy-inline-group">
@@ -1403,16 +1432,16 @@ function SttModels(): React.JSX.Element {
                         .then((r) => {
                           if (r?.ok) {
                             void update({ voice: { modelId: m.id } as never })
-                            useUiStore.getState().toast('Модель готова', 'success')
+                            useUiStore.getState().toast(t('set.modelReady'), 'success')
                           } else {
-                            useUiStore.getState().toast(r?.error ?? 'Не удалось скачать', 'error')
+                            useUiStore.getState().toast(r?.error ?? t('set.modelFail'), 'error')
                           }
                           refresh()
                         })
                         .finally(() => setBusy(null))
                     }}
                   >
-                    {busy === m.id ? 'Скачиваю…' : `Скачать ${mb(m.bytes)}`}
+                    {busy === m.id ? t('set.downloading') : t('set.download', { size: mb(m.bytes) })}
                   </button>
                 )}
                 {m.installed && !isChosen && (
@@ -1424,7 +1453,7 @@ function SttModels(): React.JSX.Element {
                       setTimeout(refresh, 200)
                     }}
                   >
-                    Выбрать
+                    {t('set.choose')}
                   </button>
                 )}
                 {m.installed && (
@@ -1437,13 +1466,13 @@ function SttModels(): React.JSX.Element {
                       void window.zarya.stt
                         .removeModel(m.id)
                         .then(() => {
-                          useUiStore.getState().toast('Модель удалена')
+                          useUiStore.getState().toast(t('set.modelDeleted'))
                           refresh()
                         })
                         .finally(() => setBusy(null))
                     }}
                   >
-                    Удалить
+                    {t('common.deleteShort')}
                   </button>
                 )}
               </div>
@@ -1487,7 +1516,7 @@ function KeybindingsTab(): React.JSX.Element {
     const ids = new Set([...byId.keys(), ...Object.keys(keybindings)])
     const list: KbRow[] = [...ids].map((id) => {
       const a = byId.get(id)
-      return { id, title: a?.title ?? id, category: a?.category ?? 'Другое' }
+      return { id, title: a?.title ?? id, category: a?.category ?? t('set.catOther') }
     })
     list.sort((x, y) => x.category.localeCompare(y.category) || x.title.localeCompare(y.title))
     const map = new Map<string, KbRow[]>()
@@ -1500,7 +1529,7 @@ function KeybindingsTab(): React.JSX.Element {
   }, [keybindings])
 
   function resetAll(): void {
-    if (!window.confirm('Сбросить все горячие клавиши к значениям по умолчанию?')) return
+    if (!window.confirm(t('set.resetAsk'))) return
     void update({ keybindings: { ...DEFAULT_KEYBINDINGS } })
   }
 
@@ -1508,10 +1537,10 @@ function KeybindingsTab(): React.JSX.Element {
     <section className="zy-set-section">
       <div className="zy-kb-toolbar">
         <div className="zy-item-sub">
-          Клик по сочетанию клавиш начинает запись — нажмите новую комбинацию. Esc отменяет запись.
+          {t('set.keysHint')}
         </div>
         <button type="button" className="zy-btn zy-btn--sm" onClick={resetAll}>
-          Сбросить всё
+          {t('set.resetAll')}
         </button>
       </div>
       {[...groups.entries()].map(([category, list]) => (
@@ -1529,13 +1558,13 @@ function KeybindingsTab(): React.JSX.Element {
                   className={`zy-kbd zy-kb-chord-btn${recording ? ' zy-kb-chord-btn--recording' : ''}`}
                   onClick={() => setRecordingId(r.id)}
                 >
-                  {recording ? 'Нажмите клавиши…' : chord ? formatChord(chord) : '—'}
+                  {recording ? t('set.pressKeys') : chord ? formatChord(chord) : '—'}
                 </button>
                 {def && (
                   <button
                     type="button"
                     className="zy-icon-btn"
-                    title="Сбросить к умолчанию"
+                    title={t('set.resetOne')}
                     disabled={def === chord}
                     onClick={() => void update({ keybindings: { ...keybindings, [r.id]: def } })}
                   >
@@ -1573,33 +1602,33 @@ function UpdateRows(): React.JSX.Element {
   const ago = ((): string => {
     if (!state?.checkedAt) return ''
     const days = Math.floor((Date.now() - state.checkedAt) / 86_400_000)
-    if (days >= 1) return ` · проверяли ${days} дн. назад`
+    if (days >= 1) return t('set.agoDays', { n: days })
     const hours = Math.floor((Date.now() - state.checkedAt) / 3_600_000)
-    return hours >= 1 ? ` · проверяли ${hours} ч назад` : ' · проверяли только что'
+    return hours >= 1 ? t('set.agoHours', { n: hours }) : t('set.agoNow')
   })()
 
   const status = ((): string => {
-    if (!enabled) return 'проверка выключена — приложение не узнает о выходе исправлений'
-    if (state?.checking) return 'проверяю…'
-    if (state?.error) return `не удалось проверить: ${state.error}${ago}`
-    if (!state?.checkedAt) return 'ещё не проверяли'
-    if (state.updateAvailable && state.latest) return `доступна ${state.latest.version}${ago}`
-    return `у вас последняя версия${ago}`
+    if (!enabled) return t('set.updOff')
+    if (state?.checking) return t('set.updChecking')
+    if (state?.error) return t('set.updFail', { err: state.error, ago })
+    if (!state?.checkedAt) return t('set.updNever')
+    if (state.updateAvailable && state.latest) return t('set.updAvail', { v: state.latest.version, ago })
+    return t('set.updLatest', { ago })
   })()
 
   return (
     <>
       <Row
-        title="Проверять обновления"
+        title={t('set.updCheck')}
         sub="UPDATE CHECK"
-        desc="Один анонимный запрос к GitHub при запуске: без токена, без идентификаторов, ничего не скачивается и не запускается само."
+        desc={t('set.updCheckDesc')}
       >
         <Toggle
           checked={enabled}
           onChange={(v) => void update({ updates: { check: v } as never })}
         />
       </Row>
-      <Row title="Состояние" sub="STATUS" desc={status}>
+      <Row title={t('set.status')} sub="STATUS" desc={status}>
         <div className="zy-inline-group">
           {state?.updateAvailable && state.latest && (
             <button
@@ -1607,11 +1636,11 @@ function UpdateRows(): React.JSX.Element {
               className="zy-btn zy-btn--accent"
               onClick={() => useUiStore.getState().set({ settingsOpen: false, updateOpen: true })}
             >
-              Что нового
+              {t('set.whatsNew')}
             </button>
           )}
           <button type="button" className="zy-btn" disabled={state?.checking} onClick={() => void check()}>
-            Проверить
+            {t('set.checkNow')}
           </button>
         </div>
       </Row>
@@ -1632,12 +1661,12 @@ function AboutTab(): React.JSX.Element {
         <div className="zy-about-logo">Z</div>
         <div>
           <div className="zy-about-title">Zarya Terminal</div>
-          <div className="zy-item-sub">{info ? `Версия ${info.version}` : 'Загрузка…'}</div>
+          <div className="zy-item-sub">{info ? t('set.version', { v: info.version }) : t('set.loading')}</div>
         </div>
       </div>
       {info && (
         <div className="zy-about-grid">
-          <div className="zy-about-k">Платформа</div>
+          <div className="zy-about-k">{t('set.platform')}</div>
           <div className="zy-about-v">{info.platform}</div>
           <div className="zy-about-k">Electron</div>
           <div className="zy-about-v">{info.electron}</div>
@@ -1645,7 +1674,7 @@ function AboutTab(): React.JSX.Element {
           <div className="zy-about-v">{info.chrome}</div>
           <div className="zy-about-k">Node.js</div>
           <div className="zy-about-v">{info.node}</div>
-          <div className="zy-about-k">Папка данных</div>
+          <div className="zy-about-k">{t('set.dataFolder')}</div>
           <div className="zy-about-v zy-about-v--mono" title={info.userDataPath}>
             {info.userDataPath}
           </div>
@@ -1658,7 +1687,7 @@ function AboutTab(): React.JSX.Element {
           className="zy-btn zy-btn--accent"
           onClick={() => window.zarya.app.openExternal('https://github.com/gorka2354/zarya-terminal')}
         >
-          GitHub репозиторий
+          {t('set.repo')}
         </button>
         {info && (
           <button
@@ -1666,7 +1695,7 @@ function AboutTab(): React.JSX.Element {
             className="zy-btn"
             onClick={() => window.zarya.app.showItemInFolder(info.userDataPath)}
           >
-            Открыть папку данных
+            {t('set.openDataFolder')}
           </button>
         )}
       </div>

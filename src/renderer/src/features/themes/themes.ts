@@ -12,7 +12,7 @@ import type { ThemeDef } from '@shared/types'
 // ---------------------------------------------------------------------------
 export const zaryaCosmos: ThemeDef = {
   id: 'zarya-cosmos',
-  name: 'Заря · Космос',
+  nameKey: 'theme.kosmos',
   type: 'dark',
   // Neutral graphite, not navy. The surfaces keep the original luminance steps
   // (panel < bg < elev1 < elev2) so depth reads the same, but the blue cast is
@@ -68,7 +68,7 @@ export const zaryaCosmos: ThemeDef = {
 // ---------------------------------------------------------------------------
 export const zaryaVostok: ThemeDef = {
   id: 'zarya-vostok',
-  name: 'Заря · Восток',
+  nameKey: 'theme.vostok',
   type: 'dark',
   ui: {
     bg: '#120a0c',
@@ -116,7 +116,7 @@ export const zaryaVostok: ThemeDef = {
 // ---------------------------------------------------------------------------
 export const zaryaOrbita: ThemeDef = {
   id: 'zarya-orbita',
-  name: 'Заря · Орбита',
+  nameKey: 'theme.orbit',
   type: 'dark',
   ui: {
     bg: '#05100f',
@@ -164,7 +164,7 @@ export const zaryaOrbita: ThemeDef = {
 // ---------------------------------------------------------------------------
 export const zaryaDawn: ThemeDef = {
   id: 'zarya-dawn',
-  name: 'Заря · Рассвет',
+  nameKey: 'theme.dawn',
   type: 'dark',
   ui: {
     bg: '#0b0f1a',

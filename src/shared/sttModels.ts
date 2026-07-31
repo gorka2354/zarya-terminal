@@ -25,7 +25,8 @@ export interface SttModelFile {
 
 export interface SttModelDef {
   id: string
-  label: string
+  /** Ключ подписи: сам файл общий, язык подставляет тот, кто рисует. */
+  labelKey: string
   /** Язык в виде «RU» / «EN» — для строки выбора. */
   lang: string
   family: SttFamily
@@ -33,8 +34,8 @@ export interface SttModelDef {
   /** Каталог внутри userData/models. */
   dir: string
   files: SttModelFile[]
-  /** Короткое пояснение: чем эта модель отличается от соседей. */
-  note: string
+  /** Ключ короткого пояснения: чем эта модель отличается от соседей. */
+  noteKey: string
   /** Прошлая модель: остаётся рабочей, но не предлагается к скачиванию. */
   legacy?: boolean
 }
@@ -42,12 +43,12 @@ export interface SttModelDef {
 export const STT_MODELS: SttModelDef[] = [
   {
     id: 'gigaam-v3-ru-punct',
-    label: 'GigaAM v3 · русский',
+    labelKey: 'stt.gigaRu',
     lang: 'RU',
     family: 'nemoCtc',
     license: 'MIT',
     dir: 'gigaam-v3-ru-punct',
-    note: 'Лучшее качество на русском. Словарь на 257 токенов: цифры, латиница, знаки препинания.',
+    noteKey: 'stt.gigaRuNote',
     files: [
       {
         name: 'model.int8.onnx',
@@ -65,12 +66,12 @@ export const STT_MODELS: SttModelDef[] = [
   },
   {
     id: 'gigaam-v3-ru-rnnt',
-    label: 'GigaAM v3 RNN-T · русский',
+    labelKey: 'stt.gigaRnnt',
     lang: 'RU',
     family: 'transducer',
     license: 'MIT',
     dir: 'gigaam-v3-ru-rnnt',
-    note: 'Тот же GigaAM, но точнее на длинных фразах. Считает чуть медленнее.',
+    noteKey: 'stt.gigaRnntNote',
     files: [
       {
         name: 'encoder.int8.onnx',
@@ -100,7 +101,7 @@ export const STT_MODELS: SttModelDef[] = [
   },
   {
     id: 'moonshine-tiny-en',
-    label: 'Moonshine tiny · английский',
+    labelKey: 'stt.moonshine',
     lang: 'EN',
     family: 'moonshine',
     license: 'MIT',
@@ -109,7 +110,7 @@ export const STT_MODELS: SttModelDef[] = [
     // секунды стоит столько же, сколько на тридцать. Moonshine считает
     // пропорционально длине — для диктовки короткими фразами это структурное
     // преимущество, а не разница в весах.
-    note: 'Английский. Втрое легче русской модели и быстрее на коротких фразах.',
+    noteKey: 'stt.moonshineNote',
     files: [
       {
         name: 'preprocess.onnx',
@@ -148,12 +149,12 @@ export const STT_MODELS: SttModelDef[] = [
     // лежит на диске — диктовка работает: заставлять человека качать 225 МБ
     // заново из-за обновления приложения неправильно.
     id: 'gigaam-v3-ru-legacy',
-    label: 'GigaAM v3 · русский (прежняя)',
+    labelKey: 'stt.gigaOld',
     lang: 'RU',
     family: 'nemoCtc',
     license: 'MIT',
     dir: 'gigaam-v3-ru',
-    note: 'Словарь из 34 токенов: только строчные русские буквы, без цифр, латиницы и знаков препинания.',
+    noteKey: 'stt.gigaOldNote',
     legacy: true,
     files: [
       { name: 'model.int8.onnx', bytes: 224721476 },

@@ -1,6 +1,12 @@
-/** Clean README screenshots (no personal paths): seeded cosmic feed + launch pad. */
+/**
+ * Clean README screenshots (no personal paths): seeded cosmic feed + launch pad.
+ *
+ * Язык кадра задаётся явно (`--lang ru` для русской витрины): README
+ * англоязычный, и снимок с русским интерфейсом обещал бы читателю не то
+ * приложение, которое он поставит.
+ */
 import { _electron as electron } from 'playwright'
-import { mkdtempSync, rmSync, mkdirSync } from 'node:fs'
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -18,6 +24,13 @@ const CATALOG = [
   { value: 'sonnet', resolvedModel: 'claude-sonnet-5', displayName: 'Sonnet', description: 'Sonnet 5', supportsEffort: true, supportedEffortLevels: ['low', 'medium', 'high', 'xhigh', 'max'] },
   { value: 'haiku', resolvedModel: 'claude-haiku-4-5-20251001', displayName: 'Haiku', description: 'Haiku 4.5' }
 ]
+
+const langArg = process.argv.indexOf('--lang')
+const lang = langArg > 0 ? process.argv[langArg + 1] : 'en'
+writeFileSync(
+  join(userData, 'settings.json'),
+  JSON.stringify({ appearance: { language: lang }, sessions: { restoreOnLaunch: 'none' } }, null, 2)
+)
 
 const app = await electron.launch({ args: [join(root, 'out', 'main', 'index.js')], env: { ...process.env, ZARYA_USER_DATA: userData, NODE_ENV: 'production' } })
 try {

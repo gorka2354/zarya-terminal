@@ -199,13 +199,13 @@ all three are pure renderer concerns (no IPC, no main-process involvement):
   window area, DPR-capped) that drift and twinkle, plus the occasional shooting star.
   Reads `documentElement.dataset.themeType` to invert to dark stars on light themes,
   and freezes under `prefers-reduced-motion`.
-- **`RocketLaunch.tsx`** — a self-dismissing (~1.9s) full-screen "ПОЕХАЛИ!" liftoff
+- **`RocketLaunch.tsx`** — a self-dismissing (~1.9s) full-screen “POYEKHALI!” liftoff
   overlay (canvas starfield + exhaust embers via `requestAnimationFrame`, DOM/CSS for
   crisp countdown/title, `root.zy-shake` screen shake). Fired imperatively through a
   tiny listener registry — `launchRocket({ label })` — from anywhere (engine/thrust
   commit, provider/model change). It also exposes a `window.__zaryaLaunchRocket` test
   hook so the QA harness can trigger it without native clicks.
-- **`LaunchPad.tsx`** — the "Пусковой комплекс" model + thrust picker overlay (see
+- **`LaunchPad.tsx`** — the launch-pad model + thrust picker overlay (see
   [docs/ai.md](ai.md)); its visibility is a `uiStore` flag (`launchPadOpen`), toggled
   by the `app.launch-pad` action.
 

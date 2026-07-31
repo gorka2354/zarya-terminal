@@ -5,6 +5,7 @@ import { useSessionsStore } from '@/state/sessionsStore'
 import { useSettingsStore } from '@/state/settingsStore'
 import { paneDraft, setPaneDraft } from '@/state/paneDrafts'
 import { paneHistory, pushPaneHistory } from '@/state/paneHistory'
+import { currentLang, t } from '@/lib/i18n'
 import { barModeOf, setBarModeOf, setPaneBarMode, setRaw, useUiStore } from '@/state/uiStore'
 import { getTerminal } from '@/terminal/terminalRegistry'
 import { convForSession, useAiStore } from '@/features/ai/aiStore'
@@ -46,7 +47,7 @@ const warnedMissingMics = new Set<string>()
 
 type BarMode = 'shell' | 'zarya' | AgentEngine
 const MODE_LABEL: Record<BarMode, string> = {
-  shell: 'ТЕРМИНАЛ',
+  shell: 'shell',
   zarya: 'ZARYA',
   'claude-code': 'CLAUDE CODE',
   codex: 'CODEX',
@@ -54,14 +55,22 @@ const MODE_LABEL: Record<BarMode, string> = {
   kimi: 'KIMI',
   qwen: 'QWEN'
 }
-const MODE_PLACEHOLDER: Record<BarMode, string> = {
-  shell: 'Команда терминала…  (Enter — выполнить)',
-  zarya: 'Спросить агента Zarya…  (Enter)',
-  'claude-code': 'Спросить Claude Code…  (Enter, нативно, подписка Max)',
-  codex: 'Спросить Codex…  (Enter, нативно)',
-  gemini: 'Спросить Gemini…  (Enter, нативно)',
-  kimi: 'Спросить Kimi…  (Enter, нативно)',
-  qwen: 'Спросить Qwen…  (Enter, нативно)'
+/** Подпись режима: у оболочки она переводится, у движков это имена. */
+function modeLabel(mode: BarMode): string {
+  return mode === 'shell' ? t('bar.modeTerminal') : MODE_LABEL[mode]
+}
+/** Подсказка в строке ввода — по режиму. */
+function modePlaceholder(mode: BarMode): string {
+  const byMode: Record<BarMode, string> = {
+    shell: 'bar.placeholderShell',
+    zarya: 'bar.placeholderZarya',
+    'claude-code': 'bar.placeholderClaude',
+    codex: 'bar.placeholderCodex',
+    gemini: 'bar.placeholderGemini',
+    kimi: 'bar.placeholderKimi',
+    qwen: 'bar.placeholderQwen'
+  }
+  return t(byMode[mode])
 }
 /** The manual chip cycle: Терминал ⇄ each detected native engine. «Zarya» is a
  *  niche entered only by auto-follow, so it stays out of the cycle. */
@@ -127,23 +136,29 @@ function prettyModel(id: string): string {
 function resetLabel(ts?: number): string {
   if (!ts) return ''
   const mins = Math.round((ts - Date.now()) / 60000)
-  if (mins <= 1) return 'минуту'
-  if (mins < 60) return `${mins} мин`
+  if (mins <= 1) return t('time.aMinute')
+  if (mins < 60) return t('time.mins', { n: mins })
   const h = Math.floor(mins / 60)
   const m = mins % 60
   // The weekly window resets days out, and «через 96 ч» is not how anyone reads
   // that — count in days once it stops being an afternoon away.
   if (h >= 24) {
     const d = Math.round(h / 24)
+    // Русская плюрализация живёт здесь: в английском формы две, в русском три,
+    // и через один ключ это не выражается.
     const tail =
-      d % 10 === 1 && d % 100 !== 11
-        ? 'день'
-        : d % 10 >= 2 && d % 10 <= 4 && (d % 100 < 10 || d % 100 >= 20)
-          ? 'дня'
-          : 'дней'
+      currentLang() === 'en'
+        ? d === 1
+          ? t('time.dayOne')
+          : t('time.dayMany')
+        : d % 10 === 1 && d % 100 !== 11
+          ? t('time.dayOne')
+          : d % 10 >= 2 && d % 10 <= 4 && (d % 100 < 10 || d % 100 >= 20)
+            ? t('time.dayFew')
+            : t('time.dayMany')
     return `${d} ${tail}`
   }
-  return m ? `${h} ч ${m} мин` : `${h} ч`
+  return m ? `${h} ${t('time.h')} ${m} ${t('time.min')}` : `${h} ${t('time.h')}`
 }
 
 /** Compact token count for the context readout tooltip (45 231 → "45K"). */
@@ -244,10 +259,10 @@ export function UsagePanel({
     rows.push(
       <UsageRow
         key="5h"
-        label="5 часов"
+        label={t('usage.fiveHours')}
         pct={usage.fiveHourPct}
         note={
-          usage.fiveHourResetsAt ? `сброс через ${resetLabel(usage.fiveHourResetsAt)}` : undefined
+          usage.fiveHourResetsAt ? t('usage.resetsIn', { time: resetLabel(usage.fiveHourResetsAt) }) : undefined
         }
       />
     )
@@ -255,10 +270,10 @@ export function UsagePanel({
     rows.push(
       <UsageRow
         key="7d"
-        label="7 дней"
+        label={t('usage.sevenDays')}
         pct={usage.sevenDayPct}
         note={
-          usage.sevenDayResetsAt ? `сброс через ${resetLabel(usage.sevenDayResetsAt)}` : undefined
+          usage.sevenDayResetsAt ? t('usage.resetsIn', { time: resetLabel(usage.sevenDayResetsAt) }) : undefined
         }
       />
     )
@@ -266,11 +281,11 @@ export function UsagePanel({
     rows.push(
       <UsageRow
         key="ctx"
-        label="Контекст"
+        label={t('usage.context')}
         pct={context.pct}
         note={
           context.tokens != null && context.window != null
-            ? `${fmtTokens(context.tokens)} из ${fmtTokens(context.window)} токенов`
+            ? t('usage.tokensOf', { used: fmtTokens(context.tokens), total: fmtTokens(context.window) })
             : undefined
         }
       />
@@ -279,7 +294,7 @@ export function UsagePanel({
   return (
     <div className="zy-usage-panel" ref={ref}>
       <div className="zy-usage-head">
-        <span>РАСХОД</span>
+        <span>{t('usage.title')}</span>
         {usage?.subscriptionType ? (
           <span className="zy-usage-sub">{usage.subscriptionType}</span>
         ) : null}
@@ -288,7 +303,7 @@ export function UsagePanel({
         rows
       ) : (
         <div className="zy-usage-empty">
-          Данных пока нет — появятся после первого ответа агента.
+          {t('usage.empty')}
         </div>
       )}
     </div>
@@ -620,7 +635,7 @@ ${prev}`
     if (busyConv) {
       useUiStore
         .getState()
-        .toast('Движок занят — дождитесь ответа или Esc, потом переключайтесь', 'info')
+        .toast(t('bar.engineBusy'), 'info')
       return
     }
     const order = modeCycle(Object.keys(agentCaps))
@@ -641,7 +656,7 @@ ${prev}`
     if (activeEngine && agentCaps[activeEngine]?.images !== true) {
       useUiStore
         .getState()
-        .toast(`${MODE_LABEL[mode]} не принимает изображения — вставьте текстом или путём`, 'error')
+        .toast(t('bar.noImages', { engine: modeLabel(mode) }), 'error')
       return 0
     }
     let added = 0
@@ -676,8 +691,8 @@ ${prev}`
       .getState()
       .toast(
         next
-          ? 'Без подтверждений — агент выполняет всё сам'
-          : 'Подтверждения инструментов включены',
+          ? t('bar.autopilotToastOn')
+          : t('bar.autopilotToastOff'),
         next ? 'error' : 'success'
       )
   }
@@ -706,14 +721,14 @@ ${prev}`
     const res = await window.zarya.stt.transcribe(samples, sampleRate)
     setVoice('idle')
     if (!res.ok) {
-      setVoiceNote(res.error ?? 'не распозналось')
-      useUiStore.getState().toast(res.error ?? 'Распознавание не удалось', 'error')
+      setVoiceNote(res.error ?? t('voice.failed'))
+      useUiStore.getState().toast(res.error ?? t('voice.failedLong'), 'error')
       return
     }
     setVoiceNote('')
     const said = (res.text ?? '').trim()
     if (!said) {
-      useUiStore.getState().toast('Ничего не разобрал', 'error')
+      useUiStore.getState().toast(t('voice.nothing'), 'error')
       return
     }
     setText((t) => (t ? `${t} ${said}` : said))
@@ -726,7 +741,7 @@ ${prev}`
     // строк станет столько же, сколько панелей, и каждая проходила бы СВОЮ
     // защиту — четыре записи одной фразы и четыре расшифровки.
     if (!activeSessionId || !claimMic(activeSessionId)) {
-      useUiStore.getState().toast('Микрофон занят другой панелью', 'error')
+      useUiStore.getState().toast(t('voice.busy'), 'error')
       return
     }
     // Claim the slot BEFORE the first await. Two entry points can fire almost
@@ -749,12 +764,12 @@ ${prev}`
     const state = await window.zarya.stt.state()
     if (!state.modelReady) {
       // First run downloads ~225 MB — say so instead of appearing frozen.
-      setVoiceNote('загружаю модель…')
+      setVoiceNote(t('voice.loadingModel'))
       const r = await window.zarya.stt.ensureModel()
       setVoiceNote('')
       if (!r?.ok) {
         setVoice('idle')
-        useUiStore.getState().toast(r?.error ?? 'Не удалось загрузить модель', 'error')
+        useUiStore.getState().toast(r?.error ?? t('voice.modelFailed'), 'error')
         return
       }
     }
@@ -781,7 +796,7 @@ ${prev}`
           warnedMissingMics.add(cfg.deviceId)
           useUiStore
             .getState()
-            .toast(`Микрофон «${pick.label}» не найден — пишу в системный`, 'error')
+            .toast(t('voice.micMissing', { name: pick.label }), 'error')
         }
       } else {
         // Устройство вернулось — право на предупреждение восстановлено. Без
@@ -797,7 +812,7 @@ ${prev}`
           releaseMic(activeSessionId)
           setVoice('idle')
           setVoiceLevel(0)
-          useUiStore.getState().toast('Микрофон отключён — запись прервана', 'error')
+          useUiStore.getState().toast(t('voice.micLost'), 'error')
         }
       })
       // Бар ушёл с экрана, пока открывался микрофон: его cleanup уже прошёл и
@@ -829,7 +844,7 @@ ${prev}`
         useUiStore
           .getState()
           .toast(
-            `Микрофон «${cfg.deviceLabel || 'выбранный'}» недоступен — пишу в системный`,
+            t('voice.micUnavailable', { name: cfg.deviceLabel || t('voice.chosen') }),
             'error'
           )
       }
@@ -842,12 +857,12 @@ ${prev}`
       const name = e instanceof Error ? e.name : ''
       const msg =
         name === 'NotAllowedError'
-          ? 'Доступ к микрофону запрещён — проверь системные настройки приватности'
+          ? t('voice.denied')
           : name === 'NotFoundError'
-            ? 'Микрофон не найден'
+            ? t('voice.notFound')
             : e instanceof Error
               ? e.message
-              : 'Микрофон недоступен'
+              : t('voice.unavailable')
       useUiStore.getState().toast(msg, 'error')
       setVoice('idle')
     }
@@ -865,7 +880,7 @@ ${prev}`
     const hidden = labelsHidden(devices)
     const items: MenuItem[] = [
       {
-        label: 'Системный по умолчанию',
+        label: t('voice.systemDefault'),
         hint: voiceCfg.deviceId ? undefined : '✓',
         onClick: () =>
           void useSettingsStore
@@ -889,7 +904,7 @@ ${prev}`
     // выбор ненажатым нигде — как будто ничего и не выбрано.
     if (voiceCfg.deviceId && !list.some((d) => d.deviceId === voiceCfg.deviceId)) {
       items.push({
-        label: `${voiceCfg.deviceLabel || 'Выбранный микрофон'} · не найден`,
+        label: t('voice.chosenMissing', { name: voiceCfg.deviceLabel || t('voice.chosenMic') }),
         hint: '✓',
         disabled: true
       })
@@ -901,25 +916,25 @@ ${prev}`
       // явному нажатию.
       items.push({ separator: true })
       items.push({
-        label: 'Показать названия…',
-        hint: 'нужен доступ',
+        label: t('voice.revealNames'),
+        hint: t('voice.needsAccess'),
         onClick: () => {
           void revealMicLabels()
             .then((fresh) => {
               setMics(fresh)
               openMicMenu(at.x, at.y, micItems(fresh, at))
             })
-            .catch(() => useUiStore.getState().toast('Доступ к микрофону не выдан', 'error'))
+            .catch(() => useUiStore.getState().toast(t('voice.accessDenied'), 'error'))
         }
       })
     }
     if (!list.length) {
       items.push({ separator: true })
-      items.push({ label: 'Микрофонов не найдено', disabled: true })
+      items.push({ label: t('voice.noMics'), disabled: true })
     }
     if (voice === 'rec') {
       items.push({ separator: true })
-      items.push({ label: 'Применится со следующей записи', disabled: true })
+      items.push({ label: t('voice.appliesNext'), disabled: true })
     }
     return items
   }
@@ -959,7 +974,7 @@ ${prev}`
   }, [])
 
   const micLabel = ((): string => {
-    if (!voiceCfg.deviceId) return 'системный'
+    if (!voiceCfg.deviceId) return t('voice.system')
     const list = usableMics(mics)
     const i = list.findIndex((d) => d.deviceId === voiceCfg.deviceId)
     if (i >= 0) return micName(list[i], i)
@@ -967,8 +982,8 @@ ${prev}`
     // здесь одно имя, а записать другое, значит соврать ровно в том месте, куда
     // человек и смотрит, чтобы это проверить. Пустой список не в счёт: он
     // означает, что перечисление ещё не вернулось, а не что устройство пропало.
-    const name = voiceCfg.deviceLabel || 'выбранный'
-    return list.length ? `${name} — не найден, пишу в системный` : name
+    const name = voiceCfg.deviceLabel || t('voice.chosen')
+    return list.length ? t('voice.fallbackToSystem', { name }) : name
   })()
 
   // The microphone must close itself. The bar unmounts WITHOUT the user doing
@@ -1052,7 +1067,7 @@ ${prev}`
         return
       }
       const pct = p.total ? Math.floor((p.received / p.total) * 100) : 0
-      setVoiceNote(`модель распознавания… ${pct}%`)
+      setVoiceNote(t('voice.modelProgress', { pct }))
     })
   }, [])
 
@@ -1094,8 +1109,8 @@ ${prev}`
       .getState()
       .toast(
         next
-          ? 'Без подтверждений — борт сам выполняет команды в терминале'
-          : 'Подтверждение команд включено',
+          ? t('bar.autoApproveOn')
+          : t('bar.autoApproveOff'),
         next ? 'error' : 'success'
       )
   }
@@ -1116,8 +1131,8 @@ ${prev}`
     const seven = u?.sevenDayPct
     if (five == null && seven == null) return null
     if (seven != null && (five == null || seven > five))
-      return { short: '7дн', label: 'Недельный лимит', pct: seven }
-    return { short: '5ч', label: 'Пятичасовой лимит', pct: five as number }
+      return { short: t('usage.weekShort'), label: t('usage.weekLimit'), pct: seven }
+    return { short: t('usage.fiveShort'), label: t('usage.fiveLimit'), pct: five as number }
   })()
 
   // SECURITY: the chip is the one place that answers «will I be asked?», so it
@@ -1139,13 +1154,13 @@ ${prev}`
   const gateOff = isBuiltinMode ? autoApprove : bypass && caps?.bypass !== false
   const gateTitle = isBuiltinMode
     ? gateOff
-      ? '⚠ АВТОПИЛОТ — борт сам выполняет команды в терминале, без подтверждения. Клик: вернуть ручное управление'
-      : 'Ручное управление — борт спрашивает подтверждение перед каждой командой. Клик: включить автопилот (выполнять без подтверждений)'
+      ? t('bar.gateBuiltinOn')
+      : t('bar.gateBuiltinOff')
     : !canToggleGate
-      ? `Ручное управление — ${MODE_LABEL[mode]} всегда спрашивает подтверждение перед инструментом; автопилот для этого борта не поддерживается`
+      ? t('bar.gateLocked', { engine: modeLabel(mode) })
       : gateOff
-        ? '⚠ АВТОПИЛОТ — борт выполняет все инструменты сам, без подтверждений (кроме вопросов AskUserQuestion). Клик: вернуть ручное управление'
-        : 'Ручное управление — борт спрашивает подтверждение перед инструментами. Клик: включить автопилот (выполнять без подтверждений)'
+        ? t('bar.gateOn')
+        : t('bar.gateOff')
 
   if (question) {
     return (
@@ -1180,8 +1195,8 @@ ${prev}`
           className="zy-agentbar-fuel-main"
           title={
             lead
-              ? `${lead.label}: израсходовано ${Math.round(lead.pct)}%. Нажми — все лимиты`
-              : 'Лимиты и контекст беседы'
+              ? t('usage.leadHint', { label: lead.label, pct: Math.round(lead.pct) })
+              : t('usage.allHint')
           }
           aria-expanded={usageOpen}
           onClick={() => setUsageOpen((v) => !v)}
@@ -1209,7 +1224,7 @@ ${prev}`
             </>
           ) : (
             <span className="zy-agentbar-fuel-val">
-              {showFuel ? 'борт заправлен' : '∞ без лимита · локальный борт'}
+              {t(showFuel ? 'strip.fueled' : 'strip.noLimit')}
             </span>
           )}
           <Icon name={usageOpen ? 'chevron-down' : 'chevron-up'} size={10} />
@@ -1219,7 +1234,7 @@ ${prev}`
           <button
             className="zy-agentbar-fuel-model"
             onClick={openLaunchPad}
-            title="Двигатель и тяга"
+            title={t('bar.engineHint')}
           >
             {claudeStatus.model ? prettyModel(claudeStatus.model) : ''}
             {ultracode
@@ -1232,9 +1247,9 @@ ${prev}`
           <button
             className="zy-agentbar-fuel-pult"
             onClick={openLaunchPad}
-            title="Пусковой комплекс"
+            title={t('bar.launchPad')}
           >
-            пульт ▴
+            {t('strip.console')}
           </button>
         </div>
       )}
@@ -1242,13 +1257,13 @@ ${prev}`
       {pendingImages.length > 0 && (
         <div className="zy-img-chips">
           {pendingImages.map((img, i) => (
-            <span key={img.id} className="zy-img-chip" title={`${img.width}×${img.height} · ${Math.round(img.bytes / 1024)} КБ`}>
+            <span key={img.id} className="zy-img-chip" title={`${img.width}×${img.height} · ${Math.round(img.bytes / 1024)} ${t('common.kb')}`}>
               {img.thumb ? <img src={img.thumb} alt="" /> : null}
               <span className="zy-img-chip-n">#{i + 1}</span>
-              <span className="zy-img-chip-name">{img.name ?? 'снимок'}</span>
+              <span className="zy-img-chip-name">{img.name ?? t('bar.snapshot')}</span>
               <button
                 className="zy-img-chip-x"
-                title="Убрать"
+                title={t('bar.removeAttachment')}
                 onClick={() => activeSessionId && useAiStore.getState().dropImage(activeSessionId, img.id)}
               >
                 ✕
@@ -1287,7 +1302,7 @@ ${prev}`
               .map((x) => `"${x}"`)
             if (paths.length) {
               setText((prev) => (prev.trim() ? `${prev} ${paths.join(' ')}` : paths.join(' ')))
-              useUiStore.getState().toast('Файл добавлен путём — агент прочитает сам', 'success')
+              useUiStore.getState().toast(t('bar.fileAsPath'), 'success')
             }
           }
         }}
@@ -1300,12 +1315,12 @@ ${prev}`
           className={`zy-agentbar-mode zy-agentbar-mode--icon zy-agentbar-mode--${mode}`}
           title={
             isShell
-              ? 'Режим: Терминал — Enter выполнит команду. Нажми, чтобы говорить с агентом'
+              ? t('bar.modeShellHint')
               : isAgent
-                ? `Режим: ${MODE_LABEL[mode]} (нативно) — Enter отправит запрос. Нажми — сменить режим`
-                : 'Режим: Zarya (свой ключ) — Enter отправит запрос. Нажми — сменить режим'
+                ? t('bar.modeAgentHint', { engine: modeLabel(mode) })
+                : t('bar.modeZaryaHint')
           }
-          aria-label={`Режим: ${MODE_LABEL[mode]}`}
+          aria-label={t('bar.modeAria', { engine: modeLabel(mode) })}
           onClick={cycleMode}
         >
           <EngineGlyph engine={mode} size={14} />
@@ -1316,7 +1331,7 @@ ${prev}`
               gateOff ? ' zy-agentbar-bypass--on' : ''
             }${canToggleGate ? '' : ' zy-agentbar-bypass--locked'}`}
             title={gateTitle}
-            aria-label={gateOff ? 'Автопилот включён' : 'Ручное управление'}
+            aria-label={t(gateOff ? 'bar.autopilotAria' : 'bar.manualAria')}
             disabled={!canToggleGate}
             onClick={canToggleGate ? (isBuiltinMode ? toggleAutoApprove : toggleBypass) : undefined}
           >
@@ -1331,16 +1346,16 @@ ${prev}`
           }`}
           title={
             voice === 'rec'
-              ? 'Идёт запись — нажми, чтобы закончить (Esc — отменить)'
+              ? t('bar.recording')
               : voice === 'load'
-                ? 'Загружается модель распознавания'
+                ? t('voice.modelLoading')
                 : voice === 'work'
-                  ? 'Распознаю…'
+                  ? t('voice.recognising')
                   : micBusy
-                    ? 'Микрофон занят другой панелью — закончи запись там'
-                    : `Диктовка: нажми или удерживай Ctrl+Shift+Space. Текст попадёт в строку, отправишь сам\nМикрофон: ${micLabel} · ПКМ — выбрать`
+                    ? t('bar.micBusy')
+                    : t('voice.hint', { mic: micLabel })
           }
-          aria-label="Диктовка"
+          aria-label={t('bar.dictate')}
           onClick={() => (voice === 'rec' ? void finishVoice() : void startVoice())}
           onContextMenu={(e) => {
             e.preventDefault()
@@ -1386,13 +1401,13 @@ ${prev}`
           rows={1}
           placeholder={
             busyConv && mode !== 'shell'
-              ? 'Агент работает — Enter поставит в очередь · Esc прервать · ↑ править'
+              ? t('bar.busy')
               : paneSessionId
                 ? // В панели места вчетверо меньше, и приписка «(Enter — выполнить)»
                   // не влезала: подсказка обрывалась на полуслове. Что делает Enter,
                   // написано на кнопке отправки и на чипе режима.
-                  MODE_PLACEHOLDER[mode].replace(/\s*\(.*\)\s*$/, '')
-                : MODE_PLACEHOLDER[mode]
+                  modePlaceholder(mode).replace(/\s*\(.*\)\s*$/, '')
+                : modePlaceholder(mode)
           }
           value={text}
           onChange={(e) => {
@@ -1433,7 +1448,7 @@ ${prev}`
           <>
             <button
               className={`zy-agentbar-effort${effort === 'max' ? ' zy-agentbar-effort--max' : ''}`}
-              title={`Тяга (effort): ${EFFORT_TUNING[effort].label} · пусковой комплекс`}
+              title={t('bar.effortHint', { level: t(EFFORT_TUNING[effort].labelKey) })}
               onClick={openLaunchPad}
             >
               <span className="zy-agentbar-effort-bars">
@@ -1444,11 +1459,11 @@ ${prev}`
                   />
                 ))}
               </span>
-              <span className="zy-agentbar-effort-label">{EFFORT_TUNING[effort].label}</span>
+              <span className="zy-agentbar-effort-label">{t(EFFORT_TUNING[effort].labelKey)}</span>
             </button>
             <button
               className="zy-agentbar-model"
-              title={`Двигатель · модель: ${model} (пусковой комплекс)`}
+              title={t('bar.modelHint', { model })}
               onClick={openLaunchPad}
             >
               <span className="zy-agentbar-model-name">{prettyModel(model)}</span>
@@ -1458,7 +1473,7 @@ ${prev}`
         )}
         <button
           className="zy-agentbar-send"
-          title={isShell ? 'Выполнить команду (Enter)' : 'Отправить агенту (Enter)'}
+          title={t(isShell ? 'bar.run' : 'bar.send')}
           onClick={doAction}
         >
           <Icon name="send" size={16} />

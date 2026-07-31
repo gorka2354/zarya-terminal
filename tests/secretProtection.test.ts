@@ -5,6 +5,7 @@ import {
   protectionHint,
   protectionLabel
 } from '@shared/secretProtection'
+import { setLangProvider } from '@shared/lang'
 
 /**
  * Интерфейс рисовал один зелёный бейдж «Ключ сохранён» и когда ключ лежит в
@@ -56,10 +57,15 @@ describe('classifyProtection', () => {
 
 describe('подача пользователю', () => {
   it('надписи различают три состояния, а не два', () => {
+    expect(protectionLabel('os')).toBe('Key in the OS store')
+    expect(protectionLabel('weak')).toBe('Key is weakly protected')
+    expect(protectionLabel('plain')).toBe('Key in plain text')
+    expect(protectionLabel('none')).toBe('No key set')
+    // Различие состояний обязано выживать в обоих языках.
+    setLangProvider(() => 'ru')
     expect(protectionLabel('os')).toBe('Ключ в хранилище ОС')
-    expect(protectionLabel('weak')).toBe('Ключ защищён слабо')
     expect(protectionLabel('plain')).toBe('Ключ открытым текстом')
-    expect(protectionLabel('none')).toBe('Ключ не задан')
+    setLangProvider(() => 'en')
   })
 
   it('у каждого рискованного состояния есть объяснение и что делать', () => {
@@ -67,7 +73,7 @@ describe('подача пользователю', () => {
       const hint = protectionHint(p)
       expect(hint.length).toBeGreaterThan(40)
       // Не просто «небезопасно», а куда идти.
-      expect(/keyring|kwallet|secrets\.json|сохран/i.test(hint)).toBe(true)
+      expect(/keyring|kwallet|secrets\.json|save|сохран/i.test(hint)).toBe(true)
     }
   })
 

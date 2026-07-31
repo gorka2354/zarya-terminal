@@ -15,6 +15,8 @@
  * Судить по одному префиксу — значит показывать зелёное поверх открытого текста.
  */
 
+import { ts } from './lang'
+
 export type SecretProtection =
   /** Ключа нет. */
   | 'none'
@@ -53,13 +55,13 @@ export function classifyProtection(
 export function protectionLabel(p: SecretProtection): string {
   switch (p) {
     case 'os':
-      return 'Ключ в хранилище ОС'
+      return ts('sec.os')
     case 'weak':
-      return 'Ключ защищён слабо'
+      return ts('sec.weak')
     case 'plain':
-      return 'Ключ открытым текстом'
+      return ts('sec.plain')
     default:
-      return 'Ключ не задан'
+      return ts('sec.none')
   }
 }
 
@@ -70,11 +72,11 @@ export function protectionLabel(p: SecretProtection): string {
 export function protectionHint(p: SecretProtection): string {
   switch (p) {
     case 'os':
-      return 'Зашифрован средствами операционной системы (DPAPI / Keychain / keyring) и расшифровывается только под вашей учётной записью.'
+      return ts('sec.osHint')
     case 'weak':
-      return 'Система не предоставила настоящего хранилища (на Linux — нет keyring). Шифрование формальное: тот, кто прочитает файл, прочитает и ключ. Установите gnome-keyring или kwallet, затем сохраните ключ заново.'
+      return ts('sec.weakHint')
     case 'plain':
-      return 'Ключ записан в secrets.json как обычный текст (base64 — это не шифрование). Любой процесс с доступом к вашим файлам его прочитает. Сохраните ключ заново, когда хранилище ОС станет доступно.'
+      return ts('sec.plainHint')
     default:
       return ''
   }

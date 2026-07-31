@@ -28,7 +28,7 @@ interface SessionSnapshot {
   but only the tail is persisted.
 - **What is *not* saved:** the actual OS process. Restoring a session does not
   reattach to anything — it replays the saved scrollback text, prints a
-  `сессия восстановлена · новый shell` marker, and spawns a brand-new shell process
+  `session restored · new shell` marker, and spawns a brand-new shell process
   in the session's last known `cwd`. Anything that only existed in that process's
   memory (env vars set mid-session, a `cd`'d-into subshell, background jobs) is gone;
   what's on screen and the command/output history is not.

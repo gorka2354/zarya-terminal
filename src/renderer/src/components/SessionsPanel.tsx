@@ -3,7 +3,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import type { SessionMeta, TabState } from '@shared/types'
 import { closePaneAsking, closeTabAsking, setPaneMaximized } from '@/actions/panes'
 import { deskTitle } from '@shared/deskTitle'
-import { t } from '@/lib/i18n'
+import { t, useLang } from '@/lib/i18n'
 import { formatRelative, shortenPath } from '@/lib/ansi'
 import { fuzzyFilter } from '@/lib/fuzzy'
 import { useAiStore } from '@/features/ai/aiStore'
@@ -53,6 +53,10 @@ function openCrewMember(conversationId: string): void {
  * scrollback + blocks and starts a fresh shell in the saved cwd.
  */
 export function SessionsPanel(): React.JSX.Element {
+  // Подписка на язык: без неё надписи этого компонента сменились бы не в
+  // момент переключения, а при следующей перерисовке по другой причине.
+  const lang = useLang()
+
   const savedList = useSessionsStore((s) => s.savedList)
   const sessions = useSessionsStore((s) => s.sessions)
   const tabs = useSessionsStore((s) => s.tabs)
@@ -595,7 +599,7 @@ export function SessionsPanel(): React.JSX.Element {
         onClick={() => store.setActiveTab(tab.id)}
         onDoubleClick={() => renameDesk(tab)}
         onContextMenu={(e) => openTabContext(e, tab)}
-        title={`${session?.cwd ?? ''}\nКлик — открыть этот рабочий стол · 2×клик — переименовать\nБросьте сюда панель, чтобы перенести её в этот стол`}
+        title={t('desk.dropHint', { cwd: session?.cwd ?? '' })}
         // Открытый терминал тоже хватается: бросок на панель переносит его
         // ТУДА. Процесс при этом не трогается — двигается лист в дереве.
         draggable
@@ -629,7 +633,8 @@ export function SessionsPanel(): React.JSX.Element {
             {session?.pinned && <span className="zy-pin-dot" title={t('session.pinned')} />}
             {deskTitle(
               leaves.map((sid) => sessions[sid]?.title ?? ''),
-              tab.title
+              tab.title,
+              t('desk.untitled')
             ) + (count > 1 ? ` · ${count}` : '')}
           </div>
           <div className="zy-item-sub zy-item-sub--path">{shortenPath(session?.cwd || '', 34)}</div>
@@ -684,7 +689,8 @@ export function SessionsPanel(): React.JSX.Element {
   const renameDesk = (tab: TabState): void => {
     const now = deskTitle(
       listLeaves(tab.layout).map((sid) => sessions[sid]?.title ?? ''),
-      tab.title
+      tab.title,
+      t('desk.untitled')
     )
     const next = window.prompt(t('desk.renamePrompt'), tab.title ?? now)
     if (next !== null) store.renameTab(tab.id, next)
@@ -701,7 +707,8 @@ export function SessionsPanel(): React.JSX.Element {
   const renderDeskHead = (tab: TabState, leaves: string[]): React.JSX.Element => {
     const name = deskTitle(
       leaves.map((sid) => sessions[sid]?.title ?? ''),
-      tab.title
+      tab.title,
+      t('desk.untitled')
     )
     return (
       <div
@@ -756,7 +763,9 @@ export function SessionsPanel(): React.JSX.Element {
       <div className="zy-sidebar-header">
         <span>
           {t('sidebar.sessions')}
-          <span style={enSubStyle}>SESSIONS</span>
+          {/* Латинская приписка — часть двуязычного пульта, но в английском
+              интерфейсе это то же слово дважды. */}
+          {lang === 'ru' && <span style={enSubStyle}>SESSIONS</span>}
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <button

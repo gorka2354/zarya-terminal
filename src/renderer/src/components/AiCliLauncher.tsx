@@ -5,6 +5,7 @@ import { setBarModeOf, setRaw, useUiStore } from '@/state/uiStore'
 import { convForSession, useAiStore } from '@/features/ai/aiStore'
 import { getTerminal } from '@/terminal/terminalRegistry'
 import './aiclilauncher.css'
+import { t, useLang } from '@/lib/i18n'
 
 let cliCache: AiCli[] | null = null
 
@@ -50,7 +51,7 @@ export function launchClaudeNative(): void {
   }
   useUiStore
     .getState()
-    .toast('Claude Code активен — просто напишите запрос и нажмите Enter', 'success')
+    .toast(t('cli.claudeActive'), 'success')
 }
 
 /**
@@ -76,6 +77,10 @@ export function launchAiCli(cli: AiCli): void {
  * feed hero as the primary "get started with an agent" surface.
  */
 export function AiCliLauncher(): React.JSX.Element | null {
+  // Подписка на язык: без неё надписи этого компонента сменились бы не в
+  // момент переключения, а при следующей перерисовке по другой причине.
+  useLang()
+
   const clis = useAiClis()
   if (clis.length === 0) return null
   const installed = clis.filter((c) => c.detected)
@@ -88,8 +93,8 @@ export function AiCliLauncher(): React.JSX.Element | null {
     <div className="zy-clilaunch">
       <div className="zy-clilaunch-label">
         {installed.length > 0
-          ? 'запустить ИИ-агента в терминале'
-          : 'поддерживаемые ИИ-агенты (не установлены)'}
+          ? t('feed.launchAgentLower')
+          : t('cli.noneInstalled')}
       </div>
       <div className="zy-clilaunch-grid">
         {shown.map((cli) => (
@@ -99,9 +104,9 @@ export function AiCliLauncher(): React.JSX.Element | null {
             title={
               cli.detected
                 ? cli.id === 'claude'
-                  ? 'Claude Code — нативно (структурный UI, выбор в строке, подписка Max)'
-                  : `Запустить в терминале: ${cli.cmd}`
-                : `${cli.name} не найден в PATH — установите CLI, чтобы запускать здесь`
+                  ? t('cli.claudeHint')
+                  : t('cli.runInTerminal', { cmd: cli.cmd })
+                : t('cli.notInPath', { name: cli.name })
             }
             disabled={!cli.detected}
             onClick={() => cli.detected && launchAiCli(cli)}

@@ -10,6 +10,7 @@ import { Icon } from '@/components/Icon'
 import { PixelIcon } from '@/components/PixelIcon'
 import { useUiStore } from '@/state/uiStore'
 import { useUpdateStore } from './updateStore'
+import { t, useLang } from '@/lib/i18n'
 import './updates.css'
 
 /**
@@ -27,7 +28,7 @@ import './updates.css'
 function fmtSize(bytes: number): string {
   if (!bytes) return ''
   const mb = bytes / 1_000_000
-  return mb >= 1 ? `${mb.toFixed(0)} МБ` : `${Math.max(1, Math.round(bytes / 1000))} КБ`
+  return mb >= 1 ? `${mb.toFixed(0)} ${t('unit.mb')}` : `${Math.max(1, Math.round(bytes / 1000))} ${t('unit.kb')}`
 }
 
 /**
@@ -78,10 +79,10 @@ function InstallButton(): React.JSX.Element {
     return (
       <button
         className="zy-btn zy-btn--accent"
-        title="Заря закроется, поставит обновление и откроется снова. Открытые сессии сохранятся."
+        title={t('upd.restartHint')}
         onClick={() => void install()}
       >
-        Перезапустить и установить
+        {t('upd.restart')}
       </button>
     )
   }
@@ -91,7 +92,7 @@ function InstallButton(): React.JSX.Element {
       <button className="zy-btn zy-upd-progress" disabled>
         <span className="zy-upd-progress-fill" style={{ width: `${dl.percent}%` }} />
         <span className="zy-upd-progress-text">
-          {dl.total ? `${mb(dl.transferred)} / ${mb(dl.total)} МБ` : 'Скачиваю…'}
+          {dl.total ? t('upd.progress', { done: mb(dl.transferred), total: mb(dl.total) }) : t('upd.downloading')}
         </span>
       </button>
     )
@@ -99,10 +100,10 @@ function InstallButton(): React.JSX.Element {
   return (
     <button
       className="zy-btn zy-btn--accent"
-      title="Скачает обновление и проверит его целостность. Установка — по отдельному подтверждению."
+      title={t('upd.installHint')}
       onClick={() => void download()}
     >
-      Установить обновление
+      {t('upd.install')}
     </button>
   )
 }
@@ -126,7 +127,7 @@ function OtherPlatforms({
   if (!open) {
     return (
       <button className="zy-upd-more" onClick={() => setOpen(true)}>
-        Сборки для других систем ({files.length})
+        {t('upd.otherBuilds', { n: files.length })}
       </button>
     )
   }
@@ -144,10 +145,10 @@ function OtherPlatforms({
                 <button
                   className="zy-btn"
                   data-url={url}
-                  title={`Открыть ${url}`}
+                  title={t('upd.openUrl', { url })}
                   onClick={() => window.zarya.app.openExternal(url)}
                 >
-                  Скачать
+                  {t('upd.download')}
                 </button>
               )}
             </div>
@@ -198,37 +199,41 @@ export default function UpdateView(): React.JSX.Element | null {
             <PixelIcon name="download" />
           </span>
           <div className="zy-upd-title">
-            <div className="zy-upd-name">{rel?.name || (rel ? `Заря ${rel.version}` : 'Обновление')}</div>
+            <div className="zy-upd-name">{rel?.name || (rel ? t('upd.name', { v: rel.version }) : t('upd.update'))}</div>
             <div className="zy-upd-sub">
-              {rel ? `ВЕРСИЯ ${rel.version}` : 'UPDATE'}
+              {rel ? t('upd.versionCaps', { v: rel.version }) : 'UPDATE'}
               {rel && fmtDate(rel.publishedAt) ? ` · ${fmtDate(rel.publishedAt)}` : ''}
             </div>
           </div>
           <div className="zy-upd-spacer" />
-          <button className="zy-upd-x" onClick={close} title="Закрыть (Esc)">
+          <button className="zy-upd-x" onClick={close} title={t('common.closeEsc')}>
             <Icon name="close" size={16} />
           </button>
         </header>
 
         <div className="zy-upd-body">
           {state?.installError && (
-            <div className="zy-set-warning">Не удалось обновить: {state.installError}</div>
+            <div className="zy-set-warning">{t('upd.installFail', { err: state.installError })}</div>
           )}
           {rel && state?.signature && !signed && (
             <div className="zy-set-warning">
               {state.signature === 'bad'
-                ? 'Подпись релиза не сходится с ключом автора. Так выглядела бы подмена файлов — Заря не станет ставить это сама.'
-                : 'У релиза нет подписи автора. Контрольные суммы считает та же машина, что и собирает, поэтому подтвердить ими нечего. Установка одним нажатием недоступна: скачайте файл вручную и сверьте SHA256.'}
+                ? t('upd.sigBad')
+                : t('upd.sigNone')}
             </div>
           )}
           {!rel ? (
             <div className="zy-upd-empty">
-              {state?.checking ? 'Проверяю…' : state?.error ? `Не удалось проверить: ${state.error}` : 'Пока нечего показать.'}
+              {state?.checking
+                ? t('upd.checking')
+                : state?.error
+                  ? t('upd.checkFail', { err: state.error })
+                  : t('upd.nothing')}
             </div>
           ) : (
             <>
               <div className="zy-upd-vers">
-                <span className="zy-upd-vers-cur">у вас {state?.current}</span>
+                <span className="zy-upd-vers-cur">{t('upd.yours', { v: state?.current ?? '' })}</span>
                 <span className="zy-upd-vers-arrow">→</span>
                 <span className="zy-upd-vers-new">{rel.version}</span>
               </div>
@@ -239,12 +244,12 @@ export default function UpdateView(): React.JSX.Element | null {
                   dangerouslySetInnerHTML={{ __html: defuseLinks(renderMarkdown(rel.body)) }}
                 />
               ) : (
-                <div className="zy-upd-empty">Описание релиза пустое.</div>
+                <div className="zy-upd-empty">{t('upd.emptyNotes')}</div>
               )}
 
               {mine.length > 0 && (
                 <div className="zy-upd-files">
-                  <div className="zy-section-label">Файлы</div>
+                  <div className="zy-section-label">{t('upd.files')}</div>
                   {mine.map((f) => {
                     const url = assetUrl(rel.tag, f.name)
                     const sha = rel.sums[f.name]
@@ -259,17 +264,17 @@ export default function UpdateView(): React.JSX.Element | null {
                               // Адрес виден до нажатия: кнопка ведёт наружу, и
                               // человек вправе знать куда, не кликая наугад.
                               data-url={url}
-                              title={`Открыть ${url}`}
+                              title={t('upd.openUrl', { url })}
                               onClick={() => window.zarya.app.openExternal(url)}
                             >
-                              Скачать
+                              {t('upd.download')}
                             </button>
                           )}
                         </div>
                         {/* Хеш рядом с файлом — чтобы «скачайте установщик» не было
                             просьбой поверить сети на слово. */}
                         {sha && (
-                          <div className="zy-upd-file-sha" title="SHA256 из файла контрольных сумм релиза">
+                          <div className="zy-upd-file-sha" title={t('upd.shaHint')}>
                             SHA256 {sha}
                           </div>
                         )}
@@ -288,14 +293,14 @@ export default function UpdateView(): React.JSX.Element | null {
         <footer className="zy-upd-foot">
           <span className="zy-upd-foot-note">
             {!state?.canInstall
-              ? 'Эта сборка не умеет обновляться сама (переносимая версия, macOS или .deb) — скачайте файл и запустите установку. Рядом с файлом лежит SHA256 для сверки.'
+              ? t('upd.manualBuild')
               : signed
-                ? 'Ничего не качается и не ставится в фоне. Подпись автора и контрольная сумма проверяются до установки.'
-                : 'Пока релиз не подписан автором, Заря его сама не поставит — скачайте файл и сверьте SHA256 руками.'}
+                ? t('upd.safeNote')
+                : t('upd.unsignedNote')}
           </span>
           <div className="zy-upd-spacer" />
           <button className="zy-btn" onClick={() => void check()} disabled={state?.checking || busy}>
-            {state?.checking ? 'Проверяю…' : 'Проверить снова'}
+            {state?.checking ? t('upd.checking') : t('upd.checkAgain')}
           </button>
           {rel && selfInstall && <InstallButton />}
           {page && (
@@ -306,10 +311,10 @@ export default function UpdateView(): React.JSX.Element | null {
               // подписи), главным становится ручной путь.
               className={`zy-btn${selfInstall ? '' : ' zy-btn--accent'}`}
               data-url={page}
-              title={`Открыть ${page}`}
+              title={t('upd.openUrl', { url: page })}
               onClick={() => window.zarya.app.openExternal(page)}
             >
-              Открыть страницу релиза
+              {t('upd.openRelease')}
             </button>
           )}
         </footer>

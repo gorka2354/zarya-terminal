@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { useAiStore } from '@/features/ai/aiStore'
 import { nextGate } from '@/features/ai/gates'
 import { useUiStore } from '@/state/uiStore'
+import { t, useLang } from '@/lib/i18n'
 import { FuelGauge, UsagePanel } from './AgentBar'
 import { Icon } from './Icon'
 import './agentbar.css'
@@ -21,6 +22,10 @@ import './agentbar.css'
  * куда вы сейчас не смотрите, а невидимый вопрос — это агент, вставший навсегда.
  */
 export function BottomStrip(): React.JSX.Element {
+  // Подписка на язык: без неё надписи этого компонента сменились бы не в
+  // момент переключения, а при следующей перерисовке по другой причине.
+  useLang()
+
   const claudeStatus = useUiStore((s) => s.claudeStatus)
   const agentContext = useUiStore((s) => s.agentContext)
   const agentCaps = useUiStore((s) => s.agentCaps)
@@ -41,8 +46,8 @@ export function BottomStrip(): React.JSX.Element {
     const seven = u?.sevenDayPct
     if (five == null && seven == null) return null
     if (seven != null && (five == null || seven > five))
-      return { short: '7дн', label: 'Недельный лимит', pct: seven }
-    return { short: '5ч', label: 'Пятичасовой лимит', pct: five as number }
+      return { short: t('usage.weekShort'), label: t('usage.weekLimit'), pct: seven }
+    return { short: t('usage.fiveShort'), label: t('usage.fiveLimit'), pct: five as number }
   })()
 
   return (
@@ -61,8 +66,8 @@ export function BottomStrip(): React.JSX.Element {
           className="zy-agentbar-fuel-main"
           title={
             lead
-              ? `${lead.label}: израсходовано ${Math.round(lead.pct)}%. Нажми — все лимиты`
-              : 'Лимиты подписки'
+              ? t('usage.leadHint', { label: lead.label, pct: Math.round(lead.pct) })
+              : t('bar.limits')
           }
           aria-expanded={usageOpen}
           onClick={() => setUsageOpen((v) => !v)}
@@ -76,7 +81,7 @@ export function BottomStrip(): React.JSX.Element {
             </>
           ) : (
             <span className="zy-agentbar-fuel-val">
-              {showFuel ? 'борт заправлен' : '∞ без лимита · локальный борт'}
+              {t(showFuel ? 'strip.fueled' : 'strip.noLimit')}
             </span>
           )}
           <Icon name={usageOpen ? 'chevron-down' : 'chevron-up'} size={10} />
@@ -85,17 +90,17 @@ export function BottomStrip(): React.JSX.Element {
       <button
         className="zy-agentbar-fuel-pult"
         onClick={() => useUiStore.getState().set({ launchPadOpen: true })}
-        title="Пусковой комплекс"
+        title={t('bar.launchPad')}
       >
-        пульт ▴
+        {t('strip.console')}
       </button>
       <div className="zy-strip-spacer" />
       {waiting > 0 && (
         <span
           className="zy-strip-waiting"
-          title="Панели, где агент ждёт вашего решения. Клавишами отвечает только та, что в фокусе"
+          title={t('strip.pendingHint')}
         >
-          ждут решения: {waiting}
+          {t('strip.pendingLower', { n: waiting })}
         </span>
       )}
     </div>

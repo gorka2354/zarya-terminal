@@ -1,3 +1,4 @@
+import { tm } from './lang'
 import { execFile } from 'child_process'
 import { existsSync, promises as fs } from 'fs'
 import { isAbsolute, join, win32 as winPath } from 'path'
@@ -106,7 +107,7 @@ async function git(cwd: string, args: string[]): Promise<string> {
   const exe = await gitExe()
   // No trusted git → no git features. Never fall back to the bare name: that is
   // exactly the hijackable path this resolution exists to avoid.
-  if (!exe) throw new Error('git не найден в доверенных путях')
+  if (!exe) throw new Error(tm('main.err.noGit'))
   const { stdout } = await execFileAsync(exe, [...GIT_HARDEN, ...args], {
     cwd,
     timeout: 5000,

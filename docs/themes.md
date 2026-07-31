@@ -14,15 +14,15 @@ order they appear in the picker (base themes first, then the extended pack):
 
 | id | Name | Type | Feel / intended use |
 |---|---|---|---|
-| `zarya-cosmos` | Заря · Космос | dark | **Default.** Signature deep-space navy, brand red, brass gold. |
-| `zarya-vostok` | Заря · Восток | dark | Red-dominant, deep maroon space. |
-| `zarya-orbita` | Заря · Орбита | dark | Teal control-panel / oscilloscope retrofuturism. |
-| `zarya-dawn` | Заря · Рассвет | dark | The original sunrise theme, kept as a warm orange option. |
-| `zarya-sputnik` | Заря · Спутник | dark | Cold graphite hull, brand red, brass telemetry. |
-| `zarya-baikonur` | Заря · Байконур | dark | Warm steppe night, sodium launch-pad amber. |
-| `zarya-plakat` | Заря · Плакат | light | Constructivist poster: cream paper, red + black ink. |
-| `zarya-polden` | Заря · Полдень | light | Warm cosmonaut daylight, red + brass. |
-| `zarya-chertyozh` | Заря · Чертёж | light | Technical drawing on cool paper — navy lines + red notes. |
+| `zarya-cosmos` | Zarya · Kosmos | dark | **Default.** Signature deep-space navy, brand red, brass gold. |
+| `zarya-vostok` | Zarya · Vostok | dark | Red-dominant, deep maroon space. |
+| `zarya-orbita` | Zarya · Orbit | dark | Teal control-panel / oscilloscope retrofuturism. |
+| `zarya-dawn` | Zarya · Dawn | dark | The original sunrise theme, kept as a warm orange option. |
+| `zarya-sputnik` | Zarya · Sputnik | dark | Cold graphite hull, brand red, brass telemetry. |
+| `zarya-baikonur` | Zarya · Baikonur | dark | Warm steppe night, sodium launch-pad amber. |
+| `zarya-plakat` | Zarya · Poster | light | Constructivist poster: cream paper, red + black ink. |
+| `zarya-polden` | Zarya · Noon | light | Warm cosmonaut daylight, red + brass. |
+| `zarya-chertyozh` | Zarya · Blueprint | light | Technical drawing on cool paper — navy lines + red notes. |
 
 The base four (`cosmos`, `vostok`, `orbita`, `dawn`) live in
 `src/renderer/src/features/themes/themes.ts`; the extended pack (`sputnik`,
@@ -34,10 +34,10 @@ text stays legible on cream/paper backgrounds.
 
 ## Switching themes
 
-Open Settings — **"Центр управления"** — (`Ctrl+,`), go to the **Внешний вид**
-(Appearance) tab, and pick a card under **Тема**. Each card shows the theme's
-background / accent / accent-2 swatches, its name, and a `ТЁМНАЯ · DARK` /
-`СВЕТЛАЯ · LIGHT` tag; the active one is marked `● АКТИВНА`. Clicking a card writes
+Open Settings — **Mission Control** — (`Ctrl+,`), go to the **Appearance** tab, and
+pick a card under **Theme**. Each card shows the theme's
+background / accent / accent-2 swatches, its name, and a `DARK` /
+`LIGHT` tag; the active one is marked `● ACTIVE`. Clicking a card writes
 `appearance.themeId` to settings (persisted in `settings.json`) and applies it live.
 
 Under the hood, `applyTheme(theme)` (`themes.ts`):
@@ -65,7 +65,7 @@ Under the hood, `applyTheme(theme)` (`themes.ts`):
    at the bottom of `themePack.ts`:
 
    ```ts
-   const myTheme: ThemeDef = { id: 'zarya-mir', name: 'Заря · Мир', type: 'dark', ui: { … }, terminal: { … } }
+   const myTheme: ThemeDef = { id: 'zarya-mir', nameKey: 'theme.mir', type: 'dark', ui: { … }, terminal: { … } }
    registerThemes([myTheme])
    ```
 

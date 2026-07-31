@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n'
 import { useEffect, useState } from 'react'
 import { Icon } from '@/components/Icon'
 import { useSessionsStore } from '@/state/sessionsStore'
@@ -39,7 +40,7 @@ export default function WorkflowRunDialog(): React.JSX.Element | null {
   const dispatch = (withEnter: boolean): void => {
     const sessionId = useSessionsStore.getState().activeSessionId()
     if (!sessionId) {
-      useUiStore.getState().toast('Нет активной сессии терминала', 'error')
+      useUiStore.getState().toast(t('wf.noSession'), 'error')
       return
     }
     window.zarya.pty.write(sessionId, withEnter ? preview + '\r' : preview)
@@ -57,7 +58,7 @@ export default function WorkflowRunDialog(): React.JSX.Element | null {
       <div className="zy-modal wf-run-modal" onMouseDown={(e) => e.stopPropagation()}>
         <div className="zy-sidebar-header">
           <span>{wf.name}</span>
-          <button className="zy-icon-btn" title="Закрыть" onClick={close}>
+          <button className="zy-icon-btn" title={t('wf.close')} onClick={close}>
             <Icon name="close" size={14} strokeWidth={1.6} />
           </button>
         </div>
@@ -80,21 +81,21 @@ export default function WorkflowRunDialog(): React.JSX.Element | null {
             </label>
           ))}
           <div className="wf-field">
-            <span className="wf-label">Итоговая команда</span>
+            <span className="wf-label">{t('wf.finalCmd')}</span>
             <pre className="wf-preview">{preview || ' '}</pre>
           </div>
         </div>
         <div className="wf-form-actions">
           <button className="zy-btn zy-btn--ghost" onClick={close}>
-            Отмена
+            {t('wf.cancel')}
           </button>
           <button className="zy-btn" onClick={() => dispatch(false)}>
             <Icon name="insert" size={13} strokeWidth={1.6} />
-            Вставить
+            {t('wf.insert')}
           </button>
           <button className="zy-btn zy-btn--accent" onClick={() => dispatch(true)}>
             <Icon name="run" size={13} strokeWidth={1.6} />
-            Запустить
+            {t('wf.run')}
           </button>
         </div>
       </div>

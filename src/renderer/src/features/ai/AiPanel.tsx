@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n'
 import { useEffect, useRef, useState } from 'react'
 import type { AiContentPart, AiMessage } from '@shared/types'
 import { Icon } from '@/components/Icon'
@@ -12,7 +13,7 @@ import { renderMarkdown } from './markdown'
 import { useAiStore } from './aiStore'
 import { gateLabel, orphanGates, toolLabel } from './gates'
 
-const EXAMPLES = ['Объясни последнюю ошибку', 'Найди большие файлы', 'Что съедает порт 3000?']
+const EXAMPLES = ['ide.ex1', 'ide.ex2', 'ide.ex3']
 
 /** Find the tool_result matching a tool_use id, searched across all messages. */
 function findToolResult(
@@ -33,9 +34,9 @@ function targetSessionId(sessionId: string | undefined): string | null {
 
 /** Short "✓ …" summary line for a settled tool result (first non-empty line, truncated). */
 function summarizeToolResult(content: string | undefined): string {
-  if (!content) return 'готово'
+  if (!content) return t('ide.done')
   const firstLine = content.split('\n').find((l) => l.trim().length > 0)?.trim()
-  if (!firstLine) return 'готово'
+  if (!firstLine) return t('ide.done')
   return firstLine.length > 72 ? `${firstLine.slice(0, 72)}…` : firstLine
 }
 
@@ -94,7 +95,7 @@ export default function AiPanel(): React.JSX.Element {
     const sid = targetSessionId(conv.sessionId)
     const block = sid ? useBlocksStore.getState().lastBlock(sid) : undefined
     if (!block) {
-      useUiStore.getState().toast('Нет блоков в этой сессии', 'info')
+      useUiStore.getState().toast(t('ide.noBlocks'), 'info')
       return
     }
     useAiStore.getState().attachBlockContext(block, conv.id)
@@ -105,7 +106,7 @@ export default function AiPanel(): React.JSX.Element {
     const sid = targetSessionId(conv.sessionId)
     const block = sid ? useBlocksStore.getState().lastFailedBlock(sid) : undefined
     if (!block) {
-      useUiStore.getState().toast('Ошибок в этой сессии не найдено', 'info')
+      useUiStore.getState().toast(t('ide.noErrors'), 'info')
       return
     }
     useAiStore.getState().attachBlockContext(block, conv.id)
@@ -116,18 +117,18 @@ export default function AiPanel(): React.JSX.Element {
     const sid = targetSessionId(conv.sessionId)
     const cwd = sid ? useSessionsStore.getState().sessions[sid]?.cwd : ''
     if (!cwd) {
-      useUiStore.getState().toast('Неизвестна рабочая директория', 'info')
+      useUiStore.getState().toast(t('ide.noCwd'), 'info')
       return
     }
     const status = await window.zarya.git.status(cwd)
     if (!status) {
-      useUiStore.getState().toast('Это не git-репозиторий', 'info')
+      useUiStore.getState().toast(t('ide.notGit'), 'info')
       return
     }
     const lines = [
-      `Ветка: ${status.branch}`,
-      `Опережение/отставание от upstream: +${status.ahead}/-${status.behind}`,
-      `Изменено файлов: ${status.dirty}`,
+      t('ide.gitBranch', { branch: status.branch }),
+      t('ide.gitAhead', { ahead: status.ahead, behind: status.behind }),
+      t('ide.gitDirty', { n: status.dirty }),
       ...status.files.slice(0, 30).map((f) => `${f.status} ${f.path}`)
     ]
     useAiStore.getState().attachContext('git status', lines.join('\n'), conv.id)
@@ -153,11 +154,11 @@ export default function AiPanel(): React.JSX.Element {
 
     if (action === 'copy') {
       void navigator.clipboard.writeText(code)
-      useUiStore.getState().toast('Код скопирован', 'success')
+      useUiStore.getState().toast(t('ide.codeCopied'), 'success')
       return
     }
     if (!sid) {
-      useUiStore.getState().toast('Нет активной терминальной сессии', 'error')
+      useUiStore.getState().toast(t('ide.noSession'), 'error')
       return
     }
     if (action === 'insert') {
@@ -167,12 +168,12 @@ export default function AiPanel(): React.JSX.Element {
       // same explicit confirmation as "run".
       const noTrailing = code.replace(/\r?\n$/, '')
       const lineCount = noTrailing.split('\n').length
-      if (lineCount > 1 && !window.confirm(`Вставить ${lineCount} строк(и)? Многострочная вставка может выполниться сразу.`)) return
+      if (lineCount > 1 && !window.confirm(t('ide.pasteAsk', { n: lineCount }))) return
       window.zarya.pty.write(sid, noTrailing)
       getTerminal(sid)?.focus()
     } else if (action === 'run') {
       const lineCount = code.trim().split('\n').length
-      if (lineCount > 1 && !window.confirm(`Выполнить ${lineCount} строк(и) команд в терминале?`)) return
+      if (lineCount > 1 && !window.confirm(t('ide.runAsk', { n: lineCount }))) return
       window.zarya.pty.write(sid, code + '\r')
       getTerminal(sid)?.focus()
     }
@@ -183,8 +184,8 @@ export default function AiPanel(): React.JSX.Element {
 
   return (
     <>
-      <div className="zy-ai-caption" title="Отдельный от нативного Claude Code (в терминале) агент со своим API-ключом, не привязан к конкретному терминалу">
-        IDE-агент · второй пилот · свой ключ
+      <div className="zy-ai-caption" title={t('ide.caption')}>
+        {t('ide.captionShort')}
       </div>
       <div className="zy-sidebar-header">
         <div className="zy-row" style={{ gap: 6, minWidth: 0 }}>
@@ -201,7 +202,7 @@ export default function AiPanel(): React.JSX.Element {
           </select>
           <button
             className="zy-icon-btn"
-            title="Новая беседа"
+            title={t('ide.newConv')}
             onClick={() =>
               useAiStore.getState().newConversation({ sessionId: useSessionsStore.getState().activeSessionId() ?? undefined })
             }
@@ -211,9 +212,9 @@ export default function AiPanel(): React.JSX.Element {
           {conversations.length > 1 && conv && (
             <button
               className="zy-icon-btn"
-              title="Удалить беседу"
+              title={t('ide.deleteConv')}
               onClick={() => {
-                if (window.confirm('Удалить эту беседу?')) useAiStore.getState().deleteConversation(conv.id)
+                if (window.confirm(t('ide.deleteConvAsk'))) useAiStore.getState().deleteConversation(conv.id)
               }}
             >
               <Icon name="trash" size={14} />
@@ -223,12 +224,12 @@ export default function AiPanel(): React.JSX.Element {
         <div className="zy-row" style={{ gap: 4 }}>
           <button
             className={`zy-btn zy-btn--sm ${conv?.agentMode ? 'zy-btn--accent' : ''}`}
-            title="Агентный режим: AI сможет сам выполнять команды в терминале (с подтверждением, если авто-подтверждение выключено в настройках AI)"
+            title={t('ide.agentModeLong')}
             onClick={() => conv && useAiStore.getState().setAgentMode(!conv.agentMode, conv.id)}
           >
-            <Icon name="bolt" size={13} /> Агент
+            <Icon name="bolt" size={13} /> {t('ide.agent')}
           </button>
-          <button className="zy-icon-btn" title="Закрыть" onClick={() => useUiStore.getState().set({ aiPanelOpen: false })}>
+          <button className="zy-icon-btn" title={t('common.close')} onClick={() => useUiStore.getState().set({ aiPanelOpen: false })}>
             <Icon name="close" size={14} />
           </button>
         </div>
@@ -238,8 +239,7 @@ export default function AiPanel(): React.JSX.Element {
         {!conv || conv.messages.length === 0 ? (
           <div className="zy-ai-empty">
             <div className="zy-empty">
-              Спросите что-нибудь про терминал, файлы или git — или включите агентный режим, чтобы AI сам выполнял
-              команды.
+              {t('ide.emptyHint')}
             </div>
             <div className="zy-ai-examples">
               {EXAMPLES.map((ex) => (
@@ -266,7 +266,7 @@ export default function AiPanel(): React.JSX.Element {
                     <span className="zy-ai-divider-line" />
                     <span className="zy-ai-divider-label">
                       <Icon name="bolt" size={12} />
-                      ОТВЕТ АГЕНТА
+                      {t('ide.agentAnswer')}
                     </span>
                     <span className="zy-ai-divider-line" />
                   </div>
@@ -306,7 +306,7 @@ export default function AiPanel(): React.JSX.Element {
                       ? gateLabel(pendingTool)
                       : toolLabel(p.name, p.input)
                     const reason = input?.reason
-                    const denied = result?.isError && result.content === 'Пользователь отклонил выполнение'
+                    const denied = result?.isError && result.content === t('ai.denied')
                     return (
                       <ToolCard
                         key={pi}
@@ -372,15 +372,15 @@ export default function AiPanel(): React.JSX.Element {
       <button
         type="button"
         className="zy-ai-fuel"
-        title="Топливо · пусковой комплекс"
+        title={t('ide.fuelTitle')}
         onClick={() => useUiStore.getState().set({ launchPadOpen: true })}
       >
         <span className="zy-ai-fuel-left">
           <Icon name="rocket" size={13} className="zy-ai-fuel-icon" />
-          <span className="zy-ai-fuel-label">ТОПЛИВО</span>
-          <span className="zy-ai-fuel-value">∞ без лимита · локальный борт</span>
+          <span className="zy-ai-fuel-label">{t('ide.fuel')}</span>
+          <span className="zy-ai-fuel-value">{t('ide.fuelNone')}</span>
         </span>
-        <span className="zy-ai-fuel-right">пульт ▴</span>
+        <span className="zy-ai-fuel-right">{t('ide.console')}</span>
       </button>
 
       <div className="zy-ai-composer">
@@ -398,10 +398,10 @@ export default function AiPanel(): React.JSX.Element {
         )}
         <div className="zy-ai-chips">
           <button className="zy-ai-chip" onClick={addLastBlock}>
-            + Последний блок
+            {t('ide.lastBlock')}
           </button>
           <button className="zy-ai-chip" onClick={addLastError}>
-            + Последняя ошибка
+            {t('ide.lastError')}
           </button>
           <button className="zy-ai-chip" onClick={() => void addGitStatus()}>
             + git status
@@ -411,7 +411,7 @@ export default function AiPanel(): React.JSX.Element {
           <button
             type="button"
             className={`zy-ai-star-btn ${conv?.agentMode ? 'zy-ai-star-btn--on' : ''}`}
-            title="Агентный режим: AI сможет сам выполнять команды в терминале"
+            title={t('ide.agentMode')}
             onClick={() => conv && useAiStore.getState().setAgentMode(!conv.agentMode, conv.id)}
           >
             <Icon name="bolt" size={14} />
@@ -419,8 +419,8 @@ export default function AiPanel(): React.JSX.Element {
           <textarea
             ref={textareaRef}
             className="zy-input zy-ai-textarea"
-            placeholder="Спросите агента…"
-            title="Enter — отправить, Shift+Enter — новая строка"
+            placeholder={t('ide.ask')}
+            title={t('ide.enterHint')}
             value={input}
             onChange={onInputChange}
             onKeyDown={onKeyDown}
@@ -429,7 +429,7 @@ export default function AiPanel(): React.JSX.Element {
           <button
             type="button"
             className="zy-ai-model-btn"
-            title="Пусковой комплекс: модель и тяга рассуждений"
+            title={t('ide.launchpad')}
             onClick={() => useUiStore.getState().set({ launchPadOpen: true })}
           >
             <Icon name="rocket" size={15} className="zy-ai-model-icon" />
@@ -439,7 +439,7 @@ export default function AiPanel(): React.JSX.Element {
           {conv?.streaming ? (
             <button
               className="zy-icon-btn zy-ai-stop"
-              title="Остановить"
+              title={t('ide.stop')}
               onClick={() => useAiStore.getState().abort(conv.id)}
             >
               <Icon name="stop" size={14} />
@@ -447,7 +447,7 @@ export default function AiPanel(): React.JSX.Element {
           ) : (
             <button
               className="zy-icon-btn zy-ai-send"
-              title="Отправить"
+              title={t('ide.send')}
               disabled={!conv}
               onClick={() => doSend(input)}
             >
@@ -483,30 +483,30 @@ function ToolCard(props: {
       <div className="zy-ai-tool-head">
         <Icon name="run" size={11} className="zy-ai-tool-icon" />
         <code className="zy-ai-tool-cmd">{command || '—'}</code>
-        <span className="zy-ai-tool-kicker">агент хочет выполнить</span>
+        <span className="zy-ai-tool-kicker">{t('ide.wantsToRun')}</span>
       </div>
       {reason && <div className="zy-ai-tool-reason">{reason}</div>}
 
       {awaitingDecision && (
         <div className="zy-ai-tool-actions">
           <button className="zy-ai-tool-btn zy-ai-tool-btn--approve" onClick={onApprove}>
-            Выполнить
+            {t('ide.run')}
           </button>
           <button className="zy-ai-tool-btn zy-ai-tool-btn--deny" onClick={onDeny}>
-            Отклонить
+            {t('ide.deny')}
           </button>
         </div>
       )}
 
       {executing && (
         <div className="zy-ai-tool-exec">
-          {isAuto && <span className="zy-badge zy-badge--accent">авто</span>}
+          {isAuto && <span className="zy-badge zy-badge--accent">{t('ide.auto')}</span>}
           <span className="zy-ai-tool-spinner" />
-          <span className="zy-ai-tool-status">выполняется в терминале…</span>
+          <span className="zy-ai-tool-status">{t('ide.runningInTerm')}</span>
         </div>
       )}
 
-      {denied && <div className="zy-ai-tool-denied">✗ отклонено оператором</div>}
+      {denied && <div className="zy-ai-tool-denied">{t('ide.denied')}</div>}
 
       {resolved && !denied && (
         <button className="zy-ai-tool-done" onClick={() => setExpanded((v) => !v)}>

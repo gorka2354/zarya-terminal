@@ -3,6 +3,7 @@ import { formatDuration, formatRelative } from '@/lib/ansi'
 import { useBlocksStore } from '@/state/blocksStore'
 import { useSessionsStore } from '@/state/sessionsStore'
 import { useUiStore } from '@/state/uiStore'
+import { t, useLang } from '@/lib/i18n'
 import { getTerminal } from '@/terminal/terminalRegistry'
 import { aiExplainBlock } from '@/features/ai/aiBridge'
 import { Icon } from './Icon'
@@ -12,6 +13,10 @@ import { Icon } from './Icon'
  * click to scroll, copy command/output, re-run, ask AI about a failure.
  */
 export function BlocksPanel(): React.JSX.Element {
+  // Подписка на язык: без неё надписи этого компонента сменились бы не в
+  // момент переключения, а при следующей перерисовке по другой причине.
+  useLang()
+
   const tabs = useSessionsStore((s) => s.tabs)
   const activeTabId = useSessionsStore((s) => s.activeTabId)
   const sessionId = tabs.find((t) => t.id === activeTabId)?.activeSessionId ?? null
@@ -26,7 +31,7 @@ export function BlocksPanel(): React.JSX.Element {
 
   const copy = (text: string, what: string): void => {
     void navigator.clipboard.writeText(text)
-    toast(`${what} скопирован`, 'success')
+    toast(t('blocks.copied', { what }), 'success')
   }
 
   const exportMd = (b: BlockRecord): void => {
@@ -56,10 +61,10 @@ export function BlocksPanel(): React.JSX.Element {
   return (
     <>
       <div className="zy-sidebar-header">
-        <span>Блоки</span>
+        <span>{t('blocks.title')}</span>
         <button
           className="zy-icon-btn"
-          title="Закрыть"
+          title={t('title.close')}
           onClick={() => useUiStore.getState().set({ blocksPanelOpen: false })}
         >
           <Icon name="close" size={14} />
@@ -68,7 +73,7 @@ export function BlocksPanel(): React.JSX.Element {
       <div className="zy-sidebar-body">
         {!blocks.length && (
           <div className="zy-empty">
-            Блоки команд появятся здесь после первого запуска команды (нужна shell
+            {t('blocks.empty')}
             integration — PowerShell/bash/zsh).
           </div>
         )}
@@ -104,7 +109,7 @@ export function BlocksPanel(): React.JSX.Element {
                 {badge.label}
               </span>
               <span className="zy-block-card-cmd" title={b.command}>
-                {b.command || '(команда неизвестна)'}
+                {b.command || t('blocks.unknownCmd')}
               </span>
             </div>
             {b.output && <pre className="zy-block-card-out">{b.output.slice(-400)}</pre>}
@@ -116,27 +121,27 @@ export function BlocksPanel(): React.JSX.Element {
               <span className="zy-block-card-actions">
                 <button
                   className="zy-icon-btn"
-                  title="Скопировать команду"
+                  title={t('blocks.copyCmd')}
                   onClick={(e) => {
                     e.stopPropagation()
-                    copy(b.command, 'Команда')
+                    copy(b.command, t('blocks.cmdWord'))
                   }}
                 >
                   <Icon name="copy" size={13} />
                 </button>
                 <button
                   className="zy-icon-btn"
-                  title="Скопировать вывод"
+                  title={t('blocks.copyOut')}
                   onClick={(e) => {
                     e.stopPropagation()
-                    copy(b.output, 'Вывод')
+                    copy(b.output, t('blocks.outWord'))
                   }}
                 >
                   <Icon name="download" size={13} />
                 </button>
                 <button
                   className="zy-icon-btn"
-                  title="Экспорт в Markdown"
+                  title={t('blocks.exportMd')}
                   onClick={(e) => {
                     e.stopPropagation()
                     exportMd(b)
@@ -146,7 +151,7 @@ export function BlocksPanel(): React.JSX.Element {
                 </button>
                 <button
                   className="zy-icon-btn"
-                  title="Повторить команду"
+                  title={t('blocks.rerun')}
                   onClick={(e) => {
                     e.stopPropagation()
                     rerun(b)
@@ -156,7 +161,7 @@ export function BlocksPanel(): React.JSX.Element {
                 </button>
                 <button
                   className="zy-icon-btn"
-                  title="Спросить AI об этом блоке"
+                  title={t('blocks.askAi')}
                   onClick={(e) => {
                     e.stopPropagation()
                     aiExplainBlock(b)

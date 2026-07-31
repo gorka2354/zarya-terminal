@@ -2,10 +2,13 @@
 
 # ЗАРЯ · Zarya
 
-**Космический CLI-агент. A new dawn for your terminal.**
+**A space-age CLI agent. A new dawn for your terminal.**
+
+*Zarya (Заря) — “dawn”, and the name of the first module of the ISS.*
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-e2231a.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.6.5%20%C2%AB%D0%9F%D0%BB%D0%BE%D1%89%D0%B0%D0%B4%D0%BA%D0%B0%C2%BB-e0b15a.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.7.0%20%22Lexicon%22-e0b15a.svg)](CHANGELOG.md)
+[![Languages](https://img.shields.io/badge/UI-English%20%7C%20%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9-4fd6d6.svg)](#language)
 [![Electron](https://img.shields.io/badge/Electron-43-4fd6d6.svg)](https://www.electronjs.org/)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-5fb88a.svg)](#install)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-e0b15a.svg)](CONTRIBUTING.md)
@@ -34,9 +37,10 @@ no account, no telemetry.
   you can point at one with the mouse; drag a pane by its header to move it next to
   another (the edge you aim at lights up) or into the list to give it a desk of its own —
   without killing the process.
-- **🚀 Пусковой комплекс** — a cosmic launch console for picking the model and
-  reasoning effort, with every current Claude version, live-switchable mid-session.
-- **🎙 Диктовка — offline speech-to-text** — hold `Ctrl+Shift+Space`, speak, and the
+- **🚀 Launch Pad** — a cosmic launch console for picking the model and reasoning
+  effort (`LOW` → `AFTERBURNER`), with every current Claude version, live-switchable
+  mid-session.
+- **🎙 Dictation — offline speech-to-text** — hold `Ctrl+Shift+Space`, speak, and the
   text lands in the input. Runs entirely on your machine ([sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx)
   + [GigaAM](https://github.com/salute-developers/GigaAM), strong on Russian): no
   network, no cloud key, and the audio is never written to disk. Recognised text is
@@ -47,8 +51,30 @@ no account, no telemetry.
   reboot; each conversation is bound to its terminal and its folder.
 - **🧩 IDE as an add-on** — a Monaco editor, file tree and git diff you can switch on;
   **off by default**, so the base stays a clean terminal + agent.
-- **🎨 Космос + конструктивизм** — deep-space navy, Soviet red, brass gold, a pixel
+- **🌐 Two languages, one build** — the entire interface is English or Russian, switched
+  instantly in settings, no restart and no second installer. Follows your system
+  language on first launch; the built-in agent answers in the language you picked.
+- **🎨 Kosmos + constructivism** — deep-space navy, Soviet red, brass gold, a pixel
   wordmark and a live starfield, across 9 dark & light themes.
+
+## Language
+
+Zarya ships both languages inside one build. On first launch it follows your system
+language; **Settings → Appearance → Language** pins English or Russian either way, and
+the switch takes effect immediately — the dictionaries are already in the app, so
+there is nothing to download, restart or sign into again.
+
+The space-age framing is translated rather than dropped: Mission Control, the launch
+pad, thrust levels (`LOW` → `AFTERBURNER`), the `// ORBIT-1` tagline and the ship
+themes (Kosmos, Vostok, Baikonur, Blueprint) read as themselves in English. The
+built-in agent is told to answer in the interface language, and so do the system
+dialogs the main process shows.
+
+Your own data is never translated: terminal output, agent answers, paths, session
+names and command history stay exactly as you typed or received them.
+
+Release notes and the changelog exist in both languages —
+[CHANGELOG.md](CHANGELOG.md) in English, [CHANGELOG.ru.md](CHANGELOG.ru.md) in Russian.
 
 ## Native Claude Code
 
@@ -68,7 +94,7 @@ native GUI front-end for the agent — no terminal-scraping, no second chat wind
   change applies from your next message.
 - **Fuel gauge** — a real read of your 5-hour / 7-day subscription utilization, plus the
   active model and effort, right above the input.
-- **«Без спроса»** — an optional bypass that auto-approves ordinary tools (AskUserQuestion
+- **Bypass mode** — an optional switch that auto-approves ordinary tools (AskUserQuestion
   still always asks). Off by default; a one-click chip, live-toggleable.
 
 Prefer to bring your own key? Zarya also has a **built-in provider agent** that talks to
@@ -97,16 +123,17 @@ a desk of its own, because past four the feed collapses into a strip of lines.
 - **Desks have names.** Built from the panes («zarya-web + zarya-api +2») or your own —
   rename with a double click.
 
-## Пусковой комплекс — the Launch Pad
+## The Launch Pad
 
 <img src="docs/img/launchpad-tight.png" align="right" width="290" alt="Launch Pad" />
 
 The signature control — a cosmic launch console instead of a boring dropdown. Every
 current Claude model is version-qualified (**Opus 4.8**, **Fable 5**, **Sonnet 5**,
-**Haiku 4.5**) with a one-line purpose and a live "активна" marker on whatever is
-actually running. Pick a **двигатель** (model) and its **ТЯГА / effort** (from `МАЛАЯ`
-to `ФОРСАЖ`, gated per model), flip **ULTRACODE** for xhigh + workflow orchestration,
-and hit **ПУСК · ПОЕХАЛИ** — a pixel rocket lifts off as the settings apply.
+**Haiku 4.5**) with a one-line purpose and a live "active" marker on whatever is
+actually running. Pick an **engine** (model) and its **thrust / effort** (from `LOW`
+to `AFTERBURNER`, gated per model), flip **ULTRACODE** for xhigh + workflow
+orchestration, and hit **LAUNCH · POYEKHALI** — a pixel rocket lifts off as the
+settings apply.
 
 The rocket stays collapsed to a slim strip while you browse and only unfolds for the
 launch animation, so the picker reads like the CLI's own `/model`. Open it from the
@@ -121,7 +148,7 @@ SDK, so the pad is future-proof — the next model Anthropic ships just shows up
 
 ### Ask-agent bar & modes
 One input under the terminal, Warp-style: **Enter runs a shell command** by default,
-`Shift+Enter` / `Ctrl+Enter` add a line. A chip switches the bar between **Терминал**
+`Shift+Enter` / `Ctrl+Enter` add a line. A chip switches the bar between **Terminal**
 and the agents, and it auto-follows — launching an interactive CLI (`claude`, `vim`,
 `ssh`, a TUI) flips into raw-terminal mode automatically. Message queueing, `↑/↓`
 input history, `Esc` to interrupt and approve/deny keys are all there.
@@ -131,7 +158,7 @@ out — and opens the rest on click: a line per limit with its own gauge and res
 Engine and permission mode are icons; their labels live in tooltips, but the gate
 **keeps its colour**, because «will I be asked?» must be readable without hovering.
 
-### Диктовка (voice input)
+### Dictation (voice input)
 Click the microphone or hold `Ctrl+Shift+Space`. Click-mode stops itself after a
 second and a half of silence; `Esc` cancels. While recording, the button **is** the
 indicator — it pulses and shows the input level, because a microphone must never be
@@ -141,19 +168,19 @@ The model (~225 MB) is downloaded on first use with a checksum check, not bundle
 and cached under your user data. Everything after that is local: no request leaves
 the machine, and the audio exists only in memory while you speak.
 
-**Choosing the microphone.** Right-click the mic button (or Settings → Голос) to pick
+**Choosing the microphone.** Right-click the mic button (or Settings → Voice) to pick
 the input device; the default follows your OS. The choice is stored with the device
 name as well as its id, because Chromium's per-origin device ids change when a driver
 is reinstalled — so the same headset is re-bound silently instead of dictation quietly
 falling back to the laptop's built-in mic. If the device really is gone, Zarya says so
 and records into the system default rather than failing or pretending.
 
-### Обновления (update check)
+### Update check
 Zarya makes **one anonymous GET** to the GitHub releases API at startup — no token,
 no identifiers, no telemetry — and shows a dot in the activity bar when a newer
-version exists. Behind it: a **«Что нового» page** with the release notes, the files
+version exists. Behind it: a **"What's new" page** with the release notes, the files
 with their sizes, and the **SHA256** of each so you can verify what you downloaded.
-Turn it off in Settings → О программе.
+Turn it off in Settings → About.
 
 Zarya never downloads or launches anything on its own. Every URL on that page is
 **built by the app** from a hardcoded repo constant and a validated tag — never
@@ -176,7 +203,7 @@ Maintainer flow: `node scripts/gen-signing-key.mjs` once, then
 
 ### Blocks
 Every command becomes a distinct, navigable block — command, output, exit code and
-duration, shown as an instrument-panel pill (`✓ 0 · 40мс` / `✗ 7 · 3.4с`) — on the open
+duration, shown as an instrument-panel pill (`✓ 0 · 40ms` / `✗ 7 · 3.4s`) — on the open
 [OSC 133](docs/shell-integration.md) standard, not a proprietary protocol. Jump with
 `Ctrl+↑` / `Ctrl+↓`, re-run, copy command/output, or export as Markdown.
 
@@ -187,13 +214,13 @@ its terminal and cwd (so Claude Code resumes the right thread). Open a terminal 
 into a bookmarked project folder from the sidebar `▾` menu, `Ctrl+Shift+O`, or a folder
 drag-drop. Model: [docs/sessions.md](docs/sessions.md).
 
-### IDE add-on («IDE-агент»)
+### IDE add-on
 An optional layer — **off by default** — that reveals a **Monaco** editor with a file
 tree (git-status markers), a git diff view and a second built-in-provider agent. Toggle
 it from the activity bar; the base app stays a clean terminal + Claude Code agent until
 you opt in.
 
-### Time Machine («Хроника»)
+### Time Machine
 Global, cross-session command history (`Ctrl+R`) — every command with cwd, shell and
 exit code, fuzzy-searchable across every session you've ever had.
 
@@ -204,28 +231,28 @@ cannot read images says so out loud instead of swallowing the attachment.
 
 ### More
 Workflows (parameterized snippets), Command Palette (`Ctrl+Shift+P`), tabs and panes
-(persisted across restarts), ghost autosuggest, and a `ТЕМА` quick-cycle button.
+(persisted across restarts), ghost autosuggest, and a `THEME` quick-cycle button.
 
 ### Themes — 9, dark and light
 
 | Theme | Type | |
 |---|---|---|
-| Заря · Космос | dark | signature deep-space (default) |
-| Заря · Восток | dark | red-dominant maroon space |
-| Заря · Орбита | dark | teal oscilloscope |
-| Заря · Спутник | dark | cold graphite + brass |
-| Заря · Байконур | dark | warm launch-pad amber |
-| Заря · Рассвет | dark | original sunrise |
-| Заря · Плакат | **light** | constructivist poster paper |
-| Заря · Полдень | **light** | warm cosmonaut daylight |
-| Заря · Чертёж | **light** | blueprint on cool paper |
+| Zarya · Kosmos | dark | signature deep-space (default) |
+| Zarya · Vostok | dark | red-dominant maroon space |
+| Zarya · Orbit | dark | teal oscilloscope |
+| Zarya · Sputnik | dark | cold graphite + brass |
+| Zarya · Baikonur | dark | warm launch-pad amber |
+| Zarya · Dawn | dark | original sunrise |
+| Zarya · Poster | **light** | constructivist poster paper |
+| Zarya · Noon | **light** | warm cosmonaut daylight |
+| Zarya · Blueprint | **light** | blueprint on cool paper |
 
-Switch in Центр управления → Внешний вид, or cycle with the `ТЕМА` button. Add your
+Switch in Mission Control → Appearance, or cycle with the `THEME` button. Add your
 own via `registerThemes()` — see [docs/themes.md](docs/themes.md).
 
 ## Keyboard shortcuts
 
-Remappable in Центр управления → Клавиши (`Ctrl+,`). Full reference:
+Remappable in Mission Control → Keys (`Ctrl+,`). Full reference:
 [docs/keybindings.md](docs/keybindings.md).
 
 | Action | Default | | Action | Default |

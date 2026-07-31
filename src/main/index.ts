@@ -17,6 +17,7 @@ import { SttService } from './sttService'
 import { UpdateService } from './updateService'
 import { hardenDir } from './filePerms'
 import { APP_VERSION } from './appVersion'
+import { bindLang } from './lang'
 import { SettingsStore } from './settingsStore'
 import { WorkflowStore, builtinResourcesDir } from './workflowStore'
 
@@ -54,7 +55,7 @@ function acpEngine(
   defBin: string,
   defArgs: string[],
   envPrefix: string,
-  installHint: string
+  installHintKey: string
 ): AcpDriver {
   return new AcpDriver(
     engine,
@@ -62,7 +63,7 @@ function acpEngine(
       bin: process.env[`ZARYA_${envPrefix}_BIN`] || defBin,
       args: parseAcpArgs(process.env[`ZARYA_${envPrefix}_ARGS`], defArgs),
       capabilities: ACP_CAPABILITIES,
-      installHint
+      installHintKey
     },
     () => mainWindow
   )
@@ -72,21 +73,21 @@ const geminiDriver = acpEngine(
   'gemini',
   ['--acp'],
   'GEMINI',
-  'Gemini CLI не найден. Установи `npm i -g @google/gemini-cli`, затем войди в аккаунт.'
+  'drv.geminiMissing'
 )
 const kimiDriver = acpEngine(
   'kimi',
   'kimi',
   ['acp'],
   'KIMI',
-  'Kimi CLI не найден. Установи Kimi Code CLI (`kimi`) и выполни `kimi /login`.'
+  'drv.kimiMissing'
 )
 const qwenDriver = acpEngine(
   'qwen',
   'qwen',
   ['--acp'],
   'QWEN',
-  'Qwen Code не найден. Установи `npm i -g @qwen-code/qwen-code`, затем войди в аккаунт.'
+  'drv.qwenMissing'
 )
 const agentRegistry = new Map<AgentEngine, AgentDriver>([
   ['claude-code', claudeCodeDriver],
@@ -294,6 +295,8 @@ if (!gotLock) {
 
   app.whenReady().then(async () => {
     await settingsStore.init()
+    // Тексты главного процесса берут язык из тех же настроек, что и окно.
+    bindLang(settingsStore)
 
     registerIpc({
       getWindow: () => mainWindow,
@@ -346,14 +349,19 @@ if (!gotLock) {
     // Проверка обновлений — один анонимный запрос при запуске, и только если
     // это разрешено настройкой. Ошибка сети сюда не всплывает: сервис держит её
     // в своём состоянии строкой, а не роняет старт приложения.
-    if (settingsStore.get().updates.check) void updateService.check()
+    // ZARYA_NO_UPDATE_CHECK — рубильник для прогонов: они подставляют состояние
+    // релиза сами, а живой ответ GitHub приходил бы поверх подставленного и
+    // гасил проверяемый экран. Заодно прогон перестаёт зависеть от сети.
+    if (settingsStore.get().updates.check && !process.env.ZARYA_NO_UPDATE_CHECK) {
+      void updateService.check()
+    }
 
     // Убрать за прошлым обновлением. electron-updater оставляет в своём кеше
     // ДВЕ копии установщика — на нашей сборке это 365 МБ после каждого
     // обновления. Чистится только то, что старше установленной версии: скачанное
     // и ещё не поставленное обновление трогать нельзя.
     void updateService.cleanCache().then((freed) => {
-      if (freed > 0) console.log(`[updates] освобождено ${Math.round(freed / 1e6)} МБ в кеше`)
+      if (freed > 0) console.log(`[updates] freed ${Math.round(freed / 1e6)} MB of cache`)
     })
 
     settingsStore.onChange((s) => {
