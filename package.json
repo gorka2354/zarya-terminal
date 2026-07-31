@@ -1,7 +1,7 @@
 {
   "name": "zarya-terminal",
   "productName": "Zarya",
-  "version": "0.6.2",
+  "version": "0.6.3",
   "description": "Zarya — AI-native terminal with IDE superpowers. A new dawn for your terminal.",
   "main": "./out/main/index.js",
   "author": {
@@ -37,6 +37,7 @@
     "qa:updates": "npm run build && node scripts/update-view-test.mjs",
     "qa:secrets": "npm run build && node scripts/secret-badge-test.mjs",
     "qa:ui": "npm run build && node scripts/menu-fit-test.mjs && node scripts/popup-toggle-test.mjs && node scripts/ready-line-test.mjs",
+    "perf": "npm run build && node scripts/perf-panes.mjs",
     "qa:privacy": "npm run build && node scripts/secret-badge-test.mjs && node scripts/history-privacy-test.mjs"
   },
   "dependencies": {
