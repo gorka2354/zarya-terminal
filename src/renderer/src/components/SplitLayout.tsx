@@ -2,6 +2,7 @@ import { useRef } from 'react'
 import type { GutterRect, Rect } from '@shared/paneTree'
 import { paneRects } from '@shared/paneTree'
 import { useSessionsStore } from '@/state/sessionsStore'
+import { setLayoutDragging } from '@/terminal/terminalRegistry'
 import { useUiStore } from '@/state/uiStore'
 import { TerminalPane } from './TerminalPane'
 
@@ -118,16 +119,37 @@ function Gutter({
     const box = container.getBoundingClientRect()
     const gutter = e.currentTarget as HTMLElement
     gutter.classList.add('zy-split-gutter--dragging')
+    // Пока тянут — терминалы не пересчитывают размер: промежуточные размеры
+    // оболочке не нужны, а стоят они дорого (см. terminalRegistry).
+    setLayoutDragging(true)
+    /**
+     * Движения мыши приходят чаще кадра — у игровых мышей вчетверо чаще.
+     * Раскладку двигаем РАЗ В КАДР по последнему положению: обновлять её на
+     * каждое событие значит перерисовывать четыре панели по десять раз между
+     * двумя кадрами, и жест начинает спотыкаться.
+     */
+    let pending: number | null = null
+    let raf = 0
+    const apply = (): void => {
+      raf = 0
+      if (pending === null) return
+      useSessionsStore.getState().setSplitRatio(g.tabId, g.path, pending)
+      pending = null
+    }
     const move = (ev: PointerEvent): void => {
       const frac = isRow
         ? (ev.clientX - (box.left + g.branch.left * box.width)) / (g.branch.width * box.width)
         : (ev.clientY - (box.top + g.branch.top * box.height)) / (g.branch.height * box.height)
       // Путь, а не ссылка на узел: после первой же правки дерево пересобрано
       // новыми объектами, и ссылка перестала бы совпадать (см. paneTree).
-      useSessionsStore.getState().setSplitRatio(g.tabId, g.path, Math.min(0.85, Math.max(0.15, frac)))
+      pending = Math.min(0.85, Math.max(0.15, frac))
+      if (!raf) raf = requestAnimationFrame(apply)
     }
     const up = (): void => {
       gutter.classList.remove('zy-split-gutter--dragging')
+      if (raf) cancelAnimationFrame(raf)
+      apply()
+      setLayoutDragging(false)
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
     }

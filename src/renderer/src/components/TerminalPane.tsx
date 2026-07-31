@@ -39,7 +39,16 @@ function sideAt(el: HTMLElement, x: number, y: number): DropSide {
   return dist.reduce((best, cur) => (cur.d < best.d ? cur : best)).side
 }
 
-export function TerminalPane({ sessionId, active, visible }: Props): React.JSX.Element {
+/**
+ * Панель. Обёрнута в memo: пока тянут разделитель, рабочая область
+ * перерисовывается каждый кадр, и панели незачем пересобираться следом — у них
+ * меняется только размер слота, то есть стиль обёртки.
+ */
+export const TerminalPane = memo(function TerminalPane({
+  sessionId,
+  active,
+  visible
+}: Props): React.JSX.Element {
   const store = useSessionsStore.getState()
   const searchOpenFor = useUiStore((s) => s.searchOpenFor)
   const rightClickBehavior = useSettingsStore((s) => s.settings.terminal.rightClickBehavior)
@@ -198,7 +207,7 @@ export function TerminalPane({ sessionId, active, visible }: Props): React.JSX.E
       {menu}
     </div>
   )
-}
+})
 
 /**
  * Thin instrument-panel strip above the xterm surface: "★ CLI-АГЕНТ · ЗАРЯ"

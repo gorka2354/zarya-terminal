@@ -37,6 +37,8 @@ const LIMITS = {
   typeAvgMs: 12,
   chunkAvgMs: 12,
   chunkWorstMs: 80,
+  gutterAvgMs: 12,
+  gutterWorstMs: 60,
   longTaskTotalMs: 1200
 }
 
@@ -148,6 +150,47 @@ try {
   }, ids[0])
   console.log('  буква, мс:', JSON.stringify(typing))
   ok(`средняя буква ≤ ${LIMITS.typeAvgMs} мс`, typing.avg <= LIMITS.typeAvgMs, typing.avg)
+
+  console.log('\n[4] Тянем разделитель: живое изменение пропорций')
+  // Красная полоса между панелями. Каждое движение меняет доли — а с ними
+  // размеры терминалов, и каждый пересчёт размера уходит в ConPTY. Если это
+  // делать на каждое движение мыши, тянуть панель невозможно.
+  const gutter = await page.evaluate(async () => {
+    const g = document.querySelector('.zy-gutter')
+    if (!g) return { skipped: true }
+    const r = g.getBoundingClientRect()
+    const x0 = r.left + r.width / 2
+    const y0 = r.top + r.height / 2
+    g.dispatchEvent(
+      new PointerEvent('pointerdown', { bubbles: true, cancelable: true, clientX: x0, clientY: y0 })
+    )
+    const times = []
+    for (let i = 0; i < 60; i++) {
+      // Ведём туда-обратно на ±120 пикселей, как рукой.
+      const dx = Math.round(120 * Math.sin((i / 59) * Math.PI * 2))
+      const t0 = performance.now()
+      window.dispatchEvent(
+        new PointerEvent('pointermove', {
+          bubbles: true,
+          cancelable: true,
+          clientX: Math.round(x0 + dx),
+          clientY: Math.round(y0)
+        })
+      )
+      await new Promise((res) => requestAnimationFrame(() => res()))
+      times.push(performance.now() - t0)
+    }
+    window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true }))
+    times.sort((a, b) => a - b)
+    return {
+      avg: +(times.reduce((s, x) => s + x, 0) / times.length).toFixed(1),
+      p50: +times[Math.floor(times.length / 2)].toFixed(1),
+      worst: +times[times.length - 1].toFixed(1)
+    }
+  })
+  console.log('  движение разделителя, мс:', JSON.stringify(gutter))
+  ok(`среднее <= ${LIMITS.gutterAvgMs} мс`, (gutter.avg ?? 99) <= LIMITS.gutterAvgMs, gutter.avg)
+  ok(`худшее <= ${LIMITS.gutterWorstMs} мс`, (gutter.worst ?? 99) <= LIMITS.gutterWorstMs, gutter.worst)
 
   console.log('\n[4] Поток ответа: сколько стоит ОДИН пришедший кусок текста')
   // Настоящий стриминг сыплет десятками кусков в секунду. Если каждый кусок

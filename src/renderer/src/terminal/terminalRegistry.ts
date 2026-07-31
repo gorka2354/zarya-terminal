@@ -74,6 +74,38 @@ export function getTerminal(sessionId: string): TermHandle | undefined {
   return handles.get(sessionId)
 }
 
+/**
+ * Человек тянет разделитель прямо сейчас.
+ *
+ * Пока он тянет, размеры панелей меняются каждый кадр, и каждый пересчёт
+ * уходил в оболочку: `fit` перекладывает буфер xterm под новую ширину, а
+ * `pty.resize` — это ConPTY, то есть перерисовка настоящей консоли в главном
+ * процессе. Умножаем на четыре панели и на частоту мыши (а она бывает и 1000
+ * Гц) — и жест, который должен быть мгновенным, начинает спотыкаться.
+ *
+ * Промежуточные размеры оболочке не нужны: ей важен тот, на котором отпустили.
+ * Поэтому на время жеста пересчёт откладывается, а по отпусканию делается один
+ * раз — для всех живых терминалов.
+ */
+let layoutDragging = false
+
+export function isLayoutDragging(): boolean {
+  return layoutDragging
+}
+
+export function setLayoutDragging(on: boolean): void {
+  if (layoutDragging === on) return
+  layoutDragging = on
+  if (on) return
+  for (const h of handles.values()) {
+    try {
+      h.fit()
+    } catch {
+      // размер посчитается со следующим наблюдением
+    }
+  }
+}
+
 export function disposeTerminal(sessionId: string): void {
   const h = handles.get(sessionId)
   handles.delete(sessionId)

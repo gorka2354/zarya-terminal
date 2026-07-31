@@ -17,7 +17,12 @@ import { shouldBypassTerminal } from '@/features/palette/keybindings'
 import { openFileInEditor } from '@/features/editor/editorBridge'
 import { BlockEngine } from './blockEngine'
 import { terminalOptionsFrom, applyTerminalOptions } from './terminalOptions'
-import { registerTerminal, takePendingRestore, getTerminal } from './terminalRegistry'
+import {
+  getTerminal,
+  isLayoutDragging,
+  registerTerminal,
+  takePendingRestore
+} from './terminalRegistry'
 import { findPathsInLine, resolveAgainstCwd } from './termLinks'
 import { suggestFor } from './historyCache'
 
@@ -282,13 +287,24 @@ export const XtermView = memo(function XtermView({
 
     // ------------------------------------------------------------- sizing
     let fitRaf = 0
+    // Последний размер, о котором знает оболочка. Пересчёт вызывается на каждое
+    // наблюдение за размером, а ConPTY стоит дорого: сообщать ей одно и то же
+    // по десять раз в секунду — значит платить ни за что.
+    let told = { cols: 0, rows: 0 }
     const doFit = (): void => {
       cancelAnimationFrame(fitRaf)
       fitRaf = requestAnimationFrame(() => {
         if (!container.isConnected || container.clientWidth < 40) return
+        // Пока тянут разделитель, размеры меняются каждый кадр. Перекладывать
+        // буфер и дёргать консоль на каждый промежуточный размер незачем — по
+        // отпусканию реестр вызовет пересчёт один раз (см. setLayoutDragging).
+        if (isLayoutDragging()) return
         try {
           fit.fit()
-          window.zarya.pty.resize(sessionId, term.cols, term.rows)
+          if (term.cols !== told.cols || term.rows !== told.rows) {
+            told = { cols: term.cols, rows: term.rows }
+            window.zarya.pty.resize(sessionId, term.cols, term.rows)
+          }
         } catch {
           // ignore transient layout errors
         }
