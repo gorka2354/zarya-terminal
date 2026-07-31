@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
+import { setUiLang } from './uiLang'
 import {
   applySubagentEvent,
   fmtElapsed,
@@ -106,6 +107,9 @@ describe('summarizeWave', () => {
 })
 
 describe('formatting', () => {
+  // См. tests/uiLang.ts: без явного языка проверка зависит от локали машины.
+  beforeEach(() => setUiLang('ru'))
+
   it('reads token counts the way the CLI does', () => {
     expect(fmtTokens(842)).toBe('842')
     expect(fmtTokens(31_899)).toBe('31.9K')
@@ -116,5 +120,8 @@ describe('formatting', () => {
     expect(fmtElapsed(6_000)).toBe('6с')
     expect(fmtElapsed(666_000)).toBe('11м 6с')
     expect(fmtElapsed(0)).toBe('0с')
+    setUiLang('en')
+    expect(fmtElapsed(6_000)).toBe('6s')
+    expect(fmtElapsed(666_000)).toBe('11m 6s')
   })
 })

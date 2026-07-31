@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
+import { setUiLang } from './uiLang'
 import {
   labelsHidden,
   micName,
@@ -61,9 +62,16 @@ describe('labelsHidden', () => {
 })
 
 describe('micName', () => {
+  // Язык фиксируем явно: по умолчанию он «как в системе», и без этого проверка
+  // текста зелена лишь на машине с той же локалью, что у автора.
+  beforeEach(() => setUiLang('ru'))
+
   it('без доступа имени нет — нумеруем, а не показываем пустую строку', () => {
     expect(micName(dev({ label: '' }), 0)).toBe('Микрофон 1')
     expect(micName(dev({ label: '   ' }), 2)).toBe('Микрофон 3')
+    // И то же самое по-английски: нумерация — правило, а не перевод.
+    setUiLang('en')
+    expect(micName(dev({ label: '' }), 0)).toBe('Microphone 1')
   })
 
   it('название есть — показываем его', () => {
