@@ -1686,3 +1686,58 @@ body {
   bottom: 0;
   height: 50%;
 }
+
+/* Строка меню с действиями справа: сам пункт и мелкие кнопки к нему. */
+.zy-context-item--acts {
+  padding: 0 4px 0 0;
+  gap: 2px;
+}
+.zy-context-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex: 1;
+  min-width: 0;
+  padding: 7px 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.zy-context-act {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 24px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg-dim);
+  cursor: pointer;
+}
+.zy-context-act:hover {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+  color: var(--fg);
+}
+/* Убрать проект из списка — действие редкое и обратимое, но соседствует с
+   «открыть панелью». Пока на строку не навели, крестик приглушён. */
+.zy-context-act--del {
+  color: var(--fg-faint);
+  opacity: 0.5;
+}
+.zy-context-item--acts:hover .zy-context-act--del {
+  opacity: 1;
+}
+.zy-context-act--del:hover {
+  background: color-mix(in srgb, var(--danger) 28%, transparent);
+  color: var(--danger);
+}

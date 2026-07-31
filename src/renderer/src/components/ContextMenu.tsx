@@ -18,6 +18,15 @@ export interface MenuItem {
    * а она под меню.
    */
   drag?: { type: string; data: string }
+  /**
+   * Дополнительные действия справа в строке.
+   *
+   * Появились из-за проектов: подменю наше меню не умеет, и «открыть панелью
+   * рядом» жило ОТДЕЛЬНОЙ строкой под каждым проектом. Список из двух проектов
+   * занимал четыре строки, а стрелка-отступ схлопывалась в мусор вида «Ⴑ,» —
+   * понять, что к чему относится, было нельзя.
+   */
+  actions?: { title: string; node: React.ReactNode; danger?: boolean; onClick: () => void }[]
 }
 
 interface Props {
@@ -101,6 +110,52 @@ export function ContextMenu({ x, y, items, onClose, anchor }: Props): React.JSX.
       {items.map((item, i) =>
         item.separator ? (
           <div key={i} className="zy-context-sep" />
+        ) : item.actions?.length ? (
+          // Строка с действиями: кнопку в кнопку вложить нельзя, поэтому здесь
+          // строка — контейнер, а нажимаемого в ней несколько.
+          <div
+            key={i}
+            className="zy-context-item zy-context-item--acts"
+            draggable={!!item.drag}
+            onDragStart={(e) => {
+              if (!item.drag) return
+              e.dataTransfer.setData(item.drag.type, item.drag.data)
+              e.dataTransfer.effectAllowed = 'copy'
+              setDragging(true)
+            }}
+            onDragEnd={() => {
+              if (!item.drag) return
+              setDragging(false)
+              onClose()
+            }}
+          >
+            <button
+              className="zy-context-main"
+              disabled={item.disabled}
+              title={item.label}
+              onClick={() => {
+                onClose()
+                item.onClick?.()
+              }}
+            >
+              <span>{item.label}</span>
+              {item.hint && <span className="zy-context-hint">{item.hint}</span>}
+            </button>
+            {item.actions.map((a, k) => (
+              <button
+                key={k}
+                className={`zy-context-act${a.danger ? ' zy-context-act--del' : ''}`}
+                title={a.title}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onClose()
+                  a.onClick()
+                }}
+              >
+                {a.node}
+              </button>
+            ))}
+          </div>
         ) : (
           <button
             key={i}

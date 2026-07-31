@@ -123,7 +123,8 @@ export function Titlebar(): React.JSX.Element {
           терминалов: чем больше проектов, тем ниже уезжала работа. */}
       <button
         className="zy-titlebar-proj"
-        title={activeCwd || 'Проекты и недавние папки'}
+        title={`${activeCwd || 'Папка не выбрана'}
+Клик — проекты и папки`}
         onClick={(e) => {
           const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
           const store2 = useSessionsStore.getState()
@@ -131,20 +132,44 @@ export function Titlebar(): React.JSX.Element {
             { label: 'Открыть папку…', hint: 'Ctrl+Shift+O', onClick: () => void openFolder() }
           ]
           if (bookmarks.length) {
-            items.push({ separator: true }, { label: 'ПРОЕКТЫ', disabled: true })
+            // Одна строка на проект. Раньше их было две: под каждым проектом
+            // висел псевдо-подпункт «панелью рядом» — подменю наше меню не
+            // умеет. Два проекта давали четыре строки, а отступ со стрелкой
+            // схлопывался в мусор, и понять, что к чему относится, было нельзя.
+            items.push(
+              { separator: true },
+              { label: 'ПРОЕКТЫ', hint: 'клик — вкладкой', disabled: true }
+            )
+            // Какие проекты уже открыты — видно точкой: список папок без этого
+            // ничего не говорит о том, что происходит прямо сейчас.
+            const openCwds = new Set(Object.values(sessions).map((x) => x.cwd))
             for (const b of bookmarks) {
               items.push({
-                label: shortTail(b),
+                label: `${openCwds.has(b) ? '● ' : ''}${shortTail(b)}`,
                 // Проект можно утащить прямо отсюда на нужную панель — так он
                 // окажется ИМЕННО ТАМ, куда показали мышью, а не рядом с
                 // активной. Пока проекты жили в сайдбаре, их таскали оттуда.
-                hint: 'тащи на панель',
                 drag: { type: PANE_DRAG_CWD, data: b },
-                onClick: () => void store2.newTab(undefined, b)
-              })
-              items.push({
-                label: '      ↳ панелью рядом',
-                onClick: () => void store2.splitActive('row', b)
+                onClick: () => void store2.newTab(undefined, b),
+                actions: [
+                  {
+                    title: `Открыть панелью рядом · ${b}
+Или перетащи проект на нужную панель`,
+                    node: <Icon name="split-h" size={13} />,
+                    onClick: () => void store2.splitActive('row', b)
+                  },
+                  {
+                    title: `Убрать «${shortTail(b)}» из проектов`,
+                    node: <Icon name="close" size={12} />,
+                    danger: true,
+                    onClick: () => {
+                      const cur = useSettingsStore.getState().settings.bookmarks
+                      void useSettingsStore
+                        .getState()
+                        .update({ bookmarks: cur.filter((x) => x !== b) })
+                    }
+                  }
+                ]
               })
             }
           }
