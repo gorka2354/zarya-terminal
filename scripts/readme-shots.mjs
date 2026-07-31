@@ -27,6 +27,12 @@ try {
   await page.setViewportSize?.({ width: 1280, height: 800 }).catch(() => {})
 
   // 1) Hero — populated cosmic mission feed (seed uses neutral ~/code/zarya-web paths).
+  //    Панель подписываем тем же путём: в шапке панели и в кнопке проекта иначе
+  //    осталась бы настоящая домашняя папка того, кто снимал.
+  await page.evaluate(() => {
+    const sid = window.__zaryaDumpSessions().activeSessionId
+    window.__zaryaRenameForShot?.(sid, 'zarya-web', '~/code/zarya-web')
+  })
   await page.evaluate(() => window.__zaryaSeedMission?.())
   await page.waitForTimeout(900)
   await page.screenshot({ path: join(out, 'hero.png') })
@@ -41,6 +47,33 @@ try {
   // 3) Just the launch pad element, cropped (for a tight secondary image).
   await page.locator('.zy-launchpad').screenshot({ path: join(out, 'launchpad-tight.png') })
   console.log('shot: docs/img/launchpad-tight.png')
+
+  // 4) Панели: четыре CLI и сайдбар, который их перечисляет. Главное в 0.6 —
+  //    и объяснить это словами дороже, чем показать.
+  await page.evaluate(() => window.__zaryaSetUi?.({ launchPadOpen: false }))
+  await page.setViewportSize?.({ width: 1440, height: 900 }).catch(() => {})
+  for (let i = 0; i < 3; i++) {
+    await page.evaluate(() => window.__zaryaSplitActive('row'))
+    await page.waitForTimeout(900)
+  }
+  await page.waitForTimeout(1200)
+  // Пути нейтральные: в README не должно быть чужих папок.
+  const panes = await page.evaluate(() => window.__zaryaDumpSessions().tabs[0].leaves)
+  const DEMO = ['zarya-web', 'zarya-api', 'design-system', 'infra']
+  await page.evaluate(
+    ([list, names]) => {
+      list.forEach((sid, i) => {
+        window.__zaryaRenameForShot?.(sid, names[i], `~/code/${names[i]}`)
+        // Первая панель остаётся с демо-миссией: в кадре должно быть видно и
+        // работу агента, и обычные команды рядом.
+        if (i > 0) window.__zaryaSeedBlocks?.(sid, 3, 4)
+      })
+    },
+    [panes, DEMO]
+  )
+  await page.waitForTimeout(1200)
+  await page.screenshot({ path: join(out, 'panes.png') })
+  console.log('shot: docs/img/panes.png')
 } finally {
   await app.close()
   try { rmSync(userData, { recursive: true, force: true }) } catch {}

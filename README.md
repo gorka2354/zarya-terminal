@@ -5,15 +5,17 @@
 **Космический CLI-агент. A new dawn for your terminal.**
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-e2231a.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.5.7%20%C2%AB%D0%A1%D0%BB%D0%BE%D0%B2%D0%BE%C2%BB-e0b15a.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.6.5%20%C2%AB%D0%9F%D0%BB%D0%BE%D1%89%D0%B0%D0%B4%D0%BA%D0%B0%C2%BB-e0b15a.svg)](CHANGELOG.md)
 [![Electron](https://img.shields.io/badge/Electron-43-4fd6d6.svg)](https://www.electronjs.org/)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-5fb88a.svg)](#install)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-e0b15a.svg)](CONTRIBUTING.md)
 
 Zarya is an AI-native terminal with a Soviet space-age soul. It runs **Claude Code
 natively** — the full agent, its tools and its permission prompts, driven straight
-from your terminal — alongside Warp-style command blocks, persistent sessions, and an
-optional built-in editor. 100% on your machine, no account, no telemetry.
+from your terminal — and gives every **pane its own agent**, so four CLIs can work
+side by side without ever sharing a conversation. Warp-style command blocks,
+persistent sessions and an optional built-in editor come along. 100% on your machine,
+no account, no telemetry.
 
 ![Zarya](docs/img/hero.png)
 
@@ -26,6 +28,12 @@ optional built-in editor. 100% on your machine, no account, no telemetry.
   approve/deny, the `AskUserQuestion` choice widget, session **resume**, and a live
   **fuel gauge** of your subscription limits — signed in with your **Max plan, no API
   key**.
+- **▦ Panes are whole CLIs** — split the window and each pane keeps its own feed, its
+  own input line, its own mode and its own autopilot. One Enter approves a tool in the
+  **framed** pane and nowhere else. The sidebar lists the panes of the active desk, so
+  you can point at one with the mouse; drag a pane by its header to move it next to
+  another (the edge you aim at lights up) or into the list to give it a desk of its own —
+  without killing the process.
 - **🚀 Пусковой комплекс** — a cosmic launch console for picking the model and
   reasoning effort, with every current Claude version, live-switchable mid-session.
 - **🎙 Диктовка — offline speech-to-text** — hold `Ctrl+Shift+Space`, speak, and the
@@ -67,6 +75,27 @@ Prefer to bring your own key? Zarya also has a **built-in provider agent** that 
 **Anthropic**, **OpenAI**, **Ollama** (local inference, incl. a remote Ollama box on your
 LAN or Tailscale) or any **OpenAI-compatible** endpoint — keys encrypted at rest, never
 sent anywhere but the provider you configured.
+
+## Panes — four CLIs in one window
+
+![Panes](docs/img/panes.png)
+
+A tab is a **desk**, a pane is a **CLI**. Up to four panes share a desk; the fifth opens
+a desk of its own, because past four the feed collapses into a strip of lines.
+
+- **Nothing is shared.** Feed, input line, mode, autopilot, attachments, input history —
+  all per pane. A full-screen program (`vim`, `htop`) takes over *its* pane only.
+- **The frame never lies.** The accented border marks the pane that receives `Enter` and
+  `Esc` — i.e. where a tool approval will land. The sidebar mirrors it: a subtle
+  background means «on screen», the accent means «in focus», and there is exactly one.
+- **Layout is a rule, not a chore.** One pane fills the desk, two-three go in columns,
+  four make a 2×2 grid. Close one and the rest re-flow — unless you dragged a divider,
+  in which case your layout is yours and stays untouched.
+- **Move or detach.** Grab a pane by its header: drop it on another pane and it docks to
+  the **edge you aim at** (the half it will take lights up first); drop it into the
+  sidebar and it leaves the grid for its own desk. The process never restarts.
+- **Desks have names.** Built from the panes («zarya-web + zarya-api +2») or your own —
+  rename with a double click.
 
 ## Пусковой комплекс — the Launch Pad
 
@@ -168,9 +197,14 @@ you opt in.
 Global, cross-session command history (`Ctrl+R`) — every command with cwd, shell and
 exit code, fuzzy-searchable across every session you've ever had.
 
+### Images
+Paste (`Ctrl+V`) or drop a picture into the bar and it attaches to **that** pane, shows
+as a chip before you send, and is scaled down to the model's limit. An engine that
+cannot read images says so out loud instead of swallowing the attachment.
+
 ### More
-Workflows (parameterized snippets), Command Palette (`Ctrl+Shift+P`), splits & tabs
-(persisted), ghost autosuggest, and a `ТЕМА` quick-cycle button.
+Workflows (parameterized snippets), Command Palette (`Ctrl+Shift+P`), tabs and panes
+(persisted across restarts), ghost autosuggest, and a `ТЕМА` quick-cycle button.
 
 ### Themes — 9, dark and light
 
@@ -201,6 +235,7 @@ Remappable in Центр управления → Клавиши (`Ctrl+,`). Ful
 | Settings | `Ctrl+,` | | Global command history | `Ctrl+R` |
 | Toggle sidebar | `Ctrl+B` | | New terminal in folder | `Ctrl+Shift+O` |
 | New / close tab | `Ctrl+Shift+T` / `Ctrl+Shift+W` | | Split right / down | `Ctrl+Shift+D` / `Ctrl+Shift+S` |
+| Close pane | `Ctrl+Shift+X` | | Focus next pane | `Alt+→` |
 | Previous / next block | `Ctrl+↑` / `Ctrl+↓` | | Find in terminal | `Ctrl+Shift+F` |
 | Dictate (hold) | `Ctrl+Shift+Space` | | New line in the bar | `Shift+Enter` |
 

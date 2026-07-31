@@ -927,6 +927,20 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
 ).__zaryaMovePane = (sid, target) => useSessionsStore.getState().movePaneNextTo(sid, target)
 ;(window as unknown as { __zaryaCloseSession?: (sid: string) => Promise<void> }).__zaryaCloseSession = (sid) =>
   useSessionsStore.getState().closeSession(sid, { save: false })
+/**
+ * Снимкам для README: подписать панель нейтрально. В документации не должно
+ * быть ни чужих папок, ни личных путей — а настоящие берутся из настоящей
+ * файловой системы, какая есть на машине.
+ */
+;(
+  window as unknown as { __zaryaRenameForShot?: (sid: string, title: string, cwd: string) => void }
+).__zaryaRenameForShot = (sid, title, cwd) => {
+  useSessionsStore.setState((s) => {
+    const cur = s.sessions[sid]
+    if (!cur) return {}
+    return { sessions: { ...s.sessions, [sid]: { ...cur, title, customTitle: true, cwd } } }
+  })
+}
 
 async function restoreWorkspace(
   ws: WorkspaceState,

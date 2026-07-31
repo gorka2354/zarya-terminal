@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { useSessionsStore } from './sessionsStore'
 import type { BlockRecord } from '@shared/types'
 
 const MAX_BLOCKS_PER_SESSION = 500
@@ -72,11 +73,15 @@ export const useBlocksStore = create<BlocksState>((set, get) => ({
   }
 ).__zaryaSeedBlocks = (sessionId, count, lines) => {
   const now = Date.now()
+  // Папка — та же, что у самой панели: в снимках для README путь в блоке не
+  // должен спорить с путём в шапке.
+  const cwd = useSessionsStore.getState().sessions[sessionId]?.cwd || '~/code/project'
+  const CMDS = ['npm run build', 'git status', 'npm test -- --watch=false', 'git log --oneline -5']
   const list: BlockRecord[] = Array.from({ length: count }, (_, i) => ({
     id: `seed-${sessionId}-${i}`,
     sessionId,
-    command: `npm run build -- --seed ${i}`,
-    cwd: 'C:/Users/pesto/Desktop/project',
+    command: CMDS[i % CMDS.length],
+    cwd,
     startedAt: now - (count - i) * 1000,
     endedAt: now - (count - i) * 1000 + 400,
     exitCode: i % 7 === 0 ? 1 : 0,
