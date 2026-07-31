@@ -5,6 +5,74 @@ All notable changes to Zarya are documented here. This project uses
 
 Русская версия этого файла — [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## 0.7.1 — "Countdown" (2026-07-31)
+
+### Added
+
+- **You can see that work is happening.** An agent would go off to clone a
+  repository and the screen fell silent: the tool card showed a spinner and the
+  word "running" — no seconds, no line of output. Whether it had been a minute or
+  ten was impossible to tell.
+
+  The card now ticks: **running · 1:24**. It works for every engine, Claude Code
+  included, because the start time is the one thing we honestly know — the SDK
+  hands over a tool's output in a single piece at the end, and there is no
+  intermediate progress in it at all (`include_partial_messages` streams the
+  answer text and the thinking, not the tool output). The clock starts at
+  **approval**, not when the gate appears: while a card waits for your decision,
+  the time is yours, not the command's.
+
+- **A download line for commands that run in your terminal.** Downloaders
+  (`git clone`, `pip`, `wget`, `docker pull`) write progress as one line they
+  keep redrawing; in a terminal that reads fine, in the feed it turned into
+  jumping digits. The percentage, the size, the speed and the ETA are now pulled
+  out of the output and shown as a bar that stays in one place.
+
+  The parsing is deliberately picky: a percentage alone is not enough — it takes
+  a second sign (speed, size, a bar, or the name of the work), otherwise a
+  coverage report reading `Statements: 100% (42/42)` would draw a bar over
+  nothing. With no percentage the width is not invented: a shuttle runs instead,
+  because a bar sitting "about a third of the way" would promise knowledge we do
+  not have.
+
+### Changed
+
+- **Projects live in one place.** The projects menu existed twice — in the header
+  and under the sidebar caret — and both showed the same thing, the sidebar one
+  with fewer actions. Inside each, the duplication continued: "Projects", "Add a
+  folder to projects…" and "Recent folders" were three blocks about one thing.
+  The separate "Add a folder to projects…" opened the SAME system folder picker
+  as "Open folder…" and differed only in not opening the folder.
+
+  Now the roles are split: the sidebar caret is about starting a terminal (three
+  entries, no lists); the header "Projects" is the only place folders live. Open
+  a folder and it lands in the list, freshest first; one button opens it as a
+  pane, the cross removes it. The cap is 12 — with three to eight projects in
+  play the eviction never fires, but a list without a limit stops being a list.
+
+### Fixed
+
+- **A tool card no longer vanishes the moment you approve it.** With engines that
+  send no `tool_use` (Codex, Gemini, Kimi, Qwen) the gate was filtered out as
+  settled, so pressing RUN left nothing on screen: the command ran for a minute
+  and the feed said nothing. The card now lives until the result arrives, and the
+  "the agent wants to run" label is dropped once the decision is made — it was
+  announcing a choice that no longer existed.
+- **The "open now" dot stopped lying.** Paths were compared character by
+  character, and the same folder arrives in different shapes: the picker gives a
+  backslash path, the shell reports a forward-slash one. Comparison is now by
+  meaning, with the platform in mind: case is ignored only for paths with a drive
+  letter, because on Linux `~/Code` and `~/code` are different folders.
+- **An empty output snapshot no longer wipes what is already on screen** — the
+  feed used to flash blank while a command was still running.
+
+### Tested
+
+- `npm run qa:progress` — 16 live checks: the bar, its updates, the shuttle with
+  no percentage, silence on ordinary output, the ticking clock, the card after
+  approval. Plus 15 unit tests on the progress parsing and 9 on the project list
+  (order, cap, path comparison).
+
 ## 0.7.0 — "Lexicon" (2026-07-31)
 
 ### Added
