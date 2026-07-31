@@ -1494,6 +1494,64 @@ onBus('terminal:focus', ({ sessionId }) => {
 ;(
   window as unknown as { __zaryaSetBypassFor?: (convId: string, on: boolean) => void }
 ).__zaryaSetBypassFor = (convId, on) => useAiStore.getState().setBypass(convId, on)
+/** Правка беседы для прогонов скорости — тем же путём, что и настоящая. */
+function seedPatch(convId: string, fn: (c: Conversation) => Conversation): void {
+  useAiStore.setState((s) => ({
+    conversations: s.conversations.map((c) => (c.id === convId ? fn(c) : c))
+  }))
+}
+/**
+ * Прогону скорости: длинная беседа, как к вечеру рабочего дня — с разметкой,
+ * запусками инструментов и их результатами. Настоящий агент такую пишет
+ * полчаса, а мерить надо ленту, а не агента.
+ */
+;(
+  window as unknown as { __zaryaSeedConversation?: (sessionId: string, turns: number) => string }
+).__zaryaSeedConversation = (sessionId, turns) => {
+  const store = useAiStore.getState()
+  const id = store.newConversation({ sessionId, engine: 'claude-code' })
+  const messages: AiMessage[] = []
+  for (let i = 0; i < turns; i++) {
+    messages.push({ role: 'user', content: [{ type: 'text', text: `Вопрос номер ${i}` }] })
+    messages.push({
+      role: 'assistant',
+      content: [
+        {
+          type: 'text',
+          text:
+            `### Ответ ${i}\n\nСмотри, тут **важное** и \`код\`:\n\n` +
+            '```ts\nconst x = ' + i + '\nconsole.log(x)\n```\n\n' +
+            `- пункт раз\n- пункт два\n- пункт три\n\nИ ещё абзац текста про панели, ленту и всё остальное, чтобы разметка была не в одну строку.`
+        },
+        { type: 'tool_use', id: `t${i}`, name: 'Read', input: { file_path: `C:/p/file${i}.ts` } }
+      ]
+    })
+    messages.push({
+      role: 'user',
+      content: [
+        { type: 'tool_result', toolUseId: `t${i}`, content: `прочитано ${i}`, isError: false }
+      ]
+    })
+  }
+  seedPatch(id, (c) => ({ ...c, messages }))
+  return id
+}
+/** Прогону скорости: один чанк потока — дописать текст в последний ответ. */
+;(
+  window as unknown as { __zaryaSeedChunk?: (convId: string, text: string) => void }
+).__zaryaSeedChunk = (convId, text) => {
+  seedPatch(convId, (c) => {
+    const messages = [...c.messages]
+    const last = messages[messages.length - 1]
+    if (!last) return c
+    const parts = [...last.content]
+    const tail = parts[parts.length - 1]
+    parts[parts.length - 1] =
+      tail?.type === 'text' ? { ...tail, text: tail.text + text } : { type: 'text', text }
+    messages[messages.length - 1] = { ...last, content: parts }
+    return { ...c, messages, streaming: true }
+  })
+}
 ;(
   window as unknown as { __zaryaStartAgent?: (engine: AgentEngine, text: string) => string }
 ).__zaryaStartAgent = (engine, text) => {

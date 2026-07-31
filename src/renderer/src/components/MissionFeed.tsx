@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import type { AiContentPart, BlockRecord } from '@shared/types'
 import { onBus } from '@/lib/bus'
 import { formatDuration, formatRelative, shortenPath } from '@/lib/ansi'
@@ -47,7 +47,17 @@ function fmtClock(ts: number): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
-export function MissionFeed({ sessionId }: { sessionId: string }): React.JSX.Element {
+/**
+ * Лента панели. Обёрнута в memo: её родитель перерисовывается на каждое
+ * движение мыши при перетаскивании, а лента — самое дорогое, что есть на
+ * экране (сотни блоков, разметка, карточки инструментов). Свои данные она берёт
+ * из сторов сама, поэтому пропуск чужой перерисовки ничего не «замораживает».
+ */
+export const MissionFeed = memo(function MissionFeed({
+  sessionId
+}: {
+  sessionId: string
+}): React.JSX.Element {
   const blocks = useBlocksStore((s) => s.bySession[sessionId] ?? NO_BLOCKS)
   const cwd = useSessionsStore((s) => s.sessions[sessionId]?.cwd ?? '')
   // Each terminal shows its OWN agent conversation (bound by sessionId).
@@ -325,11 +335,11 @@ export function MissionFeed({ sessionId }: { sessionId: string }): React.JSX.Ele
       {cliMenu}
     </div>
   )
-}
+})
 
 // ------------------------------------------------------------------- blocks
 
-function ShellBlock({
+const ShellBlock = memo(function ShellBlock({
   block,
   branch,
   liveTail
@@ -375,7 +385,7 @@ function ShellBlock({
       {output.trim() !== '' && <OutputLines text={output} failed={failed} />}
     </div>
   )
-}
+})
 
 /** Friendly per-tool verbs (not shell-hardcoded for Read/Edit/Write/etc). */
 function toolVerb(name: string): { want: string; run: string } {
@@ -514,7 +524,7 @@ function SubagentWave({ conv }: { conv: Conversation }): React.JSX.Element | nul
   )
 }
 
-function AgentMessage({
+const AgentMessage = memo(function AgentMessage({
   msg,
   conv,
   cwd,
@@ -612,7 +622,7 @@ function AgentMessage({
       })}
     </>
   )
-}
+})
 
 function findToolResult(
   conv: Conversation,
@@ -633,7 +643,7 @@ function findToolResult(
  * gates had NO card at all — yet Enter still approved them. Same card now
  * renders for every engine.
  */
-function ToolCard({
+const ToolCard = memo(function ToolCard({
   conv,
   id,
   name,
@@ -760,7 +770,7 @@ function ToolCard({
       {body}
     </div>
   )
-}
+})
 
 // -------------------------------------------------------------------- empty
 

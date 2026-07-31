@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import type { AgentEngine, AgentUsage, AiEffort, ClaudeCliQuestion } from '@shared/types'
 import { EFFORT_TUNING } from '@shared/defaults'
 import { useSessionsStore } from '@/state/sessionsStore'
@@ -301,7 +301,9 @@ export function UsagePanel({
  * When Claude Code raises an AskUserQuestion the whole bar morphs into
  * {@link ClaudeQuestionBar} — the single input becomes a native choice selector.
  */
-export function AgentBar({ paneSessionId }: { paneSessionId?: string } = {}): React.JSX.Element {
+export const AgentBar = memo(function AgentBar({
+  paneSessionId
+}: { paneSessionId?: string } = {}): React.JSX.Element {
   const model = useSettingsStore((s) => s.settings.ai.model)
   const effort = useSettingsStore((s) => s.settings.ai.effort)
   const effortIdx = EFFORTS.indexOf(effort)
@@ -1465,4 +1467,4 @@ ${prev}`
       {micMenu}
     </div>
   )
-}
+})

@@ -1,6 +1,6 @@
 import { PANE_DRAG_CWD, PANE_DRAG_SESSION } from '@shared/types'
 import type { DropSide } from '@shared/paneTree'
-import { useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import { XtermView } from '@/terminal/XtermView'
 import { MissionFeed } from './MissionFeed'
 import { AgentBar } from './AgentBar'
@@ -205,7 +205,7 @@ export function TerminalPane({ sessionId, active, visible }: Props): React.JSX.E
  * mark, the pane's own cwd, split + search shortcuts. One per pane (not per
  * split gutter) so every terminal keeps its own working-directory readout.
  */
-function PaneHeader({
+const PaneHeader = memo(function PaneHeader({
   sessionId,
   maximized,
   multiPane
@@ -315,7 +315,7 @@ function PaneHeader({
       </div>
     </div>
   )
-}
+})
 
 function TermSearchBar({ sessionId }: { sessionId: string }): React.JSX.Element {
   const [query, setQuery] = useState('')

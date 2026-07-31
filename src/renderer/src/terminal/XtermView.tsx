@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { SearchAddon } from '@xterm/addon-search'
@@ -35,7 +35,11 @@ interface Ghost {
   top: number
 }
 
-export function XtermView({ sessionId, active, visible }: Props): React.JSX.Element {
+export const XtermView = memo(function XtermView({
+  sessionId,
+  active,
+  visible
+}: Props): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null)
   const [ghost, setGhost] = useState<Ghost | null>(null)
   const ghostRef = useRef<{ full: string; typed: string } | null>(null)
@@ -447,4 +451,4 @@ export function XtermView({ sessionId, active, visible }: Props): React.JSX.Elem
       )}
     </div>
   )
-}
+})
