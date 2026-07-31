@@ -118,6 +118,15 @@ export interface TabState {
   id: string
   layout: SplitNode
   activeSessionId: string
+  /**
+   * Имя рабочего стола, если его задали руками.
+   *
+   * Без него строка вкладки подписывалась именем той панели, что была в ней
+   * активной: четыре разных проекта — одно имя в списке, да ещё и меняющееся
+   * при переключении фокуса внутри. Пустое поле значит «собери подпись из
+   * панелей» (см. deskTitle).
+   */
+  title?: string
 }
 
 export interface WorkspaceState {
@@ -195,8 +204,15 @@ export interface AiSettings {
   claudeModel: string
   /** Claude Code effort override ('' = account default). */
   claudeEffort: string
-  /** Auto-approve tool calls without prompting (canUseTool auto-allow; AskUserQuestion still surfaces). */
-  claudeBypass: boolean
+  /**
+   * АВТОПИЛОТ здесь БОЛЬШЕ НЕ ЖИВЁТ (inc-17): он стал свойством беседы.
+   *
+   * Одна настройка на окно с несколькими панелями неизбежно врёт: выключаешь её,
+   * глядя на одну панель, — гаснут чипы во всех, а работающий агент в третьей
+   * продолжает выполнять команды сам. Поэтому решение принимается для каждой
+   * беседы отдельно (Conversation.bypass), новая панель всегда открывается со
+   * спрашиванием, и наследовать автопилот неоткуда.
+   */
 }
 
 /** Диктовка: какой микрофон слушать. Распознавание всегда локальное. */
@@ -288,6 +304,20 @@ export type AiContentPart =
   | { type: 'text'; text: string }
   | { type: 'tool_use'; id: string; name: string; input: unknown }
   | { type: 'tool_result'; toolUseId: string; content: string; isError?: boolean }
+  /**
+   * Вставленное изображение. `data` — base64 без префикса data:. Пределы и
+   * допустимые типы живут в @shared/images: расползшийся предел это предел,
+   * который где-то не проверяется.
+   */
+  | {
+      type: 'image'
+      mediaType: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif'
+      data: string
+      bytes: number
+      width: number
+      height: number
+      name?: string
+    }
 
 export interface AiMessage {
   role: 'user' | 'assistant'
@@ -407,6 +437,16 @@ export type AgentPermissionMode = 'default' | 'acceptEdits' | 'plan'
 export interface AgentStartOpts {
   /** The user's turn text. */
   prompt: string
+  /**
+   * Изображения этого хода. Отдельным полем, а не внутри prompt: строка их не
+   * вместит, а менять тип prompt значило бы трогать все движки разом. Драйвер,
+   * который картинки не умеет, просто их игнорирует — но интерфейс до этого не
+   * доводит: вставка у такого движка вложения не создаёт (capabilities.images).
+   */
+  images?: Array<{
+    mediaType: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif'
+    data: string
+  }>
   /** Working directory the agent operates in (the bound session's cwd). */
   cwd?: string
   /** Model id override; omit to use the driver's configured default. */
@@ -602,6 +642,11 @@ export interface AgentCapabilities {
   /** The driver can emit a 'permission' event carrying `questions` (AskUserQuestion-style). */
   structuredQuestions: boolean
   /**
+   * Движок принимает изображения. Где false — вставка не должна создавать
+   * вложение: проглотить картинку и отправить запрос без неё значит соврать.
+   */
+  images?: boolean
+  /**
    * Движок умеет отматывать отправленное сообщение из контекста (Esc над ходом,
    * на который агент ещё не ответил) — см. {@link AgentRewind}. Возможность, а
    * не обещание: удастся ли конкретная отмена, отвечает сам драйвер. Где false,
@@ -776,3 +821,12 @@ export type WindowCommand = 'minimize' | 'maximize' | 'close' | 'devtools'
 export interface PrepareQuitPayload {
   reason: 'quit' | 'close'
 }
+
+/**
+ * Тип данных перетаскивания «проект → панель». Свой, а не text/plain: файлы
+ * обрабатывает строка ввода, и пути не должны путаться с вложениями.
+ */
+export const PANE_DRAG_CWD = 'application/x-zarya-cwd'
+
+/** Перетаскивание УЖЕ ОТКРЫТОГО терминала: переносим панель, а не создаём новую. */
+export const PANE_DRAG_SESSION = 'application/x-zarya-session'

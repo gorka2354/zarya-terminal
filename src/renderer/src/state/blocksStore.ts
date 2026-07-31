@@ -59,6 +59,34 @@ export const useBlocksStore = create<BlocksState>((set, get) => ({
   }
 }))
 
+/**
+ * Прогону скорости: набить ленту так, как она выглядит к вечеру рабочего дня.
+ *
+ * Через настоящую оболочку сотня блоков набирается минуту, и мерили бы мы
+ * скорость pty, а не скорость ленты. Здесь сцена собирается сразу и одинаково —
+ * иначе цифры «до» и «после» не сравнить.
+ */
+;(
+  window as unknown as {
+    __zaryaSeedBlocks?: (sessionId: string, count: number, lines: number) => number
+  }
+).__zaryaSeedBlocks = (sessionId, count, lines) => {
+  const now = Date.now()
+  const list: BlockRecord[] = Array.from({ length: count }, (_, i) => ({
+    id: `seed-${sessionId}-${i}`,
+    sessionId,
+    command: `npm run build -- --seed ${i}`,
+    cwd: 'C:/Users/pesto/Desktop/project',
+    startedAt: now - (count - i) * 1000,
+    endedAt: now - (count - i) * 1000 + 400,
+    exitCode: i % 7 === 0 ? 1 : 0,
+    output: Array.from({ length: lines }, (_, k) => `строка вывода ${k} блока ${i}`).join('\n'),
+    outputTruncated: false
+  }))
+  useBlocksStore.getState().setBlocks(sessionId, list)
+  return list.length
+}
+
 // QA hook: inspect command blocks (command/exitCode/cwd/output) per session from
 // the offscreen harness. Returns all sessions when no id is given.
 ;(window as unknown as { __zaryaDumpBlocks?: (sessionId?: string) => unknown }).__zaryaDumpBlocks = (

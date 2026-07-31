@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { createContext, memo, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { AiContentPart, BlockRecord } from '@shared/types'
 import { onBus } from '@/lib/bus'
 import { formatDuration, formatRelative, shortenPath } from '@/lib/ansi'
 import { useBlocksStore } from '@/state/blocksStore'
 import { useSessionsStore } from '@/state/sessionsStore'
-import { useUiStore } from '@/state/uiStore'
+import { setBarModeOf, setRaw, useUiStore } from '@/state/uiStore'
 import { convForSession, useAiStore, type Conversation } from '@/features/ai/aiStore'
 import {
   feedIsBusy,
@@ -47,7 +47,17 @@ function fmtClock(ts: number): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
-export function MissionFeed({ sessionId }: { sessionId: string }): React.JSX.Element {
+/**
+ * Лента панели. Обёрнута в memo: её родитель перерисовывается на каждое
+ * движение мыши при перетаскивании, а лента — самое дорогое, что есть на
+ * экране (сотни блоков, разметка, карточки инструментов). Свои данные она берёт
+ * из сторов сама, поэтому пропуск чужой перерисовки ничего не «замораживает».
+ */
+export const MissionFeed = memo(function MissionFeed({
+  sessionId
+}: {
+  sessionId: string
+}): React.JSX.Element {
   const blocks = useBlocksStore((s) => s.bySession[sessionId] ?? NO_BLOCKS)
   const cwd = useSessionsStore((s) => s.sessions[sessionId]?.cwd ?? '')
   // Each terminal shows its OWN agent conversation (bound by sessionId).
@@ -88,7 +98,8 @@ export function MissionFeed({ sessionId }: { sessionId: string }): React.JSX.Ele
               cwd: folder,
               sessionId
             })
-            useUiStore.getState().set({ barMode: 'claude-code', rawTerminal: false })
+            setBarModeOf(sessionId, 'claude-code')
+            setRaw(sessionId, false)
           })
         }
       }))
@@ -308,9 +319,13 @@ export function MissionFeed({ sessionId }: { sessionId: string }): React.JSX.Ele
                 waits for a decision. */}
             {!busy && (
               <div className="zy-mf-ready">
-                <span className="zy-mf-spark"><PixelIcon name="star" /></span>
+                <span className="zy-mf-spark">
+                  <PixelIcon name="star" />
+                </span>
                 <span className="zy-mf-cwd">{cwdShort || '~'}</span>
-                <span className="zy-mf-chev"><PixelIcon name="chevron-right" /></span>
+                <span className="zy-mf-chev">
+                  <PixelIcon name="chevron-right" />
+                </span>
                 <span className="zy-mf-ready-text">готов · введите запрос в строку ниже ↓</span>
               </div>
             )}
@@ -320,11 +335,11 @@ export function MissionFeed({ sessionId }: { sessionId: string }): React.JSX.Ele
       {cliMenu}
     </div>
   )
-}
+})
 
 // ------------------------------------------------------------------- blocks
 
-function ShellBlock({
+const ShellBlock = memo(function ShellBlock({
   block,
   branch,
   liveTail
@@ -342,7 +357,9 @@ function ShellBlock({
   return (
     <div className={`zy-mf-block${failed ? ' zy-mf-block--fail' : ''}`}>
       <div className="zy-mf-cmd">
-        <span className="zy-mf-star"><PixelIcon name="star" /></span>
+        <span className="zy-mf-star">
+          <PixelIcon name="star" />
+        </span>
         <span className="zy-mf-cwd">{cwdShort}</span>
         {branch && (
           <span className="zy-mf-git">
@@ -368,7 +385,7 @@ function ShellBlock({
       {output.trim() !== '' && <OutputLines text={output} failed={failed} />}
     </div>
   )
-}
+})
 
 /** Friendly per-tool verbs (not shell-hardcoded for Read/Edit/Write/etc). */
 function toolVerb(name: string): { want: string; run: string } {
@@ -379,7 +396,8 @@ function toolVerb(name: string): { want: string; run: string } {
     return { want: 'агент хочет изменить файл', run: 'применяет правку…' }
   if (n === 'webfetch' || n === 'websearch')
     return { want: 'агент хочет в сеть', run: 'запрос в сеть…' }
-  if (n === 'task' || n === 'agent') return { want: 'агент хочет запустить субагента', run: 'субагент работает…' }
+  if (n === 'task' || n === 'agent')
+    return { want: 'агент хочет запустить субагента', run: 'субагент работает…' }
   return { want: 'агент хочет выполнить', run: 'выполняется…' }
 }
 
@@ -402,9 +420,50 @@ function OutputLines({ text, failed }: { text: string; failed: boolean }): React
 
 // ------------------------------------------------------------------- agent
 
+/**
+ * Беседа для карточек инструментов — через контекст, а не пропсом.
+ *
+ * Пока агент печатает, объект беседы пересоздаётся десятки раз в секунду. Если
+ * передавать его вниз пропсом, memo на сообщениях не значит НИЧЕГО: у каждого
+ * сообщения меняется пропс, и лента перерисовывается целиком — вся разметка,
+ * все строки вывода, все карточки. Через контекст перерисовываются только те,
+ * кому беседа правда нужна, — карточки инструментов.
+ *
+ * Там же лежит индекс результатов. Раньше каждая карточка искала свой результат
+ * перебором ВСЕХ сообщений: на длинном разговоре это квадрат, который растёт
+ * ровно тогда, когда работать становится интереснее всего.
+ */
+interface FeedConv {
+  conv: Conversation
+  results: Map<string, Extract<AiContentPart, { type: 'tool_result' }>>
+}
+const FeedConvContext = createContext<FeedConv | null>(null)
+
+function buildResultIndex(conv: Conversation): FeedConv['results'] {
+  const map = new Map<string, Extract<AiContentPart, { type: 'tool_result' }>>()
+  for (const m of conv.messages) {
+    for (const p of m.content) {
+      if (p.type === 'tool_result' && !map.has(p.toolUseId)) map.set(p.toolUseId, p)
+    }
+  }
+  return map
+}
+
+
 function AgentSection({ conv, cwd }: { conv: Conversation; cwd: string }): React.JSX.Element {
+  // Индекс результатов пересчитывается при изменении сообщений — один проход на
+  // перерисовку вместо перебора всей беседы в каждой карточке.
+  const feed = useMemo<FeedConv>(
+    () => ({ conv, results: buildResultIndex(conv) }),
+    [conv]
+  )
+  // Признаки, от которых зависят СООБЩЕНИЯ, считаем здесь и отдаём значениями:
+  // так их memo продолжает работать, пока меняется только последний ответ.
+  const covered = useMemo(() => coveredToolUseIds(conv.subagents ?? {}), [conv.subagents])
+  const gateId = nextGate(conv)?.id
+  const interrupted = conv.interrupted
   return (
-    <>
+    <FeedConvContext.Provider value={feed}>
       <div className="zy-mf-divider">
         <span className="zy-mf-divider-line" />
         <span className="zy-mf-divider-label">
@@ -414,7 +473,14 @@ function AgentSection({ conv, cwd }: { conv: Conversation; cwd: string }): React
         <span className="zy-mf-divider-line" />
       </div>
       {conv.messages.map((m, i) => (
-        <AgentMessage key={i} msg={m} conv={conv} cwd={cwd} interrupted={(conv.interrupted ?? []).includes(i)} />
+        <AgentMessage
+          key={i}
+          msg={m}
+          cwd={cwd}
+          covered={covered}
+          gateId={gateId}
+          interrupted={(interrupted ?? []).includes(i)}
+        />
       ))}
       {/*
         Gates that no message describes. Claude Code announces a tool as a
@@ -426,12 +492,11 @@ function AgentSection({ conv, cwd }: { conv: Conversation; cwd: string }): React
       {orphanGates(conv).map((t) => (
         <ToolCard
           key={t.id}
-          conv={conv}
           id={t.id}
           name={t.name}
           input={t.input}
           title={t.title}
-          isNextGate={nextGate(conv)?.id === t.id}
+          isNextGate={gateId === t.id}
         />
       ))}
       <SubagentWave conv={conv} />
@@ -442,7 +507,7 @@ function AgentSection({ conv, cwd }: { conv: Conversation; cwd: string }): React
         </div>
       )}
       {conv.error && <div className="zy-mf-errbanner">✗ {conv.error}</div>}
-    </>
+    </FeedConvContext.Provider>
   )
 }
 
@@ -471,11 +536,7 @@ function SubagentWave({ conv }: { conv: Conversation }): React.JSX.Element | nul
   return (
     <div className={`zy-mf-wave${allDone ? ' zy-mf-wave--done' : ''}`}>
       <div className="zy-mf-wave-head">
-        {allDone ? (
-          <Icon name="check" size={12} />
-        ) : (
-          <span className="zy-mf-spinner" aria-hidden />
-        )}
+        {allDone ? <Icon name="check" size={12} /> : <span className="zy-mf-spinner" aria-hidden />}
         <span className="zy-mf-wave-count">
           {w.done}/{w.total} {w.total === 1 ? 'агент' : 'агентов'}
         </span>
@@ -498,23 +559,25 @@ function SubagentWave({ conv }: { conv: Conversation }): React.JSX.Element | nul
         </div>
       ))}
       {w.running.length > 4 && (
-        <div className="zy-mf-wave-row zy-mf-wave-row--more">
-          …и ещё {w.running.length - 4}
-        </div>
+        <div className="zy-mf-wave-row zy-mf-wave-row--more">…и ещё {w.running.length - 4}</div>
       )}
     </div>
   )
 }
 
-function AgentMessage({
+const AgentMessage = memo(function AgentMessage({
   msg,
-  conv,
   cwd,
+  covered,
+  gateId,
   interrupted
 }: {
   msg: Conversation['messages'][number]
-  conv: Conversation
   cwd: string
+  /** Инструменты, о которых уже рассказала строка субагента выше. */
+  covered: Set<string>
+  /** Гейт, который одобрит голый Enter, — по нему карточка подсвечивается. */
+  gateId?: string
   /** This user turn was cut off with Esc — no answer is coming for it. */
   interrupted?: boolean
 }): React.JSX.Element | null {
@@ -525,24 +588,50 @@ function AgentMessage({
       .filter((t) => !t.startsWith('[Контекст:'))
       .join('\n')
       .trim()
-    if (!text) return null
+    const images = msg.content.filter(
+      (p): p is Extract<AiContentPart, { type: 'image' }> => p.type === 'image'
+    )
+    // Ход из одних картинок — законный: «что тут не так?» со скриншотом.
+    if (!text && !images.length) return null
     return (
       <div className="zy-mf-user">
-        <span className="zy-mf-spark"><PixelIcon name="star" /></span>
+        <span className="zy-mf-spark">
+          <PixelIcon name="star" />
+        </span>
         <span className="zy-mf-cwd">{cwd}</span>
-        <span className="zy-mf-chev"><PixelIcon name="chevron-right" /></span>
+        <span className="zy-mf-chev">
+          <PixelIcon name="chevron-right" />
+        </span>
         <span className="zy-mf-user-text">{text}</span>
         {interrupted && (
-          <span className="zy-mf-user-cut" title="Ход прерван по Esc. Ответа не будет, но агент увидит это сообщение при продолжении беседы">
+          <span
+            className="zy-mf-user-cut"
+            title="Ход прерван по Esc. Ответа не будет, но агент увидит это сообщение при продолжении беседы"
+          >
             прервано
           </span>
         )}
         {msg.ts != null && <span className="zy-mf-user-time">{fmtClock(msg.ts)}</span>}
+        {images.length > 0 && (
+          <div className="zy-mf-user-imgs">
+            {images.map((img, i) => (
+              <figure key={i} className="zy-mf-img">
+                <img
+                  src={`data:${img.mediaType};base64,${img.data}`}
+                  alt={img.name ?? `Изображение ${i + 1}`}
+                  loading="lazy"
+                />
+                <figcaption>
+                  #{i + 1} · {img.width}×{img.height}
+                  {img.name ? ` · ${img.name}` : ''}
+                </figcaption>
+              </figure>
+            ))}
+          </div>
+        )}
       </div>
     )
   }
-  // Built once per message, not once per tool_use block inside it.
-  const covered = coveredToolUseIds(conv.subagents ?? {})
   return (
     <>
       {msg.content.map((p, i) => {
@@ -564,11 +653,10 @@ function AgentMessage({
           return (
             <ToolCard
               key={i}
-              conv={conv}
               id={p.id}
               name={p.name}
               input={p.input}
-              isNextGate={nextGate(conv)?.id === p.id}
+              isNextGate={gateId === p.id}
             />
           )
         }
@@ -576,7 +664,7 @@ function AgentMessage({
       })}
     </>
   )
-}
+})
 
 function findToolResult(
   conv: Conversation,
@@ -597,15 +685,13 @@ function findToolResult(
  * gates had NO card at all — yet Enter still approved them. Same card now
  * renders for every engine.
  */
-function ToolCard({
-  conv,
+const ToolCard = memo(function ToolCard({
   id,
   name,
   input: rawInput,
   title,
   isNextGate
 }: {
-  conv: Conversation
   id: string
   name: string
   input: unknown
@@ -613,9 +699,14 @@ function ToolCard({
   title?: string
   /** This is the gate the Enter shortcut would approve (the first unsettled one). */
   isNextGate?: boolean
-}): React.JSX.Element {
+}): React.JSX.Element | null {
+  // Беседа — из контекста: пропсом она пересоздавалась бы каждый кусок потока и
+  // отменяла бы memo у всех сообщений разом (см. FeedConvContext).
+  const feed = useContext(FeedConvContext)
+  const conv = feed?.conv
+  if (!conv) return null
   const pending = conv.pendingTools.find((t) => t.id === id)
-  const result = findToolResult(conv, id)
+  const result = feed.results.get(id)
   // Label from the pending gate when there is one: it carries `displayName`, which
   // is the ONLY human description ACP engines send (their `title` is undefined and
   // their input has no command/path). Labelling from the props alone decayed those
@@ -717,16 +808,14 @@ function ToolCard({
         {!view.mustShowFull && <span className="zy-mf-tool-note">{verb.want}</span>}
       </div>
       {(view.mustShowFull || (open && view.isLong)) && (
-        <pre
-          className={`zy-mf-tool-full${view.mustShowFull ? ' zy-mf-tool-full--pinned' : ''}`}
-        >
+        <pre className={`zy-mf-tool-full${view.mustShowFull ? ' zy-mf-tool-full--pinned' : ''}`}>
           {cmd}
         </pre>
       )}
       {body}
     </div>
   )
-}
+})
 
 // -------------------------------------------------------------------- empty
 
@@ -734,12 +823,16 @@ function EmptyHero({ sessionId }: { sessionId: string }): React.JSX.Element {
   return (
     <div className="zy-mf-empty">
       <div className="zy-mf-empty-mark">
-        <img src={logoZarya} width={44} height={44} style={{ imageRendering: 'pixelated' }} alt="" />
+        <img
+          src={logoZarya}
+          width={44}
+          height={44}
+          style={{ imageRendering: 'pixelated' }}
+          alt=""
+        />
       </div>
       <div className="zy-mf-empty-title">Борт готов к старту</div>
-      <div className="zy-mf-empty-hint">
-        введите команду или запрос агенту в строку ниже ↓
-      </div>
+      <div className="zy-mf-empty-hint">введите команду или запрос агенту в строку ниже ↓</div>
       <AiCliLauncher />
       <ClaudeResumeList sessionId={sessionId} />
     </div>
@@ -778,7 +871,8 @@ function ClaudeResumeList({ sessionId }: { sessionId: string }): React.JSX.Eleme
         cwd,
         sessionId
       })
-      useUiStore.getState().set({ barMode: 'claude-code', rawTerminal: false })
+      setBarModeOf(sessionId, 'claude-code')
+      setRaw(sessionId, false)
     })
   }
 
@@ -800,9 +894,7 @@ function ClaudeResumeList({ sessionId }: { sessionId: string }): React.JSX.Eleme
 
 // QA hook: seed the feed with the design's sample mission so the offscreen
 // harness can screenshot a populated 1:1 view. Harmless in production.
-;(
-  window as unknown as { __zaryaSeedMission?: () => void }
-).__zaryaSeedMission = () => {
+;(window as unknown as { __zaryaSeedMission?: () => void }).__zaryaSeedMission = () => {
   const sid = useSessionsStore.getState().activeSessionId()
   if (!sid) return
   const t = Date.now()
@@ -839,21 +931,34 @@ function ClaudeResumeList({ sessionId }: { sessionId: string }): React.JSX.Eleme
         ? {
             ...c,
             messages: [
-              { role: 'user', content: [{ type: 'text', text: 'собери проект и почини ошибки типов' }] },
+              {
+                role: 'user',
+                content: [{ type: 'text', text: 'собери проект и почини ошибки типов' }]
+              },
               {
                 role: 'assistant',
                 content: [
                   {
                     type: 'text',
-                    text:
-                      'Запускаю сборку… нашёл **2 ошибки типов** в `src/store.ts` — значение может быть `null`. Готовлю патч.\n\n```diff\n--- a/src/store.ts\n+++ b/src/store.ts\n- const u = store.get(id).user\n+ const u = store.get(id)?.user ?? null\n```'
+                    text: 'Запускаю сборку… нашёл **2 ошибки типов** в `src/store.ts` — значение может быть `null`. Готовлю патч.\n\n```diff\n--- a/src/store.ts\n+++ b/src/store.ts\n- const u = store.get(id).user\n+ const u = store.get(id)?.user ?? null\n```'
                   },
-                  { type: 'tool_use', id: 'seed-tu', name: 'run_command', input: { command: 'pnpm build' } }
+                  {
+                    type: 'tool_use',
+                    id: 'seed-tu',
+                    name: 'run_command',
+                    input: { command: 'pnpm build' }
+                  }
                 ]
               }
             ],
             pendingTools: [
-              { id: 'seed-tu', name: 'run_command', input: { command: 'pnpm build' }, autoApproved: false, settled: false }
+              {
+                id: 'seed-tu',
+                name: 'run_command',
+                input: { command: 'pnpm build' },
+                autoApproved: false,
+                settled: false
+              }
             ]
           }
         : c

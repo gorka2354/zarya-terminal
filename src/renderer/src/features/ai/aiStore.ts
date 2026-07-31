@@ -11,6 +11,7 @@ import type {
   ClaudeCliQuestion
 } from '@shared/types'
 import type { AiConversationsState } from '@shared/types'
+import { imagePlaceholder, type ImageAttachment } from '@shared/images'
 import { EFFORT_TUNING } from '@shared/defaults'
 import { onBus } from '@/lib/bus'
 import { onQuitFlush } from '@/lib/quitFlush'
@@ -116,6 +117,13 @@ export interface Conversation {
   subagents?: Record<string, SubagentRun>
   /** Working directory the conversation was opened in (folder the AI worked in). */
   cwd?: string
+  /**
+   * АВТОПИЛОТ этой беседы: агент выполняет инструменты, не спрашивая. Своё у
+   * каждой панели — общий переключатель с четырьмя панелями неизбежно врал бы о
+   * том, спросят ли вас. Не сохраняется на диск намеренно: перезапуск должен
+   * возвращать спрашивание, а не тихо взводить автопилот заново.
+   */
+  bypass?: boolean
   agentMode: boolean
   /** True only while an ai.chat request is in flight (between dispatch and done/error). */
   streaming: boolean
@@ -170,6 +178,22 @@ interface AiState {
   activeBySession: Record<string, string>
   /** Session id remembered for the inline command bar (set by aiBridge.openCommandBar). */
   commandBarSessionId: string | null
+  /**
+   * АВТОПИЛОТ, выбранный для ПАНЕЛИ. Беседа появляется только с первым
+   * сообщением, а чип стоит в строке сразу — без этой памяти он до первой
+   * отправки молча ничего не делал бы, то есть был бы мёртвым переключателем.
+   * Панели, которой здесь нет, автопилот не достаётся: новая всегда спрашивает,
+   * наследовать от соседней неоткуда. На диск не пишется намеренно — перезапуск
+   * возвращает спрашивание.
+   */
+  bypassBySession: Record<string, boolean>
+  /**
+   * Вложенные картинки, ждущие отправки, — по ПАНЕЛИ, а не по беседе. В момент
+   * вставки беседы у панели может ещё не быть, а курсор уже в конкретной панели.
+   * На диск не пишется: base64 скриншота в открытом файле истории — плохой
+   * размен (см. SECURITY.md).
+   */
+  pendingImages: Record<string, ImageAttachment[]>
 
   /** Load persisted conversations from disk (call once at boot, after sessions). */
   hydrate: () => Promise<void>
@@ -193,6 +217,35 @@ interface AiState {
    * или null, если отменить нечего или движок так не умеет.
    */
   undoSend: (conversationId?: string) => Promise<string | null>
+  /**
+   * Включить/выключить АВТОПИЛОТ у ОДНОЙ беседы: и в сторе, и в живой сессии
+   * драйвера. Соседние панели это не касается.
+   */
+  setBypass: (conversationId: string, on: boolean) => void
+  /**
+   * То же для панели, в которой беседы ещё нет: выбор запоминается и достаётся
+   * первой же беседе этой панели.
+   */
+  setPaneBypass: (sessionId: string, on: boolean) => void
+  /** Приложить картинку к панели. Отказ (пределы) — на стороне вызывающего. */
+  attachImage: (sessionId: string, att: ImageAttachment) => void
+  /** Снять одно вложение — крестиком на чипе. */
+  dropImage: (sessionId: string, id: string) => void
+  /** Очистить вложения панели (после отправки). */
+  clearImages: (sessionId: string) => void
+  /**
+   * Панель закрыта — убрать всё, что за ней числилось.
+   *
+   * Две причины, и обе видно человеку. Первая: карты по sessionId переживали
+   * панель, а `restoreSaved` открывает сессию ПОД ТЕМ ЖЕ id — восстановленный
+   * терминал получал чужие вложения из прошлой жизни и, что хуже, включённый
+   * автопилот: новая беседа заводилась с `bypass` мёртвой панели и выполняла
+   * инструменты без спроса. Вторая: висящий гейт и идущий ход остаются в
+   * беседе, а карточка, которой их решают, умерла вместе с панелью — счётчик
+   * «ждут решения» в нижней полосе застревал до конца работы приложения.
+   */
+  forgetSession: (sessionId: string) => void
+
   /** Approve a pending tool by id (defaults to the first unsettled one). */
   approveTool: (conversationId?: string, toolId?: string) => Promise<void>
   /** Deny a pending tool by id (defaults to the first unsettled one). */
@@ -536,7 +589,8 @@ export const useAiStore = create<AiState>((set, get) => {
       .map((p) => p.text)
       .join('\n')
       .trim()
-    if (!prompt) return
+    const hasImages = (lastUser?.content ?? []).some((p) => p.type === 'image')
+    if (!prompt && !hasImages) return
     const settings = getSettings()
     const sessionId = conv.sessionId || useSessionsStore.getState().activeSessionId()
     const cwd = sessionId ? useSessionsStore.getState().sessions[sessionId]?.cwd : undefined
@@ -548,13 +602,18 @@ export const useAiStore = create<AiState>((set, get) => {
     }))
     // Opts are Claude-sourced today (the only native engine); per-engine settings
     // (settings.ai.byEngine) arrive with Codex/Gemini in Ф4.
+    // Картинки последнего хода — отдельным полем: строка их не вместит.
+    const images = (lastUser?.content ?? [])
+      .filter((p): p is Extract<AiContentPart, { type: 'image' }> => p.type === 'image')
+      .map((p) => ({ mediaType: p.mediaType, data: p.data }))
     window.zarya.agent.start(engine, convId, {
       prompt,
+      ...(images.length ? { images } : {}),
       cwd: cwd || conv.cwd,
       // SECURITY: permissionMode is always 'default' and gate-weakening comes only
       // from АВТОПИЛОТ — see nativeGateOpts, which owns that invariant and is
       // guarded by tests/startOpts.test.ts.
-      ...nativeGateOpts(settings.ai),
+      ...nativeGateOpts(settings.ai, conv.bypass),
       ultracode: useUiStore.getState().ultracode,
       model: settings.ai.claudeModel || undefined,
       // Ultracode forces xhigh; otherwise use the user's effort override.
@@ -875,6 +934,8 @@ export const useAiStore = create<AiState>((set, get) => {
     activeId: null,
     activeBySession: {},
     commandBarSessionId: null,
+  bypassBySession: {},
+  pendingImages: {},
 
     hydrate: async () => {
       const saved = await window.zarya.aiConversations.load()
@@ -931,6 +992,8 @@ export const useAiStore = create<AiState>((set, get) => {
         cwd,
         // A native agent engine drives its own agentic tool loop — agent mode implicit.
         agentMode: (opts?.engine ?? 'builtin') !== 'builtin',
+        // Автопилот — из намерения ЭТОЙ панели, а не из настроек и не от соседа.
+        bypass: opts?.sessionId ? get().bypassBySession[opts.sessionId] : undefined,
         streaming: false,
         pendingTools: [],
         pendingContext: [],
@@ -979,13 +1042,32 @@ export const useAiStore = create<AiState>((set, get) => {
       // provider rejects and which corrupts the conversation permanently.
       if (!conv || isConversationBusy(conv)) return
       const trimmed = text.trim()
-      if (!trimmed && !conv.pendingContext.length) return
+      // Вложения берём у ПАНЕЛИ этой беседы: вставляли их туда, где стоял курсор.
+      const images = (conv.sessionId ? get().pendingImages[conv.sessionId] : undefined) ?? []
+      // Сообщение из одних картинок — законное: «что тут не так?» со скриншотом.
+      if (!trimmed && !conv.pendingContext.length && !images.length) return
 
       const parts: AiContentPart[] = conv.pendingContext.map((ctx) => ({
         type: 'text',
         text: `[Контекст: ${ctx.label}]\n${ctx.content}`
       }))
-      if (trimmed) parts.push({ type: 'text', text: trimmed })
+      // Плейсхолдер в тексте, блоки следом и в том же порядке — так это делает
+      // настоящий CLI: модель видит ссылку на картинку там, где её вставили.
+      const marks = images.map((_, i) => imagePlaceholder(i)).join(' ')
+      const headText = [marks, trimmed].filter(Boolean).join(' ')
+      if (headText) parts.push({ type: 'text', text: headText })
+      for (const img of images) {
+        parts.push({
+          type: 'image',
+          mediaType: img.mediaType,
+          data: img.data,
+          bytes: img.bytes,
+          width: img.width,
+          height: img.height,
+          name: img.name
+        })
+      }
+      if (conv.sessionId && images.length) get().clearImages(conv.sessionId)
 
       patchConversation(conv.id, (c) => ({
         ...c,
@@ -1103,6 +1185,82 @@ export const useAiStore = create<AiState>((set, get) => {
         interrupted: (c.interrupted ?? []).filter((i) => i < c.messages.length - 1)
       }))
       return text
+    },
+
+    attachImage: (sessionId, att) => {
+      set((s) => ({
+        pendingImages: { ...s.pendingImages, [sessionId]: [...(s.pendingImages[sessionId] ?? []), att] }
+      }))
+    },
+
+    dropImage: (sessionId, id) => {
+      set((s) => ({
+        pendingImages: {
+          ...s.pendingImages,
+          [sessionId]: (s.pendingImages[sessionId] ?? []).filter((a) => a.id !== id)
+        }
+      }))
+    },
+
+    clearImages: (sessionId) => {
+      set((s) => {
+        if (!s.pendingImages[sessionId]?.length) return {}
+        const next = { ...s.pendingImages }
+        delete next[sessionId]
+        return { pendingImages: next }
+      })
+    },
+
+    forgetSession: (sessionId) => {
+      // ВСЕ беседы панели, а не только последняя: чип «недавние сессии» заводит
+      // вторую, и первая с висящим гейтом иначе оставалась бы «ждущей» навсегда.
+      for (const conv of get().conversations.filter((c) => c.sessionId === sessionId)) {
+        // Сперва глушим ход: abort бампает epoch и чистит цепочку инструментов,
+        // поэтому поздний ответ уже никуда не поедет. Безусловно, а не «если
+        // streaming»: снимок мог устареть между решением и этим вызовом.
+        get().abort(conv.id)
+        const unsettled = conv.pendingTools.filter((t) => !t.settled)
+        if (!unsettled.length) continue
+        if (conv.engine !== 'builtin') {
+          // Нативному движку отказ отправить НАДО: без ответа драйвер остаётся
+          // висеть на своём вопросе.
+          for (const t of unsettled) get().denyTool(conv.id, t.id)
+          continue
+        }
+        // Свой агент: гейты гасим МОЛЧА. denyTool здесь по контракту продолжает
+        // диалог (maybeContinue) — то есть закрытие панели отправляло бы новый
+        // платный запрос за агента, которого человек только что закрыл.
+        patchConversation(conv.id, (c) => ({
+          ...c,
+          pendingTools: c.pendingTools.filter((t) => !unsettled.some((u) => u.id === t.id))
+        }))
+      }
+      set((s) => {
+        const images = { ...s.pendingImages }
+        const bypass = { ...s.bypassBySession }
+        delete images[sessionId]
+        delete bypass[sessionId]
+        return { pendingImages: images, bypassBySession: bypass }
+      })
+    },
+
+    setPaneBypass: (sessionId, on) => {
+      set((s) => ({ bypassBySession: { ...s.bypassBySession, [sessionId]: on } }))
+      // Если беседа в этой панели уже есть — применить и к ней.
+      const conv = convForSession(get(), sessionId)
+      if (conv) get().setBypass(conv.id, on)
+    },
+
+    setBypass: (conversationId, on) => {
+      const conv = get().conversations.find((c) => c.id === conversationId)
+      if (!conv) return
+      patchConversation(conv.id, (c) => ({ ...c, bypass: on }))
+      // Запомнить за панелью: следующая беседа в ней откроется с тем же выбором,
+      // а соседних панелей это не касается.
+      if (conv.sessionId)
+        set((s) => ({ bypassBySession: { ...s.bypassBySession, [conv.sessionId as string]: on } }))
+      // Живой сессии — сразу: следующий инструмент не должен ждать нового хода.
+      if (conv.engine !== 'builtin') window.zarya.agent.setBypass(conv.engine, conv.id, on)
     },
 
     approveTool: async (conversationId, toolId) => {
@@ -1322,6 +1480,78 @@ onBus('terminal:focus', ({ sessionId }) => {
 // Ф5: start an agent turn on a SPECIFIC engine and return its conversation id,
 // so the concurrent harness can drive two engines in one terminal and read each
 // conversation back by id (proving events never cross between them).
+// Прогонам многопанельного режима нужно адресовать КОНКРЕТНУЮ панель и беседу:
+// «активная» тут не годится — проверяется как раз то, что панели независимы.
+;(
+  window as unknown as { __zaryaStartAgentIn?: (e: AgentEngine, t: string, sid: string) => string }
+).__zaryaStartAgentIn = (engine, text, sessionId) => {
+  const store = useAiStore.getState()
+  const id = store.newConversation({ sessionId, engine })
+  store.setActiveConversation(id)
+  void store.send(text, { conversationId: id })
+  return id
+}
+;(
+  window as unknown as { __zaryaSetBypassFor?: (convId: string, on: boolean) => void }
+).__zaryaSetBypassFor = (convId, on) => useAiStore.getState().setBypass(convId, on)
+/** Правка беседы для прогонов скорости — тем же путём, что и настоящая. */
+function seedPatch(convId: string, fn: (c: Conversation) => Conversation): void {
+  useAiStore.setState((s) => ({
+    conversations: s.conversations.map((c) => (c.id === convId ? fn(c) : c))
+  }))
+}
+/**
+ * Прогону скорости: длинная беседа, как к вечеру рабочего дня — с разметкой,
+ * запусками инструментов и их результатами. Настоящий агент такую пишет
+ * полчаса, а мерить надо ленту, а не агента.
+ */
+;(
+  window as unknown as { __zaryaSeedConversation?: (sessionId: string, turns: number) => string }
+).__zaryaSeedConversation = (sessionId, turns) => {
+  const store = useAiStore.getState()
+  const id = store.newConversation({ sessionId, engine: 'claude-code' })
+  const messages: AiMessage[] = []
+  for (let i = 0; i < turns; i++) {
+    messages.push({ role: 'user', content: [{ type: 'text', text: `Вопрос номер ${i}` }] })
+    messages.push({
+      role: 'assistant',
+      content: [
+        {
+          type: 'text',
+          text:
+            `### Ответ ${i}\n\nСмотри, тут **важное** и \`код\`:\n\n` +
+            '```ts\nconst x = ' + i + '\nconsole.log(x)\n```\n\n' +
+            `- пункт раз\n- пункт два\n- пункт три\n\nИ ещё абзац текста про панели, ленту и всё остальное, чтобы разметка была не в одну строку.`
+        },
+        { type: 'tool_use', id: `t${i}`, name: 'Read', input: { file_path: `C:/p/file${i}.ts` } }
+      ]
+    })
+    messages.push({
+      role: 'user',
+      content: [
+        { type: 'tool_result', toolUseId: `t${i}`, content: `прочитано ${i}`, isError: false }
+      ]
+    })
+  }
+  seedPatch(id, (c) => ({ ...c, messages }))
+  return id
+}
+/** Прогону скорости: один чанк потока — дописать текст в последний ответ. */
+;(
+  window as unknown as { __zaryaSeedChunk?: (convId: string, text: string) => void }
+).__zaryaSeedChunk = (convId, text) => {
+  seedPatch(convId, (c) => {
+    const messages = [...c.messages]
+    const last = messages[messages.length - 1]
+    if (!last) return c
+    const parts = [...last.content]
+    const tail = parts[parts.length - 1]
+    parts[parts.length - 1] =
+      tail?.type === 'text' ? { ...tail, text: tail.text + text } : { type: 'text', text }
+    messages[messages.length - 1] = { ...last, content: parts }
+    return { ...c, messages, streaming: true }
+  })
+}
 ;(
   window as unknown as { __zaryaStartAgent?: (engine: AgentEngine, text: string) => string }
 ).__zaryaStartAgent = (engine, text) => {
@@ -1372,6 +1602,7 @@ onBus('terminal:focus', ({ sessionId }) => {
         // (забрать приписку обратно, не трогая агента), и проверять её нужно
         // по конкретной беседе, а не только по активной.
         queued: c.queued,
+        bypass: c.bypass === true,
         userTexts: c.messages
           .filter((m) => m.role === 'user')
           .map((m) =>
@@ -1441,15 +1672,29 @@ onBus('terminal:focus', ({ sessionId }) => {
       }
     : null
 }
+;(
+  window as unknown as { __zaryaPendingImages?: (sid: string) => unknown[] }
+).__zaryaPendingImages = (sid) =>
+  (useAiStore.getState().pendingImages[sid] ?? []).map((a) => ({
+    id: a.id,
+    mediaType: a.mediaType,
+    bytes: a.bytes,
+    width: a.width,
+    height: a.height,
+    name: a.name
+  }))
 ;(window as unknown as { __zaryaQueue?: (t: string) => void }).__zaryaQueue = (t) => {
   const c = useAiStore.getState().activeConversation()
   if (c) useAiStore.getState().queueMessage(c.id, t)
 }
 ;(window as unknown as { __zaryaBypassLive?: (on: boolean) => void }).__zaryaBypassLive = (on) => {
-  const cur = getSettings().ai
-  void useSettingsStore.getState().update({ ai: { ...cur, claudeBypass: on } })
   const c = useAiStore.getState().activeConversation()
-  if (c && c.engine !== 'builtin') window.zarya.agent.setBypass(c.engine, c.id, on)
+  if (c) {
+    useAiStore.getState().setBypass(c.id, on)
+    return
+  }
+  const sid = useSessionsStore.getState().activeSessionId()
+  if (sid) useAiStore.getState().setPaneBypass(sid, on)
 }
 ;(window as unknown as { __zaryaApplyModelLive?: (model: string) => void }).__zaryaApplyModelLive =
   (model) => {
@@ -1468,10 +1713,13 @@ onBus('terminal:focus', ({ sessionId }) => {
     ai: {
       ...cur,
       claudeModel: model ?? cur.claudeModel,
-      claudeEffort: effort ?? cur.claudeEffort,
-      claudeBypass: bypass ?? cur.claudeBypass
+      claudeEffort: effort ?? cur.claudeEffort
     }
   })
+  if (bypass !== undefined) {
+    const c = useAiStore.getState().activeConversation()
+    if (c) useAiStore.getState().setBypass(c.id, bypass)
+  }
 }
 ;(window as unknown as { __zaryaApproveFirst?: () => void }).__zaryaApproveFirst = () => {
   const c = useAiStore.getState().activeConversation()

@@ -380,11 +380,31 @@
   flex-shrink: 0;
   white-space: nowrap;
 }
+/**
+ * Кнопки решения ПРИЛИПАЮТ к низу карточки, а текст команды прокручивается под
+ * ними. В узкой панели карточка с патчем на тридцать строк выше самой панели, и
+ * кнопки уезжали за край — при том, что решение принимают именно ими. Получалось
+ * так: единственный видимый способ ответить — клавиша, то есть вслепую.
+ *
+ * Перенос строки разрешён: «РАЗРЕШИТЬ ВСЕГДА» плюс «ОТКЛОНИТЬ» не помещаются в
+ * узкую колонку и без него схлопывались в кашу.
+ */
 .zy-mf-tool-actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
   margin-top: 9px;
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  padding: 6px 0 2px;
+  background: linear-gradient(
+    to bottom,
+    transparent 0,
+    var(--bg-elev1) 6px,
+    var(--bg-elev1) 100%
+  );
 }
 .zy-mf-tool-kbd {
   margin-left: auto;
@@ -686,4 +706,153 @@
 }
 .zy-mf-btn-run--always:hover {
   background: color-mix(in srgb, var(--warn) 34%, transparent);
+}
+
+
+/* =====================================================================
+   Узкая панель: лента в четверти экрана.
+
+   На весь экран заставка уместна — она объясняет, что делать. В панели
+   шириной ~330 точек она съедает почти весь объём, и вместо работы человек
+   смотрит на приглашение. Порог 620 точек взят по факту: на 1360 в сетке 2×2
+   панель получает примерно 560, в трёх колонках — около 370.
+   ===================================================================== */
+@container pane (max-width: 620px) {
+  .zy-mf-empty {
+    gap: 6px;
+  }
+  .zy-mf-empty-mark {
+    width: 34px;
+    height: 34px;
+  }
+  .zy-mf-empty-mark img {
+    width: 34px;
+    height: 34px;
+  }
+  .zy-mf-empty-title {
+    font-size: 13px;
+    letter-spacing: 0.04em;
+  }
+  /* Подсказка «введите команду в строку ниже» — про строку, которая и так под
+     носом; в тесноте это чистый шум. */
+  .zy-mf-empty-hint {
+    display: none;
+  }
+  /* Заголовки разделов заставки: место дороже пояснений. */
+  .zy-clilaunch-label,
+  .zy-resume-label {
+    display: none;
+  }
+  /* Режем по ЭЛЕМЕНТАМ, а не по высоте: ограничение высотой обрезало карточку
+     пополам, и это читалось как поломка вёрстки, а не как «список длиннее». */
+  .zy-resume-item:nth-child(n + 3) {
+    display: none;
+  }
+}
+
+/* Совсем узко (три-четыре колонки): оставляем только приглашение и кнопки
+   запуска — список недавних сессий там всё равно нечитаем. */
+@container pane (max-width: 420px) {
+  .zy-resume {
+    display: none;
+  }
+  .zy-mf-empty-mark {
+    display: none;
+  }
+}
+
+
+/**
+ * Внутри панели шапка ленты дублирует шапку панели: обе пишут «CLI-АГЕНТ · ЗАРЯ»
+ * и путь, и стоят вплотную. Раньше их разделяла вся рабочая область. Оставляем
+ * только кнопки ленты — они свои и в шапке панели их нет.
+ */
+.zy-pane .zy-mf-head-mark,
+.zy-pane .zy-mf-head-cwd {
+  display: none;
+}
+.zy-pane .zy-mf-head {
+  min-height: 22px;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+
+/* В узкой панели подпись «Enter · Esc» встаёт под кнопки, а не толкает их. */
+@container pane (max-width: 620px) {
+  .zy-mf-tool-kbd {
+    margin-left: 0;
+    flex-basis: 100%;
+  }
+}
+
+/**
+ * Вставленные картинки в ленте. Ширина ограничена самой лентой, а высота —
+ * отдельно: скриншот во весь экран иначе вытолкнул бы разговор за край панели,
+ * и человек не увидел бы ни ответа, ни кнопок решения.
+ */
+.zy-mf-user-imgs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+  margin-top: 6px;
+}
+.zy-mf-img {
+  margin: 0;
+  max-width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--bg-elev1);
+}
+.zy-mf-img img {
+  display: block;
+  max-width: 100%;
+  max-height: 220px;
+  object-fit: contain;
+}
+.zy-mf-img figcaption {
+  padding: 2px 6px;
+  font-size: 10px;
+  color: var(--fg-faint);
+  border-top: 1px solid var(--border);
+}
+/* В узкой панели картинка занимает всю ширину: две в ряд там нечитаемы. */
+@container pane (max-width: 620px) {
+  .zy-mf-img {
+    width: 100%;
+  }
+  .zy-mf-img img {
+    max-height: 140px;
+  }
+}
+
+/* Ход человека переносится по строкам: блок картинок шириной во всю ленту
+   сплющивал текст запроса до одной буквы в строке — он стоял в том же флексе. */
+.zy-mf-user {
+  flex-wrap: wrap;
+}
+.zy-mf-user-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/**
+ * Лента не считает то, чего не видно.
+ *
+ * Блок команды и ответ агента — это десятки строк каждый, а в ленте их сотни.
+ * Пока браузер обязан считать раскладку у всех, любое изменение ширины панели
+ * (а оно происходит каждый кадр, когда тянут разделитель) перекладывает всю
+ * ленту целиком — во всех четырёх панелях сразу.
+ *
+ * `content-visibility: auto` разрешает пропускать то, что за пределами
+ * прокрутки, а `contain-intrinsic-size: auto` запоминает настоящий размер после
+ * первой отрисовки — поэтому полоса прокрутки не прыгает и место не «схлопывается».
+ */
+.zy-mf-block,
+.zy-mf-answer,
+.zy-mf-tool {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 120px;
 }

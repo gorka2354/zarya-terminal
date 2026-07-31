@@ -1,11 +1,33 @@
+import { PANE_DRAG_CWD } from '@shared/types'
 import { useState } from 'react'
+import { closeTabAsking } from '@/actions/panes'
 import { listLeaves, useSessionsStore } from '@/state/sessionsStore'
 import { useSettingsStore } from '@/state/settingsStore'
 import { useUiStore } from '@/state/uiStore'
-import { useContextMenu } from './ContextMenu'
+import { useContextMenu, type MenuItem } from './ContextMenu'
 import { Icon, ShellGlyph } from './Icon'
 import { getThemes } from '@/features/themes/themes'
 import logoZarya from '@/assets/logo-zarya-48.png'
+
+/** Хвост пути: в шапке нужен проект, а не весь путь до него. */
+function shortTail(p: string): string {
+  // Windows-пути с обратными слэшами тоже: в шапке нужен проект, а не диск.
+  const parts = p.split(/[\\/]/).filter(Boolean)
+  return parts[parts.length - 1] || p
+}
+
+/** Открыть папку новой вкладкой — тот же жест, что в сайдбаре. */
+async function openFolder(): Promise<void> {
+  const dir = await window.zarya.app.pickDirectory()
+  if (dir) await useSessionsStore.getState().newTab(undefined, dir)
+}
+
+/** Добавить папку в проекты. */
+async function addProject(): Promise<void> {
+  const dir = await window.zarya.app.pickDirectory()
+  const cur = useSettingsStore.getState().settings.bookmarks
+  if (dir && !cur.includes(dir)) await useSettingsStore.getState().update({ bookmarks: [...cur, dir] })
+}
 
 export function Titlebar(): React.JSX.Element {
   const tabs = useSessionsStore((s) => s.tabs)
@@ -14,6 +36,12 @@ export function Titlebar(): React.JSX.Element {
   const profiles = useSettingsStore((s) => s.profiles)
   const maximized = useUiStore((s) => s.maximized)
   const { menu, open } = useContextMenu()
+  const bookmarks = useSettingsStore((s) => s.settings.bookmarks)
+  // Имя проекта активной вкладки — оно же подпись кнопки и заголовок окна.
+  const activeCwd = (() => {
+    const tab = tabs.find((t) => t.id === activeTabId)
+    return tab ? (sessions[tab.activeSessionId]?.cwd ?? '') : ''
+  })()
   const [, setHover] = useState(false)
 
   const store = useSessionsStore.getState()
@@ -66,14 +94,18 @@ export function Titlebar(): React.JSX.Element {
       {
         label: 'Закрыть другие вкладки',
         onClick: () => {
-          for (const t of tabs.filter((t) => t.id !== tabId)) void store.closeTab(t.id)
+          // По очереди и через вопрос: закрывать десяток терминалов пачкой,
+          // не спросив ни про один недописанный запрос, — потеря без следа.
+          void (async () => {
+            for (const t of tabs.filter((t) => t.id !== tabId)) await closeTabAsking(t.id)
+          })()
         }
       },
       {
         label: 'Закрыть вкладку',
         hint: 'Ctrl+Shift+W',
         danger: true,
-        onClick: () => void store.closeTab(tabId)
+        onClick: () => void closeTabAsking(tabId)
       }
     ])
   }
@@ -86,7 +118,72 @@ export function Titlebar(): React.JSX.Element {
         <span className="zy-logo-tag">// ОРБИТА-1</span>
       </div>
 
-      {/* Terminals live in the Sessions sidebar now (single source, no tab bar). */}
+      {/* Проекты — пусковая площадка, а не список происходящего, поэтому они
+          живут здесь, а не в сайдбаре. Там они отнимали место у живых
+          терминалов: чем больше проектов, тем ниже уезжала работа. */}
+      <button
+        className="zy-titlebar-proj"
+        title={`${activeCwd || 'Папка не выбрана'}
+Клик — проекты и папки`}
+        onClick={(e) => {
+          const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
+          const store2 = useSessionsStore.getState()
+          const items: MenuItem[] = [
+            { label: 'Открыть папку…', hint: 'Ctrl+Shift+O', onClick: () => void openFolder() }
+          ]
+          if (bookmarks.length) {
+            // Одна строка на проект. Раньше их было две: под каждым проектом
+            // висел псевдо-подпункт «панелью рядом» — подменю наше меню не
+            // умеет. Два проекта давали четыре строки, а отступ со стрелкой
+            // схлопывался в мусор, и понять, что к чему относится, было нельзя.
+            items.push(
+              { separator: true },
+              { label: 'ПРОЕКТЫ', hint: 'клик — вкладкой', disabled: true }
+            )
+            // Какие проекты уже открыты — видно точкой: список папок без этого
+            // ничего не говорит о том, что происходит прямо сейчас.
+            const openCwds = new Set(Object.values(sessions).map((x) => x.cwd))
+            for (const b of bookmarks) {
+              items.push({
+                label: `${openCwds.has(b) ? '● ' : ''}${shortTail(b)}`,
+                // Проект можно утащить прямо отсюда на нужную панель — так он
+                // окажется ИМЕННО ТАМ, куда показали мышью, а не рядом с
+                // активной. Пока проекты жили в сайдбаре, их таскали оттуда.
+                drag: { type: PANE_DRAG_CWD, data: b },
+                onClick: () => void store2.newTab(undefined, b),
+                actions: [
+                  {
+                    title: `Открыть панелью рядом · ${b}
+Или перетащи проект на нужную панель`,
+                    node: <Icon name="split-h" size={13} />,
+                    onClick: () => void store2.splitActive('row', b)
+                  },
+                  {
+                    title: `Убрать «${shortTail(b)}» из проектов`,
+                    node: <Icon name="close" size={12} />,
+                    danger: true,
+                    onClick: () => {
+                      const cur = useSettingsStore.getState().settings.bookmarks
+                      void useSettingsStore
+                        .getState()
+                        .update({ bookmarks: cur.filter((x) => x !== b) })
+                    }
+                  }
+                ]
+              })
+            }
+          }
+          items.push(
+            { separator: true },
+            { label: 'Добавить папку в проекты…', onClick: () => void addProject() }
+          )
+          open(r.left, r.bottom + 4, items, e.currentTarget as HTMLElement)
+        }}
+      >
+        <Icon name="folder" size={12} />
+        {activeCwd ? shortTail(activeCwd) : 'проекты'}
+        <Icon name="chevron-down" size={10} />
+      </button>
       <div className="zy-titlebar-spacer" />
 
       <button

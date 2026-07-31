@@ -1,15 +1,21 @@
-import { useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import type { AgentEngine, AgentUsage, AiEffort, ClaudeCliQuestion } from '@shared/types'
 import { EFFORT_TUNING } from '@shared/defaults'
 import { useSessionsStore } from '@/state/sessionsStore'
 import { useSettingsStore } from '@/state/settingsStore'
-import { useUiStore } from '@/state/uiStore'
+import { paneDraft, setPaneDraft } from '@/state/paneDrafts'
+import { paneHistory, pushPaneHistory } from '@/state/paneHistory'
+import { barModeOf, setBarModeOf, setPaneBarMode, setRaw, useUiStore } from '@/state/uiStore'
 import { getTerminal } from '@/terminal/terminalRegistry'
 import { convForSession, useAiStore } from '@/features/ai/aiStore'
 import { nextGate } from '@/features/ai/gates'
+import { registerPaneKeys } from '@/features/ai/keyRouter'
+import { fileToAttachment, imageFilesFrom } from '@/features/ai/imageAttach'
+import { canAcceptMore, type ImageAttachment } from '@shared/images'
 import { Icon, EngineGlyph } from './Icon'
 import { PixelIcon } from './PixelIcon'
 import { isSilent, startRecording, type Recording } from '@/features/voice/dictation'
+import { claimMic, releaseMic, useMicBusyElsewhere } from '@/features/voice/micLock'
 import {
   labelsHidden,
   listMics,
@@ -27,16 +33,8 @@ import { launchClaudeNative } from './AiCliLauncher'
 import './agentbar.css'
 
 const EFFORTS: AiEffort[] = ['low', 'medium', 'high', 'max']
-
-// Session-local input history for the bottom bar (↑/↓ recall, like a shell).
-// Module-level so it survives AgentBar remounts within the session.
-const barHistory: string[] = []
-function pushHistory(text: string): void {
-  const t = text.trim()
-  if (!t || barHistory[barHistory.length - 1] === t) return
-  barHistory.push(t)
-  if (barHistory.length > 200) barHistory.shift()
-}
+/** Стабильная пустая ссылка для селектора вложений — см. AgentBar. */
+const NO_IMAGES: ImageAttachment[] = []
 
 /**
  * Про какие пропавшие микрофоны уже сказали в этом запуске (ключ — сохранённый
@@ -137,7 +135,12 @@ function resetLabel(ts?: number): string {
   // that — count in days once it stops being an afternoon away.
   if (h >= 24) {
     const d = Math.round(h / 24)
-    const tail = d % 10 === 1 && d % 100 !== 11 ? 'день' : d % 10 >= 2 && d % 10 <= 4 && (d % 100 < 10 || d % 100 >= 20) ? 'дня' : 'дней'
+    const tail =
+      d % 10 === 1 && d % 100 !== 11
+        ? 'день'
+        : d % 10 >= 2 && d % 10 <= 4 && (d % 100 < 10 || d % 100 >= 20)
+          ? 'дня'
+          : 'дней'
     return `${d} ${tail}`
   }
   return m ? `${h} ч ${m} мин` : `${h} ч`
@@ -154,7 +157,7 @@ function fmtTokens(n?: number): string {
  * `used` is the utilization % (0-100); the tank shows the remaining fuel and
  * reddens as it empties.
  */
-function FuelGauge({ used }: { used: number }): React.JSX.Element {
+export function FuelGauge({ used }: { used: number }): React.JSX.Element {
   const remaining = Math.max(0, Math.min(100, 100 - used))
   const cells = Math.round((remaining / 100) * 10)
   const level = remaining > 40 ? 'ok' : remaining > 15 ? 'warn' : 'low'
@@ -196,7 +199,7 @@ function UsageRow({
  * Engines without a subscription gauge (Codex, the ACP ones) still get the
  * context row — it is universal — instead of an empty panel.
  */
-function UsagePanel({
+export function UsagePanel({
   usage,
   context,
   onClose,
@@ -243,7 +246,9 @@ function UsagePanel({
         key="5h"
         label="5 часов"
         pct={usage.fiveHourPct}
-        note={usage.fiveHourResetsAt ? `сброс через ${resetLabel(usage.fiveHourResetsAt)}` : undefined}
+        note={
+          usage.fiveHourResetsAt ? `сброс через ${resetLabel(usage.fiveHourResetsAt)}` : undefined
+        }
       />
     )
   if (usage?.sevenDayPct != null)
@@ -252,7 +257,9 @@ function UsagePanel({
         key="7d"
         label="7 дней"
         pct={usage.sevenDayPct}
-        note={usage.sevenDayResetsAt ? `сброс через ${resetLabel(usage.sevenDayResetsAt)}` : undefined}
+        note={
+          usage.sevenDayResetsAt ? `сброс через ${resetLabel(usage.sevenDayResetsAt)}` : undefined
+        }
       />
     )
   if (context.pct != null)
@@ -273,7 +280,9 @@ function UsagePanel({
     <div className="zy-usage-panel" ref={ref}>
       <div className="zy-usage-head">
         <span>РАСХОД</span>
-        {usage?.subscriptionType ? <span className="zy-usage-sub">{usage.subscriptionType}</span> : null}
+        {usage?.subscriptionType ? (
+          <span className="zy-usage-sub">{usage.subscriptionType}</span>
+        ) : null}
       </div>
       {rows.length ? (
         rows
@@ -292,22 +301,28 @@ function UsagePanel({
  * When Claude Code raises an AskUserQuestion the whole bar morphs into
  * {@link ClaudeQuestionBar} — the single input becomes a native choice selector.
  */
-export function AgentBar(): React.JSX.Element {
+export const AgentBar = memo(function AgentBar({
+  paneSessionId
+}: { paneSessionId?: string } = {}): React.JSX.Element {
   const model = useSettingsStore((s) => s.settings.ai.model)
   const effort = useSettingsStore((s) => s.settings.ai.effort)
   const effortIdx = EFFORTS.indexOf(effort)
-  const mode = useUiStore((s) => s.barMode)
+  // Режим строки — СВОЙ у каждой панели. Общее значение окна читалось напрямую,
+  // и агент, начавший ход в соседней панели, авто-переключал чип ЗДЕСЬ: Enter
+  // уводил набранную команду терминала в модель вместо оболочки.
+  const mode = useUiStore((s) => barModeOf(s, paneSessionId))
   const claudeStatus = useUiStore((s) => s.claudeStatus)
   const agentContext = useUiStore((s) => s.agentContext)
   const ultracode = useUiStore((s) => s.ultracode)
-  const bypass = useSettingsStore((s) => s.settings.ai.claudeBypass)
   const autoApprove = useSettingsStore((s) => s.settings.ai.autoApprove)
   const agentCaps = useUiStore((s) => s.agentCaps)
   // The native engine the bar currently targets (null in shell/zarya) + its
   // capabilities — the UI gates controls on these, not on `=== 'claude-code'`.
   const activeEngine: AgentEngine | null = mode !== 'shell' && mode !== 'zarya' ? mode : null
   const caps = activeEngine ? agentCaps[activeEngine] : null
-  const [text, setText] = useState('')
+  // Начальное значение — черновик своей панели: строка могла уйти с экрана
+  // (сырой режим, TUI) и вернуться, и набранное обязано вернуться вместе с ней.
+  const [text, setText] = useState(() => paneDraft(paneSessionId))
   const [usageOpen, setUsageOpen] = useState(false)
   /** Кнопка топливной строки — она же открывашка панели расхода. */
   const fuelBtnRef = useRef<HTMLButtonElement>(null)
@@ -326,121 +341,136 @@ export function AgentBar(): React.JSX.Element {
   const pttRef = useRef(false)
   // -1 = not browsing history; otherwise index into barHistory.
   const [histIdx, setHistIdx] = useState(-1)
+  const [dragOver, setDragOver] = useState(false)
   const draftRef = useRef('')
   const ref = useRef<HTMLTextAreaElement>(null)
 
-  const activeSessionId = useSessionsStore((s) => s.activeSessionId())
+  // Своя панель, а не «какая сейчас активная». Спрашивать про активную — это тот
+  // самый разрыв, из-за которого можно печатать в одну панель, а Enter уйдёт в
+  // другую. Без параметра ведём себя как раньше: одна строка на окно.
+  const storeActive = useSessionsStore((s) => s.activeSessionId())
+  const activeSessionId = paneSessionId ?? storeActive
+  /** Вернуть курсор в поле и поставить его в конец — после возврата текста из очереди или отмены. */
+  const focusInputEnd = (): void => {
+    requestAnimationFrame(() => {
+      const el = ref.current
+      if (!el) return
+      el.focus()
+      el.selectionStart = el.selectionEnd = el.value.length
+    })
+  }
   // The conversation belongs to the active terminal — each terminal its own chat.
   const activeConv = useAiStore((s) => convForSession(s, activeSessionId))
+  // АВТОПИЛОТ показывается по СВОЕЙ беседе: общий переключатель с несколькими
+  // панелями врал бы о том, спросят ли вас.
+  // Хук вызывается всегда и безусловно: под условием React рвёт порядок хуков,
+  // компонент падает — и строки ввода не остаётся вовсе.
+  const paneBypass = useAiStore((s) =>
+    activeSessionId ? !!s.bypassBySession[activeSessionId] : false
+  )
+  const bypass = activeConv ? !!activeConv.bypass : paneBypass
+  // Микрофон занят другой панелью — кнопка обязана это сказать, а не молчать и
+  // не начинать вторую запись.
+  const micBusy = useMicBusyElsewhere(activeSessionId)
+  // Что именно уедет с этим ходом — видно до отправки.
+  //
+  // Пустой список — ОДНА И ТА ЖЕ ссылка: `?? []` в селекторе создавал новый
+  // массив на каждый рендер, zustand считал состояние изменившимся и перерисовка
+  // уходила в бесконечный цикл — приложение не поднималось вовсе.
+  const pendingImages = useAiStore((s) =>
+    activeSessionId ? s.pendingImages[activeSessionId] : undefined
+  ) ?? NO_IMAGES
 
-  // Global keys (window-active, focus-independent): Esc interrupts the working
-  // agent; Enter/Esc approve/deny a pending tool. Skipped while an overlay owns
-  // Esc, in raw terminal mode, or during a pending choice (the choice bar owns it).
+  /**
+   * Клавиши своей панели. Строка ввода БОЛЬШЕ НЕ СЛУШАЕТ ОКНО: она заявляет свои
+   * обработчики диспетчеру (features/ai/keyRouter), и тот отдаёт нажатие ровно
+   * одному адресату. Пока строка одна, поведение прежнее; когда панелей станет
+   * несколько, один Enter перестанет одобрять команды сразу в нескольких.
+   */
   useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key !== 'Escape' && e.key !== 'Enter') return
-      // SECURITY: only a BARE Enter approves a gate. Once the input became a
-      // textarea, Shift/Ctrl+Enter meant «new line» — but this global listener
-      // still saw a plain Enter with the field empty and silently ran the
-      // pending tool. Approving something because the user asked for a line
-      // break is exactly the blind «yes» the gate exists to prevent.
-      if (e.key === 'Enter' && (e.shiftKey || e.ctrlKey || e.metaKey || e.altKey)) return
-      // Esc during dictation cancels the take. The tooltip promised this and
-      // nothing implemented it, so Esc fell through to interrupting the agent.
-      if (e.key === 'Escape' && recRef.current) {
-        e.preventDefault()
-        voiceCancelled.current = true
-        recRef.current.cancel()
-        recRef.current = null
-        setVoice('idle')
-        setVoiceLevel(0)
-        setVoiceNote('')
-        return
-      }
-      const ui = useUiStore.getState()
-      if (
-        ui.paletteOpen ||
-        ui.settingsOpen ||
-        ui.launchPadOpen ||
-        ui.quickOpenOpen ||
-        ui.historyOverlayOpen ||
-        ui.aiBarOpen ||
-        ui.rawTerminal
-      )
-        return
-      const sid = useSessionsStore.getState().activeSessionId()
-      const conv = convForSession(useAiStore.getState(), sid)
-      if (!conv) return
-      // A tool call awaiting approval: Enter (empty input) approves, Esc denies —
-      // CLI-style, no reaching for the mouse. Takes precedence over interrupt.
-      const pendingRun = nextGate(conv)
-      if (pendingRun) {
-        if (e.key === 'Escape') {
-          e.preventDefault()
-          useAiStore.getState().denyTool(conv.id, pendingRun.id)
-          return
+    const sid = activeSessionId
+    if (!sid) return
+    return registerPaneKeys(sid, {
+      onEscape: ({ overlayOpen }) => {
+        // 1. Идёт диктовка — Esc прекращает запись. Выше оверлеев: микрофон
+        //    слушает прямо сейчас, что бы ни было открыто.
+        if (recRef.current) {
+          voiceCancelled.current = true
+          recRef.current.cancel()
+          recRef.current = null
+          releaseMic(sid)
+          setVoice('idle')
+          setVoiceLevel(0)
+          setVoiceNote('')
+          return true
         }
+        if (overlayOpen) return false
+        const conv = convForSession(useAiStore.getState(), sid)
+        if (!conv) return false
+        // 2. Висит гейт — Esc отклоняет его.
+        const pendingRun = nextGate(conv)
+        if (pendingRun) {
+          useAiStore.getState().denyTool(conv.id, pendingRun.id)
+          return true
+        }
+        // 3. Непустая очередь — Esc забирает СВОЮ приписку обратно в строку и НЕ
+        //    трогает агента. Так устроен CLI: в транскриптах 103 из 103 случаев
+        //    `queue-operation: remove` идут без `[Request interrupted by user]`.
+        if (conv.queued) {
+          const q = useAiStore.getState().takeQueued(conv.id)
+          if (!q) return true
+          setHistIdx(-1)
+          setText((prev) =>
+            prev.trim()
+              ? `${q}
+${prev}`
+              : q
+          )
+          focusInputEnd()
+          return true
+        }
+        if (!conv.streaming) return false
+        if (conv.pendingTools.some((t) => t.kind === 'question' && !t.settled)) return false
+        // 4. Отмена ОТПРАВЛЕННОГО сообщения: уходит из ленты И из памяти агента,
+        //    текст возвращается в строку. Умеет только Claude Code; на остальных
+        //    движках undoSend вернёт null, и Esc остаётся прерыванием хода.
+        void useAiStore
+          .getState()
+          .undoSend(conv.id)
+          .then((text) => {
+            if (text === null) {
+              useAiStore.getState().abort(conv.id)
+              return
+            }
+            setHistIdx(-1)
+            setText((prev) =>
+              prev.trim()
+                ? `${text}
+${prev}`
+                : text
+            )
+            focusInputEnd()
+          })
+        return true
+      },
+      onEnter: () => {
+        const conv = convForSession(useAiStore.getState(), sid)
+        if (!conv) return false
+        const pendingRun = nextGate(conv)
+        if (!pendingRun) return false
+        // Одобряет только пустое поле и только когда курсор не в другом поле
+        // ввода: Enter в чужой форме не должен запускать инструмент.
         const ae = document.activeElement as HTMLElement | null
         const inOtherField =
           !!ae &&
           ae !== ref.current &&
           (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)
-        if (e.key === 'Enter' && !inOtherField && !ref.current?.value.trim()) {
-          e.preventDefault()
-          void useAiStore.getState().approveTool(conv.id, pendingRun.id)
-          return
-        }
+        if (inOtherField || ref.current?.value.trim()) return false
+        void useAiStore.getState().approveTool(conv.id, pendingRun.id)
+        return true
       }
-      if (e.key !== 'Escape') return
-      // Esc при непустой очереди забирает СВОЮ приписку обратно в строку и НЕ
-      // трогает агента. Так устроен CLI: в транскриптах пользователя 103 из 103
-      // случаев `queue-operation: remove` идут без `[Request interrupted by
-      // user]` — то есть отмена очереди и прерывание хода там не связаны.
-      // Раньше Заря на Esc прерывала агента, а очередь оставляла — и та уходила
-      // ему сама сразу после конца хода. Ровно наоборот тому, чего от Esc ждут.
-      if (conv.queued) {
-        e.preventDefault()
-        const q = useAiStore.getState().takeQueued(conv.id)
-        if (!q) return
-        setHistIdx(-1)
-        // Приписка была раньше черновика, поэтому встаёт перед ним.
-        setText((prev) => (prev.trim() ? `${q}\n${prev}` : q))
-        requestAnimationFrame(() => {
-          const el = ref.current
-          if (!el) return
-          el.focus()
-          el.selectionStart = el.selectionEnd = el.value.length
-        })
-        return
-      }
-      if (!conv.streaming) return
-      if (conv.pendingTools.some((t) => t.kind === 'question' && !t.settled)) return
-      e.preventDefault()
-      // Отмена ОТПРАВЛЕННОГО сообщения, если агент ещё не начал отвечать: оно
-      // уходит из ленты И из памяти агента, текст возвращается в строку — так
-      // делает CLI. Умеет это только Claude Code; на остальных движках undoSend
-      // вернёт null, и Esc остаётся обычным прерыванием.
-      void useAiStore
-        .getState()
-        .undoSend(conv.id)
-        .then((text) => {
-          if (text === null) {
-            useAiStore.getState().abort(conv.id)
-            return
-          }
-          setHistIdx(-1)
-          setText((prev) => (prev.trim() ? `${text}\n${prev}` : text))
-          requestAnimationFrame(() => {
-            const el = ref.current
-            if (!el) return
-            el.focus()
-            el.selectionStart = el.selectionEnd = el.value.length
-          })
-        })
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [])
+    })
+  }, [activeSessionId])
 
   // Auto-follow: when an agent conversation becomes active (selected, or you
   // start chatting), the bar switches to that engine's mode by itself — no
@@ -454,7 +484,10 @@ export function AgentBar(): React.JSX.Element {
     if (followedRef.current === activeConv.id) return
     followedRef.current = activeConv.id
     const want: BarMode = activeConv.engine !== 'builtin' ? activeConv.engine : 'zarya'
-    if (useUiStore.getState().barMode !== want) useUiStore.getState().set({ barMode: want })
+    // Только СВОЯ панель: чужой ход — не выбор человека, и общим умолчанием
+    // для следующих панелей он становиться не должен.
+    if (paneSessionId) setPaneBarMode(paneSessionId, want)
+    else if (useUiStore.getState().barMode !== want) useUiStore.getState().set({ barMode: want })
   }, [activeConv?.id, activeConv?.engine, activeConv?.messages.length, activeConv?.streaming])
 
   // A pending AskUserQuestion on the active native-agent conversation replaces
@@ -467,7 +500,7 @@ export function AgentBar(): React.JSX.Element {
   const runShell = (): void => {
     const cmd = text.trim()
     if (!cmd || !activeSessionId) return
-    pushHistory(cmd)
+    pushPaneHistory(activeSessionId, cmd)
     setHistIdx(-1)
     // Auto-detect intent: a bare `claude` means "I want to work with Claude" —
     // switch straight into the native mode instead of the raw TUI (add args,
@@ -479,7 +512,7 @@ export function AgentBar(): React.JSX.Element {
     }
     setText('')
     if (isInteractiveCmd(cmd)) {
-      useUiStore.getState().set({ rawTerminal: true })
+      setRaw(activeSessionId, true)
       setTimeout(() => getTerminal(activeSessionId)?.focus(), 60)
     }
     window.zarya.pty.write(activeSessionId, cmd + '\r')
@@ -488,7 +521,7 @@ export function AgentBar(): React.JSX.Element {
   const askAgent = (agentEngine: 'builtin' | AgentEngine): void => {
     const q = text.trim()
     if (!q) return
-    pushHistory(q)
+    pushPaneHistory(activeSessionId, q)
     setHistIdx(-1)
     setText('')
     const store = useAiStore.getState()
@@ -524,7 +557,7 @@ export function AgentBar(): React.JSX.Element {
     if (activeConv && activeConv.engine === engine && busyConv) {
       const t = text.trim()
       if (t) {
-        pushHistory(t)
+        pushPaneHistory(activeSessionId, t)
         setHistIdx(-1)
         useAiStore.getState().queueMessage(activeConv.id, t)
         setText('')
@@ -556,6 +589,7 @@ export function AgentBar(): React.JSX.Element {
         return true
       }
       // 2) Walk back through previously sent messages.
+      const barHistory = paneHistory(activeSessionId)
       if (!barHistory.length) return false
       e.preventDefault()
       if (histIdx === -1) draftRef.current = text
@@ -566,6 +600,7 @@ export function AgentBar(): React.JSX.Element {
     }
     if (e.key === 'ArrowDown' && histIdx !== -1) {
       e.preventDefault()
+      const barHistory = paneHistory(activeSessionId)
       const idx = histIdx + 1
       if (idx >= barHistory.length) {
         setHistIdx(-1)
@@ -590,17 +625,53 @@ export function AgentBar(): React.JSX.Element {
     }
     const order = modeCycle(Object.keys(agentCaps))
     const next = order[(order.indexOf(mode) + 1) % order.length] ?? 'shell'
-    useUiStore.getState().set({ barMode: next })
+    // Явный выбор человека: он же становится умолчанием для новых панелей.
+    setBarModeOf(paneSessionId, next)
     setTimeout(() => ref.current?.focus(), 0)
+  }
+
+  /**
+   * Принять картинки в СВОЮ панель. Общая точка для Ctrl+V и перетаскивания:
+   * оба жеста обязаны попадать туда, где стоит курсор, а не «в активную».
+   */
+  const acceptImages = async (files: File[]): Promise<number> => {
+    if (!activeSessionId || !files.length) return 0
+    // Движок, который картинок не принимает, не должен молча их проглатывать:
+    // отправить запрос без вложения — соврать о том, что агент их видел.
+    if (activeEngine && agentCaps[activeEngine]?.images !== true) {
+      useUiStore
+        .getState()
+        .toast(`${MODE_LABEL[mode]} не принимает изображения — вставьте текстом или путём`, 'error')
+      return 0
+    }
+    let added = 0
+    for (const file of files) {
+      const current = useAiStore.getState().pendingImages[activeSessionId] ?? []
+      const room = canAcceptMore(current, file.size)
+      if (!room.ok) {
+        useUiStore.getState().toast(room.reason, 'error')
+        break
+      }
+      const res = await fileToAttachment(file)
+      if (!res.ok) {
+        useUiStore.getState().toast(res.reason, 'error')
+        continue
+      }
+      useAiStore.getState().attachImage(activeSessionId, res.att)
+      added++
+    }
+    return added
   }
 
   const openLaunchPad = (): void => useUiStore.getState().set({ launchPadOpen: true })
 
   const toggleBypass = (): void => {
     const next = !bypass
-    void useSettingsStore.getState().update({ ai: { claudeBypass: next } as never })
-    if (activeConv && activeConv.engine !== 'builtin')
-      window.zarya.agent.setBypass(activeConv.engine, activeConv.id, next)
+    // Беседа появляется только с первым сообщением, а решение принимается
+    // сейчас: запоминаем за панелью, чтобы чип не был мёртвым до отправки.
+    if (activeConv) useAiStore.getState().setBypass(activeConv.id, next)
+    else if (activeSessionId) useAiStore.getState().setPaneBypass(activeSessionId, next)
+    else return
     useUiStore
       .getState()
       .toast(
@@ -620,6 +691,10 @@ export function AgentBar(): React.JSX.Element {
     const rec = recRef.current
     if (!rec) return
     recRef.current = null
+    // Микрофон свободен, как только устройство закрыто: расшифровка идёт уже без
+    // него, и держать замок на время распознавания значило бы запирать соседние
+    // панели просто так.
+    releaseMic(activeSessionId)
     setVoiceLevel(0)
     const { samples, sampleRate } = await rec.stop()
     if (isSilent(samples)) {
@@ -647,6 +722,13 @@ export function AgentBar(): React.JSX.Element {
 
   const startVoice = async (): Promise<void> => {
     if (recRef.current || voice !== 'idle') return
+    // Микрофон один на машину. Замок на всё приложение, а не внутри строки:
+    // строк станет столько же, сколько панелей, и каждая проходила бы СВОЮ
+    // защиту — четыре записи одной фразы и четыре расшифровки.
+    if (!activeSessionId || !claimMic(activeSessionId)) {
+      useUiStore.getState().toast('Микрофон занят другой панелью', 'error')
+      return
+    }
     // Claim the slot BEFORE the first await. Two entry points can fire almost
     // together (button click and the push-to-talk key), and both would pass the
     // guard above while awaiting — opening two microphones and orphaning the
@@ -712,6 +794,7 @@ export function AgentBar(): React.JSX.Element {
         onDeviceLost: () => {
           lost = true
           recRef.current = null
+          releaseMic(activeSessionId)
           setVoice('idle')
           setVoiceLevel(0)
           useUiStore.getState().toast('Микрофон отключён — запись прервана', 'error')
@@ -722,6 +805,7 @@ export function AgentBar(): React.JSX.Element {
       // открытым навсегда, а кнопки, которой это можно прекратить, уже нет.
       if (!aliveRef.current) {
         rec.cancel()
+        releaseMic(activeSessionId)
         return
       }
       // Someone cancelled while getUserMedia was resolving — release the device
@@ -729,12 +813,14 @@ export function AgentBar(): React.JSX.Element {
       if (voiceCancelled.current) {
         rec.cancel()
         voiceCancelled.current = false
+        releaseMic(activeSessionId)
         setVoice('idle')
         return
       }
       // Устройство успело отвалиться, пока промис резолвился: держать мёртвую
       // запись в recRef — значит показывать индикатор над закрытым микрофоном.
       if (lost) {
+        releaseMic(activeSessionId)
         setVoice('idle')
         return
       }
@@ -925,6 +1011,29 @@ export function AgentBar(): React.JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voice])
 
+  // Закрепить режим за панелью при рождении. Без этого панель, в которой режим
+  // ни разу не выбирали, продолжала бы читать общее умолчание — и менялась бы
+  // вместе с ним, когда режим переключают в СОСЕДНЕЙ панели.
+  useEffect(() => {
+    if (!paneSessionId) return
+    const st = useUiStore.getState()
+    if (!st.barModeBySession[paneSessionId]) setPaneBarMode(paneSessionId, st.barMode)
+  }, [paneSessionId])
+
+  // Отзеркалить набранное: закрытие панели приходит снаружи (крестик в сайдбаре,
+  // пункт меню) и обязано знать, теряется ли при этом текст. Строка ввода
+  // остаётся владельцем текста — сюда уходит только копия для вопроса.
+  //
+  // Черновик переживает УХОД СТРОКИ С ЭКРАНА. Запуск vim, htop или любой
+  // команды из списка интерактивных сам включает сырой режим, строка при этом
+  // размонтируется — и набранный запрос исчезал вместе с ней, без вопроса и
+  // следа. Теперь текст возвращается на место, когда программа закрылась
+  // (начальное значение поля берётся отсюда же). Забывает его только закрытие
+  // панели.
+  useEffect(() => {
+    setPaneDraft(activeSessionId, text)
+  }, [activeSessionId, text])
+
   // Grow the field with its content instead of scrolling a one-line box —
   // capped so a pasted wall of text can't eat the window.
   useEffect(() => {
@@ -948,10 +1057,18 @@ export function AgentBar(): React.JSX.Element {
   }, [])
 
   // Push-to-talk: hold the key, speak, release. Ignored while typing in a field.
+  //
+  // Слушают ОКНО все смонтированные строки — по одной на панель, включая панели
+  // неактивных вкладок. Поэтому первым делом каждая проверяет, ей ли адресовано
+  // нажатие: без этого на четырёх панелях один хоткей открывал микрофон в той,
+  // что смонтирована первой, расшифровка уезжала в чужую строку, а остальные
+  // три выдавали красное «микрофон занят другой панелью».
   useEffect(() => {
     const isHotkey = (e: KeyboardEvent): boolean => e.ctrlKey && e.shiftKey && e.code === 'Space'
+    const mine = (): boolean =>
+      !paneSessionId || useSessionsStore.getState().activeSessionId() === paneSessionId
     const down = (e: KeyboardEvent): void => {
-      if (!isHotkey(e) || e.repeat) return
+      if (!isHotkey(e) || e.repeat || !mine()) return
       e.preventDefault()
       pttRef.current = true
       void startVoice()
@@ -1013,7 +1130,7 @@ export function AgentBar(): React.JSX.Element {
   //
   // `caps === undefined` means «not loaded yet», NOT «cannot bypass»: capabilities
   // arrive from one async IPC that waits on every driver's probe, and until it
-  // lands a turn still goes out with `bypass: ai.claudeBypass` (dispatchAgent).
+  // lands a turn still goes out with the conversation's own `bypass`.
   // Collapsing unknown into false made the chip claim «always asks» while the
   // driver was auto-allowing — the exact lie it exists to prevent. Lock it only
   // on an explicit bypass:false.
@@ -1054,7 +1171,10 @@ export function AgentBar(): React.JSX.Element {
       )}
       {/* One headline figure, not four readings queued on a single line. The rest
           opens on demand — see UsagePanel. */}
-      <div className="zy-agentbar-fuel">
+      {/* Топливомер общий на окно и живёт в нижней полосе: четыре одинаковых
+          индикатора показывали бы одно и то же число, отнимая место у работы. */}
+      {!paneSessionId && (
+        <div className="zy-agentbar-fuel">
         <button
           ref={fuelBtnRef}
           className="zy-agentbar-fuel-main"
@@ -1096,8 +1216,11 @@ export function AgentBar(): React.JSX.Element {
         </button>
         <span className="zy-agentbar-fuel-spacer" />
         {showModel && (claudeStatus.model || claudeStatus.effort || ultracode) && (
-
-          <button className="zy-agentbar-fuel-model" onClick={openLaunchPad} title="Двигатель и тяга">
+          <button
+            className="zy-agentbar-fuel-model"
+            onClick={openLaunchPad}
+            title="Двигатель и тяга"
+          >
             {claudeStatus.model ? prettyModel(claudeStatus.model) : ''}
             {ultracode
               ? ' · ⚡ULTRACODE'
@@ -1106,12 +1229,69 @@ export function AgentBar(): React.JSX.Element {
                 : ''}
           </button>
         )}
-        <button className="zy-agentbar-fuel-pult" onClick={openLaunchPad} title="Пусковой комплекс">
-          пульт ▴
-        </button>
-      </div>
+          <button
+            className="zy-agentbar-fuel-pult"
+            onClick={openLaunchPad}
+            title="Пусковой комплекс"
+          >
+            пульт ▴
+          </button>
+        </div>
+      )}
 
-      <div className="zy-agentbar-row">
+      {pendingImages.length > 0 && (
+        <div className="zy-img-chips">
+          {pendingImages.map((img, i) => (
+            <span key={img.id} className="zy-img-chip" title={`${img.width}×${img.height} · ${Math.round(img.bytes / 1024)} КБ`}>
+              {img.thumb ? <img src={img.thumb} alt="" /> : null}
+              <span className="zy-img-chip-n">#{i + 1}</span>
+              <span className="zy-img-chip-name">{img.name ?? 'снимок'}</span>
+              <button
+                className="zy-img-chip-x"
+                title="Убрать"
+                onClick={() => activeSessionId && useAiStore.getState().dropImage(activeSessionId, img.id)}
+              >
+                ✕
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      <div
+        className={`zy-agentbar-row${dragOver ? ' zy-agentbar-row--drag' : ''}`}
+        onDragOver={(e) => {
+          if (!e.dataTransfer.types.includes('Files')) return
+          // stopPropagation обязателен: без него дроп всплывёт в общий
+          // обработчик окна и вместо вложения откроется новый терминал.
+          e.preventDefault()
+          e.stopPropagation()
+          setDragOver(true)
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => {
+          if (!e.dataTransfer.types.includes('Files')) return
+          e.preventDefault()
+          e.stopPropagation()
+          setDragOver(false)
+          const all = imageFilesFrom(e.dataTransfer)
+          const imgs = all.filter((f) => f.type.startsWith('image/'))
+          void acceptImages(imgs)
+          // Файл-не-картинка идёт ПУТЁМ, а не содержимым: агент прочитает его
+          // сам своим инструментом под гейтом и не потратит контекст на
+          // мегабайт, который может не понадобиться.
+          const others = all.filter((f) => !f.type.startsWith('image/'))
+          if (others.length) {
+            const paths = others
+              .map((f) => window.zarya.app.getPathForFile(f))
+              .filter(Boolean)
+              .map((x) => `"${x}"`)
+            if (paths.length) {
+              setText((prev) => (prev.trim() ? `${prev} ${paths.join(' ')}` : paths.join(' ')))
+              useUiStore.getState().toast('Файл добавлен путём — агент прочитает сам', 'success')
+            }
+          }
+        }}
+      >
         {/* Icon-only chips: the engine and the gate are permanent fixtures, and
             spelling them out in full caps ate the bar. The label lives in the
             tooltip; the gate additionally keeps its colour, because «will I be
@@ -1138,9 +1318,7 @@ export function AgentBar(): React.JSX.Element {
             title={gateTitle}
             aria-label={gateOff ? 'Автопилот включён' : 'Ручное управление'}
             disabled={!canToggleGate}
-            onClick={
-              canToggleGate ? (isBuiltinMode ? toggleAutoApprove : toggleBypass) : undefined
-            }
+            onClick={canToggleGate ? (isBuiltinMode ? toggleAutoApprove : toggleBypass) : undefined}
           >
             {gateOff ? <Icon name="bolt" size={13} /> : <PixelIcon name="lock" />}
           </button>
@@ -1158,7 +1336,9 @@ export function AgentBar(): React.JSX.Element {
                 ? 'Загружается модель распознавания'
                 : voice === 'work'
                   ? 'Распознаю…'
-                  : `Диктовка: нажми или удерживай Ctrl+Shift+Space. Текст попадёт в строку, отправишь сам\nМикрофон: ${micLabel} · ПКМ — выбрать`
+                  : micBusy
+                    ? 'Микрофон занят другой панелью — закончи запись там'
+                    : `Диктовка: нажми или удерживай Ctrl+Shift+Space. Текст попадёт в строку, отправишь сам\nМикрофон: ${micLabel} · ПКМ — выбрать`
           }
           aria-label="Диктовка"
           onClick={() => (voice === 'rec' ? void finishVoice() : void startVoice())}
@@ -1184,18 +1364,42 @@ export function AgentBar(): React.JSX.Element {
         {voiceNote && <span className="zy-agentbar-voicenote">{voiceNote}</span>}
         <textarea
           ref={ref}
+        onPaste={(e) => {
+          const files = imageFilesFrom(e.clipboardData).filter((f) =>
+            f.type.startsWith('image/')
+          )
+          if (!files.length) return
+          // Текстовую часть буфера вставляем сами: preventDefault отменил бы её
+          // вместе с картинкой, и человек потерял бы скопированный текст.
+          e.preventDefault()
+          const txt = e.clipboardData.getData('text/plain')
+          if (txt) setText((prev) => prev + txt)
+          void acceptImages(files)
+        }}
+        // Курсор в поле — панель становится активной. Без этого «панель, куда я
+        // печатаю» и «панель, на которую действует Enter» расходятся: можно
+        // одобрить запуск команды, которую даже не видел.
+        onFocus={() => {
+          if (paneSessionId) useSessionsStore.getState().setActiveSession(paneSessionId)
+        }}
           className="zy-agentbar-input"
           rows={1}
           placeholder={
             busyConv && mode !== 'shell'
               ? 'Агент работает — Enter поставит в очередь · Esc прервать · ↑ править'
-              : MODE_PLACEHOLDER[mode]
+              : paneSessionId
+                ? // В панели места вчетверо меньше, и приписка «(Enter — выполнить)»
+                  // не влезала: подсказка обрывалась на полуслове. Что делает Enter,
+                  // написано на кнопке отправки и на чипе режима.
+                  MODE_PLACEHOLDER[mode].replace(/\s*\(.*\)\s*$/, '')
+                : MODE_PLACEHOLDER[mode]
           }
           value={text}
           onChange={(e) => {
             setText(e.target.value)
             // The user edited a recalled item → leave history-browse mode.
-            if (histIdx !== -1 && e.target.value !== barHistory[histIdx]) setHistIdx(-1)
+            if (histIdx !== -1 && e.target.value !== paneHistory(activeSessionId)[histIdx])
+              setHistIdx(-1)
           }}
           onKeyDown={(e) => {
             // Shift+Enter / Ctrl+Enter insert a line break — a multi-line prompt
@@ -1220,7 +1424,7 @@ export function AgentBar(): React.JSX.Element {
             } else if ((e.ctrlKey || e.metaKey) && /^[iшI]$/i.test(e.key)) {
               // Ctrl+I → jump into Claude Code mode (and send if there's text).
               e.preventDefault()
-              if (mode !== 'claude-code') useUiStore.getState().set({ barMode: 'claude-code' })
+              if (mode !== 'claude-code') setBarModeOf(paneSessionId, 'claude-code')
               if (text.trim()) askAgent('claude-code')
             }
           }}
@@ -1263,4 +1467,4 @@ export function AgentBar(): React.JSX.Element {
       {micMenu}
     </div>
   )
-}
+})

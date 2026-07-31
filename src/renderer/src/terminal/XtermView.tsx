@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { SearchAddon } from '@xterm/addon-search'
@@ -7,15 +7,22 @@ import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { WebglAddon } from '@xterm/addon-webgl'
 import '@xterm/xterm/css/xterm.css'
+import { closePaneAsking } from '@/actions/panes'
+import { focusPane } from './paneFocus'
 import { useSettingsStore } from '@/state/settingsStore'
 import { useSessionsStore } from '@/state/sessionsStore'
-import { useUiStore } from '@/state/uiStore'
+import { isRaw, setRaw, useUiStore } from '@/state/uiStore'
 import { getTheme, toXtermTheme } from '@/features/themes/themes'
 import { shouldBypassTerminal } from '@/features/palette/keybindings'
 import { openFileInEditor } from '@/features/editor/editorBridge'
 import { BlockEngine } from './blockEngine'
 import { terminalOptionsFrom, applyTerminalOptions } from './terminalOptions'
-import { registerTerminal, takePendingRestore, getTerminal } from './terminalRegistry'
+import {
+  getTerminal,
+  isLayoutDragging,
+  registerTerminal,
+  takePendingRestore
+} from './terminalRegistry'
 import { findPathsInLine, resolveAgainstCwd } from './termLinks'
 import { suggestFor } from './historyCache'
 
@@ -33,7 +40,11 @@ interface Ghost {
   top: number
 }
 
-export function XtermView({ sessionId, active, visible }: Props): React.JSX.Element {
+export const XtermView = memo(function XtermView({
+  sessionId,
+  active,
+  visible
+}: Props): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null)
   const [ghost, setGhost] = useState<Ghost | null>(null)
   const ghostRef = useRef<{ full: string; typed: string } | null>(null)
@@ -44,7 +55,7 @@ export function XtermView({ sessionId, active, visible }: Props): React.JSX.Elem
   const shadowRef = useRef<{ buf: string; reliable: boolean }>({ buf: '', reliable: true })
   const session = useSessionsStore((s) => s.sessions[sessionId])
   const settings = useSettingsStore((s) => s.settings)
-  const rawTerminal = useUiStore((s) => s.rawTerminal)
+  const rawTerminal = useUiStore((s) => isRaw(s, sessionId))
   const status = session?.status
 
   // ------------------------------------------------------------- lifecycle
@@ -64,7 +75,7 @@ export function XtermView({ sessionId, active, visible }: Props): React.JSX.Elem
       // In «Блоки» mode the terminal is display-only (single input is the
       // ask-agent bar). In «Терминал» mode stdin is enabled so you can type
       // directly and run interactive tools (vim / claude / ssh). Toggled live.
-      disableStdin: !useUiStore.getState().rawTerminal
+      disableStdin: !isRaw(useUiStore.getState(), sessionId)
     })
 
     const fit = new FitAddon()
@@ -262,26 +273,38 @@ export function XtermView({ sessionId, active, visible }: Props): React.JSX.Elem
     // view so arrows/prompts work, and return to «Блоки» when they exit.
     const bufDisp = term.buffer.onBufferChange((buf) => {
       const isAlt = buf.type === 'alternate'
-      const ui = useUiStore.getState()
-      if (isAlt && !ui.rawTerminal) {
+      // Полноэкранная программа переключает ТОЛЬКО свою панель: раньше vim в
+      // одной гасил ленты и строки ввода во всех остальных.
+      if (isAlt && !isRaw(useUiStore.getState(), sessionId)) {
         autoRawRef.current = true
-        ui.set({ rawTerminal: true })
+        setRaw(sessionId, true)
         requestAnimationFrame(() => term.focus())
       } else if (!isAlt && autoRawRef.current) {
         autoRawRef.current = false
-        ui.set({ rawTerminal: false })
+        setRaw(sessionId, false)
       }
     })
 
     // ------------------------------------------------------------- sizing
     let fitRaf = 0
+    // Последний размер, о котором знает оболочка. Пересчёт вызывается на каждое
+    // наблюдение за размером, а ConPTY стоит дорого: сообщать ей одно и то же
+    // по десять раз в секунду — значит платить ни за что.
+    let told = { cols: 0, rows: 0 }
     const doFit = (): void => {
       cancelAnimationFrame(fitRaf)
       fitRaf = requestAnimationFrame(() => {
         if (!container.isConnected || container.clientWidth < 40) return
+        // Пока тянут разделитель, размеры меняются каждый кадр. Перекладывать
+        // буфер и дёргать консоль на каждый промежуточный размер незачем — по
+        // отпусканию реестр вызовет пересчёт один раз (см. setLayoutDragging).
+        if (isLayoutDragging()) return
         try {
           fit.fit()
-          window.zarya.pty.resize(sessionId, term.cols, term.rows)
+          if (term.cols !== told.cols || term.rows !== told.rows) {
+            told = { cols: term.cols, rows: term.rows }
+            window.zarya.pty.resize(sessionId, term.cols, term.rows)
+          }
         } catch {
           // ignore transient layout errors
         }
@@ -294,9 +317,7 @@ export function XtermView({ sessionId, active, visible }: Props): React.JSX.Elem
     const restored = takePendingRestore(sessionId)
     if (restored) {
       term.write(restored)
-      term.write(
-        '\r\n\x1b[2m╌╌╌╌╌  сессия восстановлена · новый shell  ╌╌╌╌╌\x1b[0m\r\n'
-      )
+      term.write('\r\n\x1b[2m╌╌╌╌╌  сессия восстановлена · новый shell  ╌╌╌╌╌\x1b[0m\r\n')
     }
 
     // A freshly spawned ConPTY shell begins with a full-screen repaint
@@ -312,9 +333,7 @@ export function XtermView({ sessionId, active, visible }: Props): React.JSX.Elem
       const tail = restoredGate.buf
       restoredGate = null
       clearTimeout(gateTimer)
-      term.write(
-        tail.replace(/\x1b\[[0-9;]*[23]J/g, '').replace(/\x1b\[(?:1;1)?H/g, '')
-      )
+      term.write(tail.replace(/\x1b\[[0-9;]*[23]J/g, '').replace(/\x1b\[(?:1;1)?H/g, ''))
     }
     if (restoredGate) {
       gateTimer = setTimeout(releaseGate, 2500)
@@ -383,7 +402,11 @@ export function XtermView({ sessionId, active, visible }: Props): React.JSX.Elem
     if (!visible) return
     const handle = getTerminal(sessionId)
     handle?.fit()
-    if (active) handle?.focus()
+    // Курсор — туда, где в этой панели печатают: в блочном режиме это строка
+    // ввода, в сыром — сам терминал. Безусловный фокус в скрытое поле xterm
+    // делал голый Enter «чужим полем» для гейта: рамка обещала «сюда уйдёт
+    // Enter», а одобрение не срабатывало (см. paneFocus / features/ai/keyRouter).
+    if (active) focusPane(sessionId)
   }, [visible, active, sessionId])
 
   // Toggle interactive stdin live; entering «Терминал» mode re-fits and focuses
@@ -393,9 +416,15 @@ export function XtermView({ sessionId, active, visible }: Props): React.JSX.Elem
     if (!handle) return
     handle.term.options.disableStdin = !rawTerminal
     handle.fit()
-    if (rawTerminal && visible && active) {
+    if (!visible || !active) return
+    if (rawTerminal) {
       requestAnimationFrame(() => handle.focus())
+      return
     }
+    // Обратный переход тоже нужен: vim закрылся, сырой режим снялся, строка
+    // ввода вернулась вместе с набранным — а каретка оставалась в поле xterm,
+    // где ввод выключен. Печатать было некуда, и это не объяснялось ничем.
+    focusPane(sessionId)
   }, [rawTerminal, visible, active, sessionId])
 
   const pad = settings.appearance.terminalPadding
@@ -428,7 +457,7 @@ export function XtermView({ sessionId, active, visible }: Props): React.JSX.Elem
               </button>
               <button
                 className="zy-btn"
-                onClick={() => void useSessionsStore.getState().closeSession(sessionId)}
+                onClick={() => void closePaneAsking(sessionId)}
               >
                 Закрыть
               </button>
@@ -438,4 +467,4 @@ export function XtermView({ sessionId, active, visible }: Props): React.JSX.Elem
       )}
     </div>
   )
-}
+})

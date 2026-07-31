@@ -17,11 +17,30 @@ const ACTIONS: Array<{ action: string; icon: string; title: string }> = [
   { action: 'run', icon: '▶', title: 'Выполнить в терминале' }
 ]
 
+/**
+ * Уже разобранная разметка. Разбор стоит дорого: marked + DOMPurify + разбор
+ * готового HTML в документ ради подписей к блокам кода. А зовут его на КАЖДУЮ
+ * перерисовку каждого ответа: пока агент печатает, лента из двух десятков ходов
+ * пересобирала всю свою разметку по несколько раз в секунду — и это в каждой из
+ * четырёх панелей. Текст сообщения не меняется после того, как дописан, поэтому
+ * разбирать его повторно незачем.
+ */
+const cache = new Map<string, string>()
+/** Потолок: лента не бесконечна, а память — не свалка (см. «Заря не оставляет мусор»). */
+const CACHE_MAX = 400
+
 export function renderMarkdown(md: string): string {
   if (!md) return ''
+  const hit = cache.get(md)
+  if (hit !== undefined) return hit
   const rawHtml = marked.parse(md, { gfm: true, breaks: true, async: false }) as string
   const clean = DOMPurify.sanitize(rawHtml, { ADD_ATTR: ['target', 'rel'] })
-  return decorateCodeBlocks(clean)
+  const out = decorateCodeBlocks(clean)
+  // Самая старая запись уходит первой: у растущего ответа каждый кусок даёт
+  // новый ключ, и без вытеснения карта росла бы вместе с разговором.
+  if (cache.size >= CACHE_MAX) cache.delete(cache.keys().next().value as string)
+  cache.set(md, out)
+  return out
 }
 
 function decorateCodeBlocks(html: string): string {

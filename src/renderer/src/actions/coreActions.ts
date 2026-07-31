@@ -1,8 +1,9 @@
 import { registerActions } from '@/lib/actionRegistry'
+import { closePaneAsking, closeTabAsking } from '@/actions/panes'
 import { useBlocksStore } from '@/state/blocksStore'
 import { listLeaves, useSessionsStore } from '@/state/sessionsStore'
 import { getSettings, useSettingsStore } from '@/state/settingsStore'
-import { useUiStore } from '@/state/uiStore'
+import { isRaw, setRaw, useUiStore } from '@/state/uiStore'
 import { getTerminal } from '@/terminal/terminalRegistry'
 import { aiOpenCommandBar, aiOpenPanel } from '@/features/ai/aiBridge'
 import { setIdeMode, toggleIdeMode } from '@/features/ide/ideMode'
@@ -126,7 +127,9 @@ export function registerCoreActions(): void {
       category: 'Вкладки',
       run: () => {
         const { activeTabId } = useSessionsStore.getState()
-        if (activeTabId) void sessions.closeTab(activeTabId)
+        // Через спрашивающую обёртку: горячая клавиша не должна выбрасывать
+        // недописанный запрос агенту молча, раз крестик в сайдбаре спрашивает.
+        if (activeTabId) void closeTabAsking(activeTabId)
       }
     },
     {
@@ -149,10 +152,12 @@ export function registerCoreActions(): void {
       category: 'Терминал',
       keywords: 'raw interactive интерактивный warp фид блоки claude vim tui',
       run: () => {
-        const raw = useUiStore.getState().rawTerminal
-        ui.set({ rawTerminal: !raw })
+        // Режим переключается у АКТИВНОЙ панели: соседние продолжают жить
+        // своей жизнью, а не гаснут заодно.
+        const id = activeSessionId()
+        const raw = isRaw(useUiStore.getState(), id)
+        setRaw(id, !raw)
         if (!raw) {
-          const id = activeSessionId()
           if (id) setTimeout(() => getTerminal(id)?.focus(), 60)
         }
       }
@@ -162,6 +167,19 @@ export function registerCoreActions(): void {
       title: 'Разделить вправо',
       category: 'Терминал',
       run: () => void sessions.splitActive('row')
+    },
+    {
+      id: 'terminal.split-folder',
+      title: 'Новая панель в папке…',
+      category: 'Терминал',
+      keywords: 'split folder проект панель папка другой',
+      // Сетка нужна для того, чтобы держать рядом РАЗНЫЕ проекты. Без этого
+      // деление панели давало ещё один сеанс той же папки.
+      run: () => {
+        void window.zarya.app.pickDirectory().then((dir) => {
+          if (dir) void sessions.splitActive('row', dir)
+        })
+      }
     },
     {
       id: 'terminal.split-down',
@@ -175,7 +193,7 @@ export function registerCoreActions(): void {
       category: 'Терминал',
       run: () => {
         const id = activeSessionId()
-        if (id) void sessions.closeSession(id)
+        if (id) void closePaneAsking(id)
       }
     },
     {

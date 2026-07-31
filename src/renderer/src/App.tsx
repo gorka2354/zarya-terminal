@@ -1,13 +1,14 @@
+import { installKeyRouter } from '@/features/ai/keyRouter'
 import { useEffect, useRef, useState } from 'react'
 import { registerCoreActions } from '@/actions/coreActions'
 import { ActivityBar } from '@/components/ActivityBar'
-import { AgentBar } from '@/components/AgentBar'
+import { BottomStrip } from '@/components/BottomStrip'
 import { BlocksPanel } from '@/components/BlocksPanel'
 import { LaunchPad } from '@/components/LaunchPad'
 import { MissionFeed } from '@/components/MissionFeed'
 import { StarBackdrop } from '@/components/StarBackdrop'
 import { SessionsPanel } from '@/components/SessionsPanel'
-import { SplitLayout } from '@/components/SplitLayout'
+import { PanesHost } from '@/components/SplitLayout'
 import { StatusBar } from '@/components/StatusBar'
 import { Titlebar } from '@/components/Titlebar'
 import { Toasts } from '@/components/Toasts'
@@ -32,10 +33,13 @@ import logoZarya from '@/assets/logo-zarya-64.png'
 import { seedHistoryCache } from '@/terminal/historyCache'
 import { useSessionsStore } from '@/state/sessionsStore'
 import { useSettingsStore } from '@/state/settingsStore'
-import { useUiStore } from '@/state/uiStore'
+import { isRaw, useUiStore } from '@/state/uiStore'
 import { useAiStore } from '@/features/ai/aiStore'
 
 export default function App(): React.JSX.Element {
+  // Единственный слушатель Esc/Enter на окно. Панели не слушают окно сами —
+  // иначе одно нажатие обслужат все, и один Enter одобрит несколько команд.
+  useEffect(() => installKeyRouter(), [])
   const [booted, setBooted] = useState(false)
   // QA-хук: открыть контекстное меню с заданными пунктами. Меню — общий
   // компонент, и его геометрия (влезает ли в окно, прокручивается ли длинный
@@ -102,7 +106,13 @@ export default function App(): React.JSX.Element {
     return (
       <div className="zy-splash">
         <div className="zy-splash-mark">
-          <img src={logoZarya} width={48} height={48} style={{ imageRendering: 'pixelated' }} alt="" />
+          <img
+            src={logoZarya}
+            width={48}
+            height={48}
+            style={{ imageRendering: 'pixelated' }}
+            alt=""
+          />
         </div>
         <div className="zy-splash-text">Заря · подготовка к старту</div>
       </div>
@@ -160,7 +170,12 @@ function Sidebar(): React.JSX.Element | null {
   if (!view) return null
   // Files/Workflows are IDE-only; fall back to Sessions if the IDE layer is off.
   const ideView = view === 'files' || view === 'workflows'
-  if (ideView && !ideMode) return <aside className="zy-sidebar"><SessionsPanel /></aside>
+  if (ideView && !ideMode)
+    return (
+      <aside className="zy-sidebar">
+        <SessionsPanel />
+      </aside>
+    )
   return (
     <aside className="zy-sidebar">
       {view === 'sessions' && <SessionsPanel />}
@@ -172,10 +187,10 @@ function Sidebar(): React.JSX.Element | null {
 }
 
 function MainContent(): React.JSX.Element {
-  const tabs = useSessionsStore((s) => s.tabs)
-  const activeTabId = useSessionsStore((s) => s.activeTabId)
   const activeSessionId = useSessionsStore((s) => s.activeSessionId())
-  const rawTerminal = useUiStore((s) => s.rawTerminal)
+  // Сырой режим — по панели; здесь читается режим АКТИВНОЙ, потому что от него
+  // зависит только фон рабочей области.
+  const rawTerminal = useUiStore((s) => isRaw(s, activeSessionId))
   const ideMode = useSettingsStore((s) => s.settings.ideMode)
   const editorFiles = useEditorStore((s) => s.files)
   const [editorWidth, setEditorWidth] = useState(46) // percent
@@ -191,22 +206,23 @@ function MainContent(): React.JSX.Element {
               in «Блоки» mode it sits behind the opaque mission-feed overlay and
               is display-only. */}
           <div className={`zy-engine-host${rawTerminal ? ' zy-engine-host--raw' : ''}`}>
-            {tabs.map((tab) => (
-              <SplitLayout key={tab.id} tab={tab} visible={tab.id === activeTabId} />
-            ))}
+            {/* Все панели всех вкладок — одним плоским списком: место панели в
+                разметке больше не зависит от раскладки, и перестройка дерева не
+                пересоздаёт терминал (см. SplitLayout / paneTree). */}
+            <PanesHost />
           </div>
-          {!rawTerminal &&
-            (activeSessionId ? (
-              <MissionFeed sessionId={activeSessionId} />
-            ) : (
-              <div className="zy-empty" style={{ margin: 'auto' }}>
-                Открой терминал кнопкой + в сайдбаре (Ctrl+Shift+T)
-              </div>
-            ))}
+          {/* Лента теперь рисуется КАЖДОЙ панелью (TerminalPane): иначе четыре
+              панели показывали бы один разговор, а сплиты были бы не видны. */}
+          {!activeSessionId && (
+            <div className="zy-empty" style={{ margin: 'auto' }}>
+              Открой терминал кнопкой + в сайдбаре (Ctrl+Shift+T)
+            </div>
+          )}
         </div>
-        {/* Hidden in «Терминал» mode: a raw TUI (claude/vim/ssh) owns the input,
-            so a second bar here would be a confusing double input. */}
-        {!rawTerminal && <AgentBar />}
+        {/* Строка ввода живёт в КАЖДОЙ панели (TerminalPane). Внизу окна
+            остаётся только общее: топливомер подписки и счётчик панелей,
+            ждущих решения. */}
+        <BottomStrip />
       </div>
       {editorOpen && (
         <>

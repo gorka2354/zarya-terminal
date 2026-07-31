@@ -130,7 +130,9 @@ if (process.env.ZARYA_FAKE_AGENT) {
         structuredQuestions: true,
         // Отмотка отправленного — только у этого фейка: esc-queue-test
         // проверяет на codex обратное (сообщение остаётся с пометкой).
-        rewind: true
+        rewind: true,
+        // И картинки — тоже только у него: на codex прогон проверяет отказ.
+        images: true
       },
       () => mainWindow
     )
