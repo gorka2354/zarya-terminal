@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from 'react'
+import { createContext, memo, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { AiContentPart, BlockRecord } from '@shared/types'
 import { onBus } from '@/lib/bus'
 import { formatDuration, formatRelative, shortenPath } from '@/lib/ansi'
@@ -420,9 +420,50 @@ function OutputLines({ text, failed }: { text: string; failed: boolean }): React
 
 // ------------------------------------------------------------------- agent
 
+/**
+ * Беседа для карточек инструментов — через контекст, а не пропсом.
+ *
+ * Пока агент печатает, объект беседы пересоздаётся десятки раз в секунду. Если
+ * передавать его вниз пропсом, memo на сообщениях не значит НИЧЕГО: у каждого
+ * сообщения меняется пропс, и лента перерисовывается целиком — вся разметка,
+ * все строки вывода, все карточки. Через контекст перерисовываются только те,
+ * кому беседа правда нужна, — карточки инструментов.
+ *
+ * Там же лежит индекс результатов. Раньше каждая карточка искала свой результат
+ * перебором ВСЕХ сообщений: на длинном разговоре это квадрат, который растёт
+ * ровно тогда, когда работать становится интереснее всего.
+ */
+interface FeedConv {
+  conv: Conversation
+  results: Map<string, Extract<AiContentPart, { type: 'tool_result' }>>
+}
+const FeedConvContext = createContext<FeedConv | null>(null)
+
+function buildResultIndex(conv: Conversation): FeedConv['results'] {
+  const map = new Map<string, Extract<AiContentPart, { type: 'tool_result' }>>()
+  for (const m of conv.messages) {
+    for (const p of m.content) {
+      if (p.type === 'tool_result' && !map.has(p.toolUseId)) map.set(p.toolUseId, p)
+    }
+  }
+  return map
+}
+
+
 function AgentSection({ conv, cwd }: { conv: Conversation; cwd: string }): React.JSX.Element {
+  // Индекс результатов пересчитывается при изменении сообщений — один проход на
+  // перерисовку вместо перебора всей беседы в каждой карточке.
+  const feed = useMemo<FeedConv>(
+    () => ({ conv, results: buildResultIndex(conv) }),
+    [conv]
+  )
+  // Признаки, от которых зависят СООБЩЕНИЯ, считаем здесь и отдаём значениями:
+  // так их memo продолжает работать, пока меняется только последний ответ.
+  const covered = useMemo(() => coveredToolUseIds(conv.subagents ?? {}), [conv.subagents])
+  const gateId = nextGate(conv)?.id
+  const interrupted = conv.interrupted
   return (
-    <>
+    <FeedConvContext.Provider value={feed}>
       <div className="zy-mf-divider">
         <span className="zy-mf-divider-line" />
         <span className="zy-mf-divider-label">
@@ -435,9 +476,10 @@ function AgentSection({ conv, cwd }: { conv: Conversation; cwd: string }): React
         <AgentMessage
           key={i}
           msg={m}
-          conv={conv}
           cwd={cwd}
-          interrupted={(conv.interrupted ?? []).includes(i)}
+          covered={covered}
+          gateId={gateId}
+          interrupted={(interrupted ?? []).includes(i)}
         />
       ))}
       {/*
@@ -450,12 +492,11 @@ function AgentSection({ conv, cwd }: { conv: Conversation; cwd: string }): React
       {orphanGates(conv).map((t) => (
         <ToolCard
           key={t.id}
-          conv={conv}
           id={t.id}
           name={t.name}
           input={t.input}
           title={t.title}
-          isNextGate={nextGate(conv)?.id === t.id}
+          isNextGate={gateId === t.id}
         />
       ))}
       <SubagentWave conv={conv} />
@@ -466,7 +507,7 @@ function AgentSection({ conv, cwd }: { conv: Conversation; cwd: string }): React
         </div>
       )}
       {conv.error && <div className="zy-mf-errbanner">✗ {conv.error}</div>}
-    </>
+    </FeedConvContext.Provider>
   )
 }
 
@@ -526,13 +567,17 @@ function SubagentWave({ conv }: { conv: Conversation }): React.JSX.Element | nul
 
 const AgentMessage = memo(function AgentMessage({
   msg,
-  conv,
   cwd,
+  covered,
+  gateId,
   interrupted
 }: {
   msg: Conversation['messages'][number]
-  conv: Conversation
   cwd: string
+  /** Инструменты, о которых уже рассказала строка субагента выше. */
+  covered: Set<string>
+  /** Гейт, который одобрит голый Enter, — по нему карточка подсвечивается. */
+  gateId?: string
   /** This user turn was cut off with Esc — no answer is coming for it. */
   interrupted?: boolean
 }): React.JSX.Element | null {
@@ -587,8 +632,6 @@ const AgentMessage = memo(function AgentMessage({
       </div>
     )
   }
-  // Built once per message, not once per tool_use block inside it.
-  const covered = coveredToolUseIds(conv.subagents ?? {})
   return (
     <>
       {msg.content.map((p, i) => {
@@ -610,11 +653,10 @@ const AgentMessage = memo(function AgentMessage({
           return (
             <ToolCard
               key={i}
-              conv={conv}
               id={p.id}
               name={p.name}
               input={p.input}
-              isNextGate={nextGate(conv)?.id === p.id}
+              isNextGate={gateId === p.id}
             />
           )
         }
@@ -644,14 +686,12 @@ function findToolResult(
  * renders for every engine.
  */
 const ToolCard = memo(function ToolCard({
-  conv,
   id,
   name,
   input: rawInput,
   title,
   isNextGate
 }: {
-  conv: Conversation
   id: string
   name: string
   input: unknown
@@ -659,9 +699,14 @@ const ToolCard = memo(function ToolCard({
   title?: string
   /** This is the gate the Enter shortcut would approve (the first unsettled one). */
   isNextGate?: boolean
-}): React.JSX.Element {
+}): React.JSX.Element | null {
+  // Беседа — из контекста: пропсом она пересоздавалась бы каждый кусок потока и
+  // отменяла бы memo у всех сообщений разом (см. FeedConvContext).
+  const feed = useContext(FeedConvContext)
+  const conv = feed?.conv
+  if (!conv) return null
   const pending = conv.pendingTools.find((t) => t.id === id)
-  const result = findToolResult(conv, id)
+  const result = feed.results.get(id)
   // Label from the pending gate when there is one: it carries `displayName`, which
   // is the ONLY human description ACP engines send (their `title` is undefined and
   // their input has no command/path). Labelling from the props alone decayed those

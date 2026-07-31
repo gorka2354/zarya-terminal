@@ -30,10 +30,12 @@ const ok = (name, cond, extra) => {
 
 /** Пороги. Выше — человек замечает задержку, и это уже не «мелочь». */
 const LIMITS = {
-  dragoverAvgMs: 8,
+  // Пороги стоят чуть выше нынешних цифр (7 мс на движение, 7 на кусок потока):
+  // прогон должен ловить ОТКАТ, а не мигать от шума соседних процессов.
+  dragoverAvgMs: 11,
   dragoverWorstMs: 60,
-  typeAvgMs: 16,
-  chunkAvgMs: 16,
+  typeAvgMs: 12,
+  chunkAvgMs: 12,
   chunkWorstMs: 80,
   longTaskTotalMs: 1200
 }
