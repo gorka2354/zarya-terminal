@@ -6,6 +6,7 @@ import { useUiStore } from '@/state/uiStore'
 import { t, useLang } from '@/lib/i18n'
 import { useSessionsStore } from '@/state/sessionsStore'
 import { convForSession, useAiStore } from '@/features/ai/aiStore'
+import { checkModelNews } from '@/features/ai/modelNews'
 import {
   famOf,
   parseVersion,
@@ -141,6 +142,22 @@ export function LaunchPad(): React.JSX.Element | null {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
+  /**
+   * Каталог моделей провайдера (встроенный борт). Раньше здесь стоял список,
+   * зашитый в код: вышел Opus 5 — а человек по-прежнему выбирал из Opus 4.8.
+   * Теперь спрашиваем самого провайдера, а пресет остаётся аварийным.
+   */
+  const [providerModels, setProviderModels] = useState<string[]>([])
+  useEffect(() => {
+    if (!open || claudeMode) return
+    void window.zarya.ai.listModels(provider).then((cat) => {
+      if (!cat?.ids?.length) return
+      setProviderModels(cat.ids)
+      void checkModelNews(provider, cat.ids)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, claudeMode, provider])
+
   // Refresh the dynamic model catalog every time the console opens in Claude
   // mode, so a newly released model appears without an app restart. The cached
   // / restored list still renders instantly; this overwrites it once the fresh
@@ -218,8 +235,11 @@ export function LaunchPad(): React.JSX.Element | null {
       return out
     }
     // Builtin provider path (unchanged behaviour, simple single-line rows).
+    // Живой каталог, если он есть; пресет из кода — только когда спросить не
+    // удалось (нет ключа, нет сети). Список из памяти показывать как свежий
+    // нельзя: он устаревает молча.
     const preset = AI_MODEL_PRESETS[provider] ?? []
-    const list = [...preset]
+    const list = providerModels.length ? [...providerModels] : [...preset]
     if (provider === ai.provider && ai.model && !list.includes(ai.model)) list.unshift(ai.model)
     if (model && !list.includes(model)) list.unshift(model)
     const values = list.length ? list : [model || t('lp.noModel')]
@@ -232,7 +252,17 @@ export function LaunchPad(): React.JSX.Element | null {
       selected: v === model,
       active: v === ai.model
     }))
-  }, [claudeMode, claudeModels, provider, ai.provider, ai.model, model, committed, claudeStatus.model])
+  }, [
+    claudeMode,
+    claudeModels,
+    providerModels,
+    provider,
+    ai.provider,
+    ai.model,
+    model,
+    committed,
+    claudeStatus.model
+  ])
 
   // Effort levels available for the selected Claude model (from the effective
   // catalog — dynamic when present, else the static fallback). An empty pin

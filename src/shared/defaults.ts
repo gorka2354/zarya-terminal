@@ -73,6 +73,8 @@ export const DEFAULT_SETTINGS: Settings = {
     maxTokens: 4096,
     autoApprove: false,
     contextBlocks: 3,
+    // Пусто — первый увиденный каталог запоминается молча (см. modelNews).
+    seenModels: {},
     systemPromptExtra: '',
     claudeModel: '',
     claudeEffort: ''

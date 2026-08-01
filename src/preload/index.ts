@@ -80,7 +80,8 @@ const api = {
     chat: (requestId: string, req: AiChatRequest) => ipcRenderer.send(CH.aiChat, requestId, req),
     abort: (requestId: string) => ipcRenderer.send(CH.aiAbort, requestId),
     onStream: (cb: (requestId: string, ev: AiStreamEvent) => void) => on(CH.aiStream, cb),
-    listOllamaModels: (baseUrl: string) => ipcRenderer.invoke(CH.aiOllamaModels, baseUrl)
+    listOllamaModels: (baseUrl: string) => ipcRenderer.invoke(CH.aiOllamaModels, baseUrl),
+    listModels: (provider: string) => ipcRenderer.invoke(CH.aiModels, provider)
   },
   // Generic native-agent transport — every call carries `engine`; main routes it
   // to the registry driver. Renderer migrates to this in inc-9 Ф3.

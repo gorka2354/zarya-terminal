@@ -99,6 +99,16 @@ export interface SessionMeta {
   lastCommand?: string
   /** Optional user color tag (hex) shown in the sessions list / tab. */
   colorTag?: string
+  /**
+   * Чем панель разговаривала в последний раз: оболочка, встроенный борт или
+   * движок агента.
+   *
+   * Живёт в снапшоте, потому что это выбор человека, а не состояние окна. Пока
+   * режим хранился только в памяти, вчерашняя работа в Claude Code после
+   * перезапуска молча превращалась в обычный терминал — и пусковой комплекс
+   * показывал каталог совсем другого борта.
+   */
+  barMode?: string
 }
 
 export interface SessionSnapshot {
@@ -207,6 +217,14 @@ export interface AiSettings {
   autoApprove: boolean
   /** How many recent blocks to attach as context automatically. */
   contextBlocks: number
+  /**
+   * Модели, которые человек уже видел, по провайдеру.
+   *
+   * Нужны, чтобы сказать «появилась новая модель» ровно один раз. Сравнение
+   * идёт с ВИДЕННЫМ, а не с прошлым ответом: иначе отвалившаяся на минуту сеть
+   * объявила бы новинкой то, что человеку уже показывали.
+   */
+  seenModels?: Record<string, string[]>
   /** Extra instructions appended to the system prompt. */
   systemPromptExtra: string
   /** Claude Code model override ('' = account default from ~/.claude). */

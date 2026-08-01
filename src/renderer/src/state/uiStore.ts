@@ -38,6 +38,11 @@ interface UiState {
    */
   barMode: 'shell' | 'zarya' | AgentEngine
   /**
+   * Новая модель, о которой ещё не сказали. Живёт в UI, а не в настройках:
+   * это разовое сообщение, а не состояние, которое надо переживать перезапуск.
+   */
+  modelNews: { provider: string; ids: string[]; names: string[] } | null
+  /**
    * То же для режима строки: он ещё и переключается САМ, когда где-то начинается
    * ответ агента. На одну панель это удобно, на четыре — способ отправить
    * русский текст в оболочку как команду. `barMode` остаётся умолчанием для
@@ -94,6 +99,7 @@ export const useUiStore = create<UiState>((set, get) => ({
   launchPadOpen: false,
   rawBySession: {},
   barMode: 'shell',
+  modelNews: null,
   barModeBySession: {},
   agentCaps: {},
   claudeStatus: {},
@@ -274,3 +280,13 @@ export function forgetSessionUi(sessionId: string): void {
   useUiStore.getState().claudeStatus
 ;(window as unknown as { __zaryaClaudeModels?: () => unknown }).__zaryaClaudeModels = () =>
   useUiStore.getState().claudeModels
+
+// Режим КОНКРЕТНОЙ панели — поставить и посмотреть карту целиком. Прогону это
+// нужно, чтобы проверить, что выбор человека переживает перезапуск.
+;(
+  window as unknown as { __zaryaSetPaneBarMode?: (sid: string, mode: string) => void }
+).__zaryaSetPaneBarMode = (sid, mode) => setPaneBarMode(sid, mode as UiState['barMode'])
+;(window as unknown as { __zaryaDumpUi?: () => unknown }).__zaryaDumpUi = () => ({
+  barMode: useUiStore.getState().barMode,
+  barModeBySession: useUiStore.getState().barModeBySession
+})

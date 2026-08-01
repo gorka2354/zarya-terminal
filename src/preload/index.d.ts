@@ -84,6 +84,11 @@ export interface ZaryaApi {
     abort(requestId: string): void
     onStream(cb: (requestId: string, ev: AiStreamEvent) => void): Unsub
     listOllamaModels(baseUrl: string): Promise<string[]>
+    /**
+     * Каталог моделей провайдера: живой, с кешем. `at` — когда получен, `error`
+     * стоит, если спросить не вышло и список пришёл из кеша.
+     */
+    listModels(provider: string): Promise<{ ids: string[]; at: number; error?: string }>
   }
   /** Generic native-agent transport — every call carries `engine` (registry key). */
   agent: {

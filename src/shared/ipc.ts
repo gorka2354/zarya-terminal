@@ -40,6 +40,7 @@ export const CH = {
   aiAbort: 'ai:abort',
   aiStream: 'ai:stream', // main -> renderer
   aiOllamaModels: 'ai:ollama-models',
+  aiModels: 'ai:models',
 
   // native agent drivers (claude-code, codex, gemini). Renderer->main calls carry
   // `engine` as the first arg so the main handler routes to the registry driver.

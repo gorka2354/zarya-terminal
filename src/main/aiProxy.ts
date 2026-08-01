@@ -1,8 +1,21 @@
 import { tm } from './lang'
+import { parseModelList } from '@shared/modelCatalog'
 import type { BrowserWindow } from 'electron'
 import { CH } from '@shared/ipc'
-import type { AiChatRequest, AiMessage, AiStreamEvent } from '@shared/types'
+import type { AiChatRequest, AiMessage, AiProviderKind, AiStreamEvent } from '@shared/types'
 import { OLLAMA_DEFAULT_URL } from '@shared/defaults'
+
+/** Версия протокола Anthropic — та же, что в chatAnthropic. */
+const ANTHROPIC_VERSION = '2023-06-01'
+/**
+ * Официальные адреса каталогов. Обратите внимание: у Anthropic путь версии
+ * входит в адрес, а у OpenAI — уже в базовом URL, поэтому дальше к базе
+ * дописывается только `/models`, иначе получится `/v1/v1/models`.
+ */
+const CATALOG_BASE: Record<string, string> = {
+  anthropic: 'https://api.anthropic.com/v1',
+  openai: 'https://api.openai.com/v1'
+}
 
 /**
  * AI transport living in the main process so API keys never enter the renderer.
@@ -240,6 +253,40 @@ export class AiProxy {
       type: 'done',
       stopReason: stopReason === 'tool_calls' ? 'tool_use' : stopReason
     })
+  }
+
+  /**
+   * Каталог моделей у провайдера.
+   *
+   * Список моделей раньше был константой в коде и устаревал молча: вышел
+   * Opus 5, а человек по-прежнему выбирал из Opus 4.8. У всех провайдеров есть
+   * эндпоинт со списком — спрашиваем их, а не свою память.
+   *
+   * SECURITY: запрос делает главный процесс, потому что несёт ключ. baseUrl
+   * приходит уже проверенным (см. ipc): renderer не может назвать чужой хост
+   * провайдеру, у которого есть сохранённый ключ, — иначе ключ уедет туда.
+   */
+  async listProviderModels(
+    provider: AiProviderKind,
+    baseUrl: string | undefined,
+    apiKey: string | undefined
+  ): Promise<string[]> {
+    if (provider === 'ollama') return this.listOllamaModels(baseUrl ?? '')
+    const base = (baseUrl?.trim() || CATALOG_BASE[provider] || '').replace(/\/$/, '')
+    if (!base) throw new Error(tm('main.err.noBaseUrl'))
+    if (!apiKey) {
+      throw new Error(tm(provider === 'anthropic' ? 'main.err.noAnthropicKey' : 'main.err.noOpenaiKey'))
+    }
+    const headers: Record<string, string> =
+      provider === 'anthropic'
+        ? { 'x-api-key': apiKey, 'anthropic-version': ANTHROPIC_VERSION }
+        : { authorization: `Bearer ${apiKey}` }
+    const res = await fetch(`${base}/models`, {
+      headers,
+      signal: AbortSignal.timeout(8000)
+    })
+    if (!res.ok) throw new Error(`${provider} ${res.status}`)
+    return parseModelList(await res.json())
   }
 
   async listOllamaModels(baseUrl: string): Promise<string[]> {

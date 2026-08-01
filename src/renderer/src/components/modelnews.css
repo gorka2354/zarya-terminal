@@ -1,0 +1,70 @@
+/* «Появилась новая модель» — узкая полоса над строкой ввода.
+
+   Не модальное окно: новость не требует решения и не должна перегораживать
+   работу. Появляется у нижнего края, где человек и так смотрит, и уходит по
+   крестику или по переходу в пусковой комплекс. */
+.zy-modelnews {
+  position: absolute;
+  left: 50%;
+  bottom: 76px;
+  transform: translateX(-50%);
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(560px, calc(100% - 48px));
+  padding: 9px 10px 9px 12px;
+  background: var(--bg-elev2);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 10px 28px rgb(0 0 0 / 45%);
+  animation: zy-modelnews-in 0.22s ease-out;
+}
+@keyframes zy-modelnews-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+.zy-modelnews-mark {
+  display: flex;
+  color: var(--accent-2);
+}
+.zy-modelnews-body {
+  min-width: 0;
+}
+.zy-modelnews-title {
+  font-family: var(--font-tech);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+}
+.zy-modelnews-names {
+  font-size: 13px;
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.zy-modelnews-go {
+  flex: none;
+  padding: 5px 11px;
+  font-family: var(--font-tech);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--bg);
+  background: var(--accent);
+  border: none;
+  cursor: pointer;
+}
+.zy-modelnews-go:hover {
+  filter: brightness(1.08);
+}
+.zy-modelnews-x {
+  flex: none;
+}

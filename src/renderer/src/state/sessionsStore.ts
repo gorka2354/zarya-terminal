@@ -27,7 +27,15 @@ import { runQuitFlushers } from '@/lib/quitFlush'
 import { useBlocksStore } from './blocksStore'
 import { getSettings } from './settingsStore'
 import { forgetPaneDraft } from './paneDrafts'
-import { forgetSessionUi, forgetTabUi, maximizedIn, setMaximized, useUiStore } from './uiStore'
+import {
+  barModeOf,
+  forgetSessionUi,
+  forgetTabUi,
+  maximizedIn,
+  setMaximized,
+  setPaneBarMode,
+  useUiStore
+} from '@/state/uiStore'
 import { useAiStore } from '@/features/ai/aiStore'
 import { forgetPaneHistory } from './paneHistory'
 import { focusPane } from '@/terminal/paneFocus'
@@ -265,7 +273,10 @@ function buildMeta(session: RuntimeSession, blocks: BlockRecord[]): SessionMeta 
     pinned: session.pinned,
     favorite: session.favorite,
     blocksCount: blocks.length,
-    lastCommand: lastCmd
+    lastCommand: lastCmd,
+    // Режим бара — выбор человека: он должен пережить перезапуск вместе с
+    // самой сессией, иначе работа в Claude Code молча продолжится в оболочке.
+    barMode: barModeOf(useUiStore.getState(), session.id)
   }
 }
 
@@ -765,6 +776,10 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
         }
         useBlocksStore.getState().setBlocks(savedId, snap.blocks)
         if (snap.scrollback) setPendingRestore(savedId, snap.scrollback)
+        // Режим бара возвращается вместе с сессией: человек вчера работал в
+        // Claude Code, и открывать ему сегодня обычную оболочку — значит
+        // молча отменить его выбор.
+        if (snap.meta.barMode) setPaneBarMode(savedId, snap.meta.barMode as never)
         const session = makeRuntime({
           id: savedId,
           title: restoredTitle(snap.meta.title),
@@ -976,6 +991,7 @@ async function restoreWorkspace(
         idMap.set(sid, sid)
         useBlocksStore.getState().setBlocks(sid, snap.blocks)
         if (snap.scrollback) setPendingRestore(sid, snap.scrollback)
+        if (snap.meta.barMode) setPaneBarMode(sid, snap.meta.barMode as never)
         sessions.push(
           makeRuntime({
             id: sid,

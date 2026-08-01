@@ -21,6 +21,7 @@ import type {
   WorkspaceState
 } from '@shared/types'
 import type { AiProxy } from './aiProxy'
+import { ModelCatalogStore } from './modelCatalogStore'
 import type { AgentDriver } from './agentDriver'
 import * as fsService from './fsService'
 import * as gitService from './gitService'
@@ -55,6 +56,9 @@ export interface IpcContext {
   updates: UpdateService
   requestQuitConfirmed: () => void
 }
+
+/** Последний известный каталог моделей: свой на процесс, файл в userData. */
+const modelCatalogStore = new ModelCatalogStore()
 
 export function registerIpc(ctx: IpcContext): void {
   const {
@@ -259,6 +263,32 @@ export function registerIpc(ctx: IpcContext): void {
   })
   ipcMain.on(CH.aiAbort, (_e, requestId: string) => aiProxy.abort(requestId))
   ipcMain.handle(CH.aiOllamaModels, (_e, baseUrl: string) => aiProxy.listOllamaModels(baseUrl))
+
+  /**
+   * Каталог моделей провайдера — живой, с кешем.
+   *
+   * SECURITY: та же защита, что на ai:chat — адрес берётся из НАСТРОЕК, а не из
+   * окна. Иначе renderer назвал бы чужой хост провайдеру с сохранённым ключом,
+   * и главный процесс отправил бы туда ключ.
+   */
+  ipcMain.handle(CH.aiModels, async (_e, provider: AiProviderKind) => {
+    const settings = settingsStore.get()
+    const baseUrl = provider === settings.ai.provider ? settings.ai.baseUrl : ''
+    const cached = await modelCatalogStore.get(provider)
+    try {
+      const ids = await aiProxy.listProviderModels(
+        provider,
+        baseUrl,
+        settingsStore.getSecret(provider)
+      )
+      if (!ids.length) return cached
+      return await modelCatalogStore.put(provider, ids)
+    } catch (e) {
+      // Молчать нельзя: список из кеша выглядит как свежий, и человек будет
+      // думать, что новых моделей нет, хотя мы просто не смогли спросить.
+      return { ...cached, error: e instanceof Error ? e.message : String(e) }
+    }
+  })
 
   // ------------------------------------------------- native agent drivers (registry)
   // Every renderer->main call carries `engine` first; we look the driver up in the

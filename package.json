@@ -39,6 +39,7 @@
     "qa:ui": "npm run build && node scripts/menu-fit-test.mjs && node scripts/popup-toggle-test.mjs && node scripts/ready-line-test.mjs",
     "perf": "npm run build && node scripts/perf-panes.mjs",
     "qa:progress": "npm run build && node scripts/progress-test.mjs",
+    "qa:models": "npm run build && node scripts/models-test.mjs",
     "qa:privacy": "npm run build && node scripts/secret-badge-test.mjs && node scripts/history-privacy-test.mjs"
   },
   "dependencies": {
