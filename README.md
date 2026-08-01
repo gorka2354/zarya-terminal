@@ -390,11 +390,15 @@ npm run perf          # performance budgets
 ```
 
 **What CI does and does not do.** Every push runs typecheck, the unit tests and a
-build on Ubuntu and Windows. The end-to-end runs need a real Electron window and
-are run by hand before a release — so a green tick on GitHub means *types check,
-unit tests pass, the app builds*, not that every screen was walked. That
-distinction is deliberate: a badge that implies more than it verifies is the same
-kind of lie this project tries not to tell in its interface.
+build on Ubuntu and Windows, plus four end-to-end runs on a real Electron window
+under xvfb: panes, the language switch, download progress and the agent engines
+on a fake driver. The rest — voice models, the real Claude Code driver, the
+update page, performance budgets — need network, hardware or a live agent, so
+they stay manual before a release. A green tick therefore means *types check,
+unit tests pass, the app builds and its main screens survive being driven*, but
+not that every corner was walked. The distinction is spelled out on purpose: a
+badge that implies more than it verifies is the same kind of lie this project
+tries not to tell in its interface.
 
 ## Contributing
 

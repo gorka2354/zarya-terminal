@@ -37,3 +37,45 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  # Прогоны на живом приложении. Юнит-тесты выше проверяют логику, но не то,
+  # что человек видит: панели, переключение языка, ленту, гейты одобрения.
+  # Раньше это гонялось только руками перед релизом — и зелёная галочка
+  # означала меньше, чем выглядела.
+  #
+  # Здесь только те прогоны, которым не нужны ни сеть, ни живой Claude: агенты
+  # идут через фейковый драйвер (ZARYA_FAKE_AGENT), профиль у каждого свой и
+  # временный. Проверено на Ubuntu до включения: 4 прогона, ~2.5 минуты.
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      # Electron нужен дисплей — на раннере его нет, поэтому xvfb.
+      - name: Install xvfb
+        run: sudo apt-get update && sudo apt-get install -y xvfb
+
+      - name: Panes
+        run: xvfb-run -a node scripts/panes-test.mjs
+
+      - name: Language
+        run: xvfb-run -a node scripts/i18n-test.mjs
+
+      - name: Progress
+        run: xvfb-run -a node scripts/progress-test.mjs
+
+      - name: Agent engines (fake driver)
+        run: xvfb-run -a node scripts/qa-fake-agents.mjs

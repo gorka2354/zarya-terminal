@@ -13,6 +13,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 const root = process.cwd()
+// Папка проекта для проверки перетаскивания: она должна СУЩЕСТВОВАТЬ, иначе
+// оболочка стартует в домашней, и «открылась в папке проекта» падает не по делу.
+// Зашитая C:\Windows делала прогон windows-only — а гонять его хочется и в CI.
+const PROJECT_DIR = process.platform === 'win32' ? 'C:\\Windows' : '/usr'
+const PROJECT_TAIL = process.platform === 'win32' ? 'windows' : 'usr'
 const userData = mkdtempSync(join(tmpdir(), 'zarya-panes-'))
 let pass = 0,
   fail = 0
@@ -618,7 +623,7 @@ try {
   }
   const target21 = (await dump()).tabs.find((t) => t.id === state21.activeTabId).leaves[0]
   const before21 = (await dump()).tabs.find((t) => t.id === state21.activeTabId).leaves.length
-  await page.evaluate(() => window.__zaryaAddProject('C:\\Windows'))
+  await page.evaluate((dir) => window.__zaryaAddProject(dir), PROJECT_DIR)
   await page.waitForTimeout(400)
   await page.click('.zy-titlebar-proj')
   await page.waitForTimeout(500)
@@ -644,7 +649,7 @@ try {
   const after21 = await dump()
   const tab21 = after21.tabs.find((t) => t.id === state21.activeTabId)
   ok('пункт проекта в шапке можно тащить', dragged21.ok, dragged21)
-  ok('и он несёт путь проекта', dragged21.carried === 'C:\\Windows', dragged21)
+  ok('и он несёт путь проекта', dragged21.carried === PROJECT_DIR, dragged21)
   ok('меню ушло с глаз, но жест не оборвало', dragged21.hidden === true, dragged21)
   const menuGone21 = await page.evaluate(() => document.querySelectorAll('.zy-context-menu').length)
   ok('после броска меню закрылось', menuGone21 === 0, menuGone21)
@@ -654,7 +659,10 @@ try {
   })
   const newPane21 = tab21?.leaves.find((sid) => !activeTab21.leaves.includes(sid))
   const cwd21 = after21.sessions.find((s) => s.id === newPane21)?.cwd ?? ''
-  ok('и открылась в папке проекта', /windows/i.test(cwd21), { newPane21, cwd21 })
+  ok('и открылась в папке проекта', new RegExp(PROJECT_TAIL, 'i').test(cwd21), {
+    newPane21,
+    cwd21
+  })
 
   console.log('\n[22] Развёрнутая панель не прячет работу: деление, переезд, соседняя вкладка')
   // Находки ревью: разворот был состоянием ОКНА, и три пути его не согласовывали.
