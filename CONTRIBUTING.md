@@ -22,6 +22,9 @@ npm run typecheck:node    # just src/main + src/preload
 npm run typecheck:web     # just src/renderer
 npm test                  # vitest run — unit tests under tests/
 npm run test:watch
+npm run qa:progress        # end-to-end: builds, then drives the real app (scripts/*.mjs)
+npm run qa:fake-agents     # agent engines against a protocol-accurate fake driver
+npm run perf               # latency budgets for drag / streaming / gutters
 npm run format             # prettier --write src/**/*.{ts,tsx,css}
 npm run pack               # build + unpacked electron-builder output (fast, for local testing)
 npm run dist                # build + full platform installer(s)

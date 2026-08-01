@@ -11,6 +11,7 @@
 [![Languages](https://img.shields.io/badge/UI-English%20%7C%20%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9-4fd6d6.svg)](#language)
 [![Electron](https://img.shields.io/badge/Electron-43-4fd6d6.svg)](https://www.electronjs.org/)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-5fb88a.svg)](#install)
+[![CI](https://github.com/gorka2354/zarya-terminal/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/gorka2354/zarya-terminal/actions/workflows/ci.yml)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-e0b15a.svg)](CONTRIBUTING.md)
 
 Zarya is an AI-native terminal with a Soviet space-age soul. It runs **Claude Code
@@ -363,6 +364,37 @@ Details: [docs/shell-integration.md](docs/shell-integration.md).
 - Terminal scrollback, history and conversations are stored **in cleartext** by design
   (only keys are encrypted) — see [SECURITY.md](SECURITY.md) for the threat model and how
   to disable persistence on shared machines.
+
+## Tests
+
+Numbers as of 0.7.1: **379 unit checks** across 33 files and **33 end-to-end runs**
+that drive the real application.
+
+**Unit** (`tests/`, vitest) — the pure logic where a silent mistake costs the most:
+the pane-layout rules, the approval-gate labels a person presses Enter on, the
+download-progress parsing (including its refusal to draw a bar over a coverage
+report), the project list order and path comparison, key-protection classification,
+shell-profile validation, and the completeness of both language dictionaries.
+
+**End-to-end** (`scripts/*.mjs`, Playwright driving Electron) — the real app in a
+throwaway profile, never touching your sessions or settings. Panes (139 checks),
+the language switch across every screen (10), download progress and the tool clock
+(16), the agent engines on a protocol-accurate fake driver (21), the launch pad
+(41), the update page (27), menus (27), key badges (9). Plus `npm run perf`, which
+measures drag, streaming and gutter latency against fixed budgets.
+
+```bash
+npm test              # unit tests
+npm run qa:progress   # one end-to-end run (build + drive the app)
+npm run perf          # performance budgets
+```
+
+**What CI does and does not do.** Every push runs typecheck, the unit tests and a
+build on Ubuntu and Windows. The end-to-end runs need a real Electron window and
+are run by hand before a release — so a green tick on GitHub means *types check,
+unit tests pass, the app builds*, not that every screen was walked. That
+distinction is deliberate: a badge that implies more than it verifies is the same
+kind of lie this project tries not to tell in its interface.
 
 ## Contributing
 
