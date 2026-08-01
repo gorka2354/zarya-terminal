@@ -12,10 +12,33 @@
  * всегда «поменять ссылку».
  */
 
-export type SttFamily = 'nemoCtc' | 'transducer' | 'moonshine'
+/**
+ * Семейства, форму конфигурации которых Заря умеет собрать (см. FAMILY_SHAPE в
+ * sttCustom.ts). Встроенные модели занимают три из них; остальные существуют
+ * ради своих моделей — тех, что человек приносит с диска сам.
+ */
+export type SttFamily =
+  | 'nemoCtc'
+  | 'transducer'
+  | 'moonshine'
+  | 'whisper'
+  | 'canary'
+  | 'fireRedAsr'
+  | 'senseVoice'
+  | 'paraformer'
+  | 'zipformerCtc'
+  | 'dolphin'
 
 export interface SttModelFile {
   name: string
+  /**
+   * Чем этот файл служит движку: 'model' / 'encoder' / 'tokens' и так далее.
+   * Роли, а не имена: конфигурация собирается по одной таблице форм
+   * (FAMILY_SHAPE в sttCustom.ts) и для встроенных моделей, и для своих —
+   * иначе новое семейство пришлось бы дописывать в двух местах, а разошлись бы
+   * они молча, через минуту сборки движка и невнятную нативную ошибку.
+   */
+  role: string
   /** Пусто у моделей прошлых версий: их не скачивают, их только опознают. */
   url?: string
   bytes: number
@@ -52,12 +75,14 @@ export const STT_MODELS: SttModelDef[] = [
     files: [
       {
         name: 'model.int8.onnx',
+        role: 'model',
         url: 'https://huggingface.co/csukuangfj/sherpa-onnx-nemo-ctc-punct-giga-am-v3-russian-2025-12-16/resolve/main/model.int8.onnx',
         bytes: 224893661,
         sha256: 'd5fea8df94263c285e54b21e5774b707c707192d3bdbeffd7b1eb07fb6743b35'
       },
       {
         name: 'tokens.txt',
+        role: 'tokens',
         url: 'https://huggingface.co/csukuangfj/sherpa-onnx-nemo-ctc-punct-giga-am-v3-russian-2025-12-16/resolve/main/tokens.txt',
         bytes: 2007,
         sha256: null
@@ -75,24 +100,28 @@ export const STT_MODELS: SttModelDef[] = [
     files: [
       {
         name: 'encoder.int8.onnx',
+        role: 'encoder',
         url: 'https://huggingface.co/csukuangfj/sherpa-onnx-nemo-transducer-punct-giga-am-v3-russian-2025-12-16/resolve/main/encoder.int8.onnx',
         bytes: 224570820,
         sha256: '369f35a71bf288d3b8e0391fabd8dba5f2314088d440bca474056b7b4b6e66bf'
       },
       {
         name: 'decoder.onnx',
+        role: 'decoder',
         url: 'https://huggingface.co/csukuangfj/sherpa-onnx-nemo-transducer-punct-giga-am-v3-russian-2025-12-16/resolve/main/decoder.onnx',
         bytes: 4600132,
         sha256: '38fc7475443ea2a26f63211ca350f73ac50fff824ab7a3876ee2bd610c53bbc4'
       },
       {
         name: 'joiner.onnx',
+        role: 'joiner',
         url: 'https://huggingface.co/csukuangfj/sherpa-onnx-nemo-transducer-punct-giga-am-v3-russian-2025-12-16/resolve/main/joiner.onnx',
         bytes: 2712896,
         sha256: '602ff7017a93311aad34df1437c8d7f49911353c13d6eae7a6ee7b041339465c'
       },
       {
         name: 'tokens.txt',
+        role: 'tokens',
         url: 'https://huggingface.co/csukuangfj/sherpa-onnx-nemo-transducer-punct-giga-am-v3-russian-2025-12-16/resolve/main/tokens.txt',
         bytes: 13354,
         sha256: null
@@ -114,30 +143,35 @@ export const STT_MODELS: SttModelDef[] = [
     files: [
       {
         name: 'preprocess.onnx',
+        role: 'preprocessor',
         url: 'https://huggingface.co/csukuangfj/sherpa-onnx-moonshine-tiny-en-int8/resolve/main/preprocess.onnx',
         bytes: 6800738,
         sha256: 'f33addce61a143460fe753b5ee5b7db255e5140b5b779c065b94f6c83ff0bf4e'
       },
       {
         name: 'encode.int8.onnx',
+        role: 'encoder',
         url: 'https://huggingface.co/csukuangfj/sherpa-onnx-moonshine-tiny-en-int8/resolve/main/encode.int8.onnx',
         bytes: 18249187,
         sha256: '8774dfba578de027ec6595c2c654a0836434489bc963a0db124a7f181f571acb'
       },
       {
         name: 'uncached_decode.int8.onnx',
+        role: 'uncachedDecoder',
         url: 'https://huggingface.co/csukuangfj/sherpa-onnx-moonshine-tiny-en-int8/resolve/main/uncached_decode.int8.onnx',
         bytes: 53216096,
         sha256: '216737000dd5881a17aa043f6bbd286add33e4c3b0ae257153e2ec15438bdc41'
       },
       {
         name: 'cached_decode.int8.onnx',
+        role: 'cachedDecoder',
         url: 'https://huggingface.co/csukuangfj/sherpa-onnx-moonshine-tiny-en-int8/resolve/main/cached_decode.int8.onnx',
         bytes: 45264830,
         sha256: '2aff28bba6a03d8dcf5c9feac45462629bae37317442299f28115ad09da773f6'
       },
       {
         name: 'tokens.txt',
+        role: 'tokens',
         url: 'https://huggingface.co/csukuangfj/sherpa-onnx-moonshine-tiny-en-int8/resolve/main/tokens.txt',
         bytes: 436688,
         sha256: null
@@ -157,8 +191,8 @@ export const STT_MODELS: SttModelDef[] = [
     noteKey: 'stt.gigaOldNote',
     legacy: true,
     files: [
-      { name: 'model.int8.onnx', bytes: 224721476 },
-      { name: 'tokens.txt', bytes: 196 }
+      { name: 'model.int8.onnx', role: 'model', bytes: 224721476 },
+      { name: 'tokens.txt', role: 'tokens', bytes: 196 }
     ]
   }
 ]
@@ -188,9 +222,27 @@ export function resolveSttModel(
   wantedId: string,
   installed: (m: SttModelDef) => boolean
 ): SttModelDef | null {
-  const wanted = findSttModel(wantedId)
+  return pickSttModel(wantedId, STT_MODELS, installed)
+}
+
+/** Всё, что нужно выбору: имя и признак «модель прошлых версий». */
+export interface SttCandidate {
+  id: string
+  legacy?: boolean
+}
+
+/**
+ * Тот же выбор, но по любому списку — встроенные плюс свои, принесённые с
+ * диска. Своя модель ничем не хуже встроенной: если выбрана она, грузится она.
+ */
+export function pickSttModel<T extends SttCandidate>(
+  wantedId: string,
+  list: T[],
+  installed: (m: T) => boolean
+): T | null {
+  const wanted = list.find((m) => m.id === wantedId)
   if (wanted && installed(wanted)) return wanted
-  const fresh = STT_MODELS.find((m) => !m.legacy && installed(m))
+  const fresh = list.find((m) => !m.legacy && installed(m))
   if (fresh) return fresh
-  return STT_MODELS.find((m) => m.legacy && installed(m)) ?? null
+  return list.find((m) => m.legacy && installed(m)) ?? null
 }

@@ -85,7 +85,8 @@ export const DEFAULT_SETTINGS: Settings = {
     // за этим последует.
     deviceId: '',
     deviceLabel: '',
-    modelId: ''
+    modelId: '',
+    customModels: []
   },
   updates: {
     check: true

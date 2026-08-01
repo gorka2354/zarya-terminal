@@ -90,6 +90,9 @@ export const CH = {
   sttProgress: 'stt:progress', // main -> renderer
   sttTranscribe: 'stt:transcribe',
   sttRemoveModel: 'stt:remove-model',
+  /** Своя модель с диска: main спрашивает папку сам, renderer путей не подаёт. */
+  sttAddCustom: 'stt:add-custom',
+  sttForgetCustom: 'stt:forget-custom',
 
   // проверка обновлений
   updatesState: 'updates:state',

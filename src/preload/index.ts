@@ -193,6 +193,10 @@ const api = {
     state: () => ipcRenderer.invoke(CH.sttState),
     ensureModel: (id?: string) => ipcRenderer.invoke(CH.sttEnsureModel, id),
     removeModel: (id: string) => ipcRenderer.invoke(CH.sttRemoveModel, id),
+    // Аргумента нет намеренно: путь выбирает человек в системном диалоге,
+    // который открывает главный процесс. Отсюда подать каталог нельзя.
+    addCustom: () => ipcRenderer.invoke(CH.sttAddCustom),
+    forgetCustom: (id: string) => ipcRenderer.invoke(CH.sttForgetCustom, id),
     onProgress: (cb: (p: { file: string; received: number; total: number } | null) => void) =>
       on(CH.sttProgress, cb),
     /**

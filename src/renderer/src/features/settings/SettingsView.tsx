@@ -7,6 +7,7 @@ import {
   OPENAI_COMPAT_PRESETS
 } from '@shared/defaults'
 import type { AiEffort, AiProviderKind, AiProviderStatus, AppInfo } from '@shared/types'
+import { MANIFEST_SAMPLE } from '@shared/sttCustom'
 import { getAllActions, onActionsChanged } from '@/lib/actionRegistry'
 import { Icon, type IconName } from '@/components/Icon'
 import { chordFromEvent, formatChord } from '@/features/palette/keybindings'
@@ -1409,18 +1410,61 @@ function SttModels(): React.JSX.Element {
           <div key={m.id} className="zy-set-row">
             <div className="zy-set-row-label">
               <div className="zy-set-row-title">
-                {t(m.labelKey)}
+                {/* Своя модель подписана именем, которое дал человек: ключа в
+                    словаре у неё нет и быть не может. */}
+                {m.custom ? m.name : t(m.labelKey)}
                 {m.id === activeId && <span className="zy-badge zy-badge--ok">{t('set.badgeActive')}</span>}
+                {m.custom && <span className="zy-badge">{t('set.customBadge')}</span>}
+                {m.custom && !m.installed && (
+                  <span className="zy-badge zy-badge--warn">{t('set.customMissing')}</span>
+                )}
                 {m.legacy && <span className="zy-badge zy-badge--warn">{t('set.badgeLegacy')}</span>}
               </div>
               <div className="zy-set-row-sub">
-                {m.lang} · {mb(m.bytes)} · {m.license}
+                {[m.lang, mb(m.bytes), m.license].filter(Boolean).join(' · ')}
               </div>
-              <div className="zy-item-sub">{t(m.noteKey)}</div>
+              {/* У своей модели вместо пояснения — путь и честная оговорка: она
+                  пришла не от нас, и обещать за неё нечего. Длинный путь строка
+                  обрезает, поэтому целиком он живёт в подсказке. */}
+              <div className="zy-item-sub" title={m.custom ? m.dir : undefined}>
+                {m.custom ? m.dir : t(m.noteKey)}
+              </div>
+              {m.custom && <div className="zy-item-sub">{t('set.customNote')}</div>}
             </div>
             <div className="zy-set-row-control">
               <div className="zy-inline-group">
-                {!m.installed && !m.legacy && (
+                {m.custom && !isChosen && m.installed && (
+                  <button
+                    type="button"
+                    className="zy-btn"
+                    onClick={() => {
+                      void update({ voice: { modelId: m.id } as never })
+                      setTimeout(refresh, 200)
+                    }}
+                  >
+                    {t('set.choose')}
+                  </button>
+                )}
+                {m.custom && (
+                  <button
+                    type="button"
+                    className="zy-btn"
+                    disabled={!!busy}
+                    onClick={() => {
+                      setBusy(m.id)
+                      void window.zarya.stt
+                        .forgetCustom(m.id)
+                        .then(() => {
+                          useUiStore.getState().toast(t('set.customForgotten'))
+                          refresh()
+                        })
+                        .finally(() => setBusy(null))
+                    }}
+                  >
+                    {t('set.customForget')}
+                  </button>
+                )}
+                {!m.custom && !m.installed && !m.legacy && (
                   <button
                     type="button"
                     className="zy-btn zy-btn--accent"
@@ -1444,7 +1488,7 @@ function SttModels(): React.JSX.Element {
                     {busy === m.id ? t('set.downloading') : t('set.download', { size: mb(m.bytes) })}
                   </button>
                 )}
-                {m.installed && !isChosen && (
+                {!m.custom && m.installed && !isChosen && (
                   <button
                     type="button"
                     className="zy-btn"
@@ -1456,7 +1500,7 @@ function SttModels(): React.JSX.Element {
                     {t('set.choose')}
                   </button>
                 )}
-                {m.installed && (
+                {!m.custom && m.installed && (
                   <button
                     type="button"
                     className="zy-btn zy-btn--danger"
@@ -1480,6 +1524,57 @@ function SttModels(): React.JSX.Element {
           </div>
         )
       })}
+
+      {/* Своя модель. Кнопка не спрашивает ссылку и не может её принять: папку
+          выбирает человек в системном диалоге главного процесса. Скачать чужой
+          файл в нативный движок и открыть свой — разные вещи, и разница здесь
+          выражена тем, что поля ввода тут просто нет. */}
+      <div className="zy-section-label">{t('set.customTitle')}</div>
+      {/* Пояснение отдельной строкой: в колонке подписи оно ужималось до
+          многоточия ровно на той половине фразы, ради которой написано. */}
+      <div className="zy-set-hint">{t('set.customHint')}</div>
+      <div className="zy-set-row">
+        <div className="zy-set-row-label" />
+        <div className="zy-set-row-control">
+          <div className="zy-inline-group">
+            <button
+              type="button"
+              className="zy-btn"
+              onClick={() => {
+                void navigator.clipboard
+                  .writeText(MANIFEST_SAMPLE)
+                  .then(() => useUiStore.getState().toast(t('set.customSampleDone')))
+              }}
+            >
+              {t('set.customSample')}
+            </button>
+            <button
+              type="button"
+              className="zy-btn zy-btn--accent"
+              disabled={busy === 'custom'}
+              onClick={() => {
+                setBusy('custom')
+                void window.zarya.stt
+                  .addCustom()
+                  .then((r) => {
+                    // Отказ от диалога — не ошибка: человек передумал, и
+                    // сообщать ему об этом нечего.
+                    if (r?.canceled) return
+                    if (r?.ok)
+                      useUiStore
+                        .getState()
+                        .toast(t('set.customAdded', { name: r.model?.name ?? '' }), 'success')
+                    else useUiStore.getState().toast(r?.error ?? t('set.modelFail'), 'error')
+                    refresh()
+                  })
+                  .finally(() => setBusy(null))
+              }}
+            >
+              {t('set.customAdd')}
+            </button>
+          </div>
+        </div>
+      </div>
     </>
   )
 }

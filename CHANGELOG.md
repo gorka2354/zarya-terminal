@@ -5,6 +5,32 @@ All notable changes to Zarya are documented here. This project uses
 
 Русская версия этого файла — [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## Unreleased
+
+### Added
+
+- **Your own speech model, from disk.** The built-in list is closed on purpose:
+  a downloaded file goes straight into a native engine, so a "paste a link"
+  field would be a way to run someone else's code. The consequence was
+  inconvenient, though — a multilingual Whisper meant waiting for a Zarya
+  release.
+
+  Now you can point Zarya at a folder you already have. **Settings → Voice →
+  Choose folder…**: it recognises what is inside (whisper, transducer, moonshine,
+  nemo-ctc, sense-voice, paraformer, zipformer, dolphin, canary, fire-red),
+  shows it in the same list marked *yours*, and dictates with it like with any
+  other model. Nothing is copied — the files stay where they are.
+
+  What it refuses to do is guess. A lone `model.onnx` in a folder with an
+  uninformative name looks identical for six different families; guessing would
+  build an engine that produces garbage and blame "a bad model". Instead you get
+  a refusal that says what to do: put a `zarya-model.json` next to the files —
+  and there is a button that copies a sample.
+
+  The path only ever comes from the system dialog opened by the main process:
+  the channel accepts the command "ask the human", not a ready path. And
+  "Remove" removes the entry, never the files — Zarya did not put them there.
+
 ## 0.7.1 — "Countdown" (2026-07-31)
 
 ### Added

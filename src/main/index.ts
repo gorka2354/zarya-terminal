@@ -340,6 +340,7 @@ if (!gotLock) {
     // должен срабатывать немедленно, а не со следующего запуска.
     historyStore.configure(settingsStore.get().history)
     sttService.select(settingsStore.get().voice.modelId)
+    sttService.setCustom(settingsStore.get().voice.customModels ?? [])
 
     // Каталог с данными — только владельцу. Внутри лежат ключи провайдеров,
     // история команд и переписки с агентом. На Windows это почти no-op (там
@@ -367,6 +368,7 @@ if (!gotLock) {
     settingsStore.onChange((s) => {
       historyStore.configure(s.history)
       sttService.select(s.voice.modelId)
+      sttService.setCustom(s.voice.customModels ?? [])
       mainWindow?.webContents.send(CH.settingsChanged, s)
     })
 

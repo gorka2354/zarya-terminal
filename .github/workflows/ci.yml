@@ -79,3 +79,9 @@ jobs:
 
       - name: Agent engines (fake driver)
         run: xvfb-run -a node scripts/qa-fake-agents.mjs
+
+      # Своя модель распознавания: движок здесь не поднимается (файлы пустые),
+      # проверяется всё, что до него — опознание папки, отказы и то, что чужие
+      # файлы остаются на диске.
+      - name: Custom speech model
+        run: xvfb-run -a node scripts/stt-custom-test.mjs

@@ -176,6 +176,17 @@ is reinstalled — so the same headset is re-bound silently instead of dictation
 falling back to the laptop's built-in mic. If the device really is gone, Zarya says so
 and records into the system default rather than failing or pretending.
 
+**Your own model.** The built-in list is closed on purpose — a downloaded file goes
+into a native engine, so a "paste a link" field would be a way to run someone else's
+code. Instead, **Settings → Voice → Choose folder…** points Zarya at a
+[sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) model folder you already have
+(whisper, transducer, moonshine, nemo-ctc, sense-voice, paraformer, zipformer,
+dolphin, canary, fire-red). It recognises the layout, lists the model marked *yours*,
+and dictates with it. Nothing is copied and nothing is downloaded; the path comes only
+from the system dialog, and "Remove" drops the entry, never your files. When the
+folder is ambiguous — a lone `model.onnx` looks the same for six families — Zarya
+refuses instead of guessing and asks for a `zarya-model.json` naming the family.
+
 ### Update check
 Zarya makes **one anonymous GET** to the GitHub releases API at startup — no token,
 no identifiers, no telemetry — and shows a dot in the activity bar when a newer

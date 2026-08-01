@@ -22,6 +22,7 @@ import type {
 } from '@shared/types'
 import type { AiProxy } from './aiProxy'
 import { ModelCatalogStore } from './modelCatalogStore'
+import { withCustom } from '@shared/sttCustom'
 import type { AgentDriver } from './agentDriver'
 import * as fsService from './fsService'
 import * as gitService from './gitService'
@@ -204,6 +205,50 @@ export function registerIpc(ctx: IpcContext): void {
   ctx.updates.onChange((s) => getWindow()?.webContents.send(CH.updatesChanged, s))
 
   ipcMain.handle(CH.sttState, () => ctx.stt.state())
+  /**
+   * Добавить свою модель распознавания.
+   *
+   * Канал принимает КОМАНДУ «спроси человека», а не готовый путь: renderer не
+   * может подсунуть сюда каталог, диалог открывает главный процесс. Это тот же
+   * жест, что «Открыть файл» в редакторе — и ровно поэтому здесь не появится
+   * поля со ссылкой: скачать чужой файл в нативный движок и открыть свой —
+   * разные вещи.
+   *
+   * ZARYA_STT_PICK_DIR — рубильник для прогонов: системный диалог не нажимается
+   * из Playwright, а проверять надо всё, что после него.
+   */
+  ipcMain.handle(CH.sttAddCustom, async () => {
+    const win = getWindow()
+    const forced = process.env.ZARYA_STT_PICK_DIR
+    let dir: string | null = forced ?? null
+    if (!dir) {
+      if (!win) return { ok: false, error: tm('main.stt.custom.dirUnreadable') }
+      const res = await dialog.showOpenDialog(win, {
+        properties: ['openDirectory'],
+        title: tm('main.stt.custom.pickTitle')
+      })
+      if (res.canceled || !res.filePaths[0]) return { ok: false, canceled: true }
+      dir = res.filePaths[0]
+    }
+    const found = ctx.stt.identifyDir(dir)
+    if (!found.ok) return found
+    const voice = settingsStore.get().voice
+    const list = withCustom(voice.customModels ?? [], found.model)
+    // Новая модель сразу становится выбранной: человек добавил её не для того,
+    // чтобы потом искать её в списке и нажимать «Выбрать».
+    settingsStore.set({ voice: { ...voice, customModels: list, modelId: found.model.id } })
+    return { ok: true, model: found.model }
+  })
+  ipcMain.handle(CH.sttForgetCustom, (_e, id: string) => {
+    const voice = settingsStore.get().voice
+    const list = (voice.customModels ?? []).filter((m) => m.id !== id)
+    // Файлы остаются на диске: их принесла не Заря, и удалять чужое она не
+    // будет. Выбор сбрасывается на умолчание, только если убрали выбранное.
+    settingsStore.set({
+      voice: { ...voice, customModels: list, modelId: voice.modelId === id ? '' : voice.modelId }
+    })
+    return { ok: true }
+  })
   ipcMain.handle(CH.sttRemoveModel, (_e, id: string) => ctx.stt.removeModel(id))
   ipcMain.handle(CH.sttEnsureModel, async (_e, id?: string) => {
     try {

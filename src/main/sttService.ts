@@ -1,18 +1,51 @@
 import { createHash } from 'crypto'
 import { tm } from './lang'
-import { createWriteStream, existsSync, mkdirSync, renameSync, rmSync, statSync } from 'fs'
+import {
+  createWriteStream,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync
+} from 'fs'
 import { readFile } from 'fs/promises'
 import { get } from 'https'
-import { join } from 'path'
+import { basename, join } from 'path'
 import { app } from 'electron'
 import {
   DEFAULT_STT_MODEL,
   findSttModel,
-  resolveSttModel,
+  pickSttModel,
   sttModelBytes,
   STT_MODELS,
   type SttModelDef
 } from '@shared/sttModels'
+import {
+  customId,
+  FAMILY_SHAPE,
+  identifyModel,
+  MANIFEST,
+  readManifest,
+  type CustomSttModel,
+  type DirEntry,
+  type Identified
+} from '@shared/sttCustom'
+
+/** Что вообще может быть частью модели: остальное даже не взвешивается. */
+const MODEL_EXT = /\.(onnx|txt|weights|json)$/i
+/** Потолок на число рассматриваемых файлов — защита от «выбрал не ту папку». */
+const MAX_MODEL_FILES = 200
+
+/** Размер файла, который может исчезнуть между чтением каталога и статом. */
+function safeSize(p: string): number {
+  try {
+    return statSync(p).size
+  } catch {
+    return 0
+  }
+}
 
 /**
  * Local speech-to-text — dictation into the bar's input.
@@ -37,6 +70,7 @@ export interface SttProgress {
 /** Одна строка списка моделей для настроек. */
 export interface SttModelState {
   id: string
+  /** Ключ подписи у встроенных; у своей пуст — имя дал человек. */
   labelKey: string
   lang: string
   license: string
@@ -44,6 +78,11 @@ export interface SttModelState {
   bytes: number
   installed: boolean
   legacy: boolean
+  /** Своя модель: принесена с диска, а не скачана Зарёй. */
+  custom?: boolean
+  /** Имя своей модели (готовая строка, не ключ) и папка, где она лежит. */
+  name?: string
+  dir?: string
 }
 
 export interface SttState {
@@ -72,10 +111,29 @@ type Recognizer = {
   getResult: (s: unknown) => { text?: string }
 }
 
+/**
+ * Модель в том виде, в котором её грузит движок: где лежит и какой файл за
+ * какую роль отвечает. Встроенные и свои различаются происхождением, но грузятся
+ * одинаково — иначе своя была бы гражданином второго сорта, а человек ждёт от
+ * неё того же, что от встроенной.
+ */
+interface Runnable {
+  id: string
+  family: SttModelDef['family']
+  /** Абсолютный путь к папке с файлами. */
+  dir: string
+  /** Роль → имя файла внутри dir. */
+  roles: Record<string, string>
+  legacy: boolean
+  custom: boolean
+}
+
 export class SttService {
   private recognizer: Recognizer | null = null
   /** Какая модель выбрана человеком; задаётся из настроек при старте. */
   private selectedId = ''
+  /** Свои модели из настроек: путь, семейство и роли файлов. */
+  private customs: CustomSttModel[] = []
   private loading: Promise<void> | null = null
   private downloading: SttProgress | null = null
   private lastError: string | undefined
@@ -88,6 +146,56 @@ export class SttService {
 
   private dirOf(m: SttModelDef): string {
     return join(this.modelsRoot(), m.dir)
+  }
+
+  /** Встроенная модель как объект загрузки: роли уже описаны в реестре. */
+  private toRunnable(m: SttModelDef): Runnable {
+    const roles: Record<string, string> = {}
+    for (const f of m.files) roles[f.role] = f.name
+    return {
+      id: m.id,
+      family: m.family,
+      dir: this.dirOf(m),
+      roles,
+      legacy: !!m.legacy,
+      custom: false
+    }
+  }
+
+  private customRunnable(c: CustomSttModel): Runnable {
+    return { id: c.id, family: c.family, dir: c.dir, roles: c.files, legacy: false, custom: true }
+  }
+
+  /** Все модели разом: встроенные, затем свои. */
+  private runnables(): Runnable[] {
+    return [
+      ...STT_MODELS.map((m) => this.toRunnable(m)),
+      ...this.customs.map((c) => this.customRunnable(c))
+    ]
+  }
+
+  /**
+   * Своя модель на месте, если все её файлы читаются. Размеры не сверяются:
+   * человек мог принести другую редакцию тех же весов, и требовать байт в байт
+   * значило бы объявлять его модель сломанной без причины.
+   */
+  private customInstalled(c: CustomSttModel): boolean {
+    return Object.values(c.files).every((n) => {
+      try {
+        return statSync(join(c.dir, n)).isFile()
+      } catch {
+        return false
+      }
+    })
+  }
+
+  private runnableInstalled(r: Runnable): boolean {
+    if (r.custom) {
+      const c = this.customs.find((x) => x.id === r.id)
+      return !!c && this.customInstalled(c)
+    }
+    const m = findSttModel(r.id)
+    return !!m && this.installed(m)
   }
 
   /** Файл засчитывается только при точном ожидаемом размере. */
@@ -108,9 +216,9 @@ export class SttService {
     return this.selectedId || DEFAULT_STT_MODEL
   }
 
-  /** Что реально грузить с учётом того, что скачано. */
-  private active(): SttModelDef | null {
-    return resolveSttModel(this.wantedId(), (m) => this.installed(m))
+  /** Что реально грузить с учётом того, что скачано и что принесено. */
+  private active(): Runnable | null {
+    return pickSttModel(this.wantedId(), this.runnables(), (r) => this.runnableInstalled(r))
   }
 
   /** Выбор модели из настроек. Смена выгружает движок: он держит прежнюю в памяти. */
@@ -120,30 +228,119 @@ export class SttService {
     this.recognizer = null
   }
 
+  /**
+   * Свои модели из настроек. Если состав изменился, движок выгружается: он
+   * держит в памяти ту, что грузил, и убранная из списка продолжала бы
+   * распознавать — интерфейс говорил бы одно, а работала бы другая.
+   */
+  setCustom(list: CustomSttModel[]): void {
+    // Сравнивается и состав файлов: та же папка, переопознанная после того как
+    // человек обновил в ней веса, — это ДРУГАЯ модель, а движок продолжал бы
+    // говорить голосом прежней, потому что она уже загружена в память.
+    const key = (c?: CustomSttModel): string =>
+      c ? `${c.id}|${c.dir}|${c.family}|${JSON.stringify(c.files)}` : ''
+    const same =
+      list.length === this.customs.length &&
+      list.every((c, i) => key(c) === key(this.customs[i]))
+    this.customs = list
+    if (!same) this.recognizer = null
+  }
+
   state(): SttState {
     const active = this.active()
     return {
       modelReady: !!active,
       legacyModel: !!active?.legacy,
       activeModelId: active?.id ?? null,
-      models: STT_MODELS.filter((m) => !m.legacy || this.installed(m)).map((m) => ({
-        id: m.id,
-        labelKey: m.labelKey,
-        lang: m.lang,
-        license: m.license,
-        noteKey: m.noteKey,
-        bytes: sttModelBytes(m),
-        installed: this.installed(m),
-        legacy: !!m.legacy
-      })),
+      models: [
+        ...STT_MODELS.filter((m) => !m.legacy || this.installed(m)).map((m) => ({
+          id: m.id,
+          labelKey: m.labelKey,
+          lang: m.lang,
+          license: m.license,
+          noteKey: m.noteKey,
+          bytes: sttModelBytes(m),
+          installed: this.installed(m),
+          legacy: !!m.legacy
+        })),
+        // Свои идут после встроенных: их принесли позже, и список не должен
+        // перетасовываться оттого, что человек добавил ещё одну.
+        ...this.customs.map((c) => ({
+          id: c.id,
+          labelKey: '',
+          lang: c.lang,
+          license: '',
+          noteKey: '',
+          bytes: c.bytes,
+          installed: this.customInstalled(c),
+          legacy: false,
+          custom: true,
+          name: c.name,
+          dir: c.dir
+        }))
+      ],
       engineReady: !!this.recognizer,
       downloading: this.downloading,
       error: this.lastError
     }
   }
 
+  /**
+   * Разобрать папку, которую человек выбрал: что это за модель и грузится ли
+   * она вообще. Ничего не копируется и никуда не записывается — файлы остаются
+   * там, где лежат, а решение сохранить запись принимает вызывающий.
+   */
+  identifyDir(dir: string): { ok: true; model: CustomSttModel } | { ok: false; error: string } {
+    let entries: DirEntry[]
+    try {
+      // Размер спрашивается только у файлов, которые вообще могут оказаться
+      // моделью. Ошибиться папкой легко — C:\Windows\System32 это несколько
+      // тысяч записей, и statSync по каждой подвесил бы главный процесс со
+      // всеми терминалами и агентами разом ради заведомо ненужного ответа.
+      entries = readdirSync(dir, { withFileTypes: true })
+        .filter((e) => e.isFile() && MODEL_EXT.test(e.name))
+        .slice(0, MAX_MODEL_FILES)
+        .map((e) => ({ name: e.name, bytes: safeSize(join(dir, e.name)) }))
+    } catch {
+      return { ok: false, error: tm('main.stt.custom.dirUnreadable') }
+    }
+    // Манифест главнее догадок: человек знает, что принёс. Догадка идёт в дело
+    // только там, где он ничего не сказал.
+    const hasManifest = entries.some((e) => e.name.toLowerCase() === MANIFEST)
+    let res: Identified
+    if (hasManifest) {
+      try {
+        res = readManifest(readFileSync(join(dir, MANIFEST), 'utf8'), entries)
+      } catch {
+        res = { ok: false, reason: 'badManifest' }
+      }
+    } else {
+      res = identifyModel(basename(dir), entries)
+    }
+    if (!res.ok) {
+      const detail = 'detail' in res ? res.detail : ''
+      return { ok: false, error: tm(`main.stt.custom.${res.reason}`, { detail }) }
+    }
+    return {
+      ok: true,
+      model: {
+        id: customId(dir),
+        name: res.name || basename(dir),
+        lang: res.lang,
+        family: res.family,
+        dir,
+        files: res.files,
+        bytes: res.bytes
+      }
+    }
+  }
+
   /** Убрать скачанную модель с диска — она весит сотни мегабайт. */
   async removeModel(id: string): Promise<{ ok: boolean; error?: string }> {
+    // Свою модель Заря не удаляет: эти файлы принесли не она. Из списка её
+    // убирают настройки, папка остаётся нетронутой.
+    if (this.customs.some((c) => c.id === id))
+      return { ok: false, error: tm('main.stt.custom.notOurs') }
     const m = findSttModel(id)
     if (!m) return { ok: false, error: tm('main.stt.unknownModel') }
     if (this.active()?.id === id) this.recognizer = null
@@ -277,35 +474,27 @@ export class SttService {
       // Required lazily: loading the addon costs memory, and most sessions
       // never dictate anything.
       const sherpa = require('sherpa-onnx-node')
-      const dir = this.dirOf(m)
-      const f = (n: string): string => join(dir, n)
+      const f = (n: string): string => join(m.dir, n)
       // У каждого семейства своя форма конфигурации и свой набор файлов: CTC —
-      // один файл, transducer — три, moonshine — четыре. Ключи проверены в
-      // бинарнике аддона, а не взяты из документации.
-      const modelConfig =
-        m.family === 'nemoCtc'
-          ? { nemoCtc: { model: f('model.int8.onnx') } }
-          : m.family === 'transducer'
-            ? {
-                transducer: {
-                  encoder: f('encoder.int8.onnx'),
-                  decoder: f('decoder.onnx'),
-                  joiner: f('joiner.onnx')
-                }
-              }
-            : {
-                moonshine: {
-                  preprocessor: f('preprocess.onnx'),
-                  encoder: f('encode.int8.onnx'),
-                  uncachedDecoder: f('uncached_decode.int8.onnx'),
-                  cachedDecoder: f('cached_decode.int8.onnx')
-                }
-              }
+      // один файл, transducer — три, moonshine — четыре. Формы собраны в одну
+      // таблицу (FAMILY_SHAPE), она же служит опознанию своих моделей: две копии
+      // этого знания разошлись бы молча, и заметил бы это только тот, кто ждал
+      // минуту сборки движка ради нативной ошибки про недостающий файл.
+      // Ключи проверены в бинарнике аддона, а не взяты из документации.
+      const roles = FAMILY_SHAPE[m.family]
+      const shape: Record<string, string> = {}
+      for (const role of roles) {
+        const name = m.roles[role]
+        if (!name) throw new Error(tm('main.stt.custom.missing', { detail: role }))
+        shape[role] = f(name)
+      }
+      const tokens = m.roles.tokens
+      if (!tokens) throw new Error(tm('main.stt.custom.noTokens', { detail: '' }))
       const config = {
         featConfig: { sampleRate: 16000, featureDim: 80 },
         modelConfig: {
-          ...modelConfig,
-          tokens: f('tokens.txt'),
+          [m.family]: shape,
+          tokens: f(tokens),
           numThreads: Math.max(1, Math.min(4, (require('os').cpus()?.length ?? 2) - 1)),
           provider: 'cpu',
           debug: false

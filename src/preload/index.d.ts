@@ -198,6 +198,10 @@ export interface ZaryaApi {
         bytes: number
         installed: boolean
         legacy: boolean
+        /** Своя модель: принесена с диска, а не скачана Зарёй. */
+        custom?: boolean
+        name?: string
+        dir?: string
       }>
       engineReady: boolean
       downloading: { file: string; received: number; total: number } | null
@@ -206,6 +210,18 @@ export interface ZaryaApi {
     ensureModel(id?: string): Promise<{ ok: boolean; error?: string }>
     /** Убрать скачанную модель с диска. */
     removeModel(id: string): Promise<{ ok: boolean; error?: string }>
+    /**
+     * Добавить свою модель. Пути нет и не будет: папку выбирает человек в
+     * системном диалоге, который открывает главный процесс.
+     */
+    addCustom(): Promise<{
+      ok: boolean
+      canceled?: boolean
+      error?: string
+      model?: { id: string; name: string }
+    }>
+    /** Убрать свою модель из списка. Файлы на диске остаются. */
+    forgetCustom(id: string): Promise<{ ok: boolean }>
     onProgress(cb: (p: { file: string; received: number; total: number } | null) => void): Unsub
     transcribe(
       samples: Float32Array,
