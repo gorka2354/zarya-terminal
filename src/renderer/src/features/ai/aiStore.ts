@@ -567,7 +567,7 @@ export const useAiStore = create<AiState>((set, get) => {
     requestConv.set(requestId, convId)
     patchConversation(convId, (c) => ({ ...c, activeRequestId: requestId }))
 
-    // Reasoning thrust (тяга) drives temperature + token budget.
+    // Effort drives temperature + token budget.
     const tune = EFFORT_TUNING[settings.ai.effort] ?? EFFORT_TUNING.medium
     const req: AiChatRequest = {
       provider: settings.ai.provider,

@@ -48,7 +48,11 @@ const CLAUDE_MODEL_FALLBACK: ClaudeModelInfo[] = [
   { value: 'haiku', displayName: 'Haiku', description: '' }
 ]
 
-/** Подписи тяги — интерфейс, а не данные движка: переводятся вместе со всем. */
+/**
+ * Уровень усилия называется так же, как в Claude Code: low/medium/high/xhigh/max.
+ * Своя метафора («тяга», «форсаж») читалась красиво, но заставляла держать в
+ * голове перевод при чтении документации CLI.
+ */
 function effortLabel(id: string): string {
   return t(`lp.effort.${id}`) || id.toUpperCase()
 }
@@ -103,7 +107,7 @@ interface Row {
 }
 
 /**
- * «Пусковой комплекс» — the model + reasoning-thrust console, reworked to read
+ * «Пусковой комплекс» — the model + effort console, reworked to read
  * like Claude Code's own /model + /effort: every row is version-qualified with a
  * one-line purpose, the ПО УМОЛЧАНИЮ row resolves live to the actual running
  * model, ultracode is a labeled switch, and the pixel rocket collapses to a slim
