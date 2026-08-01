@@ -1,0 +1,27 @@
+/* Окно «введите имя» — замена window.prompt, которого в Electron нет.
+
+   Маленькое и без церемоний: у него ровно одна работа, и оно не должно
+   выглядеть весомее того, что человек собирается сделать. */
+.zy-ask {
+  width: min(420px, calc(100vw - 64px));
+  padding: 16px;
+  background: var(--bg-elev1);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 18px 48px rgb(0 0 0 / 50%);
+}
+.zy-ask-title {
+  margin-bottom: 10px;
+  font-family: var(--font-tech);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  color: var(--fg);
+}
+.zy-ask-input {
+  width: 100%;
+}
+.zy-ask-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+}

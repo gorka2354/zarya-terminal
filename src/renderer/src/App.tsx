@@ -6,6 +6,7 @@ import { ActivityBar } from '@/components/ActivityBar'
 import { BottomStrip } from '@/components/BottomStrip'
 import { BlocksPanel } from '@/components/BlocksPanel'
 import { LaunchPad } from '@/components/LaunchPad'
+import { AskText } from '@/components/AskText'
 import { ModelNews } from '@/components/ModelNews'
 import { MissionFeed } from '@/components/MissionFeed'
 import { StarBackdrop } from '@/components/StarBackdrop'
@@ -161,6 +162,7 @@ export default function App(): React.JSX.Element {
       <UpdateView />
       {testMenu}
       <LaunchPad />
+      <AskText />
       <ModelNews />
       <Toasts />
     </div>

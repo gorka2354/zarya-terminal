@@ -1048,11 +1048,17 @@ try {
     names31.slice(0, 2).every((n) => head31.title.includes(n)),
     { head: head31.title, names31 }
   )
-  await page.evaluate(() => {
-    window.__origPrompt = window.prompt
-    window.prompt = () => 'СБОРКА 0.6'
-  })
+  // Имя вводится в НАСТОЯЩЕЕ окно приложения. Раньше здесь подменялся
+  // window.prompt — и прогон проверял всё, кроме главного: в Electron этого
+  // API нет вовсе, поэтому кнопка переименования молча не делала ничего.
   await page.dblclick('.zy-desk-row')
+  await page.waitForTimeout(500)
+  ok(
+    'окно с полем имени открылось',
+    await page.evaluate(() => !!document.querySelector('.zy-ask-input'))
+  )
+  await page.fill('.zy-ask-input', 'СБОРКА 0.6')
+  await page.press('.zy-ask-input', 'Enter')
   await page.waitForTimeout(700)
   const renamed31 = await page.evaluate(
     () => document.querySelector('.zy-desk-row .zy-item-title')?.textContent ?? ''
@@ -1067,9 +1073,6 @@ try {
     tab30.id
   )
   ok('и в свёрнутой строке тоже', /СБОРКА 0\.6/.test(collapsed31), collapsed31)
-  await page.evaluate(() => {
-    window.prompt = window.__origPrompt
-  })
   await page.click(`.zy-tab-row[data-tab="${tab30.id}"]`)
   await page.waitForTimeout(1000)
 

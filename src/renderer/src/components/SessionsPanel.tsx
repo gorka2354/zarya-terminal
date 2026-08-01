@@ -5,6 +5,7 @@ import { closePaneAsking, closeTabAsking, setPaneMaximized } from '@/actions/pan
 import { forgetProject, openFolderAsPane, openFolderAsTab, openProject } from '@/actions/projects'
 import { deskTitle } from '@shared/deskTitle'
 import { t, useLang } from '@/lib/i18n'
+import { askText } from '@/components/AskText'
 import { formatRelative, shortenPath } from '@/lib/ansi'
 import { fuzzyFilter } from '@/lib/fuzzy'
 import { useAiStore } from '@/features/ai/aiStore'
@@ -199,8 +200,9 @@ export function SessionsPanel(): React.JSX.Element {
       {
         label: t('common.rename'),
         onClick: () => {
-          const title = window.prompt(t('common.sessionName'), m.title)
-          if (title) void store.renameSession(m.id, title)
+          void askText(t('common.sessionName'), m.title).then((title) => {
+            if (title) void store.renameSession(m.id, title)
+          })
         }
       },
       { separator: true },
@@ -267,8 +269,9 @@ export function SessionsPanel(): React.JSX.Element {
       {
         label: t('common.rename'),
         onClick: () => {
-          const title = window.prompt(t('common.sessionName'), s.title)
-          if (title) void store.renameSession(sid, title)
+          void askText(t('common.sessionName'), s.title).then((title) => {
+            if (title) void store.renameSession(sid, title)
+          })
         }
       },
       {
@@ -309,8 +312,9 @@ export function SessionsPanel(): React.JSX.Element {
       {
         label: t('common.rename'),
         onClick: () => {
-          const title = window.prompt(t('common.sessionName'), s.title)
-          if (title) void store.renameSession(sessionId, title)
+          void askText(t('common.sessionName'), s.title).then((title) => {
+            if (title) void store.renameSession(sessionId, title)
+          })
         }
       },
       {
@@ -584,8 +588,9 @@ export function SessionsPanel(): React.JSX.Element {
       tab.title,
       t('desk.untitled')
     )
-    const next = window.prompt(t('desk.renamePrompt'), tab.title ?? now)
-    if (next !== null) store.renameTab(tab.id, next)
+    void askText(t('desk.renamePrompt'), tab.title ?? now).then((next) => {
+      if (next !== null) store.renameTab(tab.id, next)
+    })
   }
 
   /**

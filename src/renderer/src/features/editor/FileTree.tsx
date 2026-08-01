@@ -1,4 +1,5 @@
 import { t } from '@/lib/i18n'
+import { askText } from '@/components/AskText'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DirEntry, GitStatus } from '@shared/types'
 import { type MenuItem, useContextMenu } from '@/components/ContextMenu'
@@ -220,7 +221,7 @@ export default function FileTree(): React.JSX.Element {
   }
 
   const createEntry = async (dirPath: string, isDir: boolean): Promise<void> => {
-    const name = window.prompt(t(isDir ? 'ft.newDirName' : 'ft.newFileName'))
+    const name = await askText(t(isDir ? 'ft.newDirName' : 'ft.newFileName'))
     if (!name) return
     const path = joinPath(dirPath, name)
     try {
@@ -233,7 +234,7 @@ export default function FileTree(): React.JSX.Element {
   }
 
   const renameEntry = async (entry: DirEntry): Promise<void> => {
-    const name = window.prompt(t('ft.newName'), entry.name)
+    const name = await askText(t('ft.newName'), entry.name)
     if (!name || name === entry.name) return
     const parent = parentOf(entry.path)
     try {

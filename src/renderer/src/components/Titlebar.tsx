@@ -9,6 +9,7 @@ import {
   openProjectBeside
 } from '@/actions/projects'
 import { t, useLang } from '@/lib/i18n'
+import { askText } from '@/components/AskText'
 import { listLeaves, useSessionsStore } from '@/state/sessionsStore'
 import { useSettingsStore } from '@/state/settingsStore'
 import { useUiStore } from '@/state/uiStore'
@@ -77,8 +78,9 @@ export function Titlebar(): React.JSX.Element {
         label: t('common.rename'),
         onClick: () => {
           const cur = sessions[sid]
-          const title = window.prompt(t('common.sessionName'), cur?.title ?? '')
-          if (title) void store.renameSession(sid, title)
+          void askText(t('common.sessionName'), cur?.title ?? '').then((title) => {
+            if (title) void store.renameSession(sid, title)
+          })
         }
       },
       {
