@@ -143,7 +143,9 @@ export const TerminalPane = memo(function TerminalPane({
 
   return (
     <div
-      className={`zy-pane${active ? ' zy-pane--focused' : multiPane ? ' zy-pane--dim' : ''}${dropSide ? ' zy-pane--drop' : ''}`}
+      // Метки «неактивна» здесь нет намеренно: неактивные панели ничем не
+      // гасятся, активную называет рамка (см. .zy-pane--focused в base.css).
+      className={`zy-pane${active ? ' zy-pane--focused' : ''}${dropSide ? ' zy-pane--drop' : ''}`}
       // Чья это панель — видно в разметке. Нужно прогонам: «строка сайдбара
       // указывает на ЭТУ панель» иначе проверяется догадкой по порядку.
       data-session={sessionId}
