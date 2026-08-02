@@ -30,6 +30,7 @@ import '@fontsource/handjet/latin-500.css'
 import './styles/base.css'
 import './styles/features.css'
 import '@/features/themes/themePack'
+import '@/features/themes/themeDawn'
 
 // NB: no StrictMode — xterm.js instances are imperative singletons per session
 // and StrictMode's double-mount in dev would duplicate terminal DOM/handlers.
