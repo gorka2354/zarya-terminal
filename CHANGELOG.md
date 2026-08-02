@@ -5,7 +5,7 @@ All notable changes to Zarya are documented here. This project uses
 
 Русская версия этого файла — [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
-## Unreleased
+## 0.7.2 — "Callsign" (2026-08-02)
 
 ### Added
 
@@ -30,6 +30,67 @@ All notable changes to Zarya are documented here. This project uses
   The path only ever comes from the system dialog opened by the main process:
   the channel accepts the command "ask the human", not a ready path. And
   "Remove" removes the entry, never the files — Zarya did not put them there.
+
+- **The model catalogue comes from the provider, live.** The launch pad used to
+  list models from a constant in the source — so it aged with every Anthropic
+  release, silently, and showed no Opus 5 to someone working on a Claude
+  subscription. Zarya now asks the provider itself (`GET /v1/models` for
+  Anthropic and OpenAI, `/api/tags` for Ollama) and caches the answer: the
+  screen opens instantly from cache and the live reply refreshes it. The request
+  is made by the main process, which holds the key; the base URL comes from
+  settings, never from the window. Without a key you get an honest error and an
+  empty list rather than an invented one.
+
+- **A new model announces itself once.** When an id appears that was not there
+  before, a small strip says so. The comparison is against what you have *seen*,
+  not against the previous reply — otherwise a minute of bad network would
+  announce yesterday's models as news. The first catalogue is remembered
+  silently, so a fresh install does not greet you with a notice per model.
+
+### Changed
+
+- **Effort is called what the CLI calls it.** "ТЯГА · EFFORT" with steps
+  МАЛАЯ / СРЕДНЯЯ / ВЫСОКАЯ / СВЕРХ / ФОРСАЖ read nicely, but it was our
+  metaphor laid over someone else's concept: in Claude Code and its docs this is
+  `effort` with low / medium / high / xhigh / max. Anyone checking the
+  documentation had to carry a translation in their head. The steps are now
+  **LOW · MEDIUM · HIGH · XHIGH · MAX** in both languages, like a model name,
+  and the heading is simply EFFORT. The "faster" / "smarter" captions stay —
+  they explain the direction rather than translate the term.
+
+- **"Open folder…" became "Add project…".** The item sits first in the projects
+  list, and after it the folder appears in that same list — the old name
+  described half the action and left the new row unexplained.
+
+- **Inactive panes are no longer dimmed.** On a light theme the dimming
+  (brightness 0.66 plus opacity 0.62) turned white into dirty grey: three panes
+  out of four looked switched off while work was running in them. The accent
+  border already answers the only question dimming was meant to answer — where
+  Enter will go.
+
+### Fixed
+
+- **Renaming works again.** Clicking the pencil on a desk did *nothing*:
+  Electron does not implement `window.prompt`, and seven places in the interface
+  rested on it — renaming a desk (button and double click), a pane, a saved
+  session, creating a file or a folder, renaming a file in the tree. All of them
+  silently did nothing, which is the worst kind of untruth an interface can
+  tell: not an error, silence. They now use Zarya's own dialog — the same
+  promise, kept.
+
+- **The pane's mode survives a restart.** It lived only in window memory: you
+  worked in Claude Code, restarted, and found yourself in a plain shell without
+  choosing anything. It is stored in the session snapshot now and comes back
+  with it.
+
+### Tested
+
+- 417 unit tests; live runs: panes 140, launch pad 41, catalogue 10, progress
+  16, language 10, agent engines 21, speech models 16 + 25.
+- Four live-app runs execute in CI under xvfb on every push; the custom speech
+  model run joined them.
+- The custom model path was verified on a real Whisper base build: the engine
+  assembles and answers in 0.8 s.
 
 ## 0.7.1 — "Countdown" (2026-07-31)
 

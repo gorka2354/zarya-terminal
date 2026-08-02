@@ -5,7 +5,7 @@
 
 The English version of this file is [CHANGELOG.md](CHANGELOG.md).
 
-## Не выпущено
+## 0.7.2 — «Позывной» (2026-08-02)
 
 ### Добавлено
 
@@ -30,9 +30,68 @@ The English version of this file is [CHANGELOG.md](CHANGELOG.md).
   процесс: канал принимает команду «спроси человека», а не готовый путь. А
   «Убрать» убирает запись, но не файлы — их клала не Заря.
 
+- **Каталог моделей берётся у провайдера живьём.** Пусковой комплекс брал список
+  из константы в коде — он устаревал с каждым релизом Anthropic, молча, и не
+  показывал Opus 5 тому, кто работает по подписке Claude. Теперь Заря
+  спрашивает самого провайдера (`GET /v1/models` у Anthropic и OpenAI,
+  `/api/tags` у Ollama) и кеширует ответ: экран открывается мгновенно из кеша,
+  живой ответ обновляет его следом. Запрос делает главный процесс — он несёт
+  ключ; адрес берётся из настроек, а не из окна. Без ключа приходит честная
+  ошибка и пустой список, а не выдуманный.
+
+- **Новая модель объявляется один раз.** Появился id, которого раньше не было —
+  Заря говорит об этом небольшой полосой. Сравнение идёт с ВИДЕННЫМ, а не с
+  прошлым ответом: иначе минута плохой сети объявила бы новинкой вчерашние
+  модели. Первый каталог запоминается молча, чтобы свежая установка не
+  встречала человека окном про каждую модель.
+
+### Изменено
+
+- **Усилие называется так же, как в CLI.** «ТЯГА · EFFORT» со ступенями МАЛАЯ /
+  СРЕДНЯЯ / ВЫСОКАЯ / СВЕРХ / ФОРСАЖ читалось красиво, но было нашей метафорой
+  поверх чужого понятия: в Claude Code и в документации это `effort` со
+  значениями low / medium / high / xhigh / max. Человек, сверяющийся с доками,
+  держал в голове перевод. Теперь ступени называются **LOW · MEDIUM · HIGH ·
+  XHIGH · MAX** одинаково в обоих языках, как имя модели, а заголовок — просто
+  EFFORT. Подписи «быстрее» и «умнее» остались: они объясняют направление, а не
+  переводят термин.
+
+- **«Открыть папку…» стало «Добавить проект…».** Пункт стоит первым в списке
+  проектов, и после него папка оказывается в этом же списке — прежнее название
+  описывало половину действия.
+
+- **Неактивные панели больше не гаснут.** На светлой теме затемнение
+  (brightness 0.66 и opacity 0.62) превращало белый фон в грязно-серый: три
+  панели из четырёх выглядели выключенными, хотя в них шла работа. На
+  единственный вопрос, ради которого гашение было, — куда уйдёт Enter — уже
+  отвечает акцентная рамка.
+
+### Исправлено
+
+- **Переименование снова работает.** Нажатие на карандаш у рабочего стола не
+  делало *ничего*: Electron не реализует `window.prompt`, а на нём держались
+  семь мест интерфейса — переименование стола (кнопка и двойной клик), панели,
+  сохранённой сессии, создание файла и папки, переименование файла в дереве. Все
+  они молча не делали ничего: не ошибка на экране, а тишина — худший вид
+  неправды, какой бывает в интерфейсе. Теперь у Зари своё окно: то же обещание
+  «введите имя», но выполненное.
+
+- **Режим панели переживает перезапуск.** Он жил только в памяти окна:
+  поработал в Claude Code, перезапустил — и оказался в оболочке, ничего не
+  выбирая. Теперь режим хранится в снапшоте сессии и возвращается вместе с ней.
+
+### Проверено
+
+- 417 юнит-тестов; живые прогоны: панели 140, пусковой комплекс 41, каталог 10,
+  лента 16, язык 10, движки агентов 21, модели распознавания 16 + 25.
+- Четыре прогона на живом приложении идут в CI под xvfb на каждый push; к ним
+  добавился прогон своей модели распознавания.
+- Путь своей модели проверен на настоящем Whisper base: движок собирается и
+  отвечает за 0.8 с.
+
 ## 0.7.1 — «Отсчёт» (2026-07-31)
 
-### Added
+### Добавлено
 
 - **Видно, что работа идёт.** Агент уходил качать репозиторий, и экран замолкал:
   карточка инструмента показывала спиннер и слово «выполняется» — ни секунды, ни
@@ -58,7 +117,7 @@ The English version of this file is [CHANGELOG.md](CHANGELOG.md).
   нет, ширину не выдумываем: идёт бегунок, потому что полоса «примерно на треть»
   обещала бы знание, которого у нас нет.
 
-### Changed
+### Изменено
 
 - **Проекты живут в одном месте.** Меню проектов было в двух — в шапке и под
   стрелкой в сайдбаре, — и оба показывали одно и то же, причём в сайдбаре
@@ -73,7 +132,7 @@ The English version of this file is [CHANGELOG.md](CHANGELOG.md).
   убирает. Потолок — 12: при трёх-восьми проектах в работе вытеснение не
   сработает никогда, но список без предела перестаёт быть списком.
 
-### Fixed
+### Исправлено
 
 - **Карточка инструмента перестала исчезать в момент одобрения.** У движков без
   `tool_use` (Codex, Gemini, Kimi, Qwen) гейт отсеивался как решённый, и после
@@ -89,7 +148,7 @@ The English version of this file is [CHANGELOG.md](CHANGELOG.md).
 - **Пустой снимок вывода больше не стирает то, что уже видно** — лента мигала
   пустым местом, пока команда ещё шла.
 
-### Tested
+### Проверено
 
 - `npm run qa:progress` — 16 живых проверок: полоса, её обновление, бегунок без
   процентов, молчание на обычном выводе, тикающее время, карточка после
@@ -98,7 +157,7 @@ The English version of this file is [CHANGELOG.md](CHANGELOG.md).
 
 ## 0.7.0 — «Словарь» (2026-07-31)
 
-### Added
+### Добавлено
 
 - **Заря говорит по-английски.** Интерфейс теперь существует на двух языках —
   английском и русском, — и переключение мгновенное: оба словаря лежат внутри
@@ -120,7 +179,7 @@ The English version of this file is [CHANGELOG.md](CHANGELOG.md).
   имени: подпись по умолчанию берётся из языка, а старые сохранённые сессии
   переносятся на месте.
 
-### Tested
+### Проверено
 
 - `node scripts/i18n-test.mjs` — проходит по шапке, сайдбару, ленте, строке
   ввода, меню панели, меню проектов, центру управления и пусковому комплексу
@@ -128,7 +187,7 @@ The English version of this file is [CHANGELOG.md](CHANGELOG.md).
   терминала, ответы агента и пути исключены — это данные, а не наши подписи).
   Заодно проверяет полноту обоих словарей и что русский не тронут: 10 проверок.
 
-### Fixed
+### Исправлено
 
 - **Прогон страницы обновления перестал зависеть от сети.** Он подставлял
   состояние релиза руками, а живой ответ GitHub приходил поверх и гасил
@@ -136,7 +195,7 @@ The English version of this file is [CHANGELOG.md](CHANGELOG.md).
 
 ## 0.6.5 — «Площадка» (2026-07-31)
 
-### Changed
+### Изменено
 
 - **Проекты в шапке стали понятными.** Каждый проект занимал ДВЕ строки: сам
   проект и приписку «панелью рядом» — подменю меню не умело, и приписка
@@ -151,7 +210,7 @@ The English version of this file is [CHANGELOG.md](CHANGELOG.md).
 
 ## 0.6.4 — «Ползунок» (2026-07-31)
 
-### Fixed
+### Исправлено
 
 - **Разделитель панелей тянется без рывков.** Живое изменение пропорций стоило
   25.8 мс на движение мыши — полтора кадра, отсюда и рывки. Каждое движение
@@ -165,7 +224,7 @@ The English version of this file is [CHANGELOG.md](CHANGELOG.md).
 
 ## 0.6.3 — «Ход» (2026-07-31)
 
-### Fixed
+### Исправлено
 
 - **Работа в трёх-четырёх панелях перестала тормозить.** Два узких места, оба
   видны в числах (`npm run perf` — прогон собирает рабочий день: четыре панели,
@@ -185,7 +244,7 @@ The English version of this file is [CHANGELOG.md](CHANGELOG.md).
 
 ## 0.6.2 — «Ребро» (2026-07-31)
 
-### Added
+### Добавлено
 
 - **Видно, к какому ребру встанет панель.** Пока сторона не спрашивалась, всё
   вставало справа: человек целился в левый край панели и получал принесённую не
@@ -194,7 +253,7 @@ The English version of this file is [CHANGELOG.md](CHANGELOG.md).
   Работает и для панели, и для проекта из шапки; сверху и снизу делят панель по
   горизонтали.
 
-### Fixed
+### Исправлено
 
 - **Три панели перестали быть кривыми.** Перенос панели делил цель пополам, и
   раскладка из трёх вставала как 50/25/25, хотя правило обещает равные трети.
@@ -205,7 +264,7 @@ The English version of this file is [CHANGELOG.md](CHANGELOG.md).
 
 ## 0.6.1 — «Приёмник» (2026-07-31)
 
-### Changed
+### Изменено
 
 - **Видно, куда тащить панель.** Зона, в которую панель возвращают из сетки в
   список, подсвечивалась только под курсором — то есть её надо было сначала
@@ -219,7 +278,7 @@ The English version of this file is [CHANGELOG.md](CHANGELOG.md).
 
 ## 0.6.0 — «Сетка» (2026-07-31)
 
-### Added
+### Добавлено
 
 - **Каждая панель — самостоятельный CLI.** Раньше окно делилось надвое, но
   разговор, строка ввода, лента и режим были общими: две панели показывали одну
@@ -258,7 +317,7 @@ The English version of this file is [CHANGELOG.md](CHANGELOG.md).
   модели. Движок, который картинок не принимает, говорит об этом вслух, а не
   проглатывает вложение молча.
 
-### Fixed
+### Исправлено
 
 - **Панель теряла экран при перестройке раскладки.** Место панели в разметке
   зависело от места в дереве: стоило закрыть одну из четырёх, соседняя переезжала
@@ -290,7 +349,7 @@ The English version of this file is [CHANGELOG.md](CHANGELOG.md).
 
 ## 0.5.8 — «Печать» (2026-07-29)
 
-### Added
+### Добавлено
 
 - **Подпись релизов.** Установка одним нажатием теперь требует подписи: список
   контрольных сумм каждого релиза подписывается Ed25519-ключом, которого нет в
@@ -308,7 +367,7 @@ The English version of this file is [CHANGELOG.md](CHANGELOG.md).
   SmartScreen при ручной установке предупреждать не перестанет; закрывается
   подмена обновления, а не предупреждение Windows.
 
-### Changed
+### Изменено
 
 - **Esc над отправленным сообщением убирает его и из памяти агента.** Раньше
   сообщение оставалось в ленте с пометкой «прервано», и агент видел его на
@@ -324,7 +383,7 @@ The English version of this file is [CHANGELOG.md](CHANGELOG.md).
   там сообщение по-прежнему остаётся с пометкой «прервано», и это честно: убрать
   с глаз то, что агент помнит, было бы враньём.
 
-### Fixed
+### Исправлено
 
 - **Ответ на отменённое сообщение больше не долетает в ленту.** Прерванная
   сессия успевала договорить, и её ответ появлялся уже после того, как вопрос
@@ -337,7 +396,7 @@ The English version of this file is [CHANGELOG.md](CHANGELOG.md).
 
 ## 0.5.7 — «Слово» (2026-07-28)
 
-### Added
+### Добавлено
 
 - **Выбор модели распознавания.** Модель была захардкожена одной константой —
   теперь это закрытый реестр: **GigaAM v3** (русский, 225 МБ), **GigaAM v3
@@ -352,7 +411,7 @@ The English version of this file is [CHANGELOG.md](CHANGELOG.md).
   Список остался **закрытым**: настраиваемый адрес модели был бы примитивом
   «скачай что угодно откуда угодно», а скачанное отдаётся нативному движку.
 
-### Fixed
+### Исправлено
 
 - **Диктовка теперь умеет цифры, латиницу и знаки препинания.** У прежней модели
   словарь состоял из 34 токенов: пробел и 33 строчные русские буквы. Ни цифр, ни
@@ -372,7 +431,7 @@ The English version of this file is [CHANGELOG.md](CHANGELOG.md).
 
 ## 0.5.6 — «Шаг-2» (2026-07-28)
 
-### Fixed
+### Исправлено
 
 - **Переносимая сборка больше не предлагает обновиться сама.** Для portable
   electron-builder намеренно не пишет метаданные обновления, и установщик
@@ -383,7 +442,7 @@ The English version of this file is [CHANGELOG.md](CHANGELOG.md).
 
 ## 0.5.5 — «Шаг» (2026-07-28)
 
-### Added
+### Добавлено
 
 - **Обновление в одно нажатие.** Раньше «обновиться» значило: открыть браузер,
   скачать 190 МБ, сверить хеш руками (чего никто не делает), пройти мастер
@@ -405,7 +464,7 @@ The English version of this file is [CHANGELOG.md](CHANGELOG.md).
   нотаризации. Где нельзя — кнопки нет, и текст объясняет почему. Ручной путь с
   файлами и SHA256 никуда не делся.
 
-### Fixed
+### Исправлено
 
 - **Релизы не содержали `latest.yml`.** В конфигурации стоял `publish: null`,
   поэтому метаданные обновления не генерировались вовсе. Теперь они собираются и
@@ -422,7 +481,7 @@ The English version of this file is [CHANGELOG.md](CHANGELOG.md).
 Релиз про то, чтобы интерфейс не успокаивал там, где успокаивать нечем, и не
 терял то, что показывает.
 
-### Fixed
+### Исправлено
 
 - **Разовое «ВЫПОЛНИТЬ» больше не становится постоянным разрешением.** Часть
   ACP-агентов не предлагает разового разрешения — только `allow_always`. Драйвер
@@ -455,7 +514,7 @@ The English version of this file is [CHANGELOG.md](CHANGELOG.md).
   версиями, чинятся отдельно: `history.jsonl` только дописывается и сам никогда
   не пересоздаётся.
 
-### Added
+### Добавлено
 
 - **История команд под контролем.** Файл рос без ограничений, выключить запись
   было нельзя, стереть тоже — а команды регулярно содержат секреты. Появились
@@ -465,7 +524,7 @@ The English version of this file is [CHANGELOG.md](CHANGELOG.md).
 
 ## 0.5.3 — «Маяк» (2026-07-27)
 
-### Added
+### Добавлено
 
 - **Выбор микрофона для диктовки.** Правый клик по кнопке микрофона или
   «Настройки → Голос». Хранится не только `deviceId`, но и имя устройства:
@@ -489,7 +548,7 @@ The English version of this file is [CHANGELOG.md](CHANGELOG.md).
   задачу с инструментом, на котором она сейчас. Все числа — собственная
   телеметрия Claude Code, ничего не выдумано (`src/renderer/src/features/ai/subagents.ts`).
 
-### Changed
+### Изменено
 
 - **Esc над очередью — как в CLI.** Семантика снята с транскриптов настоящего
   CLI: там отмена своей приписки и прерывание хода — разные жесты (во всех 103
@@ -506,7 +565,7 @@ The English version of this file is [CHANGELOG.md](CHANGELOG.md).
   посчитанными на том же раннере, что собрал файлы. Раньше её создавали руками,
   из-за чего тег v0.5.2 остался без релиза.
 
-### Fixed
+### Исправлено
 
 - **Диктовка после Esc молча не начиналась.** Флаг отмены не сбрасывался:
   следующее нажатие открывало микрофон и тут же само себя отменяло, работало
@@ -523,7 +582,7 @@ The English version of this file is [CHANGELOG.md](CHANGELOG.md).
 
 ## 0.5.2 — «Шлюз» (2026-07-27)
 
-### Added
+### Добавлено
 
 - **Голосовой ввод — диктовка прямо в строку.** Локально и без сети: sherpa-onnx
   с моделью GigaAM v3 от Сбера для русского. Кнопка микрофона в баре или
@@ -539,7 +598,7 @@ The English version of this file is [CHANGELOG.md](CHANGELOG.md).
   вовсе, а Electron без него выдаёт разрешения по умолчанию. Теперь микрофон и
   буфер обмена — и только нашему окну (`src/main/index.ts`).
 
-### Changed
+### Изменено
 
 - **Нижний бар переделан.** Лимиты больше не стоят в очередь на одной строке: в
   баре одна цифра — то окно, что ближе к исчерпанию, остальное раскрывается
@@ -550,7 +609,7 @@ The English version of this file is [CHANGELOG.md](CHANGELOG.md).
 - **Поле ввода стало многострочным.** `Shift+Enter` и `Ctrl+Enter` вставляют
   перенос, поле растёт под текст, `Enter` по-прежнему отправляет.
 
-### Fixed
+### Исправлено
 
 - **Esc прерывает ход, а не рвёт сессию.** У Claude Code отмена закрывала
   входную очередь целиком — процесс выходил, и собственная отмена возвращалась
@@ -568,7 +627,7 @@ The English version of this file is [CHANGELOG.md](CHANGELOG.md).
   (тот, что берёт рабочий стол) оказался уменьшенной копией 256px. Теперь десять
   нативных размеров, включая 96px для крупных значков.
 
-### Security
+### Безопасность
 
 Продолжение разбора того же аудита — MEDIUM-находки про гейт одобрения.
 
@@ -659,7 +718,7 @@ The English version of this file is [CHANGELOG.md](CHANGELOG.md).
   с чужим id (`pwsh`, `cmd`) больше не подменяет системный шелл, на который
   указывает «авто» (`src/main/shellProfiles.ts`).
 
-### Changed
+### Изменено
 
 - **Сборочная цепочка обновлена: electron-builder 24.13.3 → 26.15.3.** Все
   `app-builder-lib < 26.15.0` генерируют AppRun с висящим двоеточием в
@@ -669,7 +728,7 @@ The English version of this file is [CHANGELOG.md](CHANGELOG.md).
   22. Требует Node ≥ 20.19 (26.x читает ESM-зависимость через `require`),
   поэтому в `engines` зафиксирована нижняя граница.
 
-### Fixed
+### Исправлено
 
 - **Гейт на правку файла в боковой панели больше не пустой.** Панель «IDE-агент»
   подписывала карточку только из `input.command`, поэтому запрос Edit/Write/Read
@@ -694,7 +753,7 @@ chain) turned up four ways untrusted content could act with the app's authority
 — all closed here. Separately, newly released Claude models now appear on their
 own, without rebuilding or restarting Zarya.
 
-### Security
+### Безопасность
 
 Found by an adversarial audit of the whole attack surface (process spawning,
 Electron/IPC boundary, approval gates, secrets, supply chain).
@@ -736,7 +795,7 @@ Electron/IPC boundary, approval gates, secrets, supply chain).
 - **Dev-сервер сверяется по origin, а не по префиксу строки** — префиксная
   проверка принимала `http://localhost:5920@evil.com/` за свой origin.
 
-### Fixed
+### Исправлено
 
 - **New Claude models no longer stay invisible.** The model catalog is served by
   the `claude` binary, not by Zarya — so a model released after the build (Opus 5)
@@ -766,7 +825,7 @@ Electron/IPC boundary, approval gates, secrets, supply chain).
   leaking the process and latching the in-flight guards (catalog and fuel poll
   dead until the app restarted). It now races a 20s timeout and always settles.
 
-### Added
+### Добавлено
 
 - **Newest-binary preference** — Zarya now runs the user's own (self-updating)
   `claude` CLI when it is strictly newer than the bundled one on the same major
@@ -781,7 +840,7 @@ Electron/IPC boundary, approval gates, secrets, supply chain).
   Unit coverage for the binary-choice policy and the terminal-settings mapping
   (`tests/claudeExe.test.ts`, `tests/terminalOptions.test.ts`) — 109 tests.
 
-### Changed
+### Изменено
 
 - Bundled Claude Agent SDK `0.3.217` → `0.3.220` (ships CLI 2.1.220, which knows
   Opus 5).
@@ -794,7 +853,7 @@ Claude Code, **Codex**, **Gemini**, **Kimi** and **Qwen** — each a chip in the
 command bar, each with its own tool-approval gates and resume. Plus bring-your-own-key
 presets for Kimi/Qwen/DeepSeek and macOS packaging.
 
-### Added
+### Добавлено
 
 - **AgentDriver abstraction** — the AI layer is generalized from a hardcoded
   `engine === 'claude-code'` into an open `AgentDriver` interface + capability
@@ -819,7 +878,7 @@ presets for Kimi/Qwen/DeepSeek and macOS packaging.
 - **macOS packaging** — the Claude Code SDK's platform CLI is unpacked for every
   platform (win/mac-arm/mac-x64/linux), so builds run outside the asar on macOS.
 
-### Security
+### Безопасность
 
 - **fs-proxy confinement (ACP)** — agent-driven file reads/writes are restricted
   to the session working directory both lexically **and** after resolving symlinks
@@ -829,7 +888,7 @@ presets for Kimi/Qwen/DeepSeek and macOS packaging.
   main), fail-closed tool approvals, request timeouts, and clean teardown of child
   processes on every quit path, across the Codex and ACP drivers.
 
-### Tested
+### Проверено
 
 - 80 unit tests + offscreen harnesses covering each driver end-to-end against a
   protocol-accurate mock server (init, streaming, approve/deny, resume, interrupt,
@@ -842,7 +901,7 @@ A large "cosmic CLI agent" redesign — Soviet-space pixel-constructivism. The w
 shell now reads like a launch console: pixel type, a drifting starfield, a launch
 pad for the AI engine, and a bilingual "mission control" settings surface.
 
-### Added
+### Добавлено
 
 - **Pixel type system** — bundled offline pixel/dot-matrix fonts alongside the
   existing constructivist voice: **Pixelify Sans** (logo, hero headings) and
@@ -884,7 +943,7 @@ pad for the AI engine, and a bilingual "mission control" settings surface.
   captures the renderer's real pixels regardless of what covers the window or which
   monitor it's on. Supports `--theme`, `--rocket`, `--ui`, `--out`, `--wait`.
 
-### Changed
+### Изменено
 
 - **Default theme** is now `zarya-cosmos` (Заря · Космос).
 - **Exit-code badges, block separators and command blocks** restyled to match the
@@ -893,7 +952,7 @@ pad for the AI engine, and a bilingual "mission control" settings surface.
   snapshot/prune has realistic room to finish on quit instead of being cut off
   mid-write (`src/main/index.ts`).
 
-### Security
+### Безопасность
 
 - **Prompt-injection spotlighting (OWASP LLM01)** — recent terminal output attached
   as automatic AI context is now wrapped in explicit `<untrusted-terminal-output>`
@@ -912,7 +971,7 @@ pad for the AI engine, and a bilingual "mission control" settings surface.
 
 Initial release.
 
-### Added
+### Добавлено
 
 - **Terminal core** — xterm.js 6 with WebGL rendering (DOM fallback on context loss),
   find-in-terminal, clickable web links, Unicode 11 support, per-pane split/tab layout

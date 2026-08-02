@@ -7,7 +7,7 @@
 *Zarya (Заря) — “dawn”, and the name of the first module of the ISS.*
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-e2231a.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.7.1%20%22Countdown%22-e0b15a.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.7.2%20%22Callsign%22-e0b15a.svg)](CHANGELOG.md)
 [![Languages](https://img.shields.io/badge/UI-English%20%7C%20%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9-4fd6d6.svg)](#language)
 [![Electron](https://img.shields.io/badge/Electron-43-4fd6d6.svg)](https://www.electronjs.org/)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-5fb88a.svg)](#install)
@@ -39,7 +39,7 @@ no account, no telemetry.
   another (the edge you aim at lights up) or into the list to give it a desk of its own —
   without killing the process.
 - **🚀 Launch Pad** — a cosmic launch console for picking the model and reasoning
-  effort (`LOW` → `AFTERBURNER`), with every current Claude version, live-switchable
+  effort (`LOW` → `MAX`), with every current Claude version, live-switchable
   mid-session.
 - **🎙 Dictation — offline speech-to-text** — hold `Ctrl+Shift+Space`, speak, and the
   text lands in the input. Runs entirely on your machine ([sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx)
@@ -66,7 +66,7 @@ the switch takes effect immediately — the dictionaries are already in the app,
 there is nothing to download, restart or sign into again.
 
 The space-age framing is translated rather than dropped: Mission Control, the launch
-pad, thrust levels (`LOW` → `AFTERBURNER`), the `// ORBIT-1` tagline and the ship
+pad, the `// ORBIT-1` tagline and the ship
 themes (Kosmos, Vostok, Baikonur, Blueprint) read as themselves in English. The
 built-in agent is told to answer in the interface language, and so do the system
 dialogs the main process shows.
@@ -131,8 +131,8 @@ a desk of its own, because past four the feed collapses into a strip of lines.
 The signature control — a cosmic launch console instead of a boring dropdown. Every
 current Claude model is version-qualified (**Opus 4.8**, **Fable 5**, **Sonnet 5**,
 **Haiku 4.5**) with a one-line purpose and a live "active" marker on whatever is
-actually running. Pick an **engine** (model) and its **thrust / effort** (from `LOW`
-to `AFTERBURNER`, gated per model), flip **ULTRACODE** for xhigh + workflow
+actually running. Pick an **engine** (model) and its **effort** (from `LOW`
+to `MAX`, gated per model — the same names the CLI uses), flip **ULTRACODE** for xhigh + workflow
 orchestration, and hit **LAUNCH · POYEKHALI** — a pixel rocket lifts off as the
 settings apply.
 
@@ -378,7 +378,7 @@ Details: [docs/shell-integration.md](docs/shell-integration.md).
 
 ## Tests
 
-Numbers as of 0.7.1: **379 unit checks** across 33 files and **33 end-to-end runs**
+Numbers as of 0.7.2: **417 unit checks** across 35 files and **46 end-to-end runs**
 that drive the real application.
 
 **Unit** (`tests/`, vitest) — the pure logic where a silent mistake costs the most:

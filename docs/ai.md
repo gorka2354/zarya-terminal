@@ -57,40 +57,40 @@ Set per-provider via `settings:set-secret` → `SettingsStore.setSecret()`
 - `settings:provider-status` only ever returns `{ provider, hasKey: boolean }` — never
   the key material, so the renderer/UI can show "connected" state safely.
 
-## Reasoning thrust
+## Reasoning effort
 
 Instead of asking you to hand-tune sampling for every model, Zarya exposes one
-launch-console dial — **reasoning thrust** (`AiSettings.effort`, an `AiEffort` of
+launch-console dial — **reasoning effort** (`AiSettings.effort`, an `AiEffort` of
 `low` / `medium` / `high` / `max`). Each level maps to a temperature and a token
 budget through `EFFORT_TUNING` (`src/shared/defaults.ts`):
 
-| Thrust (`effort`) | Label | Temperature | Token floor |
+| `effort` | Label | Temperature | Token floor |
 |---|---|---|---|
 | `low` | LOW | 0.15 | 2048 |
 | `medium` (default) | MEDIUM | 0.40 | 4096 |
 | `high` | HIGH | 0.60 | 6144 |
-| `max` | AFTERBURNER | 0.85 | 8192 |
+| `max` | MAX | 0.85 | 8192 |
 
-When a request is dispatched (`aiStore.ts`, `dispatchChat`), the thrust drives two
+When a request is dispatched (`aiStore.ts`, `dispatchChat`), the effort drives two
 fields of the `AiChatRequest`:
 
-- `temperature` is taken **from the thrust** (`tune.temperature`).
-- `maxTokens` is `max(your configured "Max tokens", the thrust's token floor)` — so
-  raising thrust can only ever *raise* the response budget, never clip a larger value
+- `temperature` is taken **from the effort** (`tune.temperature`).
+- `maxTokens` is `max(your configured "Max tokens", the effort's token floor)` — so
+  raising effort can only ever *raise* the response budget, never clip a larger value
   you set by hand.
 
 The manual **Temperature** and **Max tokens** fields in Settings → AI still exist for
-fine control; thrust is the fast, four-notch way to move both at once.
+fine control; effort is the fast, four-notch way to move both at once.
 
 ### The Launch Pad
 
 The Launch Pad (`Ctrl+Alt+M`, `app.launch-pad`, or the **Open the launch pad**
 button in Settings → AI) is a rocket-console overlay that picks the AI **engine
-(model)** and **thrust (effort)** together. Selections are drafts until you hit
+(model)** and **effort** together. Selections are drafts until you hit
 **LAUNCH · POYEKHALI**, which commits `{ model, effort }` to `settings.ai` and fires the
 rocket-launch animation. The model list is built from `AI_MODEL_PRESETS` for the
 current provider, always including whatever model is currently configured. The same
-4-segment thrust control also lives inline in Settings → AI (`EffortControl`), so the
+4-segment effort control also lives inline in Settings → AI (`EffortControl`), so the
 two stay in sync.
 
 ## Agentic mode & command safety
@@ -171,7 +171,7 @@ nothing, in the surface that is always on screen.
 
 - **AI panel** (`Ctrl+Shift+A`) — the main chat surface.
 - **Launch Pad** (`Ctrl+Alt+M`, `app.launch-pad` action) — pick the model + reasoning
-  thrust and apply them to the agent in one gesture (see above).
+  effort and apply them to the agent in one gesture (see above).
 - **Inline command bar** (`Ctrl+I`, `ai.command-bar` action) — natural language → a
   shell command, without leaving the terminal, scoped to the currently focused session.
 - **Ask about a block** — the **✦** button on any command block
