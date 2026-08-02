@@ -208,7 +208,7 @@ main-process involvement):
 **Fonts** are bundled offline via `@fontsource/*` (Cyrillic + Latin subsets, imported
 in `src/renderer/src/main.tsx`) so nothing is fetched at runtime: **Pixelify Sans**
 and **Handjet** carry the pixel/dot-matrix voice (logo, tech labels, telemetry),
-**Oswald** + **Ruslan Display** the constructivist headings, and **PT Sans** /
+**Oswald** + **Ruslan Display** the display headings, and **PT Sans** /
 **JetBrains Mono** the body and terminal text.
 
 ## Offscreen visual-QA harness

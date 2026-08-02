@@ -2,19 +2,20 @@
 
 # ЗАРЯ · Zarya
 
-**A space-age CLI agent. A new dawn for your terminal.**
+**A CLI agent that reads like first light. A new dawn for your terminal.**
 
-*Zarya (Заря) — “dawn”, and the name of the first module of the ISS.*
+*Zarya (Заря) — “dawn”: the twenty minutes before sunrise, when there is
+exactly enough light to work by.*
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-e2231a.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.7.2%20%22Callsign%22-e0b15a.svg)](CHANGELOG.md)
+[![License: MIT](https://img.shields.io/badge/license-MIT-ffb05c.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/version-0.7.2%20%22Callsign%22-ffb05c.svg)](CHANGELOG.md)
 [![Languages](https://img.shields.io/badge/UI-English%20%7C%20%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9-4fd6d6.svg)](#language)
 [![Electron](https://img.shields.io/badge/Electron-43-4fd6d6.svg)](https://www.electronjs.org/)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-5fb88a.svg)](#install)
 [![CI](https://github.com/gorka2354/zarya-terminal/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/gorka2354/zarya-terminal/actions/workflows/ci.yml)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-e0b15a.svg)](CONTRIBUTING.md)
 
-Zarya is an AI-native terminal with a Soviet space-age soul. It runs **Claude Code
+Zarya is an AI-native terminal named after the dawn — and it reads like one. It runs **Claude Code
 natively** — the full agent, its tools and its permission prompts, driven straight
 from your terminal — and gives every **pane its own agent**, so four CLIs can work
 side by side without ever sharing a conversation. Warp-style command blocks,
@@ -38,7 +39,7 @@ no account, no telemetry.
   you can point at one with the mouse; drag a pane by its header to move it next to
   another (the edge you aim at lights up) or into the list to give it a desk of its own —
   without killing the process.
-- **🚀 Launch Pad** — a cosmic launch console for picking the model and reasoning
+- **🌅 Model & effort** — a console for picking the model and reasoning
   effort (`LOW` → `MAX`), with every current Claude version, live-switchable
   mid-session.
 - **🎙 Dictation — offline speech-to-text** — hold `Ctrl+Shift+Space`, speak, and the
@@ -55,8 +56,9 @@ no account, no telemetry.
 - **🌐 Two languages, one build** — the entire interface is English or Russian, switched
   instantly in settings, no restart and no second installer. Follows your system
   language on first launch; the built-in agent answers in the language you picked.
-- **🎨 Kosmos + constructivism** — deep-space navy, Soviet red, brass gold, a pixel
-  wordmark and a live starfield, across 9 dark & light themes.
+- **🌅 Light with a direction** — the interface is named after the dawn, and reads
+  like one: cold ground, a single warm signal that means "Enter lands here", and a
+  window that has a bottom. 11 themes as hours of light, dark and light.
 
 ## Language
 
@@ -65,9 +67,9 @@ language; **Settings → Appearance → Language** pins English or Russian eithe
 the switch takes effect immediately — the dictionaries are already in the app, so
 there is nothing to download, restart or sign into again.
 
-The space-age framing is translated rather than dropped: Mission Control, the launch
-pad, the `// FIRST LIGHT` tagline and the light-hour
-themes (Night, Embers, Sand, Tracing) read as themselves in English. The
+The framing is translated rather than dropped: the model picker, the
+`// FIRST LIGHT` tagline and the light-hour themes (Night, Embers, Sand, Tracing)
+read as themselves in English. The
 built-in agent is told to answer in the interface language, and so do the system
 dialogs the main process shows.
 
@@ -124,11 +126,11 @@ a desk of its own, because past four the feed collapses into a strip of lines.
 - **Desks have names.** Built from the panes («zarya-web + zarya-api +2») or your own —
   rename with a double click.
 
-## The Launch Pad
+## Model & effort
 
-<img src="docs/img/launchpad-tight.png" align="right" width="290" alt="Launch Pad" />
+<img src="docs/img/launchpad-tight.png" align="right" width="290" alt="Model and effort picker" />
 
-The signature control — a cosmic launch console instead of a boring dropdown. Every
+The signature control — a console instead of a boring dropdown. Every
 current Claude model is version-qualified (**Opus 4.8**, **Fable 5**, **Sonnet 5**,
 **Haiku 4.5**) with a one-line purpose and a live "active" marker on whatever is
 actually running. Pick an **engine** (model) and its **effort** (from `LOW`
@@ -136,9 +138,9 @@ to `MAX`, gated per model — the same names the CLI uses), flip **ULTRACODE** f
 orchestration, and hit **APPLY** — a pixel sunrise marks the moment as the
 settings apply.
 
-The rocket stays collapsed to a slim strip while you browse and only unfolds for the
-launch animation, so the picker reads like the CLI's own `/model`. Open it from the
-model chip, the fuel strip, or `Ctrl+Alt+M`.
+The console stays a slim strip while you browse and only opens up when the choice is
+applied, so the picker reads like the CLI's own `/model`. Open it from the model chip,
+the limit strip, or `Ctrl+Alt+M`.
 
 Everything is dynamic: the list, the effort levels and the default all come from the
 SDK, so the pad is future-proof — the next model Anthropic ships just shows up.
@@ -252,31 +254,38 @@ cannot read images says so out loud instead of swallowing the attachment.
 Workflows (parameterized snippets), Command Palette (`Ctrl+Shift+P`), tabs and panes
 (persisted across restarts), ghost autosuggest, and a `THEME` quick-cycle button.
 
-### Themes — 9, dark and light
+### Themes — 11, read as hours of light
 
 | Theme | Type | |
 |---|---|---|
-| Zarya · Kosmos | dark | signature deep-space (default) |
-| Zarya · Vostok | dark | red-dominant maroon space |
+| Zarya · Blue Hour | dark | twenty minutes before sunrise (**default**) |
+| Zarya · Night | dark | deep graphite, the darkest of the set |
+| Zarya · Embers | dark | red-dominant, banked coals |
+| Zarya · Ash | dark | cold graphite, muted brass |
 | Zarya · Frost | dark | teal oscilloscope |
-| Zarya · Sputnik | dark | cold graphite + brass |
-| Zarya · Baikonur | dark | warm launch-pad amber |
-| Zarya · Dawn | dark | original sunrise |
-| Zarya · Poster | **light** | constructivist poster paper |
-| Zarya · Noon | **light** | warm cosmonaut daylight |
-| Zarya · Blueprint | **light** | blueprint on cool paper |
+| Zarya · Sand | dark | warm amber over a dark steppe |
+| Zarya · First Ray | dark | the original sunrise, kept as a warm option |
+| Zarya · Golden Hour | **light** | morning on paper |
+| Zarya · Paper | **light** | cream paper, red and black ink |
+| Zarya · Noon | **light** | warm daylight |
+| Zarya · Tracing | **light** | navy lines on cool paper |
 
-Switch in Mission Control → Appearance, or cycle with the `THEME` button. Add your
-own via `registerThemes()` — see [docs/themes.md](docs/themes.md).
+Switch in Settings → Appearance, or cycle with the `THEME` button. Add your own via
+`registerThemes()` — see [docs/themes.md](docs/themes.md).
+
+The accent means *"Enter lands here"* and `danger` means the opposite, so a theme is
+only finished when the two cannot be confused: `tests/themeSignals.test.ts` requires
+contrast ≥ 1.5 and ≥ 30° of hue between them, both legible on their own ground, and
+ANSI colours still true to their names.
 
 ## Keyboard shortcuts
 
-Remappable in Mission Control → Keys (`Ctrl+,`). Full reference:
+Remappable in Settings → Keys (`Ctrl+,`). Full reference:
 [docs/keybindings.md](docs/keybindings.md).
 
 | Action | Default | | Action | Default |
 |---|---|---|---|---|
-| Command palette | `Ctrl+Shift+P` | | Launch Pad (model · effort) | `Ctrl+Alt+M` |
+| Command palette | `Ctrl+Shift+P` | | Model & effort | `Ctrl+Alt+M` |
 | Quick open (file) | `Ctrl+P` | | AI: natural language → command | `Ctrl+I` |
 | Settings | `Ctrl+,` | | Global command history | `Ctrl+R` |
 | Toggle sidebar | `Ctrl+B` | | New terminal in folder | `Ctrl+Shift+O` |
@@ -385,7 +394,8 @@ Details: [docs/shell-integration.md](docs/shell-integration.md).
 
 ## Tests
 
-Numbers as of 0.7.2: **431 unit checks** across 36 files and **47 end-to-end runs**
+Numbers as of 0.7.2: **437 unit checks** (plus 6 skipped on this platform) across
+37 files and **48 end-to-end runs**
 that drive the real application.
 
 **Unit** (`tests/`, vitest) — the pure logic where a silent mistake costs the most:
@@ -395,9 +405,9 @@ report), the project list order and path comparison, key-protection classificati
 shell-profile validation, and the completeness of both language dictionaries.
 
 **End-to-end** (`scripts/*.mjs`, Playwright driving Electron) — the real app in a
-throwaway profile, never touching your sessions or settings. Panes (139 checks),
+throwaway profile, never touching your sessions or settings. Panes (140 checks),
 the language switch across every screen (10), download progress and the tool clock
-(16), the agent engines on a protocol-accurate fake driver (21), the launch pad
+(16), the agent engines on a protocol-accurate fake driver (21), the model picker
 (41), the update page (27), menus (27), key badges (9). Plus `npm run perf`, which
 measures drag, streaming and gutter latency against fixed budgets.
 

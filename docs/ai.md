@@ -82,16 +82,26 @@ fields of the `AiChatRequest`:
 The manual **Temperature** and **Max tokens** fields in Settings → AI still exist for
 fine control; effort is the fast, four-notch way to move both at once.
 
-### The Launch Pad
+### Model & effort
 
-The Launch Pad (`Ctrl+Alt+M`, `app.launch-pad`, or the **Open the launch pad**
-button in Settings → AI) is a rocket-console overlay that picks the AI **engine
-(model)** and **effort** together. Selections are drafts until you hit
-**APPLY**, which commits `{ model, effort }` to `settings.ai` and fires the
-rocket-launch animation. The model list is built from `AI_MODEL_PRESETS` for the
-current provider, always including whatever model is currently configured. The same
-4-segment effort control also lives inline in Settings → AI (`EffortControl`), so the
-two stay in sync.
+The picker (`Ctrl+Alt+M`, `app.launch-pad`, or **Open model & effort** in
+Settings → AI) chooses the **model** and the **effort** together. Selections are
+drafts until you hit **APPLY**, which commits `{ model, effort }` to `settings.ai`;
+a pixel sunrise marks the moment. Its collapsed strip carries the same sunrise in
+four phases — one dawn at different heights, so the row reads as a scale.
+
+The model list comes from the **provider itself** (`GET /v1/models` for Anthropic and
+OpenAI, `/api/tags` for Ollama), fetched by the main process — it holds the key, and
+the base URL is read from settings rather than from the window. The answer is cached
+(`model-catalog.json` in userData), so the screen opens instantly and the live reply
+refreshes it. `AI_MODEL_PRESETS` is the fallback only while the provider has not
+answered: if it *refuses* (no key), the list is empty and the console says so instead
+of showing an invented catalogue. A model id that appears for the first time raises a
+one-off "new model" strip — compared against what you have *seen*, not against the
+previous reply.
+
+The same 4-segment effort control also lives inline in Settings → AI
+(`EffortControl`), so the two stay in sync.
 
 ## Agentic mode & command safety
 
@@ -170,8 +180,8 @@ nothing, in the surface that is always on screen.
 ## Where the assistant is reachable
 
 - **AI panel** (`Ctrl+Shift+A`) — the main chat surface.
-- **Launch Pad** (`Ctrl+Alt+M`, `app.launch-pad` action) — pick the model + reasoning
-  effort and apply them to the agent in one gesture (see above).
+- **Model & effort** (`Ctrl+Alt+M`, `app.launch-pad` action) — pick the model and
+  reasoning effort and apply them to the agent in one gesture (see above).
 - **Inline command bar** (`Ctrl+I`, `ai.command-bar` action) — natural language → a
   shell command, without leaving the terminal, scoped to the currently focused session.
 - **Ask about a block** — the **✦** button on any command block

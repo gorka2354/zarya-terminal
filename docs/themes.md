@@ -1,7 +1,7 @@
 # Themes
 
-Zarya ships a single cosmic-constructivist theme language — Soviet space programme +
-constructivism — voiced in nine keys. A theme is a plain `ThemeDef`
+Zarya ships one theme language — light with a direction and a time of day — voiced
+in eleven keys, from the blue hour before sunrise to noon. A theme is a plain `ThemeDef`
 (`src/shared/types.ts`) with two colour groups: `ui` (`ThemeUiColors` — the app
 chrome: backgrounds, borders, foreground, accents, status colours) and `terminal`
 (`ThemeTerminalColors` — the full 16-colour ANSI palette plus background, foreground,
@@ -9,32 +9,44 @@ cursor and selection for xterm).
 
 ## The collection
 
-Six dark themes and three light "poster paper" themes. They're listed here in the
-order they appear in the picker (base themes first, then the extended pack):
+Seven dark themes and four light ones, read as hours of light rather than as a list
+of unrelated moods. Identifiers are unchanged from the era they were named in — a
+rename must never cost anyone the theme they picked.
 
 | id | Name | Type | Feel / intended use |
 |---|---|---|---|
-| `zarya-cosmos` | Zarya · Kosmos | dark | **Default.** Signature deep-space navy, brand red, brass gold. |
-| `zarya-vostok` | Zarya · Vostok | dark | Red-dominant, deep maroon space. |
+| `zarya-blue-hour` | Zarya · Blue Hour | dark | **Default.** Twenty minutes before sunrise: cold ground, one warm signal. |
+| `zarya-cosmos` | Zarya · Night | dark | Deep graphite, the darkest of the set. |
+| `zarya-vostok` | Zarya · Embers | dark | Red-dominant, banked coals. |
 | `zarya-orbita` | Zarya · Frost | dark | Teal control-panel / oscilloscope retrofuturism. |
-| `zarya-dawn` | Zarya · Dawn | dark | The original sunrise theme, kept as a warm orange option. |
-| `zarya-sputnik` | Zarya · Sputnik | dark | Cold graphite hull, brand red, brass telemetry. |
-| `zarya-baikonur` | Zarya · Baikonur | dark | Warm steppe night, sodium launch-pad amber. |
-| `zarya-plakat` | Zarya · Poster | light | Constructivist poster: cream paper, red + black ink. |
-| `zarya-polden` | Zarya · Noon | light | Warm cosmonaut daylight, red + brass. |
-| `zarya-chertyozh` | Zarya · Blueprint | light | Technical drawing on cool paper — navy lines + red notes. |
+| `zarya-dawn` | Zarya · First Ray | dark | The original sunrise theme, kept as a warm orange option. |
+| `zarya-sputnik` | Zarya · Ash | dark | Cold graphite, muted brass telemetry. |
+| `zarya-baikonur` | Zarya · Sand | dark | Warm amber over a dark steppe. |
+| `zarya-golden-hour` | Zarya · Golden Hour | light | Morning on paper: warm ground, burnt-ochre signal. |
+| `zarya-plakat` | Zarya · Paper | light | Cream paper, red + black ink. |
+| `zarya-polden` | Zarya · Noon | light | Warm daylight, red + brass. |
+| `zarya-chertyozh` | Zarya · Tracing | light | Technical drawing on cool paper — navy lines + red notes. |
 
 The base four (`cosmos`, `vostok`, `orbita`, `dawn`) live in
 `src/renderer/src/features/themes/themes.ts`; the extended pack (`sputnik`,
-`baikonur`, `plakat`, `polden`, `chertyozh`) in `themePack.ts`, which registers
-itself on import (imported for its side effect in `src/renderer/src/main.tsx`).
+`baikonur`, `plakat`, `polden`, `chertyozh`) in `themePack.ts`; the dawn pair in
+`themeDawn.ts`. Both packs register on import — from `src/renderer/src/main.tsx`,
+not from the gallery: the gallery loads later than `App` applies the saved theme,
+and a theme that is not registered yet is silently replaced by the default.
+
+**A theme is only finished when its two signals cannot be confused.** The accent
+means "Enter lands here"; `danger` means the opposite. `tests/themeSignals.test.ts`
+checks the dawn pair by numbers — contrast ≥ 1.5 and ≥ 30° of hue between them,
+each ≥ 4.5:1 against its own ground, ANSI blue still blue. For reference, in the
+old Kosmos palette those two colours sat 1.25 apart with **one** degree of hue
+between them.
 
 Light themes deliberately carry **darkened, saturated** ANSI palettes so terminal
 text stays legible on cream/paper backgrounds.
 
 ## Switching themes
 
-Open Settings — **Mission Control** — (`Ctrl+,`), go to the **Appearance** tab, and
+Open Settings (`Ctrl+,`), go to the **Appearance** tab, and
 pick a card under **Theme**. Each card shows the theme's
 background / accent / accent-2 swatches, its name, and a `DARK` /
 `LIGHT` tag; the active one is marked `● ACTIVE`. Clicking a card writes
@@ -46,8 +58,9 @@ Under the hood, `applyTheme(theme)` (`themes.ts`):
   `--accent`, `--accent-grad`, `--danger`, …) via `VAR_MAP`,
 - keeps the native window backing (`body.backgroundColor`) and `--term-bg` in sync so
   there's no dark flash under a light theme,
-- stamps `documentElement.dataset.theme` / `dataset.themeType` — the latter is what
-  the star backdrop reads to invert to dark stars on light themes,
+- stamps `documentElement.dataset.theme` / `dataset.themeType` — the latter drives the
+  light-theme overrides in `base.css` (soft shadows, and no glow under the window:
+  the dawn ground is a dark-theme device only),
 - and hands the terminal palette to xterm through `toXtermTheme(theme)` (the
   `terminal` colours plus a derived `cursorAccent`).
 

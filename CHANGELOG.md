@@ -158,8 +158,9 @@ file list was capped before the manifest was looked for.
 - **The launch pad opens on the branch of the pane you are looking at.** It read
   the window-wide default instead of the pane's own mode, so after a restart you
   could have Claude Code running in the pane — input line and all — while the
-  console offered the built-in agent's accounts and model list. Pressing "ПУСК"
-  there would have applied the choice somewhere other than where you were looking.
+  console offered the built-in agent's accounts and model list. Pressing the apply
+  button there would have committed the choice somewhere other than where you were
+  looking.
 
 - **A pane keeps the engine it was born with.** Until a pane had its own record
   it followed the window-wide default — which any *other* pane's switch changes.
@@ -169,11 +170,11 @@ file list was capped before the manifest was looked for.
 
 ### Tested
 
-- 431 unit tests; live runs: panes 140, launch pad 41, catalogue 10, progress
+- 437 unit tests; live runs: panes 140, model picker 41, catalogue 17, progress
   16, language 10, agent engines 21, speech models 16 + 22, key routing 6,
-  projects 6.
-- Six live-app runs execute in CI under xvfb on every push — the custom speech
-  model and the key router joined them.
+  sidebar folding 11, projects 6.
+- Seven live-app runs execute in CI under xvfb on every push — the custom speech
+  model, the key router and sidebar folding joined them.
 - The custom-model path was also verified on real weights (`npm run
   qa:voice-custom`): Whisper tiny is added, recognises, and the same weights
   declared as another family are refused in words with the window still up.

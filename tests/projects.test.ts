@@ -35,7 +35,7 @@ describe('withProject', () => {
   })
 
   it('край пути не теряется: путь хранится целиком', () => {
-    const long = 'C:\\Users\\pesto\\Desktop\\zarya-terminal'
+    const long = 'C:\\Users\\dev\\projects\\zarya-terminal'
     expect(withProject([], long)[0]).toBe(long)
   })
 })
@@ -51,7 +51,7 @@ describe('samePath', () => {
   it('на Windows-пути регистр не важен, на остальных — важен', () => {
     expect(samePath('C:/Code/CV', 'c:/code/cv')).toBe(true)
     // Linux: это две разные папки, и слить их значило бы соврать в другую сторону.
-    expect(samePath('/home/egor/Code', '/home/egor/code')).toBe(false)
+    expect(samePath('/home/user/code', '/home/other/code')).toBe(false)
   })
 
   it('разные папки остаются разными', () => {
