@@ -144,7 +144,7 @@ try {
   }, leaves)
   await page.waitForTimeout(300)
 
-  /** Какая ветка комплекса открыта: у встроенного борта есть чипы аккаунтов. */
+  /** Какая ветка окна открыта: у встроенного агента есть чипы провайдеров. */
   const branchFor = async (sid) => {
     await page.evaluate((s) => window.__zaryaFocusPane?.(s), sid)
     await page.waitForTimeout(250)
@@ -153,11 +153,13 @@ try {
     const txt = await page.evaluate(() => document.querySelector('.zy-launchpad')?.innerText ?? '')
     await page.evaluate(() => window.__zaryaSetUi?.({ launchPadOpen: false }))
     await page.waitForTimeout(200)
-    return /АНТ-1|ГПТ-2|ЛУНА/i.test(txt) ? 'встроенный борт' : 'claude'
+    // Провайдеры зовутся своими именами: позывные АНТ-1 / ГПТ-2 / ЛУНА прятали,
+    // кому уходит запрос, и заменены на Anthropic / OpenAI / Ollama.
+    return /Anthropic|OpenAI|Ollama/i.test(txt) ? 'встроенный агент' : 'claude'
   }
 
   ok('панель Claude Code → ветка Claude', (await branchFor(leaves[0])) === 'claude')
-  ok('панель оболочки → ветка встроенного борта', (await branchFor(leaves[1])) === 'встроенный борт')
+  ok('панель оболочки → ветка встроенного агента', (await branchFor(leaves[1])) === 'встроенный агент')
 
   console.log('\n[5] Панели держат РАЗНЫЕ движки, соседей это не трогает')
   await page.evaluate((ids) => window.__zaryaSetPaneBarMode?.(ids[1], 'codex'), leaves)

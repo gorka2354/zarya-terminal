@@ -47,6 +47,36 @@ All notable changes to Zarya are documented here. This project uses
   announce yesterday's models as news. The first catalogue is remembered
   silently, so a fresh install does not greet you with a notice per model.
 
+- **The look moves from the space programme to the dawn the app is named after.**
+  Zarya means daybreak, and daybreak gives what an era cannot: light with a
+  direction and a time of day. Two new themes lead it — **Blue Hour** (twenty
+  minutes before sunrise; the one warm thing in the window is the amber that
+  means "Enter lands here") and **Golden Hour** (morning on paper, for working in
+  a lit room). Blue Hour is the new default.
+
+  The starfield and the constructivist grid are gone. In their place the window
+  simply has a bottom: a barely-there rise in light where the input line lives —
+  the place you act from.
+
+  Themes keep their palettes and lose the launch-site names: Kosmos → Night,
+  Vostok → Embers, Orbit → Frost, Sputnik → Ash, Baikonur → Sand, Poster →
+  Paper, Blueprint → Tracing. Nobody loses the theme they picked.
+
+  Words follow: "LAUNCH PAD" → "MODEL & EFFORT", "LAUNCH · POYEKHALI" → "APPLY",
+  "MISSION CONTROL" → "SETTINGS", "Crew · agents" → "Agents", "Ready for launch"
+  → "Ready when you are". The tagline becomes **// FIRST LIGHT** — in astronomy
+  that is an instrument's first working night, which is exactly what this is.
+
+  And the provider call signs go: ANT-1 / GPT-2 / LUNA are now Anthropic /
+  OpenAI / Ollama. That one is not taste — a call sign hides *who* your prompt
+  goes to.
+
+- **Sidebar sections fold.** "Recent" is a list nobody curates: it grows on its
+  own and by the end of a week it buries the open terminals and busy agents the
+  sidebar exists for. Every section now folds from its own heading, remembers
+  that between launches, and shows a count while folded so it never reads as
+  empty. Recent starts folded; searching unfolds it automatically.
+
 ### Changed
 
 - **Effort is called what the CLI calls it.** "ТЯГА · EFFORT" with steps

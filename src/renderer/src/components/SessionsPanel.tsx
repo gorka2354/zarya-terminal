@@ -60,6 +60,19 @@ export function SessionsPanel(): React.JSX.Element {
   const maximizedByTab = useUiStore((s) => s.maximizedByTab)
   const conversations = useAiStore((s) => s.conversations)
   const bookmarks = useSettingsStore((s) => s.settings.bookmarks)
+  /**
+   * Свёрнутые разделы сайдбара.
+   *
+   * «Недавние» копятся сами и к концу недели закрывают собой всё живое —
+   * открытые терминалы и агентов, ради которых сайдбар и открыт. Свернул раз —
+   * свёрнуто навсегда, поэтому состояние живёт в настройках, а не в памяти окна.
+   */
+  const collapsed = useSettingsStore((s) => s.settings.sessions.collapsed ?? [])
+  const isFolded = (key: string): boolean => collapsed.includes(key)
+  const toggleFold = (key: string): void => {
+    const next = isFolded(key) ? collapsed.filter((x) => x !== key) : [...collapsed, key]
+    void useSettingsStore.getState().update({ sessions: { collapsed: next } as never })
+  }
   const [query, setQuery] = useState('')
   const { menu, open } = useContextMenu()
   const store = useSessionsStore.getState()
@@ -161,6 +174,39 @@ export function SessionsPanel(): React.JSX.Element {
       </div>
     </div>
   ) : null
+
+  /**
+   * Заголовок раздела: он же переключатель.
+   *
+   * Счётчик рядом с именем стоит не для красоты — свёрнутый раздел обязан
+   * говорить, сколько в нём спрятано, иначе «Недавние» выглядят как пустое
+   * место и человек не догадывается туда заглянуть.
+   */
+  const sectionHead = (
+    key: string,
+    label: string,
+    count: number,
+    icon?: React.ReactNode,
+    style?: React.CSSProperties
+  ): React.JSX.Element => {
+    const folded = isFolded(key)
+    return (
+      <button
+        type="button"
+        className={`zy-section-label zy-section-head${folded ? ' zy-section-head--folded' : ''}`}
+        style={style}
+        onClick={() => toggleFold(key)}
+        title={t(folded ? 'sidebar.expand' : 'sidebar.collapse')}
+      >
+        <span className="zy-section-chev" aria-hidden="true">
+          <Icon name="chevron-down" size={10} />
+        </span>
+        {icon}
+        <span className="zy-section-head-text">{label}</span>
+        <span className="zy-section-count">{count}</span>
+      </button>
+    )
+  }
 
   const crewActive = conversations.filter((c) => c.streaming || c.pendingTools.length > 0)
 
@@ -714,27 +760,40 @@ export function SessionsPanel(): React.JSX.Element {
       >
         {shownTabs.length > 0 && (
           <>
-            <div className="zy-section-label" style={sectionLabelStyle}>
-              <Icon name="terminal" size={11} />
-              {t('sidebar.open')}
-            </div>
-            {shownTabs.map(renderOpenRow)}
-            {dropZone}
+            {sectionHead(
+              'open',
+              t('sidebar.open'),
+              shownTabs.length,
+              <Icon name="terminal" size={11} />,
+              sectionLabelStyle
+            )}
+            {!isFolded('open') && (
+              <>
+                {shownTabs.map(renderOpenRow)}
+                {dropZone}
+              </>
+            )}
           </>
         )}
         {favorites.length > 0 && (
           <>
-            <div className="zy-section-label" style={sectionLabelStyle}>
-              <Icon name="star" size={11} />
-              {t('sidebar.favorites')}
-            </div>
-            {favorites.map(renderItem)}
+            {sectionHead(
+              'favorites',
+              t('sidebar.favorites'),
+              favorites.length,
+              <Icon name="star" size={11} />,
+              sectionLabelStyle
+            )}
+            {!isFolded('favorites') && favorites.map(renderItem)}
           </>
         )}
         {recent.length > 0 && (
           <>
-            <div className="zy-section-label">{t('sidebar.recent')}</div>
-            {recent.map(renderItem)}
+            {sectionHead('recent', t('sidebar.recent'), recent.length)}
+            {/* Во время поиска раздел раскрывается сам: иначе человек ищет
+                сессию, она находится — и не показывается, потому что раздел
+                свёрнут со вчера. */}
+            {(!isFolded('recent') || !!query.trim()) && recent.map(renderItem)}
           </>
         )}
         {!tabs.length && !favorites.length && !recent.length && (
@@ -742,10 +801,8 @@ export function SessionsPanel(): React.JSX.Element {
             {t('sidebar.empty')}
           </div>
         )}
-        <div className="zy-section-label" style={crewLabelStyle}>
-          {t('sidebar.crew')}
-        </div>
-        {crewActive.length > 0 ? (
+        {sectionHead('crew', t('sidebar.crew'), crewActive.length, undefined, crewLabelStyle)}
+        {isFolded('crew') ? null : crewActive.length > 0 ? (
           crewActive.map((conv) => (
             <div key={conv.id} className="zy-item" onClick={() => openCrewMember(conv.id)}>
               <span

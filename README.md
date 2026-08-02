@@ -408,11 +408,11 @@ npm run perf          # performance budgets
 ```
 
 **What CI does and does not do.** Every push runs typecheck, the unit tests and a
-build on Ubuntu and Windows, plus six end-to-end runs on a real Electron window
+build on Ubuntu and Windows, plus seven end-to-end runs on a real Electron window
 under xvfb: panes, the language switch, download progress, the agent engines on a
 fake driver, importing a speech model from disk (folder recognition and its
-refusals — no weights are downloaded), and the key router (`Enter` in a rename
-dialog must not also approve a tool waiting in a pane). The rest — the speech
+refusals — no weights are downloaded), the key router (`Enter` in a rename dialog
+must not also approve a tool waiting in a pane), and sidebar folding. The rest — the speech
 engine on real weights, the real Claude Code driver, the update page, performance
 budgets — need network, hardware or a live agent, so they stay manual before a
 release. A green tick therefore means *types check,

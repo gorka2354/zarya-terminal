@@ -91,3 +91,8 @@ jobs:
       # заодно разрешать инструмент, ожидающий решения в панели.
       - name: Gate keys
         run: xvfb-run -a node scripts/gate-keys-test.mjs
+
+      # Сворачиваемые разделы сайдбара: «недавние» не должны закрывать собой
+      # живую работу, и это состояние обязано переживать перезапуск.
+      - name: Sidebar folding
+        run: xvfb-run -a node scripts/sidebar-fold-test.mjs

@@ -34,7 +34,7 @@ export const DEFAULT_KEYBINDINGS: Record<string, string> = {
 
 export const DEFAULT_SETTINGS: Settings = {
   appearance: {
-    themeId: 'zarya-cosmos',
+    themeId: 'zarya-blue-hour',
     // По системе: русскоязычная машина получит русский, остальные — английский.
     language: 'auto',
     fontFamily: "'JetBrains Mono', 'Cascadia Mono', Consolas, monospace",
@@ -100,7 +100,10 @@ export const DEFAULT_SETTINGS: Settings = {
   sessions: {
     restoreOnLaunch: 'workspace',
     autosaveSec: 20,
-    scrollbackSaveLines: 2000
+    scrollbackSaveLines: 2000,
+    // Недавнее свёрнуто с самого начала: этот список никто не заводит руками,
+    // он копится сам, и на второй неделе работы занимает весь сайдбар.
+    collapsed: ['recent']
   },
   editor: {
     fontSize: 13,

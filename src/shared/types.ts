@@ -303,6 +303,15 @@ export interface SessionsSettings {
   restoreOnLaunch: 'workspace' | 'none'
   autosaveSec: number
   scrollbackSaveLines: number
+  /**
+   * Свёрнутые разделы сайдбара ('open' | 'favorites' | 'recent' | 'crew').
+   *
+   * В настройках, а не в памяти окна: человек сворачивает раздел, потому что
+   * тот ему мешает, — и мешать он перестаёт навсегда, а не до перезапуска.
+   * «Недавние» свёрнуты по умолчанию: список растёт сам собой и к сотне строк
+   * закрывает собой всё живое.
+   */
+  collapsed?: string[]
 }
 
 export interface EditorSettings {

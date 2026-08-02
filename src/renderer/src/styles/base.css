@@ -63,33 +63,36 @@
   --shadow-1: 0 4px 18px rgba(0, 0, 0, 0.45);
   --shadow-2: 0 14px 54px rgba(0, 0, 0, 0.6);
 
-  /* Signature surface texture — starfield + faint constructivist grid.
-     Overridden for light themes below. */
-  --texture:
-    radial-gradient(1px 1px at 18% 30%, rgba(240, 236, 220, 0.5) 50%, transparent 51%),
-    radial-gradient(1px 1px at 62% 12%, rgba(240, 236, 220, 0.35) 50%, transparent 51%),
-    radial-gradient(1.4px 1.4px at 82% 48%, rgba(224, 177, 90, 0.5) 50%, transparent 51%),
-    radial-gradient(1px 1px at 34% 72%, rgba(240, 236, 220, 0.4) 50%, transparent 51%),
-    radial-gradient(1px 1px at 91% 82%, rgba(240, 236, 220, 0.3) 50%, transparent 51%),
-    radial-gradient(1.2px 1.2px at 8% 88%, rgba(224, 177, 90, 0.4) 50%, transparent 51%);
-  --texture-size: 520px 520px, 380px 380px, 640px 640px, 300px 300px, 700px 700px, 460px 460px;
-  --grid:
-    linear-gradient(rgba(224, 177, 90, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(224, 177, 90, 0.035) 1px, transparent 1px);
-  --grid-size: 46px 46px, 46px 46px;
+  /*
+   * Подложка окна: рассветное небо вместо звёздного поля.
+   *
+   * Раньше здесь лежали звёзды и конструктивистская сетка — прямая цитата из
+   * космической эпохи. Теперь свет: у окна появляется НИЗ. Он едва различим —
+   * пара процентов светлоты, — но именно внизу живёт строка ввода, то есть
+   * место, где человек действует. Свет идёт оттуда, куда уйдёт Enter.
+   *
+   * Заметная текстура в инструменте, где восемь часов читают мелкий текст, —
+   * помеха; поэтому здесь ровно один мягкий градиент и никакого узора.
+   */
+  --texture: radial-gradient(
+    120% 55% at 50% 118%,
+    color-mix(in srgb, var(--accent) 12%, transparent) 0%,
+    transparent 70%
+  );
+  --texture-size: auto;
+  --grid: none;
+  --grid-size: auto;
 }
 
-/* Light themes: swap the starfield for constructivist poster paper + red grid,
-   soften shadows (ink on cream, not glow in space). */
+/* Светлые темы: чернила на бумаге, а не свечение в пустоте. Подсветка снизу
+   там не нужна — на светлом поле она читается как грязь, а не как свет. */
 :root[data-theme-type='light'] {
   --shadow-1: 0 4px 16px rgba(40, 20, 12, 0.16);
   --shadow-2: 0 12px 44px rgba(40, 20, 12, 0.22);
   --texture: none;
   --texture-size: auto;
-  --grid:
-    linear-gradient(rgba(226, 35, 26, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(226, 35, 26, 0.05) 1px, transparent 1px);
-  --grid-size: 44px 44px, 44px 44px;
+  --grid: none;
+  --grid-size: auto;
 }
 
 * {
@@ -336,7 +339,7 @@ body {
   height: 100%;
 }
 
-/* Faint static texture layer under the animated stars. */
+/* Свет снизу: единственный слой подложки. */
 .zy-app::before {
   content: '';
   position: absolute;
@@ -345,17 +348,8 @@ body {
   pointer-events: none;
   background-image: var(--texture);
   background-size: var(--texture-size);
-  background-repeat: repeat;
-  opacity: 0.5;
-}
-.zy-app::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background-image: var(--grid);
-  background-size: var(--grid-size);
+  background-repeat: no-repeat;
+  opacity: 0.55;
 }
 
 .zy-main {
@@ -916,6 +910,62 @@ body {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--fg-faint);
+}
+
+/*
+ * Заголовок раздела, который сворачивается.
+ *
+ * Выглядит как прежняя подпись — это по-прежнему разделитель, а не кнопка на
+ * видном месте. Но у него есть шеврон и счётчик: свёрнутый раздел обязан
+ * говорить, сколько в нём спрятано, иначе он читается как пустое место.
+ */
+.zy-section-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  background: none;
+  border: 0;
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+  cursor: pointer;
+  text-align: left;
+}
+.zy-section-head:hover {
+  color: var(--fg-dim);
+}
+.zy-section-head:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+.zy-section-head-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.zy-section-chev {
+  display: inline-flex;
+  transition: transform 0.14s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .zy-section-chev {
+    transition: none;
+  }
+}
+/* Свёрнутый — стрелка вправо: она показывает, куда раскроется, а не где была. */
+.zy-section-head--folded .zy-section-chev {
+  transform: rotate(-90deg);
+}
+.zy-section-count {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  opacity: 0.75;
 }
 
 /* ============================================================ terminal */

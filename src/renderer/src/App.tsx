@@ -9,7 +9,6 @@ import { LaunchPad } from '@/components/LaunchPad'
 import { AskText } from '@/components/AskText'
 import { ModelNews } from '@/components/ModelNews'
 import { MissionFeed } from '@/components/MissionFeed'
-import { StarBackdrop } from '@/components/StarBackdrop'
 import { SessionsPanel } from '@/components/SessionsPanel'
 import { PanesHost } from '@/components/SplitLayout'
 import { StatusBar } from '@/components/StatusBar'
@@ -144,7 +143,6 @@ export default function App(): React.JSX.Element {
         })
       }}
     >
-      <StarBackdrop />
       <Titlebar />
       <div className="zy-main">
         <ActivityBar />
