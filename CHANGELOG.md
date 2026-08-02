@@ -127,7 +127,7 @@ file list was capped before the manifest was looked for.
 
 ### Tested
 
-- 426 unit tests; live runs: panes 140, launch pad 41, catalogue 10, progress
+- 431 unit tests; live runs: panes 140, launch pad 41, catalogue 10, progress
   16, language 10, agent engines 21, speech models 16 + 22, key routing 6,
   projects 6.
 - Six live-app runs execute in CI under xvfb on every push — the custom speech

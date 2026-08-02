@@ -187,6 +187,13 @@ from the system dialog, and "Remove" drops the entry, never your files. When the
 folder is ambiguous — a lone `model.onnx` looks the same for six families — Zarya
 refuses instead of guessing and asks for a `zarya-model.json` naming the family.
 
+Before a folder is accepted it is **started in a separate process**. That is not
+caution for its own sake: handed an ONNX of the wrong shape, the native engine does
+not return an error — it calls `exit(-1)` from a worker thread, which in the main
+process would take the whole app down, panes and agents included, without a word.
+So a model that does not build is refused in words — the engine's own, naming the
+metadata it missed — and never reaches the process you work in.
+
 ### Update check
 Zarya makes **one anonymous GET** to the GitHub releases API at startup — no token,
 no identifiers, no telemetry — and shows a dot in the activity bar when a newer
@@ -378,7 +385,7 @@ Details: [docs/shell-integration.md](docs/shell-integration.md).
 
 ## Tests
 
-Numbers as of 0.7.2: **417 unit checks** across 35 files and **46 end-to-end runs**
+Numbers as of 0.7.2: **431 unit checks** across 36 files and **47 end-to-end runs**
 that drive the real application.
 
 **Unit** (`tests/`, vitest) — the pure logic where a silent mistake costs the most:
