@@ -288,3 +288,77 @@ describe('список своих моделей', () => {
     expect(list[0].dir).toBe(`C:/m/${CUSTOM_MAX + 2}`)
   })
 })
+
+describe('канонические папки sherpa-onnx', () => {
+  it('две редакции одного файла — это одна модель, а не непонятная папка', () => {
+    // Так выглядит официальная папка sense-voice: полная и квантованная модели
+    // лежат рядом. Пока условие было «ровно один .onnx», ту самую мультиязычную
+    // модель, ради которой всё затевалось, Заря отвергала как непонятную.
+    const r = identifyModel('sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17', [
+      f('model.onnx', 900_000_000),
+      f('model.int8.onnx', 240_000_000),
+      f('tokens.txt', 300_000)
+    ])
+    expect(r.ok && r.family).toBe('senseVoice')
+    // Из редакций берётся крупная: она точнее, а место уже потрачено.
+    expect(r.ok && r.files.model).toBe('model.onnx')
+  })
+
+  it('квантованные суффиксы не мешают: int8/fp16 — та же модель', () => {
+    const r = identifyModel('sherpa-onnx-paraformer-zh', [
+      f('model.fp16.onnx', 400_000_000),
+      f('model.int8.onnx', 200_000_000),
+      f('tokens.txt', 100)
+    ])
+    expect(r.ok && r.family).toBe('paraformer')
+  })
+
+  it('два РАЗНЫХ файла по-прежнему не считаются одной моделью', () => {
+    const r = identifyModel('непонятная-папка', [
+      f('acoustic.onnx', 100),
+      f('language.onnx', 100),
+      f('tokens.txt', 10)
+    ])
+    expect(r.ok).toBe(false)
+  })
+
+  it('«ctc» в имени папки больше не выдаётся за NeMo', () => {
+    // sherpa-onnx-telespeech-ctc-* — другое семейство, которого аддон не знает
+    // вовсе. Отдать его под nemoCtc — не догадка, а неправда: движок на такой
+    // ошибке не ругается вежливо, он убивает процесс.
+    const r = identifyModel('sherpa-onnx-telespeech-ctc-int8-zh-2024-06-04', [
+      f('model.int8.onnx', 300_000_000),
+      f('tokens.txt', 5000)
+    ])
+    expect(r.ok).toBe(false)
+    expect(!r.ok && r.reason).toBe('unknown')
+  })
+
+  it('нормальные приметы NeMo работают по-прежнему', () => {
+    const one = [f('model.int8.onnx', 200_000_000), f('tokens.txt', 2000)]
+    expect((identifyModel('sherpa-onnx-nemo-ctc-punct-giga-am-v3', one) as { family: string }).family).toBe('nemoCtc')
+    expect((identifyModel('gigaam-v3-ru-punct', one) as { family: string }).family).toBe('nemoCtc')
+  })
+})
+
+describe('манифест и настоящие имена файлов', () => {
+  it('имя на диск уходит из ПАПКИ, а не из манифеста', () => {
+    // Linux: файл называется Small-Encoder.onnx, человек написал в манифесте
+    // строчными. Сверка без учёта регистра — правильно; но записать надо
+    // настоящее имя, иначе модель добавится и не откроется при загрузке.
+    const entries = [f('Small-Encoder.onnx'), f('Small-Decoder.onnx'), f('Tokens.txt')]
+    const r = readManifest(
+      JSON.stringify({
+        family: 'whisper',
+        files: {
+          encoder: 'small-encoder.onnx',
+          decoder: 'small-decoder.onnx',
+          tokens: 'tokens.txt'
+        }
+      }),
+      entries
+    )
+    expect(r.ok && r.files.encoder).toBe('Small-Encoder.onnx')
+    expect(r.ok && r.files.tokens).toBe('Tokens.txt')
+  })
+})

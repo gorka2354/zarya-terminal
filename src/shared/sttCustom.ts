@@ -139,6 +139,24 @@ function pick(entries: DirEntry[], has: string[], not: string[] = []): string | 
   return found.sort((a, b) => b.bytes - a.bytes)[0]?.name
 }
 
+/**
+ * Все эти `.onnx` — редакции ОДНОГО файла?
+ *
+ * В папках sherpa-onnx полная и квантованная модели лежат рядом:
+ * `model.onnx` и `model.int8.onnx`, `small-encoder.onnx` и
+ * `small-encoder.int8.onnx`. Отличие всегда в суффиксах вроде `.int8` перед
+ * расширением, поэтому сравниваются имена без них.
+ */
+function sameModelFile(onnx: DirEntry[]): boolean {
+  const base = (n: string): string =>
+    n
+      .toLowerCase()
+      .replace(/\.onnx$/, '')
+      .replace(/[._-](int8|fp16|fp32|quant|q8|q4)$/g, '')
+  const first = base(onnx[0].name)
+  return onnx.every((e) => base(e.name) === first)
+}
+
 /** Словарь: без него не собирается ни одно семейство. */
 function tokensOf(entries: DirEntry[]): string | undefined {
   const txt = entries.filter((e) => e.name.toLowerCase().endsWith('tokens.txt'))
@@ -163,13 +181,18 @@ export function readManifest(raw: string, entries: DirEntry[]): Identified {
   const declared = (o.files ?? {}) as Record<string, unknown>
   const roles = [...FAMILY_SHAPE[family as SttFamily], 'tokens']
   const files: Record<string, string> = {}
-  const present = new Set(entries.map((e) => e.name.toLowerCase()))
+  // Имя берётся из ПАПКИ, а не из манифеста. Сверка идёт без учёта регистра —
+  // человек пишет по памяти, — но на диск уходит настоящее имя: на Linux
+  // «small-encoder.onnx» вместо «Small-Encoder.onnx» проходило проверку и
+  // ломалось потом, уже при загрузке движка.
+  const present = new Map(entries.map((e) => [e.name.toLowerCase(), e.name]))
   for (const role of roles) {
     const name = declared[role]
     if (typeof name !== 'string' || !name) return { ok: false, reason: 'missing', detail: role }
     if (!safeFileName(name)) return { ok: false, reason: 'badFile', detail: name }
-    if (!present.has(name.toLowerCase())) return { ok: false, reason: 'missing', detail: name }
-    files[role] = name
+    const real = present.get(name.toLowerCase())
+    if (!real) return { ok: false, reason: 'missing', detail: name }
+    files[role] = real
   }
   return {
     ok: true,
@@ -231,9 +254,16 @@ export function identifyModel(dirName: string, entries: DirEntry[]): Identified 
     return put(family, { encoder, decoder })
   }
 
+  // Однофайловые семейства. Файлов при этом может лежать НЕСКОЛЬКО: в
+  // канонических папках sherpa-onnx рядом лежат полная и квантованная редакции
+  // одного и того же — model.onnx и model.int8.onnx. Пока условие было
+  // «ровно один .onnx», такая папка отвергалась как непонятная: то есть
+  // мультиязычная sense-voice, ради которой всё и затевалось, не ставилась.
   const onnx = entries.filter((e) => e.name.toLowerCase().endsWith('.onnx'))
-  if (onnx.length === 1) {
-    const single = onnx[0].name
+  if (onnx.length && sameModelFile(onnx)) {
+    // Из редакций берём КРУПНУЮ: она точнее, а место человек уже потратил,
+    // скачав папку целиком.
+    const single = [...onnx].sort((a, b) => b.bytes - a.bytes)[0].name
     const family: SttFamily | null = hint.includes('sense-voice') || hint.includes('sensevoice')
       ? 'senseVoice'
       : hint.includes('paraformer')
@@ -242,12 +272,15 @@ export function identifyModel(dirName: string, entries: DirEntry[]): Identified 
           ? 'zipformerCtc'
           : hint.includes('dolphin')
             ? 'dolphin'
-            : hint.includes('nemo') || hint.includes('giga') || hint.includes('ctc')
+            : // «ctc» нарочно НЕ считается приметой NeMo: так называются и чужие
+              // семейства (telespeech-ctc, wenet-ctc), а часть из них аддон не
+              // умеет вовсе. Отдать их под nemoCtc — это не догадка, а неправда.
+              hint.includes('nemo') || hint.includes('giga')
               ? 'nemoCtc'
               : null
     // Шесть семейств выглядят одинаково — один файл и словарь. Угадать «скорее
-    // всего nemoCtc» значило бы отдать движку модель не той формы: он соберётся,
-    // а распознавание выдаст мусор, и виновата будет «плохая модель».
+    // всего nemoCtc» значило бы отдать движку модель не той формы, а он на этом
+    // не ошибается вежливо: нативный код просто убивает процесс.
     if (!family) return { ok: false, reason: 'unknown' }
     return put(family, { model: single })
   }

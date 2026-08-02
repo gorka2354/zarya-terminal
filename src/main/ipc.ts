@@ -230,7 +230,9 @@ export function registerIpc(ctx: IpcContext): void {
       if (res.canceled || !res.filePaths[0]) return { ok: false, canceled: true }
       dir = res.filePaths[0]
     }
-    const found = ctx.stt.identifyDir(dir)
+    // Проверка запускает модель в отдельном процессе и на крупных занимает
+    // секунды — оттого и await: ответ приходит, когда ответ уже настоящий.
+    const found = await ctx.stt.identifyDir(dir)
     if (!found.ok) return found
     const voice = settingsStore.get().voice
     const list = withCustom(voice.customModels ?? [], found.model)
@@ -326,7 +328,12 @@ export function registerIpc(ctx: IpcContext): void {
         baseUrl,
         settingsStore.getSecret(provider)
       )
-      if (!ids.length) return cached
+      // Пустой ответ — не то же самое, что «нечего показать». Он бывает и
+      // когда провайдер честно говорит «моделей нет» (человек сделал `ollama
+      // rm`). Отдавать в этом случае вчерашний кеш молча значит показывать
+      // удалённые модели как живые, поэтому кеш идёт с пометкой, а решает
+      // окно: список видно, но он назван старым.
+      if (!ids.length) return { ...cached, stale: true }
       return await modelCatalogStore.put(provider, ids)
     } catch (e) {
       // Молчать нельзя: список из кеша выглядит как свежий, и человек будет

@@ -333,6 +333,7 @@ export const RU: Dict = {
   'lp.launch': 'ПУСК · ПОЕХАЛИ',
   'lp.byDefault': 'ПО УМОЛЧАНИЮ',
   'lp.customModel': 'Пользовательская модель',
+  'lp.catalogFail': 'каталог недоступен — проверьте ключ',
   'lp.noModel': 'модель не задана',
   'lp.model': 'модель',
   'lp.claudePlan': 'Claude Code · подписка Max',
@@ -633,6 +634,13 @@ export const RU: Dict = {
   'main.stt.custom.missing': 'не хватает файла: {detail}',
   'main.stt.custom.badManifest': 'zarya-model.json не разбирается как JSON',
   'main.stt.custom.notOurs': 'эту модель принесли вы — Заря не удаляет чужие файлы',
+  // Отказы пробной сборки. Движок, получив ONNX не той формы, не возвращает
+  // ошибку — он убивает процесс; поэтому модель сперва запускают в стороне, а
+  // сюда попадает то, что человек может починить.
+  'main.stt.custom.probeFailed':
+    'папка не собирается как «{family}» — похоже, семейство указано неверно. Движок сказал: {detail}',
+  'main.stt.custom.probeTimeout': 'модель не собралась за две минуты — проверьте, та ли это папка',
+  'main.stt.custom.probeNoRun': 'не удалось проверить модель: {detail}',
   'main.stt.deleteFail': 'не удалось удалить',
   'main.stt.legacy': 'эта модель больше не скачивается',
   'main.stt.noSource': '{name}: у этой модели нет источника',
@@ -939,6 +947,7 @@ export const RU: Dict = {
   'set.openDataFolder': 'Открыть папку данных',
   'common.save': 'Сохранить',
   'common.deleteShort': 'Удалить',
+  'common.close': 'Закрыть',
   'common.closeEsc': 'Закрыть (Esc)',
   // --- общее
   'common.rename': 'Переименовать…',
@@ -1270,6 +1279,7 @@ export const EN: Dict = {
   'lp.launch': 'LAUNCH · POYEKHALI',
   'lp.byDefault': 'DEFAULT',
   'lp.customModel': 'Custom model',
+  'lp.catalogFail': 'catalogue unavailable — check the key',
   'lp.noModel': 'no model set',
   'lp.model': 'model',
   'lp.claudePlan': 'Claude Code · Max plan',
@@ -1463,6 +1473,7 @@ export const EN: Dict = {
   'set.openDataFolder': 'Open data folder',
   'common.save': 'Save',
   'common.deleteShort': 'Delete',
+  'common.close': 'Close',
   'common.closeEsc': 'Close (Esc)',
   'act.palette': 'Command palette',
   'act.cat.app': 'Application',
@@ -1607,6 +1618,10 @@ export const EN: Dict = {
   'main.stt.custom.missing': 'missing file: {detail}',
   'main.stt.custom.badManifest': 'zarya-model.json is not valid JSON',
   'main.stt.custom.notOurs': 'you brought this model — Zarya does not delete files it did not put there',
+  'main.stt.custom.probeFailed':
+    'this folder does not build as "{family}" — the family looks wrong. The engine said: {detail}',
+  'main.stt.custom.probeTimeout': 'the model did not build within two minutes — check the folder',
+  'main.stt.custom.probeNoRun': 'could not verify the model: {detail}',
   'main.stt.deleteFail': 'could not delete',
   'main.stt.legacy': 'this model is no longer downloadable',
   'main.stt.noSource': '{name}: this model has no source',

@@ -70,6 +70,48 @@ All notable changes to Zarya are documented here. This project uses
 
 ### Fixed
 
+- **A wrongly identified speech model can no longer take the app down with it.**
+  The engine does not return an error when handed an ONNX of the wrong shape — the
+  native library prints a line and calls `exit(-1)` from a worker thread. In the
+  main process that means Zarya vanishes: panes, terminals, agents and unsaved
+  state, without a word about why. And since the choice stayed in settings, the
+  next launch died the same way.
+
+  A custom model is now started in a **separate process first**. If it does not
+  build, you get the engine's own words — the missing metadata usually names the
+  real family — and nothing is added. Verified on real weights: Whisper tiny
+  declared as `senseVoice` is refused in words, and the window stays up.
+
+- **Folder recognition matches the real repositories.** Canonical sherpa-onnx
+  folders ship two editions of the same file (`model.onnx` and
+  `model.int8.onnx`); the rule "exactly one .onnx" rejected them — including the
+  multilingual sense-voice this feature exists for. And `ctc` in a folder name no
+  longer counts as NeMo: `telespeech-ctc` is a different family the addon cannot
+  build at all, so guessing meant crashing, not degrading.
+
+- **`Enter` in a dialog no longer approves a tool behind it.** With a gate waiting
+  in the active pane, opening the rename dialog and pressing `Enter` on its
+  button did two things: saved the name *and* approved the command you had not
+  read yet. The dialog now owns `Enter` and `Esc` while it is open.
+
+- **The model catalogue no longer outlives its provider.** Switching the provider
+  chip kept the previous list on screen (Claude models offered as OpenAI's), and a
+  refusal from the provider fell back to the hardcoded preset — the very stale
+  list the live catalogue replaced. Both now clear, and a refusal says so.
+
+- **`qa:models` ran only a third of what it claimed.** A duplicate key in
+  `package.json` silently shadowed two runs (`qa-claude-catalog`,
+  `qa-model-refresh`); JSON keeps the last one. Restored, and `qa:fake-agents`
+  now builds first like every other run.
+
+Smaller ones from the same review: a missing `common.close` key showed the raw
+key in a tooltip; the "new model" strip sat below the launch pad's click
+catcher; the seen-models list could evict a model that was still in the
+catalogue and announce it as new twice; a model folder in a drive root had no
+name; a manifest was found case-insensitively but read in lowercase (Linux); the
+file list was capped before the manifest was looked for.
+
+
 - **Renaming works again.** Clicking the pencil on a desk did *nothing*:
   Electron does not implement `window.prompt`, and seven places in the interface
   rested on it — renaming a desk (button and double click), a pane, a saved
@@ -85,12 +127,14 @@ All notable changes to Zarya are documented here. This project uses
 
 ### Tested
 
-- 417 unit tests; live runs: panes 140, launch pad 41, catalogue 10, progress
-  16, language 10, agent engines 21, speech models 16 + 25.
-- Four live-app runs execute in CI under xvfb on every push; the custom speech
-  model run joined them.
-- The custom model path was verified on a real Whisper base build: the engine
-  assembles and answers in 0.8 s.
+- 426 unit tests; live runs: panes 140, launch pad 41, catalogue 10, progress
+  16, language 10, agent engines 21, speech models 16 + 22, key routing 6,
+  projects 6.
+- Six live-app runs execute in CI under xvfb on every push — the custom speech
+  model and the key router joined them.
+- The custom-model path was also verified on real weights (`npm run
+  qa:voice-custom`): Whisper tiny is added, recognises, and the same weights
+  declared as another family are refused in words with the window still up.
 
 ## 0.7.1 — "Countdown" (2026-07-31)
 

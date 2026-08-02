@@ -88,7 +88,15 @@ export interface ZaryaApi {
      * Каталог моделей провайдера: живой, с кешем. `at` — когда получен, `error`
      * стоит, если спросить не вышло и список пришёл из кеша.
      */
-    listModels(provider: string): Promise<{ ids: string[]; at: number; error?: string }>
+    listModels(
+      provider: string
+    ): Promise<{
+      ids: string[]
+      at: number
+      error?: string
+      /** Список из кеша: спросить не вышло, показывать его как свежий нельзя. */
+      stale?: boolean
+    }>
   }
   /** Generic native-agent transport — every call carries `engine` (registry key). */
   agent: {

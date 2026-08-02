@@ -1,3 +1,4 @@
+import { spawn } from 'child_process'
 import { createHash } from 'crypto'
 import { tm } from './lang'
 import {
@@ -32,6 +33,20 @@ import {
   type DirEntry,
   type Identified
 } from '@shared/sttCustom'
+
+/** Сколько ждём пробную сборку модели: крупные грузятся десятки секунд. */
+const PROBE_TIMEOUT_MS = 120_000
+
+/** Первая содержательная строка нативного вывода — остальное человеку не нужно. */
+function firstLine(s: string): string {
+  const lines = s
+    .split('\n')
+    .map((x) => x.trim())
+    .filter(Boolean)
+  // Последняя строка, а не первая: нативная библиотека сначала печатает путь
+  // к своему исходнику, и только в конце — чего именно не хватило в модели.
+  return (lines[lines.length - 1] ?? '').slice(0, 300)
+}
 
 /** Что вообще может быть частью модели: остальное даже не взвешивается. */
 const MODEL_EXT = /\.(onnx|txt|weights|json)$/i
@@ -134,6 +149,14 @@ export class SttService {
   private selectedId = ''
   /** Свои модели из настроек: путь, семейство и роли файлов. */
   private customs: CustomSttModel[] = []
+  /**
+   * Какие свои модели уже пережили пробную сборку — по подписи файлов на диске.
+   * Проверка стоит секунд и сотен мегабайт, повторять её на каждую диктовку
+   * незачем; изменились файлы — изменилась подпись, и проверка будет заново.
+   */
+  private probed = new Map<string, boolean>()
+  /** Какая модель сейчас в движке: id и подпись её файлов на диске. */
+  private loadedKey = ''
   private loading: Promise<void> | null = null
   private downloading: SttProgress | null = null
   private lastError: string | undefined
@@ -226,6 +249,7 @@ export class SttService {
     if (id === this.selectedId) return
     this.selectedId = id
     this.recognizer = null
+    this.loadedKey = ''
   }
 
   /**
@@ -243,7 +267,10 @@ export class SttService {
       list.length === this.customs.length &&
       list.every((c, i) => key(c) === key(this.customs[i]))
     this.customs = list
-    if (!same) this.recognizer = null
+    if (!same) {
+      this.recognizer = null
+      this.loadedKey = ''
+    }
   }
 
   state(): SttState {
@@ -286,53 +313,72 @@ export class SttService {
   }
 
   /**
-   * Разобрать папку, которую человек выбрал: что это за модель и грузится ли
-   * она вообще. Ничего не копируется и никуда не записывается — файлы остаются
-   * там, где лежат, а решение сохранить запись принимает вызывающий.
+   * Разобрать папку, которую человек выбрал: что это за модель, и — главное —
+   * заводится ли она вообще.
+   *
+   * Ничего не копируется и никуда не записывается: файлы остаются там, где
+   * лежат, решение сохранить запись принимает вызывающий. Пробная сборка идёт
+   * ЗДЕСЬ, а не при первой диктовке: узнать «эта папка не собирается» лучше
+   * сразу после выбора, пока человек ещё помнит, что он выбрал.
    */
-  identifyDir(dir: string): { ok: true; model: CustomSttModel } | { ok: false; error: string } {
-    let entries: DirEntry[]
+  async identifyDir(
+    dir: string
+  ): Promise<{ ok: true; model: CustomSttModel } | { ok: false; error: string }> {
+    let all: string[]
     try {
-      // Размер спрашивается только у файлов, которые вообще могут оказаться
-      // моделью. Ошибиться папкой легко — C:\Windows\System32 это несколько
-      // тысяч записей, и statSync по каждой подвесил бы главный процесс со
-      // всеми терминалами и агентами разом ради заведомо ненужного ответа.
-      entries = readdirSync(dir, { withFileTypes: true })
+      all = readdirSync(dir, { withFileTypes: true })
         .filter((e) => e.isFile() && MODEL_EXT.test(e.name))
-        .slice(0, MAX_MODEL_FILES)
-        .map((e) => ({ name: e.name, bytes: safeSize(join(dir, e.name)) }))
+        .map((e) => e.name)
     } catch {
       return { ok: false, error: tm('main.stt.custom.dirUnreadable') }
     }
-    // Манифест главнее догадок: человек знает, что принёс. Догадка идёт в дело
-    // только там, где он ничего не сказал.
-    const hasManifest = entries.some((e) => e.name.toLowerCase() === MANIFEST)
+    // Манифест ищется ДО отсечки по количеству и по настоящему имени файла.
+    // Он начинается с «z», и в папке с сотнями файлов алфавитный порядок
+    // выбрасывал его за предел — Заря игнорировала прямо написанное человеком и
+    // уходила гадать. Регистр тоже настоящий: на Linux файл «Zarya-Model.json»
+    // находился поиском, но читался по имени в нижнем регистре и не открывался.
+    const manifestName = all.find((n) => n.toLowerCase() === MANIFEST)
+    const entries: DirEntry[] = all
+      .slice(0, MAX_MODEL_FILES)
+      .map((n) => ({ name: n, bytes: safeSize(join(dir, n)) }))
+
     let res: Identified
-    if (hasManifest) {
+    if (manifestName) {
       try {
-        res = readManifest(readFileSync(join(dir, MANIFEST), 'utf8'), entries)
+        res = readManifest(readFileSync(join(dir, manifestName), 'utf8'), entries)
       } catch {
         res = { ok: false, reason: 'badManifest' }
       }
     } else {
-      res = identifyModel(basename(dir), entries)
+      res = identifyModel(basename(dir) || dir, entries)
     }
     if (!res.ok) {
       const detail = 'detail' in res ? res.detail : ''
       return { ok: false, error: tm(`main.stt.custom.${res.reason}`, { detail }) }
     }
-    return {
-      ok: true,
-      model: {
-        id: customId(dir),
-        name: res.name || basename(dir),
-        lang: res.lang,
-        family: res.family,
-        dir,
-        files: res.files,
-        bytes: res.bytes
-      }
+
+    const model: CustomSttModel = {
+      id: customId(dir),
+      // Папка в корне диска имени не имеет: basename('E:\\') — пустая строка, и
+      // строка в списке осталась бы без заголовка, а тост сказал бы «Модель
+      // добавлена: ». Тогда именем становится сам путь.
+      name: res.name || basename(dir) || dir,
+      lang: res.lang,
+      family: res.family,
+      dir,
+      files: res.files,
+      bytes: res.bytes
     }
+
+    // Единственная честная проверка «та ли это модель» — попытка её собрать.
+    // Формат ONNX сам о семействе не говорит, а ошибка в семействе стоит не
+    // «плохого распознавания», а мгновенной смерти приложения (см. probe).
+    try {
+      await this.probe(this.customRunnable(model), this.buildConfig(this.customRunnable(model)))
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : String(e) }
+    }
+    return { ok: true, model }
   }
 
   /** Убрать скачанную модель с диска — она весит сотни мегабайт. */
@@ -464,43 +510,155 @@ export class SttService {
     })
   }
 
+  /**
+   * Конфигурация движка для модели.
+   *
+   * У каждого семейства своя форма и свой набор файлов: CTC — один файл,
+   * transducer — три, moonshine — четыре. Формы собраны в одну таблицу
+   * (FAMILY_SHAPE), она же служит опознанию своих моделей: две копии этого
+   * знания разошлись бы молча. Ключи проверены в бинарнике аддона, а не взяты
+   * из документации.
+   */
+  private buildConfig(m: Runnable): Record<string, unknown> {
+    const f = (n: string): string => join(m.dir, n)
+    const shape: Record<string, string> = {}
+    for (const role of FAMILY_SHAPE[m.family]) {
+      const name = m.roles[role]
+      if (!name) throw new Error(tm('main.stt.custom.missing', { detail: role }))
+      shape[role] = f(name)
+    }
+    const tokens = m.roles.tokens
+    if (!tokens) throw new Error(tm('main.stt.custom.noTokens', { detail: '' }))
+    return {
+      featConfig: { sampleRate: 16000, featureDim: 80 },
+      modelConfig: {
+        [m.family]: shape,
+        tokens: f(tokens),
+        numThreads: Math.max(1, Math.min(4, (require('os').cpus()?.length ?? 2) - 1)),
+        provider: 'cpu',
+        debug: false
+      }
+    }
+  }
+
+  /**
+   * Подпись модели на диске: путь, имена, размеры и время правки файлов.
+   * Проверять заново стоит только тогда, когда файлы изменились — сама проверка
+   * это полная загрузка модели, то есть секунды и сотни мегабайт памяти.
+   */
+  private signature(m: Runnable): string {
+    const parts = Object.entries(m.roles).map(([role, name]) => {
+      try {
+        const st = statSync(join(m.dir, name))
+        return `${role}:${name}:${st.size}:${Math.round(st.mtimeMs)}`
+      } catch {
+        return `${role}:${name}:нет`
+      }
+    })
+    return `${m.dir}|${m.family}|${parts.sort().join('|')}`
+  }
+
+  /**
+   * Попробовать собрать движок в ОТДЕЛЬНОМ процессе.
+   *
+   * Единственный способ пережить чужую модель. sherpa-onnx, получив файл не той
+   * формы (модель senseVoice, объявленная как whisper, — обычная опечатка в
+   * манифесте), не возвращает ошибку: нативная библиотека пишет строку в stderr
+   * и вызывает exit(-1) прямо из рабочего потока. В главном процессе это смерть
+   * приложения: панели, терминалы, агенты и несохранённое состояние исчезают
+   * молча, а выбор модели остаётся в настройках — и следующий запуск умирает
+   * так же. Проверять содержимое ONNX самим невозможно, поэтому проверка — это
+   * попытка запуска там, где падение никому не вредит.
+   *
+   * Дочерний процесс — та же Заря в режиме Node (ELECTRON_RUN_AS_NODE): свой
+   * `node` рядом не гарантирован, а нативный аддон собран под этот ABI.
+   */
+  private async probe(m: Runnable, config: Record<string, unknown>): Promise<void> {
+    const sig = this.signature(m)
+    if (this.probed.get(sig)) return
+    const code = [
+      'const sherpa = require(process.argv[1]);',
+      'const cfg = JSON.parse(process.argv[2]);',
+      'sherpa.OfflineRecognizer.createAsync(cfg).then(',
+      '  () => process.exit(0),',
+      '  (e) => { process.stderr.write(String((e && e.message) || e)); process.exit(3); }',
+      ');'
+    ].join('\n')
+    const modPath = require.resolve('sherpa-onnx-node')
+    const res = await new Promise<{ code: number | null; err: string }>((resolve) => {
+      let child: ReturnType<typeof spawn>
+      try {
+        child = spawn(process.execPath, ['-e', code, modPath, JSON.stringify(config)], {
+          env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+          windowsHide: true,
+          stdio: ['ignore', 'ignore', 'pipe']
+        })
+      } catch (e) {
+        resolve({ code: -100, err: e instanceof Error ? e.message : String(e) })
+        return
+      }
+      let err = ''
+      child.stderr?.on('data', (b: Buffer) => {
+        // Нативная строка бывает многословной; человеку нужен смысл, не поток.
+        if (err.length < 2000) err += b.toString()
+      })
+      // Крупные модели грузятся десятки секунд; вечно ждать всё же нельзя.
+      const timer = setTimeout(() => {
+        child.kill()
+        resolve({ code: -101, err: '' })
+      }, PROBE_TIMEOUT_MS)
+      child.on('error', (e) => {
+        clearTimeout(timer)
+        resolve({ code: -100, err: e.message })
+      })
+      child.on('exit', (c) => {
+        clearTimeout(timer)
+        resolve({ code: c, err })
+      })
+    })
+
+    if (res.code === 0) {
+      this.probed.set(sig, true)
+      return
+    }
+    if (res.code === -101) throw new Error(tm('main.stt.custom.probeTimeout'))
+    if (res.code === -100) throw new Error(tm('main.stt.custom.probeNoRun', { detail: res.err }))
+    // Движок отказался сам — показываем его слова: они называют недостающие
+    // метаданные, по которым видно, какое семейство на самом деле в папке.
+    const detail = firstLine(res.err) || String(res.code)
+    throw new Error(tm('main.stt.custom.probeFailed', { family: m.family, detail }))
+  }
+
   /** Build the recognizer once; concurrent callers share one load. */
   private async ensureEngine(): Promise<void> {
-    if (this.recognizer) return
+    // Что грузить — решаем ДО того, как обрадоваться готовому движку. Раньше
+    // условие было «движок есть — работаем», и он переживал события, после
+    // которых говорил уже не за ту модель: своя модель лежала на внешнем диске,
+    // при старте её не было — собрался GigaAM; человек воткнул диск, в
+    // настройках его модель снова «активна», а распознавал по-прежнему GigaAM.
+    // Интерфейс называл одну, работала другая.
+    const want = this.active()
+    const key = want ? `${want.id}|${this.signature(want)}` : ''
+    if (this.recognizer && this.loadedKey === key) return
+    if (this.recognizer) this.recognizer = null
     if (this.loading) return this.loading
     this.loading = (async () => {
       const m = this.active()
       if (!m) throw new Error(tm('main.stt.notInstalled'))
+      const config = this.buildConfig(m)
+      // Своя модель проверяется в ОТДЕЛЬНОМ процессе, прежде чем попасть сюда.
+      // Причина жёсткая: движок, получив ONNX не той формы, не бросает ошибку —
+      // он зовёт exit(-1) прямо из нативного потока. Промис не отвергается,
+      // try/catch бессилен, и Заря исчезает целиком вместе со всеми панелями,
+      // терминалами и агентами. Без единого слова о причине.
+      if (m.custom) await this.probe(m, config)
       // Required lazily: loading the addon costs memory, and most sessions
       // never dictate anything.
       const sherpa = require('sherpa-onnx-node')
-      const f = (n: string): string => join(m.dir, n)
-      // У каждого семейства своя форма конфигурации и свой набор файлов: CTC —
-      // один файл, transducer — три, moonshine — четыре. Формы собраны в одну
-      // таблицу (FAMILY_SHAPE), она же служит опознанию своих моделей: две копии
-      // этого знания разошлись бы молча, и заметил бы это только тот, кто ждал
-      // минуту сборки движка ради нативной ошибки про недостающий файл.
-      // Ключи проверены в бинарнике аддона, а не взяты из документации.
-      const roles = FAMILY_SHAPE[m.family]
-      const shape: Record<string, string> = {}
-      for (const role of roles) {
-        const name = m.roles[role]
-        if (!name) throw new Error(tm('main.stt.custom.missing', { detail: role }))
-        shape[role] = f(name)
-      }
-      const tokens = m.roles.tokens
-      if (!tokens) throw new Error(tm('main.stt.custom.noTokens', { detail: '' }))
-      const config = {
-        featConfig: { sampleRate: 16000, featureDim: 80 },
-        modelConfig: {
-          [m.family]: shape,
-          tokens: f(tokens),
-          numThreads: Math.max(1, Math.min(4, (require('os').cpus()?.length ?? 2) - 1)),
-          provider: 'cpu',
-          debug: false
-        }
-      }
       this.recognizer = await sherpa.OfflineRecognizer.createAsync(config)
+      // Запоминаем ИМЕННО ту модель, что загружена: по ней потом видно, не
+      // разошёлся ли движок с тем, что показывают настройки.
+      this.loadedKey = `${m.id}|${this.signature(m)}`
     })()
     try {
       await this.loading
@@ -538,5 +696,6 @@ export class SttService {
   /** Free the recognizer (model files stay cached on disk). */
   dispose(): void {
     this.recognizer = null
+    this.loadedKey = ''
   }
 }

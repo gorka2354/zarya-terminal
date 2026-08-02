@@ -67,7 +67,20 @@ export function freshModels(seen: string[], fresh: string[]): string[] {
 export function withSeen(seen: string[], fresh: string[], max = MODELS_MAX * 2): string[] {
   const out = [...seen]
   for (const id of fresh) if (!out.includes(id)) out.push(id)
-  return out.slice(-max)
+  if (out.length <= max) return out
+  // Обрезка идёт по САМЫМ СТАРЫМ, но всё, что провайдер отдаёт сейчас, из неё
+  // исключено. Иначе у провайдера с сотней идентификаторов список виденного
+  // упирался в потолок, оттуда вылетали давно знакомые модели — и Заря
+  // объявляла их новинкой во второй раз. Окно «появилась новая модель» стоит
+  // ровно на том, что оно не повторяется.
+  const live = new Set(fresh)
+  const keep = out.filter((id) => live.has(id))
+  const rest = out.filter((id) => !live.has(id))
+  const room = Math.max(0, max - keep.length)
+  const trimmedRest = room ? rest.slice(-room) : []
+  // Порядок исходного списка сохраняется: он и есть история знакомства.
+  const survive = new Set([...keep, ...trimmedRest])
+  return out.filter((id) => survive.has(id))
 }
 
 /**

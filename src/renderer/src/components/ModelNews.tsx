@@ -19,6 +19,9 @@ export function ModelNews(): React.JSX.Element | null {
   useLang()
 
   const news = useUiStore((s) => s.modelNews)
+  // Новость приходит в момент, когда каталог спрашивают, — то есть при открытом
+  // пусковом комплексе. Кнопка «посмотреть» тогда вела бы в уже открытое окно.
+  const padOpen = useUiStore((s) => s.launchPadOpen)
   if (!news) return null
 
   const close = (): void => useUiStore.getState().set({ modelNews: null })
@@ -37,9 +40,11 @@ export function ModelNews(): React.JSX.Element | null {
         </div>
         <div className="zy-modelnews-names">{news.names.join(' · ')}</div>
       </div>
-      <button type="button" className="zy-modelnews-go" onClick={openLaunchPad}>
-        {t('news.open')}
-      </button>
+      {!padOpen && (
+        <button type="button" className="zy-modelnews-go" onClick={openLaunchPad}>
+          {t('news.open')}
+        </button>
+      )}
       <button
         type="button"
         className="zy-icon-btn zy-modelnews-x"

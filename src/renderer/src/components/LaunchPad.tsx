@@ -152,13 +152,32 @@ export function LaunchPad(): React.JSX.Element | null {
    * Теперь спрашиваем самого провайдера, а пресет остаётся аварийным.
    */
   const [providerModels, setProviderModels] = useState<string[]>([])
+  /** Почему каталога нет: нет ключа, нет сети. Молчать об этом нельзя. */
+  const [catalogError, setCatalogError] = useState('')
   useEffect(() => {
     if (!open || claudeMode) return
+    // Каталог принадлежит ПРОВАЙДЕРУ. Без сброса список прошлого оставался на
+    // экране после переключения чипа: человек с ключом Anthropic жал OPENAI и
+    // видел модели Claude как доступные у OpenAI — интерфейс предлагал то,
+    // чего там нет.
+    setProviderModels([])
+    setCatalogError('')
+    let alive = true
     void window.zarya.ai.listModels(provider).then((cat) => {
-      if (!cat?.ids?.length) return
-      setProviderModels(cat.ids)
-      void checkModelNews(provider, cat.ids)
+      // Ответ на ПРОШЛЫЙ провайдер приходит после переключения — и был бы
+      // приписан новому.
+      if (!alive) return
+      if (cat?.ids?.length) {
+        setProviderModels(cat.ids)
+        // По устаревшему списку новинок не объявляем: он пришёл из кеша, потому
+        // что спросить не вышло, и «новое» в нём — это то, что уже показывали.
+        if (!cat.stale) void checkModelNews(provider, cat.ids)
+      }
+      if (cat?.error) setCatalogError(String(cat.error))
     })
+    return () => {
+      alive = false
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, claudeMode, provider])
 
@@ -242,11 +261,15 @@ export function LaunchPad(): React.JSX.Element | null {
     // Живой каталог, если он есть; пресет из кода — только когда спросить не
     // удалось (нет ключа, нет сети). Список из памяти показывать как свежий
     // нельзя: он устаревает молча.
-    const preset = AI_MODEL_PRESETS[provider] ?? []
+    // Пресет из кода — аварийный вариант, и только пока спросить не удалось
+    // МОЛЧА. Если провайдер ответил отказом (нет ключа), показывать вместо
+    // ответа зашитый список нельзя: это ровно та устаревшая выдумка, из-за
+    // которой каталог и стали спрашивать живьём. Тогда — честная строка.
+    const preset = catalogError ? [] : (AI_MODEL_PRESETS[provider] ?? [])
     const list = providerModels.length ? [...providerModels] : [...preset]
     if (provider === ai.provider && ai.model && !list.includes(ai.model)) list.unshift(ai.model)
     if (model && !list.includes(model)) list.unshift(model)
-    const values = list.length ? list : [model || t('lp.noModel')]
+    const values = list.length ? list : [model || (catalogError ? t('lp.catalogFail') : t('lp.noModel'))]
     return values.map((v) => ({
       value: v,
       title: prettyModel(v),
@@ -260,6 +283,7 @@ export function LaunchPad(): React.JSX.Element | null {
     claudeMode,
     claudeModels,
     providerModels,
+    catalogError,
     provider,
     ai.provider,
     ai.model,

@@ -1,5 +1,6 @@
 import { useSessionsStore } from '@/state/sessionsStore'
 import { isRaw, useUiStore } from '@/state/uiStore'
+import { askOwnsKeys } from '@/components/AskText'
 
 /**
  * Диспетчер Esc и Enter — один на окно.
@@ -60,8 +61,14 @@ export function isKeyTarget(sessionId: string | null | undefined): boolean {
 
 /**
  * Оверлеи забирают Esc себе: палитра, настройки, пусковой пульт, быстрый переход,
- * хроника, командная строка. В сыром режиме терминала клавиши принадлежат
- * программе внутри него.
+ * хроника, командная строка, окно «введите имя». В сыром режиме терминала
+ * клавиши принадлежат программе внутри него.
+ *
+ * Окно вопроса попало сюда не для порядка. Пока фокус стоял в его ПОЛЕ, Enter
+ * до окна не доходил; но стоило перевести фокус на кнопку «Сохранить» (Tab —
+ * обычный способ), и нажатие уходило дальше: кнопка срабатывала, а этот
+ * диспетчер тем же событием одобрял ожидающий гейт в активной панели. То есть
+ * переименование сессии запускало команду, которую человек ещё не читал.
  */
 function overlayOwnsKeys(): boolean {
   const ui = useUiStore.getState()
@@ -72,6 +79,7 @@ function overlayOwnsKeys(): boolean {
     ui.quickOpenOpen ||
     ui.historyOverlayOpen ||
     ui.aiBarOpen ||
+    askOwnsKeys() ||
     isRaw(ui, keyTargetSessionId())
   )
 }

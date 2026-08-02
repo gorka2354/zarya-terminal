@@ -94,3 +94,32 @@ describe('prettyModelName', () => {
     expect(prettyModelName('qwen3:8b')).toBe('Qwen3:8b')
   })
 })
+
+describe('виденное не теряет живые модели', () => {
+  it('переполнение выкидывает старое, но не то, что провайдер отдаёт сейчас', () => {
+    // У OpenAI под сотню идентификаторов, и список виденного упирается в
+    // потолок. Пока обрезка шла «по самым ранним», из памяти вылетали давно
+    // знакомые модели — и Заря объявляла их новинкой во второй раз. Окно
+    // «появилась новая модель» стоит ровно на том, что оно не повторяется.
+    const seen = Array.from({ length: 240 }, (_, i) => `old-${i}`)
+    const fresh = ['old-0', 'old-1', 'new-a']
+    const out = withSeen(seen, fresh)
+    expect(out.length).toBeLessThanOrEqual(240)
+    for (const id of fresh) expect(out, id).toContain(id)
+    // Место освободилось за счёт тех, кого в живом каталоге уже нет.
+    expect(out).not.toContain('old-2')
+  })
+
+  it('без переполнения список только растёт', () => {
+    const out = withSeen(['a', 'b'], ['b', 'c'])
+    expect(out).toEqual(['a', 'b', 'c'])
+  })
+
+  it('после обрезки повторного объявления новинки не будет', () => {
+    const seen = Array.from({ length: 240 }, (_, i) => `m-${i}`)
+    const fresh = Array.from({ length: 100 }, (_, i) => `m-${i}`)
+    const out = withSeen(seen, fresh)
+    // Второй проход тем же каталогом обязан не найти ничего нового.
+    expect(freshModels(out, fresh)).toEqual([])
+  })
+})
