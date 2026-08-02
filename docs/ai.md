@@ -87,7 +87,7 @@ fine control; effort is the fast, four-notch way to move both at once.
 The Launch Pad (`Ctrl+Alt+M`, `app.launch-pad`, or the **Open the launch pad**
 button in Settings → AI) is a rocket-console overlay that picks the AI **engine
 (model)** and **effort** together. Selections are drafts until you hit
-**LAUNCH · POYEKHALI**, which commits `{ model, effort }` to `settings.ai` and fires the
+**APPLY**, which commits `{ model, effort }` to `settings.ai` and fires the
 rocket-launch animation. The model list is built from `AI_MODEL_PRESETS` for the
 current provider, always including whatever model is currently configured. The same
 4-segment effort control also lives inline in Settings → AI (`EffortControl`), so the

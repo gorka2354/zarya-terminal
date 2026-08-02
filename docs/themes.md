@@ -16,7 +16,7 @@ order they appear in the picker (base themes first, then the extended pack):
 |---|---|---|---|
 | `zarya-cosmos` | Zarya · Kosmos | dark | **Default.** Signature deep-space navy, brand red, brass gold. |
 | `zarya-vostok` | Zarya · Vostok | dark | Red-dominant, deep maroon space. |
-| `zarya-orbita` | Zarya · Orbit | dark | Teal control-panel / oscilloscope retrofuturism. |
+| `zarya-orbita` | Zarya · Frost | dark | Teal control-panel / oscilloscope retrofuturism. |
 | `zarya-dawn` | Zarya · Dawn | dark | The original sunrise theme, kept as a warm orange option. |
 | `zarya-sputnik` | Zarya · Sputnik | dark | Cold graphite hull, brand red, brass telemetry. |
 | `zarya-baikonur` | Zarya · Baikonur | dark | Warm steppe night, sodium launch-pad amber. |

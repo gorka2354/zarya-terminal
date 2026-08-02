@@ -206,16 +206,21 @@ export function LaunchPad(): React.JSX.Element | null {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
-  // Mission clock: T+ elapsed since the console opened.
+  /*
+   * Часы окна: сколько оно открыто.
+   *
+   * Раньше это был полётный отсчёт «T+ 00:00:00» — красиво, но он отвечал на
+   * вопрос, которого никто не задавал, да ещё и языком космодрома. Оставлены
+   * минуты и секунды: единственное, ради чего сюда смотрят, — «я тут завис».
+   */
   useEffect(() => {
     if (!open) return
     const tick = (): void => {
       if (!clockRef.current) return
       const s = Math.floor((Date.now() - openedAt.current) / 1000)
-      const hh = String(Math.floor(s / 3600)).padStart(2, '0')
-      const mm = String(Math.floor((s % 3600) / 60)).padStart(2, '0')
+      const mm = String(Math.floor(s / 60)).padStart(2, '0')
       const ss = String(s % 60).padStart(2, '0')
-      clockRef.current.textContent = `T+ ${hh}:${mm}:${ss}`
+      clockRef.current.textContent = `${mm}:${ss}`
     }
     tick()
     const iv = setInterval(tick, 1000)
@@ -544,20 +549,33 @@ export function LaunchPad(): React.JSX.Element | null {
 
 
 
-// Rocket sprites (11×18) — hand-designed pixel art (generated via the Aseprite/
-// pixelforge pipeline), one per model slot. Palette chars below.
-const ROCKET_PAL: Record<string, string> = {
-  W: '#f6f1e2', w: '#ddd6c2', s: '#a89f88', R: '#e2231a', r: '#a81810',
-  C: '#6fe0e0', c: '#2f9f9f', G: '#e0b15a', o: '#f0662e', y: '#fff2c0'
+/*
+ * Восход (11×18) — четыре фазы одного рассвета вместо четырёх разных ракет.
+ *
+ * Пиксель здесь не про эпоху, а про знакогенератор: терминалу он родной. Что
+ * поменялось — сюжет. Раньше каждый слот модели нёс свою ракету, и ряд читался
+ * как парад техники; теперь это одно солнце на разной высоте, то есть шкала.
+ *
+ * Палитра держится на токенах темы только по духу: значения тут собственные,
+ * потому что рисунок обязан читаться на любой из тем, а не совпадать с одной.
+ */
+const SUN_PAL: Record<string, string> = {
+  Y: '#ffd79a', y: '#ffb05c', o: '#ff8f5c', r: '#e2683c',
+  H: '#7fd4e0', h: '#4a90a4', d: '#2b4757', s: '#1a2b36'
 }
-const ROCKETS: string[][] = [
-  ['.....R.....', '....RRr....', '...RRRrr...', '...GGGGG...', '...WWwss...', '...Wwwss...', '...WcCcs...', '...WCCcs...', '...Wcccs...', '...Wwwss...', '...Wwwss...', '...Wwwss...', '..RWwwssR..', '.RRWwwssRR.', 'RRRWwwssRRR', '...sGGGs...', '...oyyyo...', '..RoyyyoR..'],
-  ['.....W.....', '....Wws....', '...WWwss...', '...WWwss...', '..WWWwsss..', '..GGGGGGG..', '..WWcCcss..', '..WwCCCss..', '..WWcCcss..', '..RRRRrrr..', '.WWWWwssss.', '.RWWWwsssr.', '..WWWwsss..', '..GGGGGGG..', '...WWwss...', '...oyyyo...', '....ooo....', '.....R.....'],
-  ['.....W.....', '....Wws....', '....Wws....', '...Wwwss...', '...WcCcs...', '...Wwwss...', '...Wwwss...', '..rWwwssr..', '..WWwwssW..', '..WRRRrrW..', '..WRRrrrW..', '..WWwwssW..', '..rWwwssr..', '.WWwwsssrr.', '....sGs....', '...oyyyo...', '..RoyyyoR..', '.RRoyyyoRR.'],
-  ['.....W.....', '....Wws....', '...WWwss...', '...GGGGG...', '...WWwss...', '...WcCcs...', '...WcCcs...', '...WcCcs...', '...GGGGG...', '...WWwss...', '...Wwwss...', '..WWwwsss..', '.WWwwwssss.', '...WWwss...', '....Wws....', '....oyo....', '....RoR....', '.....R.....']
+/** Четыре фазы: от первой полоски света до полного диска. */
+const SUNRISE: string[][] = [
+  // 1. Только горизонт и первая полоска
+  ['...........', '...........', '...........', '...........', '...........', '...........', '...........', '...........', '...........', '...........', '....ooo....', '...oyyyo...', '..hHHHHHh..', '...ddddd...', '...sssss...', '...........', '...........', '...........'],
+  // 2. Край диска показался
+  ['...........', '...........', '...........', '...........', '...........', '...........', '...........', '....ooo....', '...oyyyo...', '..oyYYYyo..', '..ryYYYyr..', '..hHHHHHh..', '...ddddd...', '...sssss...', '...........', '...........', '...........', '...........'],
+  // 3. Половина диска
+  ['...........', '...........', '...........', '...........', '....ooo....', '...oyyyo...', '..oyYYYyo..', '.oyYYYYYyo.', '.ryYYYYYyr.', '.ryyYYYyyr.', '..hHHHHHh..', '...ddddd...', '...sssss...', '...........', '...........', '...........', '...........', '...........'],
+  // 4. Диск целиком над горизонтом
+  ['...........', '....ooo....', '...oyyyo...', '..oyYYYyo..', '.oyYYYYYyo.', '.oyYYYYYyo.', '.ryYYYYYyr.', '.ryyYYYyyr.', '..ryyyyyr..', '...rrrrr...', '...........', '..hHHHHHh..', '...ddddd...', '...sssss...', '...........', '...........', '...........', '...........']
 ]
 
-/** Small static per-model rocket glyph for the collapsed idle strip (drawn once). */
+/** Маленький восход для свёрнутой полосы — рисуется один раз. */
 function IdleRocket({ type }: { type: number }): React.JSX.Element {
   const ref = useRef<HTMLCanvasElement>(null)
   useEffect(() => {
@@ -565,10 +583,10 @@ function IdleRocket({ type }: { type: number }): React.JSX.Element {
     const ctx = cv?.getContext('2d')
     if (!cv || !ctx) return
     ctx.clearRect(0, 0, 11, 18)
-    const g = ROCKETS[type % ROCKETS.length]
+    const g = SUNRISE[type % SUNRISE.length]
     for (let r = 0; r < g.length; r++)
       for (let c = 0; c < g[r].length; c++) {
-        const col = ROCKET_PAL[g[r][c]]
+        const col = SUN_PAL[g[r][c]]
         if (col) {
           ctx.fillStyle = col
           ctx.fillRect(c, r, 1, 1)

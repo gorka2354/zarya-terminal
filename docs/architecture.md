@@ -188,26 +188,22 @@ sessions, settings, or single-instance lock:
 Session ids are sanitized to `[a-zA-Z0-9_-]` before being used as filenames
 (`sessionStore.ts`), so a malformed id can't escape the `sessions/` directory.
 
-## Renderer UI shell (cosmic redesign)
+## Renderer UI shell
 
-The renderer's chrome is a "space CLI agent" layer composed in `App.tsx`. Beyond the
-functional panels, three presentational pieces give the app its launch-console feel;
-all three are pure renderer concerns (no IPC, no main-process involvement):
+The renderer's chrome is composed in `App.tsx`. Beyond the functional panels there is
+now exactly one presentational piece, and it is a pure renderer concern (no IPC, no
+main-process involvement):
 
-- **`StarBackdrop.tsx`** — a full-window `<canvas>` starfield mounted behind
-  everything (`pointer-events: none`). Draws ~50–180 pixel stars (density scaled to
-  window area, DPR-capped) that drift and twinkle, plus the occasional shooting star.
-  Reads `documentElement.dataset.themeType` to invert to dark stars on light themes,
-  and freezes under `prefers-reduced-motion`.
-- **`RocketLaunch.tsx`** — a self-dismissing (~1.9s) full-screen “POYEKHALI!” liftoff
-  overlay (canvas starfield + exhaust embers via `requestAnimationFrame`, DOM/CSS for
-  crisp countdown/title, `root.zy-shake` screen shake). Fired imperatively through a
-  tiny listener registry — `launchRocket({ label })` — from anywhere (engine/effort
-  commit, provider/model change). It also exposes a `window.__zaryaLaunchRocket` test
-  hook so the QA harness can trigger it without native clicks.
-- **`LaunchPad.tsx`** — the launch-pad model + effort picker overlay (see
-  [docs/ai.md](ai.md)); its visibility is a `uiStore` flag (`launchPadOpen`), toggled
-  by the `app.launch-pad` action.
+- **The ground under the window** — a single soft gradient set through `--texture`
+  (`base.css`), rising from the bottom edge where the input line lives. It replaced a
+  canvas starfield and a constructivist grid: in a tool where small monospaced text is
+  read for hours, visible texture is a cost, and the light now carries meaning instead
+  — it marks the side you act from. Light themes drop it entirely (on paper it reads
+  as dirt, not light).
+- **`LaunchPad.tsx`** — the model + effort picker overlay (see [docs/ai.md](ai.md));
+  its visibility is a `uiStore` flag (`launchPadOpen`), toggled by the
+  `app.launch-pad` action. Its collapsed strip carries a pixel sunrise — four phases
+  of one dawn rather than four different rockets, so the row reads as a scale.
 
 **Fonts** are bundled offline via `@fontsource/*` (Cyrillic + Latin subsets, imported
 in `src/renderer/src/main.tsx`) so nothing is fetched at runtime: **Pixelify Sans**

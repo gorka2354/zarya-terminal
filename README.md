@@ -66,8 +66,8 @@ the switch takes effect immediately — the dictionaries are already in the app,
 there is nothing to download, restart or sign into again.
 
 The space-age framing is translated rather than dropped: Mission Control, the launch
-pad, the `// ORBIT-1` tagline and the ship
-themes (Kosmos, Vostok, Baikonur, Blueprint) read as themselves in English. The
+pad, the `// FIRST LIGHT` tagline and the light-hour
+themes (Night, Embers, Sand, Tracing) read as themselves in English. The
 built-in agent is told to answer in the interface language, and so do the system
 dialogs the main process shows.
 
@@ -133,7 +133,7 @@ current Claude model is version-qualified (**Opus 4.8**, **Fable 5**, **Sonnet 5
 **Haiku 4.5**) with a one-line purpose and a live "active" marker on whatever is
 actually running. Pick an **engine** (model) and its **effort** (from `LOW`
 to `MAX`, gated per model — the same names the CLI uses), flip **ULTRACODE** for xhigh + workflow
-orchestration, and hit **LAUNCH · POYEKHALI** — a pixel rocket lifts off as the
+orchestration, and hit **APPLY** — a pixel sunrise marks the moment as the
 settings apply.
 
 The rocket stays collapsed to a slim strip while you browse and only unfolds for the
@@ -258,7 +258,7 @@ Workflows (parameterized snippets), Command Palette (`Ctrl+Shift+P`), tabs and p
 |---|---|---|
 | Zarya · Kosmos | dark | signature deep-space (default) |
 | Zarya · Vostok | dark | red-dominant maroon space |
-| Zarya · Orbit | dark | teal oscilloscope |
+| Zarya · Frost | dark | teal oscilloscope |
 | Zarya · Sputnik | dark | cold graphite + brass |
 | Zarya · Baikonur | dark | warm launch-pad amber |
 | Zarya · Dawn | dark | original sunrise |
