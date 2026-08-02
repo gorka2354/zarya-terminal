@@ -125,6 +125,18 @@ file list was capped before the manifest was looked for.
   choosing anything. It is stored in the session snapshot now and comes back
   with it.
 
+- **The launch pad opens on the branch of the pane you are looking at.** It read
+  the window-wide default instead of the pane's own mode, so after a restart you
+  could have Claude Code running in the pane — input line and all — while the
+  console offered the built-in agent's accounts and model list. Pressing "ПУСК"
+  there would have applied the choice somewhere other than where you were looking.
+
+- **A pane keeps the engine it was born with.** Until a pane had its own record
+  it followed the window-wide default — which any *other* pane's switch changes.
+  Switching one pane to Codex silently moved every pane you had not touched.
+  A new pane still starts as "the same as the last one", but from then on it is
+  its own CLI: Claude Code in one pane and Codex in the next stay put.
+
 ### Tested
 
 - 431 unit tests; live runs: panes 140, launch pad 41, catalogue 10, progress

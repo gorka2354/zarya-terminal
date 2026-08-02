@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { AiEffort, AiProviderKind, ClaudeModelInfo } from '@shared/types'
 import { AI_MODEL_PRESETS, EFFORT_TUNING } from '@shared/defaults'
 import { useSettingsStore } from '@/state/settingsStore'
-import { useUiStore } from '@/state/uiStore'
+import { barModeOf, useUiStore } from '@/state/uiStore'
 import { t, useLang } from '@/lib/i18n'
 import { useSessionsStore } from '@/state/sessionsStore'
 import { convForSession, useAiStore } from '@/features/ai/aiStore'
@@ -119,7 +119,18 @@ export function LaunchPad(): React.JSX.Element | null {
   useLang()
 
   const open = useUiStore((s) => s.launchPadOpen)
-  const claudeMode = useUiStore((s) => s.barMode) === 'claude-code'
+  /**
+   * Ветка комплекса — по режиму АКТИВНОЙ ПАНЕЛИ, а не по общему умолчанию.
+   *
+   * Режим у каждой панели свой (barModeBySession) и переживает перезапуск, а
+   * `barMode` — только заготовка для следующей панели. Пока читалось оно, после
+   * запуска приложения выходило так: в панели идёт Claude Code, строка ввода
+   * подписана «Спросить Claude Code…», а комплекс открывался на ветке
+   * встроенного борта — с чужими аккаунтами и чужим списком моделей. Кнопка
+   * «ПУСК» при этом применила бы выбор не туда, куда человек смотрит.
+   */
+  const activeSessionId = useSessionsStore((s) => s.activeSessionId())
+  const claudeMode = useUiStore((s) => barModeOf(s, activeSessionId)) === 'claude-code'
   const claudeModels = useUiStore((s) => s.claudeModels)
   const claudeStatus = useUiStore((s) => s.claudeStatus)
   const ultracodeOn = useUiStore((s) => s.ultracode)

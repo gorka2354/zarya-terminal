@@ -126,6 +126,65 @@ try {
   // превращалась в обычный терминал, и пусковой комплекс показывал каталог
   // совсем другого борта.
   ok('после перезапуска режим тот же', after === 'claude-code', after)
+
+  console.log('\n[4] Пусковой комплекс открывается на ветке АКТИВНОЙ панели')
+  // Ветку определял общий `barMode`, а не режим панели. После запуска
+  // приложения выходило так: в панели идёт Claude Code, строка ввода подписана
+  // «Спросить Claude Code…», а комплекс открывался на встроенном борте — с
+  // чужими аккаунтами и чужим списком моделей. Кнопка «ПУСК» применила бы
+  // выбор не туда, куда человек смотрит.
+  await page.evaluate(() => window.__zaryaSplitActive?.('row'))
+  await page.waitForTimeout(1200)
+  const leaves = await page.evaluate(() => window.__zaryaDumpSessions().tabs[0].leaves)
+  ok('панелей стало две', leaves.length === 2, leaves.length)
+
+  await page.evaluate((ids) => {
+    window.__zaryaSetPaneBarMode?.(ids[0], 'claude-code')
+    window.__zaryaSetPaneBarMode?.(ids[1], 'shell')
+  }, leaves)
+  await page.waitForTimeout(300)
+
+  /** Какая ветка комплекса открыта: у встроенного борта есть чипы аккаунтов. */
+  const branchFor = async (sid) => {
+    await page.evaluate((s) => window.__zaryaFocusPane?.(s), sid)
+    await page.waitForTimeout(250)
+    await page.evaluate(() => window.__zaryaSetUi?.({ launchPadOpen: true }))
+    await page.waitForTimeout(500)
+    const txt = await page.evaluate(() => document.querySelector('.zy-launchpad')?.innerText ?? '')
+    await page.evaluate(() => window.__zaryaSetUi?.({ launchPadOpen: false }))
+    await page.waitForTimeout(200)
+    return /АНТ-1|ГПТ-2|ЛУНА/i.test(txt) ? 'встроенный борт' : 'claude'
+  }
+
+  ok('панель Claude Code → ветка Claude', (await branchFor(leaves[0])) === 'claude')
+  ok('панель оболочки → ветка встроенного борта', (await branchFor(leaves[1])) === 'встроенный борт')
+
+  console.log('\n[5] Панели держат РАЗНЫЕ движки, соседей это не трогает')
+  await page.evaluate((ids) => window.__zaryaSetPaneBarMode?.(ids[1], 'codex'), leaves)
+  await page.waitForTimeout(300)
+  const modes = await page.evaluate(
+    (ids) => ids.map((s) => window.__zaryaBarModeFor?.(s)),
+    leaves
+  )
+  ok('в одном окне рядом Claude Code и Codex', modes[0] === 'claude-code' && modes[1] === 'codex', modes)
+
+  // Новая панель рождается с текущим умолчанием и дальше живёт своей жизнью:
+  // раньше панель без своей записи читала общее умолчание, и переключение в
+  // ЛЮБОЙ другой панели молча меняло то, что запущено в ней.
+  await page.evaluate((ids) => window.__zaryaFocusPane?.(ids[1]), leaves)
+  await page.waitForTimeout(200)
+  await page.evaluate(() => window.__zaryaSplitActive?.('col'))
+  await page.waitForTimeout(1200)
+  const three = await page.evaluate(() => window.__zaryaDumpSessions().tabs[0].leaves)
+  const fresh = three.find((x) => !leaves.includes(x))
+  ok('новая панель получила свой режим, а не пустоту', !!fresh)
+  ok(
+    'прежние панели не сдвинулись',
+    (await page.evaluate((ids) => ids.map((s) => window.__zaryaBarModeFor?.(s)), leaves)).join() ===
+      'claude-code,codex'
+  )
+  const map = await page.evaluate(() => window.__zaryaDumpUi?.())
+  ok('у каждой панели своя запись режима', Object.keys(map.barModeBySession).length >= 3, map)
 } finally {
   await app.close()
   try {
