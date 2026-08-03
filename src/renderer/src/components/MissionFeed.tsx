@@ -194,6 +194,53 @@ export const MissionFeed = memo(function MissionFeed({
     ? conv.pendingTools.filter((t) => !t.settled && t.kind !== 'question').length
     : 0
 
+  /*
+   * Поиск по ленте.
+   *
+   * Ищем по тому, что на экране: блоки команд с их выводом, сообщения человека,
+   * ответы агента и карточки инструментов. Прежняя строка поиска работала через
+   * xterm, который в блочном режиме рендерится за экраном, — вводишь слово,
+   * которое видишь, и не происходит ничего.
+   *
+   * Подсвечиваем элемент ЦЕЛИКОМ, а не слово внутри него. Ответ агента — это
+   * отрендеренный markdown, и вставлять подсветку внутрь готовой разметки
+   * значит трогать её после санитайзера; туда лезть нельзя, там же и защита от
+   * инъекций. Найденный кусок на экране — глаз находит слово сам.
+   */
+  const feedQuery = useUiStore((s) => s.feedQuery)
+  const feedStep = useUiStore((s) => s.feedStep)
+  const searchHere = useUiStore((s) => s.searchOpenFor) === sessionId
+  useEffect(() => {
+    const root = scrollRef.current
+    if (!root) return
+    const clear = (): void => {
+      root
+        .querySelectorAll('.zy-mf-hit, .zy-mf-hit--now')
+        .forEach((el) => el.classList.remove('zy-mf-hit', 'zy-mf-hit--now'))
+    }
+    clear()
+    const q = searchHere ? feedQuery.trim().toLowerCase() : ''
+    if (!q) {
+      if (searchHere) useUiStore.getState().set({ feedHits: { count: 0, index: 0 } })
+      return
+    }
+    const items = [...root.querySelectorAll('.zy-mf-block, .zy-mf-user, .zy-mf-answer, .zy-mf-tool')]
+    const hits = items.filter((el) => (el.textContent ?? '').toLowerCase().includes(q))
+    if (!hits.length) {
+      useUiStore.getState().set({ feedHits: { count: 0, index: 0 } })
+      return
+    }
+    // Шаги считаются по кругу: дойдя до последнего совпадения, «дальше» ведёт к
+    // первому. Иначе кнопка молча перестаёт работать, и это читается поломкой.
+    const index = ((feedStep % hits.length) + hits.length) % hits.length
+    hits.forEach((el) => el.classList.add('zy-mf-hit'))
+    const now = hits[index]
+    now.classList.add('zy-mf-hit--now')
+    now.scrollIntoView({ block: 'center' })
+    useUiStore.getState().set({ feedHits: { count: hits.length, index } })
+    return clear
+  }, [feedQuery, feedStep, searchHere, blocks, conv?.messages, sessionId])
+
   // Follow new content only while the user is already near the bottom — so
   // scrolling up to read during a long turn isn't yanked back down. Suspended
   // entirely while a gate waits: the anchor effect below owns the viewport then,

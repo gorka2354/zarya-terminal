@@ -1057,3 +1057,19 @@
   font-size: 11.5px;
   line-height: 1.45;
 }
+
+/* Найденное поиском по ленте.
+
+   Подсвечивается элемент целиком — блок, сообщение, карточка, — а не слово
+   внутри: ответ агента это отрендеренный markdown, и вставлять подсветку в
+   готовую разметку значит трогать её после санитайзера. Текущее совпадение
+   отличается яркостью, а не цветом: цвета в этом интерфейсе уже заняты
+   смыслами. */
+.zy-mf-hit {
+  background: color-mix(in srgb, var(--accent-2) 8%, transparent);
+  border-radius: var(--radius-sm);
+}
+.zy-mf-hit--now {
+  background: color-mix(in srgb, var(--accent-2) 18%, transparent);
+  outline: 1px solid color-mix(in srgb, var(--accent-2) 45%, transparent);
+}

@@ -106,8 +106,23 @@ interface UiState {
    * пустым экранам. В воркспейс это не сохраняется: разворот временный.
    */
   maximizedByTab: Record<string, string>
-  /** Session id whose find-in-terminal bar is open. */
+  /** Session id whose find bar is open. */
   searchOpenFor: string | null
+  /**
+   * Что ищут в ленте панели и на каком совпадении стоят.
+   *
+   * Поиск обязан искать по тому, что человек ВИДИТ. В блочном режиме на экране
+   * лента, а xterm рендерится за экраном — прежняя строка поиска работала по
+   * нему, то есть подсвечивала невидимое и выглядела сломанной. Здесь живёт
+   * запрос для ленты; сырой режим по-прежнему ищет по терминалу.
+   *
+   * `step` — счётчик нажатий «дальше/назад»: лента сама решает, какое
+   * совпадение считать текущим, а строка поиска только просит подвинуться.
+   */
+  feedQuery: string
+  feedStep: number
+  /** Сколько нашлось и какое сейчас — заполняет лента, показывает строка поиска. */
+  feedHits: { count: number; index: number }
   blocksPanelOpen: boolean
   maximized: boolean
   toasts: Toast[]
@@ -142,6 +157,9 @@ export const useUiStore = create<UiState>((set, get) => ({
   historyOverlayOpen: false,
   maximizedByTab: {},
   searchOpenFor: null,
+  feedQuery: '',
+  feedStep: 0,
+  feedHits: { count: 0, index: 0 },
   blocksPanelOpen: false,
   maximized: false,
   toasts: [],

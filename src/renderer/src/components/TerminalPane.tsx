@@ -368,6 +368,16 @@ function TermSearchBar({
 
   const [query, setQuery] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
+  /*
+   * Ищем по тому, что человек ВИДИТ.
+   *
+   * В сыром режиме на экране терминал — работает поиск xterm, как и раньше. В
+   * блочном на экране лента, а xterm рендерится за экраном: прежняя строка
+   * искала по нему и выглядела сломанной — вводишь слово, которое на экране
+   * есть, и не происходит ничего.
+   */
+  const raw = useUiStore((s) => isRaw(s, sessionId))
+  const hits = useUiStore((s) => s.feedHits)
 
   useEffect(() => {
     inputRef.current?.focus()
@@ -375,15 +385,22 @@ function TermSearchBar({
 
   const close = (): void => {
     getTerminal(sessionId)?.search.clearDecorations()
-    useUiStore.getState().set({ searchOpenFor: null })
+    useUiStore.getState().set({ searchOpenFor: null, feedQuery: '', feedStep: 0 })
     // Не в скрытое поле xterm: оттуда голый Enter перестаёт одобрять гейт —
     // диспетчер считает его «чужим полем» (см. paneFocus / features/ai/keyRouter).
     focusPane(sessionId)
   }
 
   const find = (dir: 1 | -1): void => {
+    if (!query) return
+    if (!raw) {
+      // Лента сама решит, какое совпадение считать текущим: она знает свой
+      // порядок элементов, а строка поиска только просит подвинуться.
+      useUiStore.getState().set({ feedStep: useUiStore.getState().feedStep + dir })
+      return
+    }
     const handle = getTerminal(sessionId)
-    if (!handle || !query) return
+    if (!handle) return
     const opts = {
       decorations: { matchOverviewRuler: '#ff8a4c', activeMatchColorOverviewRuler: '#ffb86b' }
     }
@@ -391,18 +408,34 @@ function TermSearchBar({
     else handle.search.findPrevious(query, opts)
   }
 
+  const onQuery = (v: string): void => {
+    setQuery(v)
+    // В блочном режиме ищем по мере набора: лента перед глазами, и ждать Enter
+    // незачем. Терминалу оставляем прежнее поведение — findNext по Enter.
+    if (!raw) useUiStore.getState().set({ feedQuery: v, feedStep: 0 })
+  }
+
   return (
     <div className="zy-searchbar">
       <input
         ref={inputRef}
         value={query}
-        placeholder={t('search.placeholder')}
-        onChange={(e) => setQuery(e.target.value)}
+        placeholder={t(raw ? 'search.placeholder' : 'search.placeholderFeed')}
+        onChange={(e) => onQuery(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === 'Enter') find(e.shiftKey ? -1 : 1)
           if (e.key === 'Escape') close()
         }}
       />
+      {/* Сколько нашлось. Без счётчика «ничего не подсветилось» и «ничего не
+          нашлось» выглядят одинаково — а это разные ответы. */}
+      {!raw && query && (
+        <span className="zy-searchbar-count">
+          {hits.count
+            ? t('search.hit', { i: hits.index + 1, n: hits.count })
+            : t('search.none')}
+        </span>
+      )}
       <button className="zy-icon-btn" title={t('search.prev')} onClick={() => find(-1)}>
         <Icon name="chevron-up" size={13} />
       </button>
