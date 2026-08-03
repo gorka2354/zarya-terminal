@@ -59,10 +59,20 @@ try {
    */
   await app.evaluate(({ Notification, BrowserWindow }) => {
     globalThis.__calls = { notes: [], flashes: 0 }
+    // Служба уведомлений есть не везде: на Linux под xvfb (то есть в CI) её нет
+    // вовсе, и Notification.isSupported() отвечает false — код честно
+    // ограничивается миганием окна и до показа не доходит. Умеет ли ОС рисовать
+    // всплывашку, проверяет не этот прогон; он проверяет РЕШЕНИЕ позвать — тот
+    // ли повод, тот ли текст, один ли раз. Поэтому признак поддержки
+    // подменяется так же, как ниже подменяется «человек смотрит».
+    const reallySupported = Notification.isSupported()
+    Notification.isSupported = () => true
     const origShow = Notification.prototype.show
     Notification.prototype.show = function patched() {
       globalThis.__calls.notes.push({ title: this.title, body: this.body })
-      return origShow.call(this)
+      // Настоящий показ — только там, где служба действительно есть. Иначе
+      // вызов уходит в пустоту, а на некоторых сборках Linux и в ошибку.
+      return reallySupported ? origShow.call(this) : undefined
     }
     for (const w of BrowserWindow.getAllWindows()) {
       const orig = w.flashFrame.bind(w)
