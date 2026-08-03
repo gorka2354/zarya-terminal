@@ -163,6 +163,81 @@ try {
     (danger?.mcpMark ?? null) === null,
     danger?.mcpMark
   )
+
+  /*
+   * Правку, которую просят одобрить, обязано быть видно.
+   *
+   * Для команды это правило соблюдалось давно — текст разворачивается и не
+   * сворачивается, пока ждут решения. А `Edit` показывал только путь: человек
+   * одобрял изменение вслепую. Здесь проверяется, что дифф на экране, что под
+   * ожидающим гейтом он не сворачивается и что номеров строк в нём НЕТ — их
+   * неоткуда взять, вызов приносит фрагмент файла, а не файл целиком.
+   */
+  console.log('\n[5] Правку видно, а не только путь к файлу')
+  // Автопилот с раздела [3] обычную правку проглотит — и правильно сделает.
+  // Здесь нас интересует случай СО СПРОСОМ, поэтому беседу заводим без него.
+  const id6 = await page.evaluate(() => window.__zaryaStartAgent?.('codex', 'привет'))
+  await page.waitForTimeout(900)
+  await page.evaluate((c) => window.__zaryaSetBypassFor?.(c, false), id6)
+  await page.waitForTimeout(200)
+  await page.evaluate((c) => window.__zaryaSendIn?.(c, 'run an edit tool'), id6)
+  const editGate = await waitGate(page, id6)
+  ok('гейт на правку поднялся', editGate?.name === 'Edit', editGate?.name)
+
+  const diff = await page.evaluate(() => {
+    const box = document.querySelector('.zy-mf-diff')
+    if (!box) return null
+    return {
+      head: (box.querySelector('.zy-mf-diff-head')?.textContent ?? '').trim(),
+      added: [...box.querySelectorAll('.zy-mf-diff-row--add .zy-mf-diff-text')].map(
+        (e) => e.textContent
+      ),
+      removed: [...box.querySelectorAll('.zy-mf-diff-row--del .zy-mf-diff-text')].map(
+        (e) => e.textContent
+      ),
+      caret: !!box.querySelector('.zy-mf-diff-caret'),
+      body: !!box.querySelector('.zy-mf-diff-body')
+    }
+  })
+  ok('блок правки на экране', !!diff, diff)
+  ok('видно, что убрано', (diff?.removed ?? []).includes('const a = 1'), diff?.removed)
+  ok('и что добавлено', (diff?.added ?? []).includes('const a = 42'), diff?.added)
+  ok(
+    'в заголовке счёт изменений',
+    /−\d/.test(diff?.head ?? '') && /\+\d/.test(diff?.head ?? ''),
+    diff?.head
+  )
+  ok('пока ждут решения — свернуть нельзя', diff?.caret === false && diff?.body === true, diff)
+  if (shots) await page.screenshot({ path: join(shots, 'gate-edit-diff.png') })
+
+  /*
+   * И при автопилоте — тоже видно, только постфактум.
+   *
+   * Вопроса в этом режиме нет вовсе, но человек всё равно должен узнать, ЧТО
+   * агент изменил. Заголовок с «−2 +3» остаётся на экране, сам дифф свёрнут:
+   * иначе длинный ход превратил бы ленту в простыню.
+   */
+  console.log('\n[6] При автопилоте правка видна постфактум, но не разворачивается силой')
+  const id7 = await page.evaluate(() => window.__zaryaStartAgent?.('codex', 'привет'))
+  await page.waitForTimeout(900)
+  await page.evaluate((c) => window.__zaryaSetBypassFor?.(c, true), id7)
+  await page.waitForTimeout(200)
+  await page.evaluate((c) => window.__zaryaSendIn?.(c, 'run an edit tool'), id7)
+  await page.waitForTimeout(2200)
+  const silent = await page.evaluate((id) => {
+    const conv = window.__zaryaConvById?.(id)
+    const boxes = [...document.querySelectorAll('.zy-mf-diff')]
+    const box = boxes[boxes.length - 1]
+    return {
+      gates: conv?.pendingTools?.filter((t) => !t.settled).length ?? 0,
+      head: (box?.querySelector('.zy-mf-diff-head')?.textContent ?? '').trim(),
+      body: !!box?.querySelector('.zy-mf-diff-body'),
+      caret: !!box?.querySelector('.zy-mf-diff-caret')
+    }
+  }, id7)
+  ok('вопроса не было — автопилот', silent.gates === 0, silent.gates)
+  ok('но масштаб правки на экране', /−\d/.test(silent.head) && /\+\d/.test(silent.head), silent.head)
+  ok('сам дифф свёрнут и открывается по нажатию', silent.body === false && silent.caret === true, silent)
 } finally {
   await app.close()
   try {

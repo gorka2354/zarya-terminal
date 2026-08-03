@@ -940,6 +940,111 @@
   font-size: 12px;
   line-height: 1.45;
 }
+/* Правка файла в карточке.
+
+   Цвет — тонкой чертой на краю строки, а не заливкой во всю ширину. Красный в
+   этом интерфейсе значит «осторожно, необратимое» и держится за заливку с
+   рамкой; если залить им каждую обычную правку, разница исчезнет. Черта
+   различает убранное и добавленное с одного взгляда и при этом ничего не
+   обещает. */
+.zy-mf-diff {
+  margin-top: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  overflow: hidden;
+}
+.zy-mf-diff-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 8px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--fg-faint);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.zy-mf-diff-head:disabled,
+.zy-mf-diff-head[title]:not([onclick]) {
+  cursor: default;
+}
+.zy-mf-diff-minus {
+  color: var(--danger);
+}
+.zy-mf-diff-plus {
+  color: var(--success);
+}
+.zy-mf-diff-write,
+.zy-mf-diff-chunks {
+  color: var(--warn);
+}
+.zy-mf-diff-path {
+  color: var(--fg-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.zy-mf-diff-caret {
+  margin-left: auto;
+  flex-shrink: 0;
+  display: inline-flex;
+}
+/* Прокрутка ВНУТРИ карточки: свернуть правку, которую просят одобрить, нельзя —
+   это снова «одобри то, чего не видишь», — но и занимать ею пол-ленты незачем. */
+.zy-mf-diff-body {
+  max-height: 220px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.5;
+  padding: 4px 0;
+}
+.zy-mf-diff-row {
+  display: flex;
+  padding: 0 8px 0 6px;
+  border-left: 2px solid transparent;
+  white-space: pre;
+}
+.zy-mf-diff-row--add {
+  border-left-color: var(--success);
+  background: color-mix(in srgb, var(--success) 6%, transparent);
+}
+.zy-mf-diff-row--del {
+  border-left-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 6%, transparent);
+}
+.zy-mf-diff-sign {
+  width: 12px;
+  flex: none;
+  user-select: none;
+  color: var(--fg-faint);
+}
+.zy-mf-diff-row--add .zy-mf-diff-sign {
+  color: var(--success);
+}
+.zy-mf-diff-row--del .zy-mf-diff-sign {
+  color: var(--danger);
+}
+.zy-mf-diff-text {
+  color: var(--fg-dim);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.zy-mf-diff-row--add .zy-mf-diff-text,
+.zy-mf-diff-row--del .zy-mf-diff-text {
+  color: var(--fg);
+}
+.zy-mf-diff-more {
+  padding: 3px 8px;
+  color: var(--fg-faint);
+  font-size: 10.5px;
+}
+
 /* Пометка стороннего сервера. Тише «пола»: тот — наше обещание показать
    необратимое, а это чужое заявление, за которое мы не ручаемся. Разный вес
    здесь и есть разница в том, чьё это слово. */

@@ -155,8 +155,33 @@ export class FakeAgentDriver implements AgentDriver {
       // молча, необратимое показывается всё равно. Без этого пол нечем
       // проверить — фейковый драйвер спрашивал бы всегда и «прошёл» бы тест,
       // ничего не доказав.
+      const viaEdit = /edit/i.test(opts.prompt)
       this.schedule(requestId, 400, () => {
         if (opts.bypass && !stop && !viaMcp) {
+          /*
+           * Настоящий движок объявляет инструмент блоком `tool_use` в ответе
+           * модели — независимо от того, спрашивали разрешение или нет. Раньше
+           * фейк при автопилоте слал сразу результат, и в ленте не оставалось
+           * НИЧЕГО о том, что агент сделал: прогон не мог проверить показ
+           * правки постфактум, а именно так работает человек с автопилотом.
+           */
+          this.emit(requestId, {
+            type: 'assistant',
+            content: [
+              {
+                type: 'tool_use',
+                id: `${requestId}-t1`,
+                name: viaEdit ? 'Edit' : 'Bash',
+                input: viaEdit
+                  ? {
+                      file_path: 'src/shared/fake.ts',
+                      old_string: 'const a = 1\nconst b = 2\nkeep me',
+                      new_string: 'const a = 42\nkeep me\nconst c = 3'
+                    }
+                  : { command }
+              }
+            ]
+          })
           this.emit(requestId, {
             type: 'tool_result',
             toolUseId: `${requestId}-t1`,
@@ -168,8 +193,16 @@ export class FakeAgentDriver implements AgentDriver {
         this.emit(requestId, {
           type: 'permission',
           toolUseId: `${requestId}-t1`,
-          toolName: viaMcp ? 'mcp__fake_server__wipe' : 'Bash',
-          input: viaMcp ? { path: '/tmp/fake' } : { command },
+          toolName: viaEdit ? 'Edit' : viaMcp ? 'mcp__fake_server__wipe' : 'Bash',
+          input: viaEdit
+            ? {
+                file_path: 'src/shared/fake.ts',
+                old_string: 'const a = 1\nconst b = 2\nkeep me',
+                new_string: 'const a = 42\nkeep me\nconst c = 3'
+              }
+            : viaMcp
+              ? { path: '/tmp/fake' }
+              : { command },
           irreversible: stop ?? undefined,
           mcpMark: viaMcp ? { destructive: true } : undefined
         })

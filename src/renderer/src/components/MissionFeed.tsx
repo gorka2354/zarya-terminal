@@ -3,6 +3,7 @@ import type { AiContentPart, BlockRecord } from '@shared/types'
 import { onBus } from '@/lib/bus'
 import { t, useLang } from '@/lib/i18n'
 import { formatDuration, formatRelative, shortenPath } from '@/lib/ansi'
+import { editPreview, type EditPreview } from '@shared/editDiff'
 import { useBlocksStore } from '@/state/blocksStore'
 import { useSessionsStore } from '@/state/sessionsStore'
 import { setBarModeOf, setRaw, useUiStore } from '@/state/uiStore'
@@ -735,6 +736,74 @@ function findToolResult(
  * gates had NO card at all — yet Enter still approved them. Same card now
  * renders for every engine.
  */
+/**
+ * Правка файла на экране карточки.
+ *
+ * Цвет здесь тонкой чертой на краю строки, а не заливкой: красный в этом
+ * интерфейсе значит «осторожно, необратимое», и заливать им каждую обычную
+ * правку — значит стереть эту разницу. Черта различает убранное и добавленное
+ * мгновенно и при этом ничего не обещает.
+ *
+ * Пока гейт ждёт решения, блок открыт и закрыть его нельзя: свёрнутая правка —
+ * это снова «одобри то, чего не видишь». После решения (и при автопилоте, где
+ * вопроса не было вовсе) он свёрнут, но заголовок с «−2 +4» виден всегда:
+ * масштаб изменения читается, не открывая.
+ */
+function EditDiff({
+  preview,
+  pinned
+}: {
+  preview: EditPreview
+  pinned: boolean
+}): React.JSX.Element {
+  const [open, setOpen] = useState(pinned)
+  useEffect(() => {
+    if (pinned) setOpen(true)
+  }, [pinned])
+
+  return (
+    <div className="zy-mf-diff">
+      <button
+        type="button"
+        className="zy-mf-diff-head"
+        onClick={pinned ? undefined : () => setOpen((v) => !v)}
+        title={pinned ? t('feed.diffPinned') : t(open ? 'feed.collapse' : 'feed.expand')}
+      >
+        {preview.removed > 0 && <span className="zy-mf-diff-minus">−{preview.removed}</span>}
+        {preview.added > 0 && <span className="zy-mf-diff-plus">+{preview.added}</span>}
+        {preview.kind === 'write' && (
+          <span className="zy-mf-diff-write">{t('feed.diffWrite')}</span>
+        )}
+        {!!preview.chunks && preview.chunks > 1 && (
+          <span className="zy-mf-diff-chunks">{t('feed.diffChunks', { n: preview.chunks })}</span>
+        )}
+        {/* Путь здесь не повторяем: он уже стоит строкой выше, в подписи самого
+            инструмента («Edit · src/shared/fake.ts»). Второй раз — шум. */}
+        {!pinned && (
+          <span className="zy-mf-diff-caret">
+            <Icon name={open ? 'chevron-up' : 'chevron-down'} size={11} />
+          </span>
+        )}
+      </button>
+      {open && (
+        <div className="zy-mf-diff-body">
+          {preview.lines.map((l, i) => (
+            <div key={i} className={`zy-mf-diff-row zy-mf-diff-row--${l.kind}`}>
+              <span className="zy-mf-diff-sign">
+                {l.kind === 'add' ? '+' : l.kind === 'del' ? '−' : ' '}
+              </span>
+              <span className="zy-mf-diff-text">{l.text || ' '}</span>
+            </div>
+          ))}
+          {preview.truncated && (
+            <div className="zy-mf-diff-more">{t('feed.diffTruncated')}</div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 const ToolCard = memo(function ToolCard({
   id,
   name,
@@ -789,6 +858,16 @@ const ToolCard = memo(function ToolCard({
   const [expanded, setExpanded] = useState(false)
   const open = view.mustShowFull || expanded
   const canFold = view.isLong && !view.mustShowFull
+  /*
+   * Правка файла, которую просят одобрить (или уже сделали).
+   *
+   * Раньше на экране был только путь: человек одобрял изменение вслепую, хотя
+   * для команды то же правило соблюдалось строго. Данные для показа приходят
+   * всегда — и когда спрашивают, и когда автопилот выполнил молча, — поэтому
+   * дифф виден в обоих случаях: развёрнутым, пока ждут решения, и свёрнутым
+   * после, чтобы длинный ход не превращал ленту в простыню.
+   */
+  const edit = useMemo(() => editPreview(name, rawInput), [name, rawInput])
 
   let body: React.JSX.Element
   if (result) {
@@ -921,6 +1000,7 @@ const ToolCard = memo(function ToolCard({
           {cmd}
         </pre>
       )}
+      {edit && <EditDiff preview={edit} pinned={awaiting} />}
       {body}
     </div>
   )
