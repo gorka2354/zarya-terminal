@@ -231,9 +231,26 @@ try {
   const paneInput = (sid) => `.zy-pane[data-session="${sid}"] .zy-agentbar-input`
   const closeFromSidebar = async (sid) => {
     // Кнопки строки появляются по наведению — как у человека.
-    await page.hover(`.zy-pane-row[data-session="${sid}"]`)
-    await page.waitForTimeout(250)
-    await page.click(`.zy-pane-row[data-session="${sid}"] .zy-item-actions .zy-icon-btn:last-child`)
+    //
+    // Наведение изредка теряется: список под курсором перерисовывается, и
+    // кнопки снова display:none. Ждать невидимую кнопку бесполезно — она не
+    // появится, пока мышь не двинется, и прогон висел до таймаута (один раз на
+    // семь). Человек в этом случае просто шевелит мышью; тест делает то же.
+    // Если кнопки нет по-настоящему — попытки кончатся и прогон упадёт.
+    const row = `.zy-pane-row[data-session="${sid}"]`
+    const btn = `${row} .zy-item-actions .zy-icon-btn:last-child`
+    for (let attempt = 0; ; attempt++) {
+      await page.hover(row)
+      try {
+        await page.waitForSelector(btn, { state: 'visible', timeout: 2000 })
+        break
+      } catch (err) {
+        if (attempt >= 4) throw err
+        await page.mouse.move(4, 4)
+        await page.waitForTimeout(150)
+      }
+    }
+    await page.click(btn)
   }
 
   console.log('\n[8] В «Открытых» — панели, а не одна строка вкладки')

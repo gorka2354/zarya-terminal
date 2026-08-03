@@ -1462,8 +1462,13 @@ ${prev}`
           }
           aria-label={t('bar.dictate')}
           onClick={() => (voice === 'rec' ? void finishVoice() : void startVoice())}
+          // Правый клик по кнопке — выбор микрофона, и ТОЛЬКО он. Без остановки
+          // всплытия событие доходило до панели, та открывала своё меню
+          // («Копировать», «Разделить вправо»…), и на экране оказывались два
+          // меню внахлёст: одно спрашивает про устройство, другое — про панель.
           onContextMenu={(e) => {
             e.preventDefault()
+            e.stopPropagation()
             const r = e.currentTarget.getBoundingClientRect()
             openMicPicker(r.left, r.top - 8)
           }}

@@ -152,10 +152,17 @@ try {
   ok('кнопка микрофона на месте', !!micBtn)
   await micBtn?.click({ button: 'right' })
   await page.waitForTimeout(500)
-  const menu = await page.evaluate(() => {
-    const m = document.querySelector('.zy-context-menu')
-    return m ? [...m.querySelectorAll('.zy-context-item')].map((b) => b.textContent) : null
-  })
+  // Меню должно быть РОВНО одно. Кнопка живёт внутри панели терминала, у
+  // которой своё меню на правый клик: пока событие всплывало, открывались оба
+  // и ложились внахлёст. Считать меню обязательно — проверка «первое меню
+  // подходит» это пропускала, потому что первым в DOM оказывалось чужое.
+  const menus = await page.evaluate(() =>
+    [...document.querySelectorAll('.zy-context-menu')].map((m) =>
+      [...m.querySelectorAll('.zy-context-item')].map((b) => b.textContent)
+    )
+  )
+  ok('открыто ровно одно меню, а не два внахлёст', menus.length === 1, menus)
+  const menu = menus[0] ?? null
   ok('меню открылось', !!menu, menu)
   ok('в меню есть «Системный по умолчанию»', !!menu?.some((t) => t?.includes('Системный')), menu)
   ok('в меню есть хотя бы одно устройство', (menu?.length ?? 0) >= 2, menu)
