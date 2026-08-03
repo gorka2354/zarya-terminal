@@ -34,6 +34,7 @@ import { launchClaudeNative } from './AiCliLauncher'
 import './agentbar.css'
 import { applyCommand, cleanCommands, commandQuery, matchCommands, type AgentCommand } from '@shared/agentCommands'
 import { CommandList } from './CommandList'
+import { ExtrasBar } from './ExtrasBar'
 
 const EFFORTS: AiEffort[] = ['low', 'medium', 'high', 'max']
 /** Стабильная пустая ссылка для селектора вложений — см. AgentBar. */
@@ -1264,6 +1265,10 @@ ${prev}`
 
   return (
     <div className="zy-agentbar">
+      {/* Появились новые скиллы или MCP — предложить подхватить без перезапуска
+          сессии. Рядом со списком команд: обе полосы про состав того, чем агент
+          умеет пользоваться. */}
+      {mode !== 'zarya' && mode !== 'shell' && <ExtrasBar engine={mode as AgentEngine} />}
       {/* Список команд движка: вырастает НАД строкой, строка остаётся на месте
           и остаётся полем — человек продолжает печатать, список сужается. */}
       {cmdQuery !== null && (

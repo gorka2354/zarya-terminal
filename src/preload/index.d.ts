@@ -140,6 +140,17 @@ export interface ZaryaApi {
       source: 'engine' | 'unknown'
       note?: string
     }>
+    /** Перечитать скиллы/плагины/MCP на живой сессии, не перезапуская её. */
+    reloadExtras(engine: AgentEngine): Promise<{
+      ok: boolean
+      unsupported?: boolean
+      commands?: Array<{ name: string; description: string; argumentHint?: string }>
+      plugins?: number
+      mcpServers?: Array<{ name: string; status?: string }>
+      errors?: number
+    }>
+    /** На диске появились новые скиллы/плагины/MCP. */
+    onExtrasChanged(cb: () => void): Unsub
     debugFlags(engine: AgentEngine, requestId?: string): Promise<Record<string, unknown>>
   }
   /** Back-compat shim over `agent` with engine 'claude-code'. Removed after inc-9 Ф3. */

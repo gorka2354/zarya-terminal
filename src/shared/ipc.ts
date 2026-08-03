@@ -94,6 +94,10 @@ export const CH = {
   notifyWaiting: 'app:notify-waiting',
   /** Команды движка для палитры «/». */
   agentListCommands: 'agent:list-commands',
+  /** Перечитать скиллы/плагины/MCP на живой сессии, не перезапуская её. */
+  agentReloadExtras: 'agent:reload-extras',
+  /** На диске появились новые скиллы/плагины/MCP (main -> renderer). */
+  agentExtrasChanged: 'agent:extras-changed',
   /** Движок сообщил, что список команд изменился (main -> renderer). */
   agentCommandsChanged: 'agent:commands-changed',
   /** Своя модель с диска: main спрашивает папку сам, renderer путей не подаёт. */

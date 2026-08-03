@@ -1047,6 +1047,58 @@ export class ClaudeCodeDriver implements AgentDriver {
     return fresh ?? []
   }
 
+  /**
+   * Перечитать скиллы, плагины и CLAUDE.md на ЖИВОЙ сессии.
+   *
+   * Обычный путь после установки MCP-сервера или скилла — «перезапустите
+   * сессию», то есть потеряйте контекст разговора и начните заново. SDK умеет
+   * лучше: `reloadSkills()` и `reloadPlugins()` заставляют CLI перечитать диск
+   * и возвращают обновлённый состав, не трогая ни историю, ни процесс.
+   *
+   * Возвращает то, что изменилось, — окно должно сказать это словами, а не
+   * молча обновить список: человек нажал «подхватить» и обязан узнать, нашлось
+   * ли что-нибудь.
+   */
+  async reloadExtras(): Promise<{
+    ok: boolean
+    commands: import('@shared/agentCommands').AgentCommand[]
+    plugins: number
+    mcpServers: { name: string; status?: string }[]
+    errors: number
+  }> {
+    const entry = this.sessions.entries().next().value
+    // Без живой сессии перечитывать нечего: следующая и так стартует со свежим
+    // диском. Честно говорим «нечего перечитывать», а не рисуем успех.
+    if (!entry) return { ok: false, commands: [], plugins: 0, mcpServers: [], errors: 0 }
+    const q = entry[1].query as unknown as {
+      reloadSkills?: () => Promise<unknown>
+      reloadPlugins?: () => Promise<{
+        commands?: unknown
+        plugins?: unknown[]
+        mcpServers?: { name: string; status?: string }[]
+        error_count?: number
+      }>
+    }
+    try {
+      // Скиллы первыми: плагины могут принести свои, и порядок «скиллы, потом
+      // плагины» даёт итоговый список, где плагинные не затёрты.
+      if (typeof q.reloadSkills === 'function') await q.reloadSkills()
+      const res = typeof q.reloadPlugins === 'function' ? await q.reloadPlugins() : undefined
+      const commands = res?.commands
+        ? cleanCommands(res.commands)
+        : await this.commandsOf(entry[1].query)
+      return {
+        ok: true,
+        commands,
+        plugins: Array.isArray(res?.plugins) ? res.plugins.length : 0,
+        mcpServers: Array.isArray(res?.mcpServers) ? res.mcpServers : [],
+        errors: typeof res?.error_count === 'number' ? res.error_count : 0
+      }
+    } catch {
+      return { ok: false, commands: [], plugins: 0, mcpServers: [], errors: 0 }
+    }
+  }
+
   /** Спросить у одного query его команды и привести их к показываемому виду. */
   private async commandsOf(query: unknown): Promise<import('@shared/agentCommands').AgentCommand[]> {
     try {

@@ -22,6 +22,7 @@ import type {
 } from '@shared/types'
 import type { AiProxy } from './aiProxy'
 import { ModelCatalogStore } from './modelCatalogStore'
+import { ExtrasWatcher } from './extrasWatcher'
 import { withCustom } from '@shared/sttCustom'
 import type { AgentDriver } from './agentDriver'
 import * as fsService from './fsService'
@@ -57,6 +58,9 @@ export interface IpcContext {
   updates: UpdateService
   requestQuitConfirmed: () => void
 }
+
+/** Следит за скиллами и MCP на диске: один на процесс. */
+const extrasWatcher = new ExtrasWatcher()
 
 /** Последний известный каталог моделей: свой на процесс, файл в userData. */
 const modelCatalogStore = new ModelCatalogStore()
@@ -457,7 +461,25 @@ export function registerIpc(ctx: IpcContext): void {
    * называет, и движок, у которого их нет, — разные вещи. Пустой список без
    * этой пометки человек прочитает как «команд нет», и это будет неправдой.
    */
+  /*
+   * Наблюдатель за скиллами, командами, плагинами и .mcp.json.
+   *
+   * Заводится вместе с первым запросом на список команд — то есть когда панель
+   * впервые заговорила с агентом. Раньше следить не за чем, а после — уже
+   * поздно: человек как раз в этот момент ставит MCP-сервер и получает от
+   * агента «перезапустите сессию».
+   */
+  ipcMain.handle(CH.agentReloadExtras, async (_e, engine: AgentEngine) => {
+    const driver = driverFor(engine) as { reloadExtras?: () => Promise<unknown> } | undefined
+    if (!driver?.reloadExtras) return { ok: false, unsupported: true }
+    return driver.reloadExtras()
+  })
   ipcMain.handle(CH.agentListCommands, async (_e, engine: AgentEngine) => {
+    // Спросили команды — значит панель работает с агентом: самое время начать
+    // замечать, что на диске появляется новое.
+    extrasWatcher.start(process.cwd(), () =>
+      getWindow()?.webContents.send(CH.agentExtrasChanged)
+    )
     const driver = driverFor(engine)
     if (!driver?.listCommands) return { commands: [], source: 'unknown' }
     try {

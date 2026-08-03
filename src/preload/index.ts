@@ -124,6 +124,10 @@ const api = {
     listModels: (engine: AgentEngine) => ipcRenderer.invoke(CH.agentListModels, engine),
     /** Команды движка для палитры «/» — со сведениями о том, откуда список. */
     listCommands: (engine: AgentEngine) => ipcRenderer.invoke(CH.agentListCommands, engine),
+    /** Перечитать скиллы/плагины/MCP, не перезапуская сессию. */
+    reloadExtras: (engine: AgentEngine) => ipcRenderer.invoke(CH.agentReloadExtras, engine),
+    /** На диске появились новые скиллы/плагины/MCP. */
+    onExtrasChanged: (cb: () => void) => on(CH.agentExtrasChanged, cb),
     debugFlags: (engine: AgentEngine, requestId?: string) =>
       ipcRenderer.invoke(CH.agentDebugFlags, engine, requestId)
   },
