@@ -8,13 +8,28 @@ import { t, useLang } from '@/lib/i18n'
 import { askText } from '@/components/AskText'
 import { formatRelative, shortenPath } from '@/lib/ansi'
 import { fuzzyFilter } from '@/lib/fuzzy'
-import { useAiStore } from '@/features/ai/aiStore'
+import { useAiStore, attentionOf, waitingSince } from '@/features/ai/aiStore'
 import { focusPane } from '@/terminal/paneFocus'
 import { listLeaves, useSessionsStore } from '@/state/sessionsStore'
 import { useSettingsStore } from '@/state/settingsStore'
 import { useUiStore } from '@/state/uiStore'
 import { useContextMenu, type MenuItem } from './ContextMenu'
 import { Icon, ShellGlyph } from './Icon'
+
+/**
+ * Сколько агент ждёт человека, словами.
+ *
+ * Секунды не показываем: они дёргаются и создают суету там, где нужен спокойный
+ * укор. До минуты — «только что», дальше минуты и часы.
+ */
+function waitedFor(since: number | null, now: number): string {
+  if (!since) return t('sidebar.waitJustNow')
+  const sec = Math.max(0, Math.round((now - since) / 1000))
+  if (sec < 60) return t('sidebar.waitJustNow')
+  const min = Math.floor(sec / 60)
+  if (min < 60) return t('sidebar.waitMin', { n: min })
+  return t('sidebar.waitHour', { n: Math.floor(min / 60) })
+}
 
 const sectionLabelStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 6 }
 const enSubStyle: React.CSSProperties = {
@@ -208,7 +223,29 @@ export function SessionsPanel(): React.JSX.Element {
     )
   }
 
-  const crewActive = conversations.filter((c) => c.streaming || c.pendingTools.length > 0)
+  /*
+   * Два разных состояния, а не одно.
+   *
+   * Работающий агент не требует ничего — он занят. Ждущий требует всего: пока
+   * человек не нажмёт, не двигается ничего. Раньше и то и другое считалось
+   * «выполняется», и при четырёх панелях приходилось обходить их глазами по
+   * очереди, чтобы понять, кто встал. Ждущие идут первыми — это и есть очередь
+   * к человеку.
+   */
+  /*
+   * Часы ожидания идут сами: раз в 15 секунд перерисовываем строки агентов.
+   * Иначе «ждёт минуту» осталось бы минутой навсегда — а смысл подписи именно
+   * в том, чтобы цифра росла и мозолила глаз.
+   */
+  const [nowTick, setNowTick] = useState(() => Date.now())
+  useEffect(() => {
+    const iv = setInterval(() => setNowTick(Date.now()), 15000)
+    return () => clearInterval(iv)
+  }, [])
+
+  const waitingCrew = conversations.filter((c) => attentionOf(c) === 'waiting')
+  const workingCrew = conversations.filter((c) => attentionOf(c) === 'working')
+  const crewActive = [...waitingCrew, ...workingCrew]
 
   // Session ids currently open in a tab — excluded from the saved list so an
   // open terminal shows once (in ОТКРЫТЫЕ), never duplicated below.
@@ -801,29 +838,41 @@ export function SessionsPanel(): React.JSX.Element {
             {t('sidebar.empty')}
           </div>
         )}
-        {sectionHead('crew', t('sidebar.crew'), crewActive.length, undefined, crewLabelStyle)}
+        {sectionHead(
+          'crew',
+          waitingCrew.length ? t('sidebar.crewWaitCount', { n: waitingCrew.length }) : t('sidebar.crew'),
+          crewActive.length,
+          undefined,
+          crewLabelStyle
+        )}
         {isFolded('crew') ? null : crewActive.length > 0 ? (
-          crewActive.map((conv) => (
-            <div key={conv.id} className="zy-item" onClick={() => openCrewMember(conv.id)}>
-              <span
-                style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: '50%',
-                  flexShrink: 0,
-                  background: 'var(--success)',
-                  boxShadow: '0 0 8px var(--success)',
-                  animation: 'zy-crew-pulse 1.6s ease-in-out infinite'
-                }}
-              />
-              <div className="zy-item-body">
-                <div className="zy-item-title">{conv.title}</div>
-                <div className="zy-item-sub" style={crewStatusStyle}>
-                  {t('sidebar.crewBusy')}
+          crewActive.map((conv) => {
+            const waits = attentionOf(conv) === 'waiting'
+            const since = waits ? waitingSince(conv) : null
+            return (
+              <div key={conv.id} className="zy-item" onClick={() => openCrewMember(conv.id)}>
+                <span
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: '50%',
+                    flexShrink: 0,
+                    // Ждущий — цветом действия: он и есть предложение нажать.
+                    // Работающий — спокойным зелёным: его трогать не надо.
+                    background: waits ? 'var(--accent)' : 'var(--success)',
+                    boxShadow: `0 0 8px ${waits ? 'var(--accent)' : 'var(--success)'}`,
+                    animation: 'zy-crew-pulse 1.6s ease-in-out infinite'
+                  }}
+                />
+                <div className="zy-item-body">
+                  <div className="zy-item-title">{conv.title}</div>
+                  <div className="zy-item-sub" style={crewStatusStyle}>
+                    {waits ? t('sidebar.crewWaiting', { time: waitedFor(since, nowTick) }) : t('sidebar.crewBusy')}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))
+            )
+          })
         ) : (
           <div className="zy-item" style={{ cursor: 'default' }}>
             <span

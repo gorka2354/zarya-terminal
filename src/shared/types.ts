@@ -299,6 +299,17 @@ export interface HistorySettings {
   maxEntries: number
 }
 
+export interface NotificationSettings {
+  /**
+   * Звать, когда агент встал и ждёт решения, а окно не в фокусе.
+   *
+   * Только в этом случае: уведомление о том, что и так видно на экране, —
+   * шум, а шум выключают вместе с сигналом. Включено по умолчанию, потому что
+   * ожидание уже происходит и без нас; человек просто о нём не знает.
+   */
+  whenWaiting: boolean
+}
+
 export interface SessionsSettings {
   restoreOnLaunch: 'workspace' | 'none'
   autosaveSec: number
@@ -330,6 +341,7 @@ export interface Settings {
   updates: UpdateSettings
   history: HistorySettings
   sessions: SessionsSettings
+  notifications: NotificationSettings
   editor: EditorSettings
   /** actionId -> chord, e.g. "terminal.split-right": "Ctrl+Shift+D". */
   keybindings: Record<string, string>

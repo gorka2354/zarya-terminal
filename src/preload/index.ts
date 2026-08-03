@@ -211,6 +211,8 @@ const api = {
       }>
   },
   app: {
+    /** Позвать человека: агент встал, а окно не в фокусе. */
+    notifyWaiting: (title: string, body: string) => ipcRenderer.send(CH.notifyWaiting, title, body),
     info: () => ipcRenderer.invoke(CH.appInfo),
     windowCommand: (cmd: WindowCommand) => ipcRenderer.send(CH.windowCommand, cmd),
     onMaximized: (cb: (maximized: boolean) => void) => on(CH.windowMaximized, cb),

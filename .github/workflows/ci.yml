@@ -96,3 +96,8 @@ jobs:
       # живую работу, и это состояние обязано переживать перезапуск.
       - name: Sidebar folding
         run: xvfb-run -a node scripts/sidebar-fold-test.mjs
+
+      # Внимание человека: «ждёт тебя» и «работает» — разные состояния, и зов
+      # приходит только когда окно не в фокусе.
+      - name: Attention
+        run: xvfb-run -a node scripts/attention-test.mjs

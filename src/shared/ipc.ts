@@ -90,6 +90,8 @@ export const CH = {
   sttProgress: 'stt:progress', // main -> renderer
   sttTranscribe: 'stt:transcribe',
   sttRemoveModel: 'stt:remove-model',
+  /** Агент встал и ждёт человека, а окно не в фокусе — позвать. */
+  notifyWaiting: 'app:notify-waiting',
   /** Своя модель с диска: main спрашивает папку сам, renderer путей не подаёт. */
   sttAddCustom: 'stt:add-custom',
   sttForgetCustom: 'stt:forget-custom',

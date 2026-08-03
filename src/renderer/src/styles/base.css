@@ -1095,6 +1095,50 @@ body {
     inset 0 0 0 2px color-mix(in srgb, var(--accent) 16%, transparent);
 }
 /*
+ * Панель, которая ждёт решения человека.
+ *
+ * Пульсирует, а не красится: цвет в этом интерфейсе уже занят — акцент говорит
+ * «сюда уйдёт Enter», danger говорит «осторожно». Третьего смысла у цвета быть
+ * не может, а движение свободно и читается боковым зрением, ради которого всё и
+ * делается: человек не смотрит в панель, о которой забыл.
+ *
+ * Пульс медленный (2.4 с) и неяркий. Быстрый мигающий кант в рабочем окне на
+ * восемь часов — не сигнал, а раздражитель, от которого сигнал выключают.
+ */
+.zy-pane--waiting {
+  border-color: color-mix(in srgb, var(--accent) 46%, transparent);
+}
+.zy-pane--waiting::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 2px var(--accent);
+  animation: zy-wait-pulse 2.4s ease-in-out infinite;
+}
+@keyframes zy-wait-pulse {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+/* Человек уже смотрит на эту панель — звать его в неё незачем. */
+.zy-pane--waiting.zy-pane--focused::before {
+  animation: none;
+  opacity: 0.5;
+}
+@media (prefers-reduced-motion: reduce) {
+  .zy-pane--waiting::before {
+    animation: none;
+    opacity: 0.6;
+  }
+}
+
+/*
  * Неактивные панели больше НЕ гасятся.
  *
  * Раньше они уходили в brightness(0.66) и opacity(0.62). На тёмной теме это

@@ -14,6 +14,7 @@ import { useSettingsStore } from '@/state/settingsStore'
 import { isRaw, setRaw, useUiStore } from '@/state/uiStore'
 import { useContextMenu } from './ContextMenu'
 import { Icon } from './Icon'
+import { attentionOf, convForSession, useAiStore } from '@/features/ai/aiStore'
 
 interface Props {
   sessionId: string
@@ -141,11 +142,30 @@ export const TerminalPane = memo(function TerminalPane({
     ])
   }
 
+  /**
+   * Ждёт ли ЭТА панель решения человека. Строго по гейтам своей беседы: любая
+   * догадка по выводу однажды покажет «ждёт» там, где агент просто задумался.
+   */
+  const waiting = useAiStore((s) => {
+    const conv = convForSession(s, sessionId)
+    return !!conv && attentionOf(conv) === 'waiting'
+  })
+
   return (
     <div
-      // Метки «неактивна» здесь нет намеренно: неактивные панели ничем не
-      // гасятся, активную называет рамка (см. .zy-pane--focused в base.css).
-      className={`zy-pane${active ? ' zy-pane--focused' : ''}${dropSide ? ' zy-pane--drop' : ''}`}
+      /*
+       * Три состояния рамки, и они говорят разное.
+       *
+       * Активная (--focused) отвечает на вопрос «куда уйдёт Enter». Ждущая
+       * (--waiting) — на другой: «здесь остановились и ждут тебя». Их нельзя
+       * подменять друг другом: ждущая панель может быть не активной, и именно
+       * тогда о ней забывают. Поэтому ждущая не спорит цветом, а пульсирует —
+       * движение зовёт, не занимая второй смысл у цвета.
+       *
+       * Метки «неактивна» здесь нет намеренно: неактивные панели ничем не
+       * гасятся.
+       */
+      className={`zy-pane${active ? ' zy-pane--focused' : ''}${waiting ? ' zy-pane--waiting' : ''}${dropSide ? ' zy-pane--drop' : ''}`}
       // Чья это панель — видно в разметке. Нужно прогонам: «строка сайдбара
       // указывает на ЭТУ панель» иначе проверяется догадкой по порядку.
       data-session={sessionId}

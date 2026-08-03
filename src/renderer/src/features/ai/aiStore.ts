@@ -87,6 +87,43 @@ export interface PendingTool {
    * а человек думает, что разрешил один запуск.
    */
   allowAlwaysOnly?: boolean
+  /**
+   * Когда этот гейт встал и начал ждать человека.
+   *
+   * Нужен, чтобы сказать «ждёт 4 минуты». Это не украшение: в модели с четырьмя
+   * панелями агент, о котором забыли, стоит ровно столько же, сколько агент,
+   * который не работает, — и человек должен видеть, во что ему обошлось
+   * невнимание.
+   */
+  askedAt?: number
+}
+
+/**
+ * Чем занята беседа с точки зрения ЧЕЛОВЕКА.
+ *
+ * Раньше «работает» и «ждёт твоего Enter» считались одним состоянием
+ * (`streaming || pendingTools.length > 0`) и подписывались одним словом. Для
+ * одной панели разница невелика; для четырёх это главная ежедневная потеря:
+ * чем лучше работает автопилот, тем чаще человек не знает, кто из четверых
+ * стоит и ждёт нажатия. Работающий агент не требует ничего, ждущий — требует
+ * всего, и путать их нельзя.
+ *
+ * Считается СТРОГО по фактическим гейтам, без догадок по выводу: индикатор
+ * состояния врёт легче всего остального в интерфейсе, а «готов» вместо
+ * «завис» — худшая из его неправд.
+ */
+export type Attention = 'waiting' | 'working' | 'idle'
+
+export function attentionOf(conv: Conversation): Attention {
+  if (conv.pendingTools.some((t) => !t.settled)) return 'waiting'
+  return conv.streaming ? 'working' : 'idle'
+}
+
+/** С какого момента беседа ждёт человека (самый ранний нерешённый гейт). */
+export function waitingSince(conv: Conversation): number | null {
+  const times = conv.pendingTools.filter((t) => !t.settled).map((t) => t.askedAt ?? 0)
+  const first = times.filter(Boolean).sort((a, b) => a - b)[0]
+  return first ?? null
 }
 
 export interface Conversation {
@@ -741,7 +778,8 @@ export const useAiStore = create<AiState>((set, get) => {
               questions: ev.questions,
               title: ev.title,
               displayName: ev.displayName,
-              allowAlwaysOnly: ev.allowAlwaysOnly
+              allowAlwaysOnly: ev.allowAlwaysOnly,
+              askedAt: Date.now()
             }
           ]
         }))
@@ -903,7 +941,16 @@ export const useAiStore = create<AiState>((set, get) => {
           ...c,
           pendingTools: [
             ...c.pendingTools.filter((t) => t.id !== ev.id),
-            { id: ev.id, name: ev.name, input: ev.input, autoApproved: auto, settled: auto }
+            {
+              id: ev.id,
+              name: ev.name,
+              input: ev.input,
+              autoApproved: auto,
+              settled: auto,
+              // Автоодобренный инструмент никого не ждёт — время ставим только
+              // тому, кто действительно встал перед человеком.
+              askedAt: auto ? undefined : Date.now()
+            }
           ]
         }))
         if (auto) void enqueueTool(convId, { id: ev.id, name: ev.name, input: ev.input })

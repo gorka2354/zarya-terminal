@@ -105,6 +105,9 @@ export const DEFAULT_SETTINGS: Settings = {
     // он копится сам, и на второй неделе работы занимает весь сайдбар.
     collapsed: ['recent']
   },
+  notifications: {
+    whenWaiting: true
+  },
   editor: {
     fontSize: 13,
     wordWrap: false,

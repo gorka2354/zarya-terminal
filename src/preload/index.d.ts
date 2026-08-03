@@ -237,6 +237,8 @@ export interface ZaryaApi {
     ): Promise<{ ok: boolean; text?: string; error?: string }>
   }
   app: {
+    /** Позвать человека: агент встал, а окно не в фокусе. */
+    notifyWaiting(title: string, body: string): void
     info(): Promise<AppInfo>
     windowCommand(cmd: WindowCommand): void
     onMaximized(cb: (maximized: boolean) => void): Unsub

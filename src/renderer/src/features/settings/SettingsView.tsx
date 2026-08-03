@@ -1115,9 +1115,18 @@ function ApiKeysBlock(): React.JSX.Element {
 
 function SessionsTab(): React.JSX.Element {
   const s = useSettingsStore((st) => st.settings.sessions)
+  const notifications = useSettingsStore((st) => st.settings.notifications)
   const update = useSettingsStore((st) => st.update)
   return (
     <section className="zy-set-section">
+      {/* Зов живёт здесь, а не в «Внешнем виде»: это про работу с панелями, а
+          не про то, как приложение выглядит. */}
+      <Row title={t('set.notifyWaiting')} sub="NOTIFY WHEN WAITING" desc={t('set.notifyWaitingDesc')}>
+        <Toggle
+          checked={notifications?.whenWaiting ?? true}
+          onChange={(v) => void update({ notifications: { whenWaiting: v } as never })}
+        />
+      </Row>
       <Row title={t('set.restore')} sub="RESTORE ON LAUNCH">
         <SelectField
           value={s.restoreOnLaunch}

@@ -1,4 +1,4 @@
-import { BrowserWindow, app, dialog, ipcMain, shell } from 'electron'
+import { BrowserWindow, Notification, app, dialog, ipcMain, shell } from 'electron'
 import { tm } from './lang'
 import { APP_VERSION } from './appVersion'
 import { existsSync } from 'fs'
@@ -203,6 +203,34 @@ export function registerIpc(ctx: IpcContext): void {
   ipcMain.handle(CH.updatesDownload, () => ctx.updates.download())
   ipcMain.handle(CH.updatesInstall, () => ctx.updates.install())
   ctx.updates.onChange((s) => getWindow()?.webContents.send(CH.updatesChanged, s))
+
+  /**
+   * Позвать человека к панели, которая встала.
+   *
+   * Два разных зова, и оба нужны. Уведомление ОС видно, когда Заря свёрнута;
+   * подсветка кнопки в панели задач — когда окно просто под другим окном. Ни
+   * то ни другое не показывается, если окно в фокусе: там человек и так
+   * смотрит.
+   *
+   * Клик по уведомлению поднимает окно — иначе оно сообщает о деле, к которому
+   * нельзя перейти.
+   */
+  ipcMain.on(CH.notifyWaiting, (_e, title: string, body: string) => {
+    const win = getWindow()
+    if (!win || win.isFocused()) return
+    if (!settingsStore.get().notifications?.whenWaiting) return
+    // На Windows это мигание кнопки в панели задач, на macOS — подпрыгивание
+    // иконки в доке. Снимается само, когда окно получает фокус.
+    win.flashFrame(true)
+    if (!Notification.isSupported()) return
+    const n = new Notification({ title, body, silent: false })
+    n.on('click', () => {
+      if (win.isMinimized()) win.restore()
+      win.show()
+      win.focus()
+    })
+    n.show()
+  })
 
   ipcMain.handle(CH.sttState, () => ctx.stt.state())
   /**
