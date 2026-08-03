@@ -11,13 +11,20 @@
  *   3) разметка из тела релиза не приносит на страницу скрипт.
  */
 import { _electron as electron } from 'playwright'
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 const root = process.cwd()
 const shots = process.env.ZARYA_SHOTS || ''
 const userData = mkdtempSync(join(tmpdir(), 'zarya-upd-'))
+// Автопроверки выключены: состояние релиза прогон задаёт сам, а живой ответ
+// GitHub приходил бы поверх и гасил экран, который мы проверяем. Само правило
+// «когда переспрашивать» проверяется юнитами (shouldRecheck).
+writeFileSync(
+  join(userData, 'settings.json'),
+  JSON.stringify({ appearance: { language: 'ru' }, updates: { check: false } })
+)
 let pass = 0,
   fail = 0
 const ok = (name, cond, extra) => {
@@ -192,6 +199,44 @@ try {
   ok('подпись не сходится → кнопки «Установить» нет', !v.buttons.some((t) => t.includes('Установить')), v.buttons)
   ok('подпись не сходится → сказано прямо', v.warning.includes('не сходится'), v.warning)
   if (shots) await page.screenshot({ path: join(shots, 'upd-3-unsigned.png') })
+
+  /*
+   * Открытое окно не должно показывать вчерашний ответ как сегодняшний.
+   *
+   * Подпись релиза появляется ПОЗЖЕ сборки — её ставит человек ключом, которого
+   * нет в CI. Проверка же шла один раз при запуске, поэтому окно могло
+   * честно говорить «у релиза нет подписи автора» ещё долго после того, как
+   * подпись легла: так и случилось на 0.7.3.
+   *
+   * Сеть здесь не нужна: подменяем сам вызов проверки счётчиком.
+   */
+  /*
+   * Ответ получасовой давности не должен выглядеть свежим.
+   *
+   * Само РЕШЕНИЕ переспросить проверяется юнитами (shouldRecheck в
+   * tests/updates.test.ts): подменить `window.zarya` отсюда нельзя — объект
+   * из contextBridge защищён от записи, а пускать прогон в настоящую сеть
+   * значит получить живой ответ GitHub поверх подставленного состояния. Здесь
+   * проверяется то, что видно человеку: время последней проверки на экране.
+   */
+  console.log('\n[6] Видно, когда спрашивали в последний раз')
+  await page.evaluate((s) => window.__zaryaSetUpdate?.(s), {
+    ...GOOD,
+    signature: 'missing',
+    checkedAt: Date.UTC(2026, 7, 3, 9, 7)
+  })
+  await page.evaluate(() => window.__zaryaSetUi?.({ updateOpen: true }))
+  await page.waitForTimeout(500)
+  const when = await page.evaluate(
+    () => document.querySelector('.zy-upd-foot-when')?.textContent ?? ''
+  )
+  ok('в подвале названо время проверки', /\d\d:\d\d/.test(when), when)
+  ok('и это отдельная оговорка, а не часть обещания', when.trim().startsWith('·'), when)
+
+  const btns = await page.evaluate(() =>
+    [...document.querySelectorAll('.zy-upd-foot button')].map((b) => b.textContent)
+  )
+  ok('кнопка спросить руками на месте', btns.some((b) => b?.includes('Проверить')), btns)
 
   console.log(`\n[update-view] PASS ${pass} · FAIL ${fail}`)
 } finally {

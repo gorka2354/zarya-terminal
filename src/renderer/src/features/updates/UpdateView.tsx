@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import {
   assetUrl,
   releasePageUrl,
+  shouldRecheck,
   splitByPlatform,
   type ReleaseAsset
 } from '@shared/updates'
@@ -9,6 +10,7 @@ import { renderMarkdown } from '@/features/ai/markdown'
 import { Icon } from '@/components/Icon'
 import { PixelIcon } from '@/components/PixelIcon'
 import { useUiStore } from '@/state/uiStore'
+import { useSettingsStore } from '@/state/settingsStore'
 import { useUpdateStore } from './updateStore'
 import { t, useLang } from '@/lib/i18n'
 import './updates.css'
@@ -58,6 +60,14 @@ function fmtDate(iso: string): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return ''
   return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })
+}
+
+/** Когда спрашивали в последний раз — часы и минуты, без секундной суеты. */
+function fmtTime(ms: number): string {
+  const d = new Date(ms)
+  if (Number.isNaN(d.getTime())) return ''
+  const p = (x: number): string => String(x).padStart(2, '0')
+  return `${p(d.getHours())}:${p(d.getMinutes())}`
 }
 
 /**
@@ -164,6 +174,12 @@ export default function UpdateView(): React.JSX.Element | null {
   const open = useUiStore((s) => s.updateOpen)
   const state = useUpdateStore((s) => s.state)
   const check = useUpdateStore((s) => s.check)
+  /*
+   * «Проверять обновления» выключено — значит Заря не спрашивает САМА нигде,
+   * включая это окно. Кнопка «Проверить снова» при этом остаётся: человек,
+   * отключивший фоновые проверки, не отказывался от права спросить руками.
+   */
+  const autoCheck = useSettingsStore((s) => s.settings.updates.check)
 
   useEffect(() => {
     if (!open) return
@@ -176,6 +192,44 @@ export default function UpdateView(): React.JSX.Element | null {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [open])
+
+  /*
+   * Открыли окно — спрашиваем заново.
+   *
+   * Проверка идёт раз при запуске, и до этой правки окно показывало тот
+   * единственный ответ как текущий. Подпись же появляется ПОЗЖЕ сборки: её
+   * ставит человек ключом, которого нет в CI. Поэтому оказалось так, что
+   * приложение честно говорило «у релиза нет подписи автора» ещё долго после
+   * того, как подпись легла, — и переоткрытие окна ничего не меняло.
+   *
+   * Свежее чем полминуты не перепроверяем: открыть и закрыть окно дважды
+   * подряд — обычное дело, а сеть за это платить не должна.
+   */
+  useEffect(() => {
+    const recheck = shouldRecheck({
+      open,
+      autoCheck,
+      checkedAt: useUpdateStore.getState().state?.checkedAt,
+      now: Date.now()
+    })
+    if (recheck) void check()
+  }, [open, autoCheck, check])
+
+  /*
+   * Пока окно открыто, а подписи нет — тихо переспрашиваем.
+   *
+   * Это единственное состояние, которое чинится САМО, без действий человека:
+   * мейнтейнер подписывает релиз через минуты после сборки. Всё остальное
+   * (нет обновления, ошибка сети) ждать не нужно, поэтому и таймера нет.
+   * Фонового опроса при закрытом окне здесь не появляется: интервал живёт
+   * ровно столько, сколько человек смотрит.
+   */
+  const unsigned = open && autoCheck && !!state?.latest && state?.signature !== 'ok'
+  useEffect(() => {
+    if (!unsigned) return
+    const iv = setInterval(() => void check(), 120_000)
+    return () => clearInterval(iv)
+  }, [unsigned, check])
 
   if (!open) return null
   const close = (): void => useUiStore.getState().set({ updateOpen: false })
@@ -297,6 +351,20 @@ export default function UpdateView(): React.JSX.Element | null {
               : signed
                 ? t('upd.safeNote')
                 : t('upd.unsignedNote')}
+            {/*
+              Когда спрашивали в последний раз. Без этого ответ получасовой
+              давности выглядит как сегодняшний — а он меняется: подпись
+              появляется уже после сборки, и «нет подписи» бывает просто
+              устаревшим.
+            */}
+            {state?.checkedAt ? (
+              <span className="zy-upd-foot-when">
+                {' · '}
+                {state.checking
+                  ? t('upd.checkingNow')
+                  : t('upd.checkedAt', { time: fmtTime(state.checkedAt) })}
+              </span>
+            ) : null}
           </span>
           <div className="zy-upd-spacer" />
           <button className="zy-btn" onClick={() => void check()} disabled={state?.checking || busy}>

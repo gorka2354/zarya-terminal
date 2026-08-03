@@ -9,7 +9,8 @@ import {
   latestReleaseApiUrl,
   parseRelease,
   parseSha256Sums,
-  releasePageUrl
+  releasePageUrl,
+  shouldRecheck
 } from '@shared/updates'
 
 /**
@@ -192,5 +193,42 @@ describe('раскладка ассетов', () => {
 
   it('подписи нет — так и говорим', () => {
     expect(findSigAsset(assets)).toBeUndefined()
+  })
+})
+
+describe('переспросить ли при открытии окна', () => {
+  const NOW = 1_700_000_000_000
+
+  it('старый ответ переспрашиваем: подпись появляется уже после сборки', () => {
+    // Ровно случай 0.7.3: релиз собрался без подписи, человек открыл окно,
+    // подпись легла через несколько минут — и окно продолжало утверждать, что
+    // её нет.
+    expect(
+      shouldRecheck({ open: true, autoCheck: true, checkedAt: NOW - 30 * 60_000, now: NOW })
+    ).toBe(true)
+  })
+
+  it('свежий не трогаем — открыть и закрыть окно дважды подряд это норма', () => {
+    expect(shouldRecheck({ open: true, autoCheck: true, checkedAt: NOW - 5_000, now: NOW })).toBe(
+      false
+    )
+  })
+
+  it('не проверяли ни разу — спрашиваем', () => {
+    expect(shouldRecheck({ open: true, autoCheck: true, now: NOW })).toBe(true)
+  })
+
+  it('окно закрыто — молчим, фонового опроса тут нет', () => {
+    expect(shouldRecheck({ open: false, autoCheck: true, checkedAt: 0, now: NOW })).toBe(false)
+  })
+
+  it('человек выключил проверки — не спрашиваем даже с открытым окном', () => {
+    expect(shouldRecheck({ open: true, autoCheck: false, checkedAt: 0, now: NOW })).toBe(false)
+  })
+
+  it('порог свежести можно задать явно', () => {
+    expect(
+      shouldRecheck({ open: true, autoCheck: true, checkedAt: NOW - 10_000, now: NOW, freshMs: 5_000 })
+    ).toBe(true)
   })
 })
