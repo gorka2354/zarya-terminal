@@ -17,6 +17,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 const root = process.cwd()
+const shots = process.env.ZARYA_SHOTS || ''
 let pass = 0,
   fail = 0
 const ok = (name, cond, extra) => {
@@ -129,6 +130,39 @@ try {
   )
   const warn = await page.evaluate(() => document.querySelector('.zy-mf-tool-stop')?.textContent ?? '')
   ok('предупреждение на экране', warn.includes('не отменить'), warn.slice(0, 60))
+
+  /*
+   * Пометка сервера — не то же, что наш пол.
+   *
+   * MCP разрешает серверу объявить свой инструмент разрушающим. Мы такую
+   * пометку показываем, но ручаться за неё не можем: сервер вправе её не
+   * заполнить или ошибиться. Поэтому она обязана быть ОТДЕЛЬНОЙ строкой и
+   * называть источник — иначе чужое заявление читается как наше обещание.
+   */
+  console.log('\n[4] Пометку сервера показываем, но не выдаём за свою')
+  const id5 = await page.evaluate(() => window.__zaryaStartAgent?.('codex', 'run an mcp tool'))
+  const mcpGate = await waitGate(page, id5)
+  ok('гейт поднялся на инструменте сервера', mcpGate?.name?.startsWith('mcp__'), mcpGate?.name)
+  ok('пометка приехала с гейтом', mcpGate?.mcpMark?.destructive === true, mcpGate?.mcpMark)
+
+  const mark = await page.evaluate(
+    () => document.querySelector('.zy-mf-tool-mark')?.textContent ?? ''
+  )
+  ok('на экране сказано, что помечает СЕРВЕР', /[Сс]ервер помечает/.test(mark), mark)
+  const floorLine = await page.evaluate(
+    () => document.querySelector('.zy-mf-tool-stop')?.textContent ?? ''
+  )
+  ok(
+    'и это не наша строка про необратимое',
+    !floorLine || !floorLine.includes('Сервер помечает'),
+    floorLine.slice(0, 60)
+  )
+  if (shots) await page.screenshot({ path: join(shots, 'gate-mcp-mark.png') })
+  ok(
+    'обычный инструмент такой пометки не получает',
+    (danger?.mcpMark ?? null) === null,
+    danger?.mcpMark
+  )
 } finally {
   await app.close()
   try {

@@ -95,6 +95,13 @@ export interface PendingTool {
    */
   irreversible?: { kind: string; hit: string }
   /**
+   * Чем пометил инструмент САМ сервер (MCP-аннотации). Отличать от
+   * {@link irreversible}: то — наш список необратимого, это — заявление
+   * стороннего сервера, за которое мы не ручаемся. Приходит вместе с гейтом
+   * или чуть позже отдельным событием.
+   */
+  mcpMark?: import('@shared/mcp').McpMark
+  /**
    * Когда этот гейт встал и начал ждать человека.
    *
    * Нужен, чтобы сказать «ждёт 4 минуты». Это не украшение: в модели с четырьмя
@@ -803,6 +810,7 @@ export const useAiStore = create<AiState>((set, get) => {
               displayName: ev.displayName,
               allowAlwaysOnly: ev.allowAlwaysOnly,
               irreversible: ev.irreversible,
+              mcpMark: ev.mcpMark,
               askedAt: Date.now()
             }
           ]
@@ -816,6 +824,22 @@ export const useAiStore = create<AiState>((set, get) => {
             void get().approveTool(convId, ev.toolUseId)
           }
         }
+        break
+
+      /*
+       * Пометка сервера догнала свою карточку.
+       *
+       * Обновляем только ещё не решённый гейт: если человек уже нажал, дописать
+       * ему «сервер помечает разрушающим» задним числом значит сказать это
+       * после того, как оно перестало быть предупреждением.
+       */
+      case 'tool-mark':
+        patchConversation(convId, (c) => ({
+          ...c,
+          pendingTools: c.pendingTools.map((t) =>
+            t.id === ev.toolUseId && !t.settled ? { ...t, mcpMark: ev.mcpMark } : t
+          )
+        }))
         break
 
       case 'tool_result':
@@ -1779,7 +1803,11 @@ function seedPatch(convId: string, fn: (c: Conversation) => Conversation): void 
           displayName: t.displayName,
           // Признак «разрешение только навсегда» — часть наблюдаемого состояния
           // гейта: от него зависит и надпись на кнопке, и то, что уйдёт агенту.
-          allowAlwaysOnly: t.allowAlwaysOnly
+          allowAlwaysOnly: t.allowAlwaysOnly,
+          // Пометка стороннего сервера. Отдельно от `irreversible`: прогон
+          // обязан различать наше утверждение и чужое — на экране это разные
+          // строки, и путать их нельзя ни человеку, ни харнессу.
+          mcpMark: t.mcpMark
         })),
         msgs: c.messages.length
       }

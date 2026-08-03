@@ -23,7 +23,8 @@ export interface RawMcpStatus {
   scope?: unknown
   serverInfo?: { name?: unknown; version?: unknown }
   config?: Record<string, unknown>
-  tools?: unknown[]
+  /** Инструменты сервера: считаем их и читаем пометки, больше ничего. */
+  tools?: { name?: unknown; annotations?: McpMark }[]
 }
 
 /** Инструмент из `getContextUsage()`: во сколько токенов он обходится. */
@@ -130,6 +131,56 @@ export function foldMcpTokens(tools: RawMcpTool[] | undefined): Record<string, n
     const tokens = typeof t?.tokens === 'number' && t.tokens > 0 ? t.tokens : 0
     if (!server || !tokens) continue
     out[server] = (out[server] ?? 0) + tokens
+  }
+  return out
+}
+
+/**
+ * Чем сервер пометил свой инструмент.
+ *
+ * Это ЕГО заявление, а не наша проверка: MCP разрешает серверу объявить
+ * инструмент разрушающим, только читающим или ходящим наружу. Заря такие
+ * пометки показывает и называет источник — «сервер помечает», — потому что
+ * поручиться за них не может: сервер вправе не заполнить их вовсе или ошибиться.
+ * Отсутствие пометки поэтому НЕ значит «безопасно», и интерфейс не должен
+ * подсказывать обратное.
+ */
+export interface McpMark {
+  destructive?: boolean
+  readOnly?: boolean
+  openWorld?: boolean
+}
+
+/**
+ * Полное имя инструмента так, как его назовёт движок в запросе разрешения:
+ * `mcp__<сервер>__<инструмент>`, где в имени сервера всё за пределами
+ * `A-Z a-z 0-9 _ -` заменено на `_` (правило самого Claude Code — так
+ * `claude.ai Notion` становится `claude_ai_Notion`).
+ */
+export function mcpToolFullName(server: string, tool: string): string {
+  return `mcp__${server.replace(/[^A-Za-z0-9_-]/g, '_')}__${tool}`
+}
+
+/** Разложить инструменты серверов в карту «полное имя → пометки сервера». */
+export function markIndex(
+  servers: { name?: unknown; tools?: { name?: unknown; annotations?: McpMark }[] }[]
+): Record<string, McpMark> {
+  const out: Record<string, McpMark> = {}
+  for (const s of servers ?? []) {
+    const server = typeof s?.name === 'string' ? s.name : ''
+    if (!server || !Array.isArray(s.tools)) continue
+    for (const tool of s.tools) {
+      const name = typeof tool?.name === 'string' ? tool.name : ''
+      const a = tool?.annotations
+      if (!name || !a) continue
+      // Пустую пометку не храним: «сервер ничего не сказал» и «сервер сказал
+      // нет» — разные вещи, и первая не должна выглядеть как вторая.
+      const mark: McpMark = {}
+      if (a.destructive === true) mark.destructive = true
+      if (a.readOnly === true) mark.readOnly = true
+      if (a.openWorld === true) mark.openWorld = true
+      if (Object.keys(mark).length) out[mcpToolFullName(server, name)] = mark
+    }
   }
   return out
 }

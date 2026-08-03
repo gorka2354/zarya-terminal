@@ -3,7 +3,9 @@ import {
   commandOf,
   foldMcpTokens,
   hostOf,
+  markIndex,
   mcpLoginCommand,
+  mcpToolFullName,
   mcpRowFrom,
   sortMcpRows
 } from '@shared/mcp'
@@ -169,5 +171,48 @@ describe('порядок строк — это очередь к человек�
       ]).map((r) => r.name)
     expect(twice()).toEqual(['a', 'b'])
     expect(twice()).toEqual(twice())
+  })
+})
+
+describe('пометки сервера — его слово, не наше', () => {
+  it('полное имя собирается по правилу движка', () => {
+    expect(mcpToolFullName('playwright', 'browser_click')).toBe('mcp__playwright__browser_click')
+    // Пробелы и точки в имени сервера движок заменяет на подчёркивания.
+    expect(mcpToolFullName('claude.ai Notion', 'search')).toBe('mcp__claude_ai_Notion__search')
+    expect(mcpToolFullName('plugin:cloudflare:api', 'docs')).toBe(
+      'mcp__plugin_cloudflare_api__docs'
+    )
+  })
+
+  it('индекс собирает только настоящие пометки', () => {
+    const idx = markIndex([
+      {
+        name: 'files',
+        tools: [
+          { name: 'rm', annotations: { destructive: true } },
+          { name: 'ls', annotations: { readOnly: true } },
+          // Сервер ничего не сказал — этого в индексе быть не должно: пустая
+          // пометка выглядела бы как «сервер заявил, что безопасно».
+          { name: 'stat', annotations: {} },
+          { name: 'noann' }
+        ]
+      }
+    ])
+    expect(idx['mcp__files__rm']).toEqual({ destructive: true })
+    expect(idx['mcp__files__ls']).toEqual({ readOnly: true })
+    expect(idx['mcp__files__stat']).toBeUndefined()
+    expect(idx['mcp__files__noann']).toBeUndefined()
+  })
+
+  it('мусор в ответе не роняет индекс', () => {
+    expect(markIndex([])).toEqual({})
+    expect(markIndex([{ name: 'x' }, { tools: [{ name: 'y', annotations: { destructive: true } }] }])).toEqual({})
+  })
+
+  it('ложные значения пометок не превращаются в истину', () => {
+    const idx = markIndex([
+      { name: 's', tools: [{ name: 't', annotations: { destructive: false, readOnly: false } }] }
+    ])
+    expect(idx['mcp__s__t']).toBeUndefined()
   })
 })

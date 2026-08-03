@@ -26,6 +26,7 @@ import { cleanCommands } from '@shared/agentCommands'
 import { irreversible } from '@shared/irreversible'
 import {
   foldMcpTokens,
+  markIndex,
   mcpRowFrom,
   sortMcpRows,
   type RawMcpStatus,
@@ -410,6 +411,20 @@ export class ClaudeCodeDriver implements AgentDriver {
    * день накапливаются, а снимки нужны только недавним.
    */
   private mcpSnapshots = new Map<string, McpSnapshot>()
+  /**
+   * Чем серверы пометили свои инструменты — по беседам.
+   *
+   * Пометки нужны карточке одобрения: сервер вправе объявить инструмент
+   * разрушающим, и молчать об этом, зная, — значит скрывать от человека то,
+   * что у нас уже есть. Спрашиваем один раз на сессию (серверы к тому моменту
+   * подняты ею же, так что это дешёвый вопрос, а не проверка связи).
+   */
+  private mcpMarks = new Map<string, Record<string, import('@shared/mcp').McpMark>>()
+  /** Запрос карты в полёте: первый MCP-гейт не должен звать её дважды. */
+  private mcpMarksInFlight = new Map<
+    string,
+    Promise<Record<string, import('@shared/mcp').McpMark> | undefined>
+  >()
   private getWindow: () => BrowserWindow | null
   private usageTimer?: ReturnType<typeof setInterval>
   private ambientTimer?: ReturnType<typeof setInterval>
@@ -577,7 +592,21 @@ export class ClaudeCodeDriver implements AgentDriver {
          * — и обещание показать его перед запуском, не более.
          */
         const stop = irreversible(toolName, toolInput)
-        if (!isQuestion && !stop && this.sessions.get(requestId)?.bypass) {
+        /*
+         * Пометку сервера тоже пропускаем через пол.
+         *
+         * Если сторонний сервер САМ объявил инструмент разрушающим, проглотить
+         * его молча — ровно то, от чего пол и существует. Мы за эту пометку не
+         * ручаемся (сервер вправе ошибиться или не заполнить её вовсе), поэтому
+         * карточка называет источник. Сервер, который метит разрушающим всё
+         * подряд, делает автопилот бесполезным — но это видно, и такой сервер
+         * можно выключить целиком во вкладке «Инструменты».
+         *
+         * Пометки нет в карте (первый гейт опередил её) — ведём себя как
+         * раньше: обещать то, чего ещё не знаем, нельзя.
+         */
+        const mark = this.mcpMarks.get(requestId)?.[toolName]
+        if (!isQuestion && !stop && !mark?.destructive && this.sessions.get(requestId)?.bypass) {
           resolve({ behavior: 'allow' })
           return
         }
@@ -591,8 +620,25 @@ export class ClaudeCodeDriver implements AgentDriver {
           title: ctx.title,
           displayName: ctx.displayName,
           questions: isQuestion ? extractQuestions(toolInput) : undefined,
-          irreversible: stop ?? undefined
+          irreversible: stop ?? undefined,
+          // Чем сервер пометил свой инструмент. Известно сразу для всех, кроме
+          // самого первого MCP-гейта сессии: карту пометок собираем в фоне с
+          // init. Опоздала — карточка выйдет без пометки и дополнится, когда
+          // карта придёт (см. ниже).
+          mcpMark: mark
         })
+        /*
+         * Первый MCP-гейт может опередить карту пометок. Ждать её в canUseTool
+         * значило бы задержать саму карточку — а карточка нужна человеку
+         * немедленно. Поэтому досылаем пометку отдельным событием: гейт всё
+         * равно ждёт решения, и она успеет к моменту, когда человек читает.
+         */
+        if (!isQuestion && toolName.startsWith('mcp__') && !this.mcpMarks.get(requestId)) {
+          void this.ensureMcpMarks(requestId).then((marks) => {
+            const mark = marks?.[toolName]
+            if (mark) this.emit(requestId, { type: 'tool-mark', toolUseId: ctx.toolUseID, mcpMark: mark })
+          })
+        }
         ctx.signal.addEventListener('abort', () => {
           if (perms.delete(ctx.toolUseID)) resolve({ behavior: 'deny', message: tm('drv.aborted') })
         })
@@ -680,6 +726,10 @@ export class ClaudeCodeDriver implements AgentDriver {
     this.sessions.set(requestId, session)
 
     void this.pump(requestId, session)
+    // Пометки инструментов спрашиваем сразу и в фоне: к первому гейту карта
+    // должна быть уже на руках, иначе именно первое одобрение — то самое, где
+    // человек ещё не знает, чего ждать от нового сервера, — выйдет без неё.
+    void this.ensureMcpMarks(requestId)
   }
 
   /** Drain the query's message stream, translating each into a ClaudeStreamEvent. */
@@ -1148,6 +1198,8 @@ export class ClaudeCodeDriver implements AgentDriver {
       // Скиллы первыми: плагины могут принести свои, и порядок «скиллы, потом
       // плагины» даёт итоговый список, где плагинные не затёрты.
       if (typeof q.reloadSkills === 'function') await q.reloadSkills()
+      // После перечитывания состав инструментов другой — карта пометок устарела.
+      this.mcpMarks.delete(entry[0])
       const res = typeof q.reloadPlugins === 'function' ? await q.reloadPlugins() : undefined
       const commands = res?.commands
         ? cleanCommands(res.commands)
@@ -1237,10 +1289,45 @@ export class ClaudeCodeDriver implements AgentDriver {
     if (typeof q.toggleMcpServer !== 'function') return { ok: false, reason: 'unsupported' }
     try {
       await q.toggleMcpServer(name, enabled)
+      // Состав инструментов изменился — старая карта пометок больше не про эту
+      // сессию. Спросим заново при следующем гейте.
+      this.mcpMarks.delete(requestId)
       return { ok: true }
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : String(e) }
     }
+  }
+
+  /**
+   * Карта пометок для беседы: спрашиваем один раз и запоминаем.
+   *
+   * Инструменты меняются вместе с составом серверов, поэтому карта сбрасывается
+   * там же, где меняется состав, — в reloadExtras и mcpToggle.
+   */
+  private async ensureMcpMarks(
+    requestId: string
+  ): Promise<Record<string, import('@shared/mcp').McpMark> | undefined> {
+    const known = this.mcpMarks.get(requestId)
+    if (known) return known
+    const flying = this.mcpMarksInFlight.get(requestId)
+    if (flying) return flying
+    const live = this.sessions.get(requestId)
+    if (!live) return undefined
+    const task = (async () => {
+      try {
+        const q = live.query as { mcpServerStatus?: () => Promise<RawMcpStatus[]> }
+        if (typeof q.mcpServerStatus !== 'function') return undefined
+        const marks = markIndex((await q.mcpServerStatus()) ?? [])
+        this.mcpMarks.set(requestId, marks)
+        return marks
+      } catch {
+        return undefined
+      } finally {
+        this.mcpMarksInFlight.delete(requestId)
+      }
+    })()
+    this.mcpMarksInFlight.set(requestId, task)
+    return task
   }
 
   /** Спросить у одного query состав серверов и цену их инструментов. */

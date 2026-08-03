@@ -827,6 +827,16 @@ const ToolCard = memo(function ToolCard({
             {t('feed.irreversible', { hit: stop.hit })}
           </div>
         )}
+        {pending.mcpMark?.destructive && (
+          /*
+             Чем сервер пометил СВОЙ инструмент. Отдельной строкой от «пола» и
+             другими словами: там наш список необратимого, здесь — заявление
+             стороннего сервера. Мы за него не ручаемся и потому называем
+             источник; молчать, зная, тоже нельзя — эта пометка уже у нас на
+             руках, и человек решает без неё вслепую.
+          */
+          <div className="zy-mf-tool-mark">{t('feed.serverDestructive')}</div>
+        )}
         <button
           className={`zy-mf-btn-run${always ? ' zy-mf-btn-run--always' : ''}`}
           title={

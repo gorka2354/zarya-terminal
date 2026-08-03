@@ -147,12 +147,16 @@ export class FakeAgentDriver implements AgentDriver {
       // пол под автопилотом проверяется только настоящим необратимым вызовом.
       const command = /danger/i.test(opts.prompt) ? 'rm -rf build' : 'echo fake'
       const stop = irreversible('Bash', { command })
+      // «mcp» в запросе — инструмент стороннего сервера, помеченного им же как
+      // разрушающий. Автопилот его не глотает: пометка сервера идёт через тот
+      // же пол, что и наше необратимое (см. claudeCodeDriver.canUseTool).
+      const viaMcp = /mcp/i.test(opts.prompt)
       // Автопилот здесь ведёт себя как у настоящих движков: обычное проходит
       // молча, необратимое показывается всё равно. Без этого пол нечем
       // проверить — фейковый драйвер спрашивал бы всегда и «прошёл» бы тест,
       // ничего не доказав.
       this.schedule(requestId, 400, () => {
-        if (opts.bypass && !stop) {
+        if (opts.bypass && !stop && !viaMcp) {
           this.emit(requestId, {
             type: 'tool_result',
             toolUseId: `${requestId}-t1`,
@@ -164,9 +168,10 @@ export class FakeAgentDriver implements AgentDriver {
         this.emit(requestId, {
           type: 'permission',
           toolUseId: `${requestId}-t1`,
-          toolName: 'Bash',
-          input: { command },
-          irreversible: stop ?? undefined
+          toolName: viaMcp ? 'mcp__fake_server__wipe' : 'Bash',
+          input: viaMcp ? { path: '/tmp/fake' } : { command },
+          irreversible: stop ?? undefined,
+          mcpMark: viaMcp ? { destructive: true } : undefined
         })
       })
     } else if (/ask/i.test(opts.prompt) && this.capabilities.structuredQuestions) {
