@@ -10,11 +10,11 @@ import {
 } from '@/actions/projects'
 import { t, useLang } from '@/lib/i18n'
 import { askText } from '@/components/AskText'
-import { listLeaves, useSessionsStore } from '@/state/sessionsStore'
+import { useSessionsStore } from '@/state/sessionsStore'
 import { useSettingsStore } from '@/state/settingsStore'
 import { useUiStore } from '@/state/uiStore'
 import { useContextMenu, type MenuItem } from './ContextMenu'
-import { Icon, ShellGlyph } from './Icon'
+import { Icon } from './Icon'
 import { getThemes } from '@/features/themes/themes'
 import logoZarya from '@/assets/logo-zarya-48.png'
 
@@ -46,71 +46,16 @@ export function Titlebar(): React.JSX.Element {
 
   const store = useSessionsStore.getState()
 
-  const tabTitle = (tabId: string): { icon: string; title: string; pinned: boolean } => {
-    const tab = tabs.find((t) => t.id === tabId)
-    if (!tab) return { icon: '>_', title: '—', pinned: false }
-    const session = sessions[tab.activeSessionId]
-    const count = listLeaves(tab.layout).length
-    return {
-      icon: session?.shellIcon || '>_',
-      title: (session?.title || t('desk.untitled')) + (count > 1 ? ` · ${count}` : ''),
-      pinned: session?.pinned ?? false
-    }
-  }
-
-  const openNewTabMenu = (x: number, y: number): void => {
-    open(
-      x,
-      y,
-      profiles.map((p) => ({
-        label: `${p.icon}  ${p.name}`,
-        onClick: () => void store.newTab(p.id)
-      }))
-    )
-  }
-
-  const openTabContext = (x: number, y: number, tabId: string): void => {
-    const tab = tabs.find((t) => t.id === tabId)
-    if (!tab) return
-    const sid = tab.activeSessionId
-    open(x, y, [
-      {
-        label: t('common.rename'),
-        onClick: () => {
-          const cur = sessions[sid]
-          void askText(t('common.sessionName'), cur?.title ?? '').then((title) => {
-            if (title) void store.renameSession(sid, title)
-          })
-        }
-      },
-      {
-        label: t(sessions[sid]?.pinned ? 'common.unpin' : 'common.pin'),
-        onClick: () => void store.toggleFlag(sid, 'pinned')
-      },
-      {
-        label: t(sessions[sid]?.favorite ? 'common.favoriteRemove' : 'common.favoriteAdd'),
-        onClick: () => void store.toggleFlag(sid, 'favorite')
-      },
-      { separator: true },
-      {
-        label: t('tab.closeOthers'),
-        onClick: () => {
-          // По очереди и через вопрос: закрывать десяток терминалов пачкой,
-          // не спросив ни про один недописанный запрос, — потеря без следа.
-          void (async () => {
-            for (const t of tabs.filter((t) => t.id !== tabId)) await closeTabAsking(t.id)
-          })()
-        }
-      },
-      {
-        label: t('tab.close'),
-        hint: 'Ctrl+Shift+W',
-        danger: true,
-        onClick: () => void closeTabAsking(tabId)
-      }
-    ])
-  }
-
+  /*
+   * Вкладок в шапке нет намеренно.
+   *
+   * Рабочие столы живут в сайдбаре, где видно и их панели. Здесь до сегодня
+   * лежали ещё tabTitle / openNewTabMenu / openTabContext — остатки прежней
+   * раскладки, которые никто не вызывал: мёртвый код читается как «функция
+   * есть, просто спрятана», и следующий разработчик тратит время, выясняя,
+   * почему она не работает. Навигация по столам при скрытом сайдбаре — через
+   * палитру (действия «Стол: …») и Ctrl+Tab.
+   */
   return (
     <header className="zy-titlebar" onMouseEnter={() => setHover(true)}>
       <div className="zy-logo" title={t('title.logoHint')}>

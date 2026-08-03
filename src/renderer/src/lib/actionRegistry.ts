@@ -50,3 +50,21 @@ export function onActionsChanged(l: () => void): () => void {
   listeners.add(l)
   return () => listeners.delete(l)
 }
+
+/*
+ * QA-хук: выполнить действие по id и посмотреть список доступных.
+ *
+ * Прогоны обязаны проверять действие ровно так, как его вызывает клавиша или
+ * палитра, — через `runAction`, вместе с гейтом `enabled`. Иначе проверка
+ * доказывала бы работу кода, до которого человек может и не дотянуться.
+ */
+;(
+  window as unknown as {
+    __zaryaRunAction?: (id: string) => void
+    __zaryaActions?: () => { id: string; title: string; category: string }[]
+  }
+).__zaryaRunAction = runAction
+;(
+  window as unknown as { __zaryaActions?: () => { id: string; title: string; category: string }[] }
+).__zaryaActions = () =>
+  getAllActions().map((a) => ({ id: a.id, title: a.title, category: a.category }))

@@ -14,8 +14,23 @@ export interface Toast {
 
 interface UiState {
   sidebarView: SidebarView
+  /**
+   * Куда вернуться, когда сайдбар разворачивают обратно.
+   *
+   * `Ctrl+B` раньше всегда открывал «Сессии»: человек, работавший с файлами,
+   * после сворачивания оказывался в другом разделе и искал своё место заново.
+   */
+  lastSidebarView: Exclude<SidebarView, null>
   aiPanelOpen: boolean
   settingsOpen: boolean
+  /**
+   * С какой вкладки открыть настройки.
+   *
+   * Палитра ведёт сразу в раздел («Инструменты», «Голос»), а не высаживает во
+   * «Внешний вид», откуда человек ищет нужное сам. Сбрасывается при закрытии:
+   * следующий обычный вход в настройки должен открыть то, что было в прошлый раз.
+   */
+  settingsTab?: string
   /** Страница «Что нового» (обновление). */
   updateOpen: boolean
   paletteOpen: boolean
@@ -90,6 +105,7 @@ interface UiState {
 
 export const useUiStore = create<UiState>((set, get) => ({
   sidebarView: 'sessions',
+  lastSidebarView: 'sessions',
   aiPanelOpen: false,
   settingsOpen: false,
   updateOpen: false,
@@ -113,9 +129,26 @@ export const useUiStore = create<UiState>((set, get) => ({
   maximized: false,
   toasts: [],
 
-  setSidebar: (v) => set({ sidebarView: v }),
-  toggleSidebar: (v) => set({ sidebarView: get().sidebarView === v ? null : v }),
-  set: (patch) => set(patch),
+  // Оба сеттера идут через общий `set` ниже — там же живёт память о последнем
+  // открытом разделе. Отдельная запись мимо него означала бы, что правило
+  // работает не везде, а «в тех местах, где о нём вспомнили».
+  setSidebar: (v) => get().set({ sidebarView: v }),
+  toggleSidebar: (v) => get().set({ sidebarView: get().sidebarView === v ? null : v }),
+  /*
+   * Последний ОТКРЫТЫЙ раздел запоминается ЗДЕСЬ, а не в каждом сеттере.
+   *
+   * `Ctrl+B` прячет сайдбар и должен вернуть то, что было, а не всегда
+   * «Сессии»: человек, работавший с файлами, после сворачивания оказывался в
+   * другом разделе и искал своё место заново. Вид меняют из четырёх мест —
+   * setSidebar, toggleSidebar, прямой set из ActivityBar и QA-хук, — и правило
+   * в одном из них молча не сработало бы в остальных. Прогон это и поймал.
+   */
+  set: (patch) =>
+    set(
+      'sidebarView' in patch && patch.sidebarView
+        ? { ...patch, lastSidebarView: patch.sidebarView }
+        : patch
+    ),
 
   toast: (text, kind = 'info') => {
     const t: Toast = { id: uid('t'), kind, text }
@@ -127,8 +160,13 @@ export const useUiStore = create<UiState>((set, get) => ({
 
 /** Return the capabilities of the currently-selected agent engine, or null. */
 export function activeAgentCaps(): AgentCapabilities | null {
-  const { barMode, agentCaps } = useUiStore.getState()
-  return barMode === 'shell' || barMode === 'zarya' ? null : (agentCaps[barMode] ?? null)
+  const st = useUiStore.getState()
+  // Режим берём У АКТИВНОЙ ПАНЕЛИ, а не общий: у каждой панели свой движок, и
+  // общее значение — лишь умолчание для новых. Пока здесь стоял `barMode`,
+  // возможности считались по чужому движку: панель работала с Claude Code, а
+  // палитра прятала его действия, потому что общее умолчание было «оболочка».
+  const mode = barModeOf(st, useSessionsStore.getState().activeSessionId())
+  return mode === 'shell' || mode === 'zarya' ? null : (st.agentCaps[mode] ?? null)
 }
 
 // Fetch the driver registry's capabilities once on boot so the UI can gate
@@ -262,6 +300,12 @@ export function forgetSessionUi(sessionId: string): void {
   }
   useUiStore.getState().set(p as Partial<UiState>)
 }
+/**
+ * Прочитать состояние интерфейса. Нужен прогонам, которые проверяют не то, что
+ * нарисовано, а то, что решено: например, вернул ли `Ctrl+B` прежний раздел
+ * сайдбара, а не «Сессии».
+ */
+;(window as unknown as { __zaryaUi?: () => UiState }).__zaryaUi = () => useUiStore.getState()
 // Прогонам нужно адресовать КОНКРЕТНУЮ панель: «сырой ли режим» без указания
 // панели — вопрос без ответа, когда панелей несколько.
 ;(

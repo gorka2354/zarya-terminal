@@ -5,13 +5,25 @@ import { openFolderAsPane, openFolderAsTab } from '@/actions/projects'
 import { useBlocksStore } from '@/state/blocksStore'
 import { listLeaves, useSessionsStore } from '@/state/sessionsStore'
 import { getSettings, useSettingsStore } from '@/state/settingsStore'
-import { isRaw, setRaw, useUiStore } from '@/state/uiStore'
+import { activeAgentCaps, isRaw, setRaw, useUiStore } from '@/state/uiStore'
+import { convForSession, useAiStore } from '@/features/ai/aiStore'
 import { getTerminal } from '@/terminal/terminalRegistry'
 import { aiOpenCommandBar, aiOpenPanel } from '@/features/ai/aiBridge'
 import { setIdeMode, toggleIdeMode } from '@/features/ide/ideMode'
 
 function activeSessionId(): string | null {
   return useSessionsStore.getState().activeSessionId()
+}
+
+/** Беседа активной панели — та, которой касаются действия про агента. */
+function activeConversation(): ReturnType<typeof convForSession> {
+  const sid = activeSessionId()
+  return sid ? convForSession(useAiStore.getState(), sid) : undefined
+}
+
+/** Автопилот, запомненный за панелью, — до того как в ней завелась беседа. */
+function paneBypassOf(sessionId: string | null): boolean {
+  return !!sessionId && !!useAiStore.getState().bypassBySession[sessionId]
 }
 
 function withActiveTerm(fn: (handle: NonNullable<ReturnType<typeof getTerminal>>) => void): void {
@@ -61,8 +73,11 @@ export function registerCoreActions(): void {
       title: t('act.sidebar'),
       category: t('act.cat.app'),
       run: () => {
-        const cur = useUiStore.getState().sidebarView
-        ui.set({ sidebarView: cur ? null : 'sessions' })
+        const st = useUiStore.getState()
+        // Разворачиваем ТОТ раздел, что был открыт. Раньше здесь стояло
+        // «сессии» жёстко: человек, работавший с файлами или историей, после
+        // Ctrl+B дважды оказывался не там, где был, и искал своё место заново.
+        ui.set({ sidebarView: st.sidebarView ? null : st.lastSidebarView })
       }
     },
     {
@@ -148,6 +163,80 @@ export function registerCoreActions(): void {
       title: t('act.prevTab'),
       category: t('act.cat.tabs'),
       run: () => sessions.nextTab(-1)
+    },
+
+    /*
+     * ---------------------------------------------------------------- агент
+     *
+     * Всё, что появилось за последние выпуски, жило только в баре: автопилот,
+     * ultracode, перечитывание скиллов, здоровье инструментов. Палитра — то
+     * место, где человек ищет функцию по названию, и её отсутствие там значит
+     * «функции нет» для всех, кто не заметил нужный чип глазами.
+     *
+     * Каждое действие спрашивает у движка, умеет ли он это: `enabled` прячет
+     * то, чего в текущем движке не существует, вместо кнопки, которая молча
+     * ничего не сделает.
+     */
+    {
+      id: 'agent.toggle-bypass',
+      title: t('act.bypass'),
+      category: t('act.cat.agent'),
+      keywords: t('act.bypassKw'),
+      enabled: () => activeAgentCaps()?.bypass === true,
+      run: () => {
+        const conv = activeConversation()
+        const sid = activeSessionId()
+        const on = conv ? !conv.bypass : !paneBypassOf(sid)
+        if (conv) useAiStore.getState().setBypass(conv.id, on)
+        else if (sid) useAiStore.getState().setPaneBypass(sid, on)
+        useUiStore.getState().toast(t(on ? 'act.bypassOn' : 'act.bypassOff'), on ? 'error' : 'info')
+      }
+    },
+    {
+      id: 'agent.toggle-ultracode',
+      title: t('act.ultracode'),
+      category: t('act.cat.agent'),
+      enabled: () => !!activeAgentCaps()?.vendorFlags?.some((f) => f.key === 'ultracode'),
+      run: () => {
+        const ui = useUiStore.getState()
+        const on = !ui.ultracode
+        ui.set({ ultracode: on })
+        const conv = activeConversation()
+        if (conv && conv.engine !== 'builtin')
+          window.zarya.agent.setVendorFlag(conv.engine, conv.id, 'ultracode', on)
+        ui.toast(t(on ? 'act.ultracodeOn' : 'act.ultracodeOff'), 'info')
+      }
+    },
+    {
+      id: 'agent.tools',
+      title: t('act.tools'),
+      category: t('act.cat.agent'),
+      keywords: t('act.toolsKw'),
+      run: () => useUiStore.getState().set({ settingsOpen: true, settingsTab: 'tools' })
+    },
+    {
+      id: 'agent.reload-extras',
+      title: t('act.reloadExtras'),
+      category: t('act.cat.agent'),
+      keywords: t('act.reloadExtrasKw'),
+      run: async () => {
+        const conv = activeConversation()
+        const ui = useUiStore.getState()
+        if (!conv || conv.engine === 'builtin') {
+          // Перечитывать нечего: живой беседы движка нет. Честнее сказать это,
+          // чем сделать вид, что подхватили.
+          ui.toast(t('extras.nothing'), 'info')
+          return
+        }
+        const r = await window.zarya.agent.reloadExtras(conv.engine, conv.id)
+        if (r?.unsupported) ui.toast(t('extras.unsupported'), 'info')
+        else if (r?.ok)
+          ui.toast(
+            t('extras.done', { commands: r.commands?.length ?? 0, mcp: r.mcpServers?.length ?? 0 }),
+            r.errors ? 'error' : 'success'
+          )
+        else ui.toast(t('extras.nothing'), 'info')
+      }
     },
 
     // ------------------------------------------------------------- terminal

@@ -3,6 +3,7 @@ import { installWaitingCall } from '@/features/ai/waitingCall'
 import { t } from '@/lib/i18n'
 import { useEffect, useRef, useState } from 'react'
 import { registerCoreActions } from '@/actions/coreActions'
+import { registerDeskActions } from '@/actions/deskActions'
 import { ActivityBar } from '@/components/ActivityBar'
 import { BottomStrip } from '@/components/BottomStrip'
 import { BlocksPanel } from '@/components/BlocksPanel'
@@ -68,6 +69,9 @@ export default function App(): React.JSX.Element {
       await useSettingsStore.getState().init()
       applyTheme(getTheme(useSettingsStore.getState().settings.appearance.themeId))
       registerCoreActions()
+      // Столы — отдельным списком: он меняется вместе с ними, а не один раз
+      // при запуске.
+      registerDeskActions()
       initKeybindings()
       void seedHistoryCache()
       // Состояние проверки обновлений считает main; окно только подписывается.

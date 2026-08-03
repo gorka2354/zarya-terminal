@@ -91,6 +91,20 @@ export default function SettingsView(): React.JSX.Element | null {
   const ideMode = useSettingsStore((s) => s.settings.ideMode)
   const [tab, setTab] = useState<TabId>('appearance')
 
+  /*
+   * Открыть сразу нужный раздел, если попросили.
+   *
+   * Палитра ведёт в «Инструменты» одним действием — высаживать человека во
+   * «Внешний вид», откуда он ищет раздел сам, значит выполнить просьбу лишь
+   * наполовину. Просьбу гасим сразу: она разовая, а не состояние.
+   */
+  const wantTab = useUiStore((s) => s.settingsTab)
+  useEffect(() => {
+    if (!wantTab) return
+    if (TABS.some((x) => x.id === wantTab)) setTab(wantTab as TabId)
+    useUiStore.getState().set({ settingsTab: undefined })
+  }, [wantTab])
+
   // If the IDE layer is turned off while an IDE tab is open, fall back to base.
   useEffect(() => {
     if (!ideMode && (tab === 'ai' || tab === 'editor')) setTab('appearance')
