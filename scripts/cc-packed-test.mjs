@@ -10,7 +10,10 @@ const userData = mkdtempSync(join(tmpdir(), 'zarya-pk-'))
 const app = await electron.launch({
   executablePath: exe,
   args: [],
-  env: { ...process.env, ZARYA_USER_DATA: userData, NODE_ENV: 'production' }
+  env: { ...process.env, ZARYA_USER_DATA: userData,
+      // Первый экран в прогонах не нужен: он про нового человека, а здесь
+      // проверяется другое — и он вставал бы поверх проверяемого окна.
+      ZARYA_NO_ONBOARDING: '1', NODE_ENV: 'production' }
 })
 const errors = []
 try {

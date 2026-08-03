@@ -15,7 +15,10 @@ try { cpSync(join(root, 'resources'), join(root, 'out', 'main', 'resources'), { 
 const userData = mkdtempSync(join(tmpdir(), 'zarya-qat-'))
 let pass = 0, fail = 0
 const ok = (name, cond, extra) => { if (cond) { pass++; console.log('  ✓', name) } else { fail++; console.log('  ✗', name, extra != null ? '→ ' + JSON.stringify(extra) : '') } }
-const launch = () => electron.launch({ args: [join(root, 'out', 'main', 'index.js')], env: { ...process.env, ZARYA_USER_DATA: userData, NODE_ENV: 'production' } })
+const launch = () => electron.launch({ args: [join(root, 'out', 'main', 'index.js')], env: { ...process.env, ZARYA_USER_DATA: userData,
+      // Первый экран в прогонах не нужен: он про нового человека, а здесь
+      // проверяется другое — и он вставал бы поверх проверяемого окна.
+      ZARYA_NO_ONBOARDING: '1', NODE_ENV: 'production' } })
 
 const dumpS = (page) => page.evaluate(() => window.__zaryaDumpSessions?.())
 const dumpB = (page, sid) => page.evaluate((s) => window.__zaryaDumpBlocks?.(s), sid)

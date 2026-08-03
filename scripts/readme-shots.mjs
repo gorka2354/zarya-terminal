@@ -32,7 +32,10 @@ writeFileSync(
   JSON.stringify({ appearance: { language: lang }, sessions: { restoreOnLaunch: 'none' } }, null, 2)
 )
 
-const app = await electron.launch({ args: [join(root, 'out', 'main', 'index.js')], env: { ...process.env, ZARYA_USER_DATA: userData, NODE_ENV: 'production' } })
+const app = await electron.launch({ args: [join(root, 'out', 'main', 'index.js')], env: { ...process.env, ZARYA_USER_DATA: userData,
+      // Первый экран в прогонах не нужен: он про нового человека, а здесь
+      // проверяется другое — и он вставал бы поверх проверяемого окна.
+      ZARYA_NO_ONBOARDING: '1', NODE_ENV: 'production' } })
 try {
   const page = await app.firstWindow()
   await page.waitForLoadState('domcontentloaded')

@@ -18,7 +18,10 @@ mkdirSync(userData, { recursive: true })
 async function launch() {
   return electron.launch({
     args: [join(root, 'out', 'main', 'index.js')],
-    env: { ...process.env, ZARYA_USER_DATA: userData, NODE_ENV: 'production' }
+    env: { ...process.env, ZARYA_USER_DATA: userData,
+      // Первый экран в прогонах не нужен: он про нового человека, а здесь
+      // проверяется другое — и он вставал бы поверх проверяемого окна.
+      ZARYA_NO_ONBOARDING: '1', NODE_ENV: 'production' }
   })
 }
 

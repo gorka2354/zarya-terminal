@@ -4,7 +4,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 const root = process.cwd()
 const userData = mkdtempSync(join(tmpdir(), 'zarya-kb-'))
-const app = await electron.launch({ args: [join(root, 'out', 'main', 'index.js')], env: { ...process.env, ZARYA_USER_DATA: userData, NODE_ENV: 'production' } })
+const app = await electron.launch({ args: [join(root, 'out', 'main', 'index.js')], env: { ...process.env, ZARYA_USER_DATA: userData,
+      // Первый экран в прогонах не нужен: он про нового человека, а здесь
+      // проверяется другое — и он вставал бы поверх проверяемого окна.
+      ZARYA_NO_ONBOARDING: '1', NODE_ENV: 'production' } })
 const CMD = 'Выполни ровно одну bash-команду: curl -s https://api.github.com/zen . Больше ничего.'
 const dump = (page) => page.evaluate(() => window.__zaryaDumpConv?.())
 const gated = (d) => (d?.pendingTools || []).some((t) => t.kind !== 'question' && !t.settled)

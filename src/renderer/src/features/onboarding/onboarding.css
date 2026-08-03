@@ -1,0 +1,179 @@
+/* Первый экран. Тот же язык, что у остальных окон Зари: пиксельная марка,
+   холодный фон, единственное тёплое пятно — кнопка, на которую уйдёт Enter. */
+.zy-ob {
+  width: min(560px, 92vw);
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.5);
+}
+.zy-ob-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.zy-ob-title {
+  font-family: var(--font-tech);
+  font-size: 16px;
+  letter-spacing: 0.06em;
+  color: var(--fg);
+}
+.zy-ob-step {
+  font-family: var(--font-tech);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--fg-faint);
+}
+.zy-ob-spacer {
+  flex: 1;
+}
+.zy-ob-body {
+  padding: 14px;
+  overflow: auto;
+}
+.zy-ob-text {
+  margin: 0 0 10px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--fg-dim);
+}
+.zy-ob-text--quiet {
+  color: var(--fg-faint);
+  font-size: 12px;
+}
+
+/* найденные агенты */
+.zy-ob-clis {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.zy-ob-cli {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: var(--fg-dim);
+  white-space: nowrap;
+}
+.zy-ob-cli--on {
+  border-color: color-mix(in srgb, var(--success) 45%, var(--border));
+  color: var(--success);
+}
+
+/* чего нет — с командой установки или адресом проекта */
+.zy-ob-install {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.zy-ob-install-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.zy-ob-cmd {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg-dim);
+  background: var(--bg-elev1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 3px 7px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: all;
+}
+
+/* развилка «база или надстройка» */
+.zy-ob-choice {
+  display: flex;
+  gap: 8px;
+  margin: 4px 0 10px;
+  flex-wrap: wrap;
+}
+.zy-ob-card {
+  flex: 1 1 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elev1);
+  color: inherit;
+  cursor: pointer;
+}
+.zy-ob-card--on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-elev1));
+}
+.zy-ob-card-title {
+  font-size: 13px;
+  color: var(--fg);
+}
+.zy-ob-card-sub {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--fg-faint);
+}
+
+.zy-ob-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--border);
+}
+.zy-ob-btn {
+  padding: 5px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg-dim);
+  font: inherit;
+  font-family: var(--font-tech);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.zy-ob-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.zy-ob-btn--go {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+  font-weight: 600;
+}
+.zy-ob-btn--go:hover {
+  color: var(--bg);
+  filter: brightness(1.08);
+}
+/* Выход не прячется: тому, кому это не нужно, не придётся его искать. */
+.zy-ob-btn--quiet {
+  border-color: transparent;
+  color: var(--fg-faint);
+}
+.zy-ob-btn--slim {
+  padding: 3px 10px;
+  font-size: 11px;
+  flex-shrink: 0;
+}

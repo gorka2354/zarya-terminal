@@ -93,6 +93,9 @@ const launch = (pick) =>
     env: {
       ...process.env,
       ZARYA_USER_DATA: userData,
+      // Первый экран в прогонах не нужен: он про нового человека, а здесь
+      // проверяется другое — и он вставал бы поверх проверяемого окна.
+      ZARYA_NO_ONBOARDING: '1',
       ZARYA_NO_UPDATE_CHECK: '1',
       ...(pick ? { ZARYA_STT_PICK_DIR: pick } : {}),
       NODE_ENV: 'production'

@@ -116,7 +116,11 @@ export const DEFAULT_SETTINGS: Settings = {
   },
   keybindings: DEFAULT_KEYBINDINGS,
   bookmarks: [],
-  ideMode: false
+  ideMode: false,
+  // Первый экран показывается ровно один раз — и только тому, кто ставит Зарю
+  // впервые. У тех, кто обновляется, настройки уже есть, и знакомить их заново
+  // значит отнять минуту у человека, который всё это и так знает.
+  onboarded: false
 }
 
 /** Ollama default endpoint (local inference). */

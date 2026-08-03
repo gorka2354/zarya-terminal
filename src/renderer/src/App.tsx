@@ -27,6 +27,7 @@ import CommandPalette from '@/features/palette/CommandPalette'
 import QuickOpen from '@/features/palette/QuickOpen'
 import { initKeybindings } from '@/features/palette/keybindings'
 import SettingsView from '@/features/settings/SettingsView'
+import { Onboarding } from '@/features/onboarding/Onboarding'
 import UpdateView from '@/features/updates/UpdateView'
 import { useContextMenu, type MenuItem } from '@/components/ContextMenu'
 import { useUpdateStore } from '@/features/updates/updateStore'
@@ -169,6 +170,10 @@ export default function App(): React.JSX.Element {
       <LaunchPad />
       <AskText />
       <ModelNews />
+      {/* Первый экран. Поверх всего и до всего: пока он открыт, знакомство
+          важнее любого другого окна — но Esc и «Пропустить» закрывают его
+          навсегда. */}
+      <Onboarding />
       <Toasts />
     </div>
   )

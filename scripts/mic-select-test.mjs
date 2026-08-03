@@ -40,7 +40,10 @@ const app = await electron.launch({
     '--use-fake-device-for-media-stream',
     '--use-fake-ui-for-media-stream'
   ],
-  env: { ...process.env, ZARYA_USER_DATA: userData, NODE_ENV: 'production' }
+  env: { ...process.env, ZARYA_USER_DATA: userData,
+      // Первый экран в прогонах не нужен: он про нового человека, а здесь
+      // проверяется другое — и он вставал бы поверх проверяемого окна.
+      ZARYA_NO_ONBOARDING: '1', NODE_ENV: 'production' }
 })
 
 try {

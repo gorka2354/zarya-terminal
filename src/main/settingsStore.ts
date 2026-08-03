@@ -25,6 +25,25 @@ export class SettingsStore {
   async init(): Promise<void> {
     const stored = await readJson<Partial<Settings>>(this.file, {})
     this.settings = mergeDeep(DEFAULT_SETTINGS, stored)
+    /*
+     * Первый экран — только тем, кто ставит Зарю впервые.
+     *
+     * Признак «первый запуск» — отсутствие файла настроек, а не отсутствие
+     * поля в нём: у тех, кто обновляется с прошлой версии, файл есть, а поля
+     * `onboarded` в нём нет, и по одному лишь значению по умолчанию мы
+     * поздоровались бы со всеми заново. Знакомить человека с программой,
+     * которой он пользуется полгода, — способ выглядеть глупо.
+     */
+    if (Object.keys(stored).length) this.settings.onboarded = true
+    /*
+     * Прогоны стартуют с чистого профиля — и для первого экрана это «новый
+     * человек», из-за чего он встаёт поверх проверяемого окна. Гасим его тем же
+     * способом, что и проверку обновлений: явным признаком харнесса. Ставится
+     * он только в скриптах; сам первый экран проверяется отдельным прогоном,
+     * который этого флага не задаёт (см. scripts/onboarding-test.mjs).
+     */
+    if (process.env.ZARYA_NO_ONBOARDING || process.env.ZARYA_FAKE_AGENT)
+      this.settings.onboarded = true
     this.secrets = await readJson<Record<string, string>>(this.secretsFile, {})
   }
 
