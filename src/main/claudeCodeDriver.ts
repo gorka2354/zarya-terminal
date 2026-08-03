@@ -334,6 +334,8 @@ interface Session {
   query: Query
   input: ReturnType<typeof createInputQueue>
   abort: AbortController
+  /** Папка, в которой работает эта беседа (нужна наблюдателю за скиллами и MCP). */
+  cwd?: string
   /** toolUseID -> resolver for a canUseTool call awaiting the user's decision. */
   perms: Map<string, (r: PermissionResult | null) => void>
   /** toolUseID -> the AskUserQuestion questions, so resolveQuestion rebuilds the answer envelope. */
@@ -658,6 +660,11 @@ export class ClaudeCodeDriver implements AgentDriver {
       abort,
       perms,
       pendingQuestions,
+      // В какой папке эта беседа. Нужно не самой сессии, а наблюдателю за
+      // скиллами и MCP: `.mcp.json` и `.claude/skills` лежат в проекте, и
+      // следить надо за папками ПАНЕЛЕЙ, а не за папкой, из которой запустили
+      // приложение.
+      cwd: opts.cwd,
       bypass: !!opts.bypass,
       effort: effortOverride,
       model: opts.model,
@@ -1057,10 +1064,35 @@ export class ClaudeCodeDriver implements AgentDriver {
    * спрашиваем живую сессию, если она есть, и поднимаем холостую, только когда
    * бесед нет вовсе — до первого запроса человека список уже нужен.
    */
-  async listCommands(): Promise<import('@shared/agentCommands').AgentCommand[]> {
-    const entry = this.sessions.entries().next().value
-    if (entry) {
-      const list = await this.commandsOf(entry[1].query)
+  /** В какой папке работает беседа. Пусто — беседы нет или она уже закрыта. */
+  sessionCwd(requestId: string): string | undefined {
+    return this.sessions.get(requestId)?.cwd
+  }
+
+  /**
+   * Команды ЭТОЙ беседы.
+   *
+   * Раньше бралась первая сессия из Map — то есть при четырёх панелях в трёх
+   * проектах список приходил от случайной из них, и человек видел в «/» скиллы
+   * чужого репозитория. Проектные скиллы лежат в `.claude/skills` рядом с
+   * кодом, поэтому набор у панелей разный, и спрашивать надо ту, в которой
+   * человек печатает.
+   *
+   * Беседа не названа: берём живую только если она ОДНА — тогда это не догадка,
+   * а единственный возможный ответ. Живых несколько — не гадаем, поднимаем
+   * пустой query: список общих команд движка честнее случайного проектного.
+   * Совсем ничего нет — тоже пустой query, общие команды полезнее пустоты.
+   */
+  async listCommands(
+    requestId?: string
+  ): Promise<import('@shared/agentCommands').AgentCommand[]> {
+    const live = requestId
+      ? this.sessions.get(requestId)
+      : this.sessions.size === 1
+        ? this.sessions.values().next().value
+        : undefined
+    if (live) {
+      const list = await this.commandsOf(live.query)
       if (list.length) return list
     }
     const fresh = await this.withIdleQuery(async (query) => this.commandsOf(query))
@@ -1078,15 +1110,28 @@ export class ClaudeCodeDriver implements AgentDriver {
    * Возвращает то, что изменилось, — окно должно сказать это словами, а не
    * молча обновить список: человек нажал «подхватить» и обязан узнать, нашлось
    * ли что-нибудь.
+   *
+   * Перечитывает ТУ беседу, из которой нажали. Раньше бралась первая сессия из
+   * Map: человек ставил MCP-сервер в одном проекте, нажимал «подхватить» в его
+   * панели, а перечитывалась соседняя — и в его собственной ничего не менялось.
    */
-  async reloadExtras(): Promise<{
+  async reloadExtras(requestId?: string): Promise<{
     ok: boolean
     commands: import('@shared/agentCommands').AgentCommand[]
     plugins: number
     mcpServers: { name: string; status?: string }[]
     errors: number
   }> {
-    const entry = this.sessions.entries().next().value
+    // Беседа не названа — перечитываем живую только если она ОДНА. Раньше
+    // бралась первая из Map: при нескольких панелях это была лотерея, и
+    // человек нажимал «подхватить» в своей, а перечитывалась соседняя.
+    const entry: [string, Session] | undefined = requestId
+      ? this.sessions.has(requestId)
+        ? [requestId, this.sessions.get(requestId)!]
+        : undefined
+      : this.sessions.size === 1
+        ? this.sessions.entries().next().value
+        : undefined
     // Без живой сессии перечитывать нечего: следующая и так стартует со свежим
     // диском. Честно говорим «нечего перечитывать», а не рисуем успех.
     if (!entry) return { ok: false, commands: [], plugins: 0, mcpServers: [], errors: 0 }

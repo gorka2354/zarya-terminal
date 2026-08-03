@@ -61,7 +61,17 @@ export interface AgentDriver {
    * притворяться, что их нет. Отсутствие метода и пустой список — разные вещи,
    * и окно скажет об этом разными словами.
    */
-  listCommands?(): Promise<import('@shared/agentCommands').AgentCommand[]>
+  listCommands?(
+    requestId?: string
+  ): Promise<import('@shared/agentCommands').AgentCommand[]>
+  /**
+   * В какой папке работает беседа.
+   *
+   * Нужно не самой беседе, а наблюдателю за скиллами и MCP: `.mcp.json` и
+   * `.claude/skills` лежат в проекте, поэтому следить надо за папками ПАНЕЛЕЙ,
+   * а не за папкой, из которой запустили приложение.
+   */
+  sessionCwd?(requestId: string): string | undefined
   /**
    * Состав и здоровье MCP-серверов ОДНОЙ беседы (гейт: `capabilities.mcp`).
    *
@@ -101,7 +111,7 @@ export interface AgentDriver {
    * существует ровно для того, чтобы окно знало, что движок умеет, без
    * догадок по типу.
    */
-  reloadExtras?(): Promise<AgentExtrasReload>
+  reloadExtras?(requestId?: string): Promise<AgentExtrasReload>
   setModel?(requestId: string, model: string | undefined): void
   setEffort?(requestId: string, effort: string | undefined): void
   setBypass?(requestId: string, bypass: boolean): void

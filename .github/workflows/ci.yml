@@ -113,3 +113,10 @@ jobs:
       # серверы по-настоящему).
       - name: MCP panel
         run: xvfb-run -a node scripts/mcp-panel-test.mjs
+
+      # Команды, перечитывание и наблюдатель — по СВОЕЙ панели: две беседы в
+      # разных папках не должны отвечать друг за друга, а проектные скиллы
+      # обязаны попадать под наблюдение (папка процесса к ним отношения не
+      # имеет).
+      - name: Extras routing
+        run: xvfb-run -a node scripts/extras-routing-test.mjs

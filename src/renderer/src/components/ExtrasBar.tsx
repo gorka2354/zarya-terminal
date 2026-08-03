@@ -16,7 +16,14 @@ import './extrasbar.css'
  * агента — значит менять правила посреди хода: человек одобрял команду, зная
  * один набор, а получил другой. Поэтому здесь предложение и одно нажатие.
  */
-export function ExtrasBar({ engine }: { engine: AgentEngine }): React.JSX.Element | null {
+export function ExtrasBar({
+  engine,
+  requestId
+}: {
+  engine: AgentEngine
+  /** Беседа этой панели: перечитать надо ЕЁ, а не соседнюю. */
+  requestId?: string
+}): React.JSX.Element | null {
   // Подписка на язык: без неё надписи этого компонента сменились бы не в
   // момент переключения, а при следующей перерисовке по другой причине.
   useLang()
@@ -31,7 +38,7 @@ export function ExtrasBar({ engine }: { engine: AgentEngine }): React.JSX.Elemen
   const pick = async (): Promise<void> => {
     setBusy(true)
     try {
-      const r = await window.zarya.agent.reloadExtras(engine)
+      const r = await window.zarya.agent.reloadExtras(engine, requestId)
       const ui = useUiStore.getState()
       if (r?.unsupported) {
         // Движок так не умеет — говорим прямо, а не делаем вид, что подхватили.

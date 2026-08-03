@@ -469,11 +469,16 @@ export function registerIpc(ctx: IpcContext): void {
    * поздно: человек как раз в этот момент ставит MCP-сервер и получает от
    * агента «перезапустите сессию».
    */
-  ipcMain.handle(CH.agentReloadExtras, async (_e, engine: AgentEngine) => {
-    const driver = driverFor(engine)
-    if (!driver?.reloadExtras) return { ok: false, unsupported: true }
-    return driver.reloadExtras()
-  })
+  ipcMain.handle(
+    CH.agentReloadExtras,
+    async (_e, engine: AgentEngine, requestId?: string) => {
+      const driver = driverFor(engine)
+      if (!driver?.reloadExtras) return { ok: false, unsupported: true }
+      // Перечитываем ТУ беседу, из которой нажали: человек ставит сервер в
+      // одном проекте и ждёт, что подхватит его панель, а не соседняя.
+      return driver.reloadExtras(requestId)
+    }
+  )
   /**
    * Состав инструментов ОДНОЙ беседы.
    *
@@ -509,16 +514,18 @@ export function registerIpc(ctx: IpcContext): void {
       return driver.mcpToggle(requestId, name, enabled)
     }
   )
-  ipcMain.handle(CH.agentListCommands, async (_e, engine: AgentEngine) => {
+  ipcMain.handle(CH.agentListCommands, async (_e, engine: AgentEngine, requestId?: string) => {
+    const driver = driverFor(engine)
     // Спросили команды — значит панель работает с агентом: самое время начать
-    // замечать, что на диске появляется новое.
-    extrasWatcher.start(process.cwd(), () =>
+    // замечать, что на диске появляется новое. Папку берём У БЕСЕДЫ, а не у
+    // процесса: проектные скиллы и `.mcp.json` лежат рядом с кодом панели, а
+    // папка запуска приложения к ним отношения не имеет.
+    extrasWatcher.watch(requestId ? driver?.sessionCwd?.(requestId) : undefined, () =>
       getWindow()?.webContents.send(CH.agentExtrasChanged)
     )
-    const driver = driverFor(engine)
     if (!driver?.listCommands) return { commands: [], source: 'unknown' }
     try {
-      const commands = await driver.listCommands()
+      const commands = await driver.listCommands(requestId)
       return { commands, source: 'engine' }
     } catch (e) {
       return {

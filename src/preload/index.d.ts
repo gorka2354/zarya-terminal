@@ -134,14 +134,20 @@ export interface ZaryaApi {
     setEffort(engine: AgentEngine, requestId: string, effort: string | undefined): void
     setVendorFlag(engine: AgentEngine, requestId: string, key: string, value: unknown): void
     listModels(engine: AgentEngine): Promise<AgentModelInfo[]>
-    /** Команды движка для палитры «/». */
-    listCommands(engine: AgentEngine): Promise<{
+    /**
+     * Команды движка для палитры «/» — из ЭТОЙ беседы: проектные скиллы лежат
+     * рядом с кодом, поэтому у панелей в разных репозиториях списки разные.
+     */
+    listCommands(
+      engine: AgentEngine,
+      requestId?: string
+    ): Promise<{
       commands: Array<{ name: string; description: string; argumentHint?: string; aliases?: string[] }>
       source: 'engine' | 'unknown'
       note?: string
     }>
-    /** Перечитать скиллы/плагины/MCP на живой сессии, не перезапуская её. */
-    reloadExtras(engine: AgentEngine): Promise<{
+    /** Перечитать скиллы/плагины/MCP ЭТОЙ беседы, не перезапуская её. */
+    reloadExtras(engine: AgentEngine, requestId?: string): Promise<{
       ok: boolean
       unsupported?: boolean
       commands?: Array<{ name: string; description: string; argumentHint?: string }>

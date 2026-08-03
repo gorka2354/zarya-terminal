@@ -620,9 +620,18 @@ ${prev}`
     [cmdList, cmdQuery]
   )
 
+  /*
+   * Список команд принадлежит БЕСЕДЕ, а не приложению: проектные скиллы лежат
+   * в `.claude/skills` рядом с кодом, и у панели в другом репозитории они
+   * другие. Поэтому кэш сбрасывается при смене беседы или движка — иначе в «/»
+   * остались бы скиллы соседнего проекта, то есть список врал бы.
+   */
+  const cmdOwner = useRef<string>('')
   const loadCommands = (): void => {
-    if (cmdLoaded.current) return
+    const owner = `${mode}:${activeConv?.id ?? ''}`
+    if (cmdLoaded.current && cmdOwner.current === owner) return
     cmdLoaded.current = true
+    cmdOwner.current = owner
     const engine = mode === 'zarya' || mode === 'shell' ? null : (mode as AgentEngine)
     if (!engine) {
       setCmdSource('unknown')
@@ -630,7 +639,7 @@ ${prev}`
     }
     setCmdLoading(true)
     void window.zarya.agent
-      .listCommands(engine)
+      .listCommands(engine, activeConv?.id)
       .then((r) => {
         setCmdList(cleanCommands(r?.commands))
         setCmdSource(r?.source === 'engine' ? 'engine' : 'unknown')
@@ -1268,7 +1277,9 @@ ${prev}`
       {/* Появились новые скиллы или MCP — предложить подхватить без перезапуска
           сессии. Рядом со списком команд: обе полосы про состав того, чем агент
           умеет пользоваться. */}
-      {mode !== 'zarya' && mode !== 'shell' && <ExtrasBar engine={mode as AgentEngine} />}
+      {mode !== 'zarya' && mode !== 'shell' && (
+        <ExtrasBar engine={mode as AgentEngine} requestId={activeConv?.id} />
+      )}
       {/* Список команд движка: вырастает НАД строкой, строка остаётся на месте
           и остаётся полем — человек продолжает печатать, список сужается. */}
       {cmdQuery !== null && (

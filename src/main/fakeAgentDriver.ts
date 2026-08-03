@@ -103,6 +103,9 @@ export class FakeAgentDriver implements AgentDriver {
               ? { forkBase: { sessionId: opts.resume, at: opts.resumeAt } }
               : {})
           }
+    // Папка беседы: по ней прогон проверяет, что команды и перечитывание
+    // приходят от СВОЕЙ панели, а наблюдатель смотрит в её проект.
+    this.cwds.set(requestId, opts.cwd ?? '')
     this.sessions.set(requestId, session)
     // init immediately (like a real driver's system:init).
     this.emit(requestId, {
@@ -273,6 +276,44 @@ export class FakeAgentDriver implements AgentDriver {
   setEffort(): void {}
   setBypass(): void {}
   setVendorFlag(): void {}
+
+  /** Папка каждой беседы — источник ответов sessionCwd/listCommands. */
+  private cwds = new Map<string, string>()
+
+  sessionCwd(requestId: string): string | undefined {
+    return this.cwds.get(requestId)
+  }
+
+  /**
+   * Команды ЭТОЙ беседы.
+   *
+   * Одна общая — «/fake-common», и одна именная по папке — «/proj-<папка>».
+   * Именно вторая доказывает маршрутизацию: две панели в разных проектах
+   * обязаны получить разные списки, а не один от случайной сессии.
+   */
+  async listCommands(
+    requestId?: string
+  ): Promise<import('@shared/agentCommands').AgentCommand[]> {
+    const cwd = requestId ? this.cwds.get(requestId) : undefined
+    const leaf = (cwd ?? '').split(/[\\/]/).filter(Boolean).pop()
+    return [
+      { name: 'fake-common', description: 'команда, общая для всех панелей' },
+      ...(leaf ? [{ name: `proj-${leaf}`, description: `команда проекта ${leaf}` }] : [])
+    ]
+  }
+
+  /** Перечитать «диск» ЭТОЙ беседы — в ответе видно, чью именно. */
+  async reloadExtras(requestId?: string): Promise<import('@shared/types').AgentExtrasReload> {
+    if (!requestId || !this.started.has(requestId))
+      return { ok: false, commands: [], plugins: 0, mcpServers: [], errors: 0 }
+    return {
+      ok: true,
+      commands: await this.listCommands(requestId),
+      plugins: 0,
+      mcpServers: [{ name: `mcp-of-${this.cwds.get(requestId)?.split(/[\\/]/).pop() ?? '?'}` }],
+      errors: 0
+    }
+  }
 
   /**
    * Состав инструментов — разыгранный, но со всеми состояниями сразу.

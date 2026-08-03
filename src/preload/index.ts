@@ -122,10 +122,15 @@ const api = {
     setVendorFlag: (engine: AgentEngine, requestId: string, key: string, value: unknown) =>
       ipcRenderer.send(CH.agentSetVendorFlag, engine, requestId, key, value),
     listModels: (engine: AgentEngine) => ipcRenderer.invoke(CH.agentListModels, engine),
-    /** Команды движка для палитры «/» — со сведениями о том, откуда список. */
-    listCommands: (engine: AgentEngine) => ipcRenderer.invoke(CH.agentListCommands, engine),
-    /** Перечитать скиллы/плагины/MCP, не перезапуская сессию. */
-    reloadExtras: (engine: AgentEngine) => ipcRenderer.invoke(CH.agentReloadExtras, engine),
+    /**
+     * Команды движка для палитры «/» — со сведениями о том, откуда список.
+     * `requestId` называет беседу: у панелей в разных проектах скиллы разные.
+     */
+    listCommands: (engine: AgentEngine, requestId?: string) =>
+      ipcRenderer.invoke(CH.agentListCommands, engine, requestId),
+    /** Перечитать скиллы/плагины/MCP ЭТОЙ беседы, не перезапуская сессию. */
+    reloadExtras: (engine: AgentEngine, requestId?: string) =>
+      ipcRenderer.invoke(CH.agentReloadExtras, engine, requestId),
     /** На диске появились новые скиллы/плагины/MCP. */
     onExtrasChanged: (cb: () => void) => on(CH.agentExtrasChanged, cb),
     /**
