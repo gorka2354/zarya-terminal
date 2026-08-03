@@ -177,6 +177,45 @@ description only in `displayName` / `input.title`, never in a top-level title, s
 label synthesized from the tool name alone read «Bash» or «Edit» — a card describing
 nothing, in the surface that is always on screen.
 
+### Session allowances, and the floor beneath them
+
+Between "ask every time" and AUTOPILOT there is a third button on the card: **allow
+for this session**. It creates a rule scoped to the conversation, and the card shows
+the rule verbatim before you press it — "for the rest of this session, don't ask
+about: `git status`" — so an allowance is never wider than what you read
+(`src/shared/allowRules.ts`).
+
+Underneath both sits a floor that neither an allowance nor AUTOPILOT can lift:
+recursive deletes, `git push --force`, `DROP TABLE` and their kin are always shown
+before they run (`src/shared/irreversible.ts`, `tests/irreversible.test.ts`).
+
+This is **not** a sandbox, and the interface never calls it one: there is no OS
+isolation here. It is a promise about what Zarya always puts in front of you — the
+only claim the mechanism can actually back.
+
+### MCP servers: state, cost, and whose they are
+
+**Settings → Tools** shows the MCP servers of a chosen pane: state as the engine
+names it (`connected` / `failed` / `needs-auth` / `pending` / `disabled`), the
+failure reason verbatim, and what each server's tools cost in tokens per request
+(`getContextUsage()`, folded per server). Reconnect and turn-off act on the live
+session; turning one off writes to Claude Code's own `~/.claude.json` for the current
+project, and the panel says so.
+
+Two rules shape this surface:
+
+- **A pane, not the app.** `.mcp.json` is per project and the context window belongs
+  to a session, so the panel always names whose tools it is showing and offers a pane
+  selector. There is no such thing as "the tools of Zarya".
+- **Secrets never cross IPC.** `McpServerStatus.config` carries `env` (stdio) and
+  `headers` (http/sse), and homemade servers often put a key straight in the URL. The
+  main process builds a narrow row itself — name, transport, host, version, tool count
+  — and sends only that (`src/shared/mcp.ts`, `tests/mcp.test.ts`). Filtering in the
+  renderer would mean the secret already crossed.
+
+A health check really does start the servers, so Zarya never runs one on its own: with
+no live pane you get the previous snapshot, timestamped, and a **Check** button.
+
 ## Where the assistant is reachable
 
 - **AI panel** (`Ctrl+Shift+A`) — the main chat surface.

@@ -5,6 +5,89 @@ All notable changes to Zarya are documented here. This project uses
 
 Русская версия этого файла — [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## 0.7.3 — "Watch" (2026-08-03)
+
+The theme of this release: **your attention**. Four panes, each with its own agent
+and its own autopilot — and the better that works, the more often you cannot tell
+which one has stopped and is waiting for a keypress, or which of your tools broke
+hours ago. This release is about Zarya keeping watch for you.
+
+### Added
+
+- **You can see who is working and who is waiting for you.** Both used to count as
+  one state and carried one word, "running". The day looked like this: send a task,
+  walk away, come back ten minutes later — nine of them the agent spent waiting for
+  a single keypress.
+
+  Now they are two states. Waiting agents come first in the sidebar, with how long
+  they have waited ("waiting for you · 4 min") and the colour of action; working
+  ones stay a calm green. The section header counts the waiting. A waiting pane
+  pulses — slowly and faintly, and the pulse fades in the pane you are already
+  looking at.
+
+  It is computed strictly from actual permission requests, with no guessing from
+  output: an indicator lies more easily than anything else, and "ready" instead of
+  "stuck" is the worst lie it can tell.
+
+- **Zarya calls you when an agent stops.** A system notification and a taskbar
+  highlight — only when the window is **not focused**, and only on the transition
+  into waiting, not on every message. Announcing what is already on screen spends
+  the trust notifications need, and noise gets muted together with the signal.
+  Clicking raises the window. One checkbox turns it off.
+
+- **Engine commands via `/`.** The list comes from the agent itself — `/review`,
+  `/compact`, your own skills — instead of a constant in our source that would age
+  with every release of theirs. An engine that does not name its commands says so
+  rather than showing an empty list.
+
+- **"Allow for this session" — with a floor that does not lift.** Between "ask about
+  everything" and "ask about nothing" there was nothing. The tool card now has a
+  third button, and next to it the exact rule it will create: "for the rest of this
+  session, don't ask about: `git status`".
+
+  What that rule will never cover: `rm -rf`, `git push --force`, `DROP TABLE` and
+  their kin are shown before every run, autopilot or not. This is not a sandbox and
+  we do not call it one — there is no OS isolation here, only a promise about what
+  Zarya always puts in front of you.
+
+- **New skills and MCP servers are picked up without a restart.** The usual answer
+  after installing one is "restart your session", which means "lose the conversation
+  and start over". Zarya notices that something new appeared on disk and offers to
+  reread it: one click, same session, context intact.
+
+- **A Tools tab: what is alive, and what it costs you.** The state of the MCP servers
+  of a chosen pane — working, not responding, sign-in needed, off — and on a failure
+  **the engine's own words**, not our paraphrase. Next to it: reconnect and turn off.
+
+  Measured on a working machine the day this shipped: of fourteen servers three had
+  quietly died, four were waiting for a sign-in, and the tool descriptions took
+  **~15,800 tokens out of every request** — nearly half the context in use. Until
+  now there was exactly one way to learn this: run `claude mcp list` by hand.
+
+  The panel names **whose** tools it is showing: `.mcp.json` is per project and the
+  context window belongs to a session, so two panes in different repositories see
+  different sets. For a server waiting on a sign-in, Zarya does not offer
+  "reconnect" — that would not help; it gives you the command to run,
+  `claude mcp login "name"`, ready to copy.
+
+### Fixed
+
+- **Right-clicking the microphone opened two overlapping menus** — the device picker
+  and the pane menu ("Copy", "Split right", "Close pane"), both waiting for a
+  decision. The button suppressed the browser's own action but not the event's
+  bubbling, so it reached the pane. The bug shipped in 0.7.2, and the test missed it
+  because it read the first menu in the document — which turned out to be the other
+  one.
+
+### Tested
+
+- 484 unit checks across 40 files and 53 runs against the live application; ten of
+  them now run in CI, including "who is waiting", the floor under autopilot and the
+  health of MCP servers.
+- A separate live run against a real configuration (`npm run qa:tools-live`): it
+  verifies that no keys or headers reach the screen, and that the sign-in command
+  copies out working — the name `claude.ai Notion` contains a space and is quoted.
+
 ## 0.7.2 — "Callsign" (2026-08-02)
 
 ### Added

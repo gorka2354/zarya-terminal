@@ -39,6 +39,15 @@ no account, no telemetry.
   you can point at one with the mouse; drag a pane by its header to move it next to
   another (the edge you aim at lights up) or into the list to give it a desk of its own —
   without killing the process.
+- **👁 Who is waiting for you** — a working agent and an agent standing at a permission
+  prompt are two different states, and Zarya says so: the sidebar counts who is
+  **waiting** and for how long, the waiting pane pulses, and when the window is not in
+  focus you get one system notification per stop — never a stream. Turned off with a
+  single checkbox.
+- **🧰 Tools you can see** — **Settings → Tools** lists the MCP servers of a chosen pane
+  with their real state, the engine's own words for a failure, what each one costs you
+  in tokens **per request**, and buttons to reconnect or turn one off. The tools of 14
+  servers can quietly eat half your context; now that number is on screen.
 - **🌅 Model & effort** — a console for picking the model and reasoning
   effort (`LOW` → `MAX`), with every current Claude version, live-switchable
   mid-session.
@@ -97,8 +106,20 @@ native GUI front-end for the agent — no terminal-scraping, no second chat wind
   change applies from your next message.
 - **Fuel gauge** — a real read of your 5-hour / 7-day subscription utilization, plus the
   active model and effort, right above the input.
+- **Engine commands via `/`** — type a slash and the list comes from the agent itself
+  (`/review`, `/compact`, your own skills), not from a constant in our source that ages
+  with every release. An engine that does not name its commands says so instead of
+  showing an empty list.
 - **Bypass mode** — an optional switch that auto-approves ordinary tools (AskUserQuestion
   still always asks). Off by default; a one-click chip, live-toggleable.
+- **"Allow for this session" — with a floor** — between "ask every time" and "ask
+  nothing" there is now a third button, and it shows the exact rule it will create.
+  What it will never cover: `rm -rf`, `git push --force`, `DROP TABLE` and their kin
+  are shown before every run, autopilot or not. This is not a sandbox and we do not
+  call it one — there is no OS isolation here, only a promise about what Zarya always
+  puts in front of you.
+- **New skills and MCP without a restart** — install a server or a skill and the running
+  session picks it up on one click, keeping the conversation. No "please restart".
 
 Prefer to bring your own key? Zarya also has a **built-in provider agent** that talks to
 **Anthropic**, **OpenAI**, **Ollama** (local inference, incl. a remote Ollama box on your
@@ -394,8 +415,8 @@ Details: [docs/shell-integration.md](docs/shell-integration.md).
 
 ## Tests
 
-Numbers as of 0.7.2: **437 unit checks** (plus 6 skipped on this platform) across
-37 files and **48 end-to-end runs**
+Numbers as of 0.7.3: **484 unit checks** (plus 6 skipped on this platform) across
+40 files and **53 end-to-end runs**
 that drive the real application.
 
 **Unit** (`tests/`, vitest) — the pure logic where a silent mistake costs the most:
@@ -408,8 +429,10 @@ shell-profile validation, and the completeness of both language dictionaries.
 throwaway profile, never touching your sessions or settings. Panes (140 checks),
 the language switch across every screen (10), download progress and the tool clock
 (16), the agent engines on a protocol-accurate fake driver (21), the model picker
-(41), the update page (27), menus (27), key badges (9). Plus `npm run perf`, which
-measures drag, streaming and gutter latency against fixed budgets.
+(41), the update page (27), menus (27), key badges (9), who is waiting for you and
+when Zarya may call (11), the floor under autopilot (12), and the health of the
+agent's MCP servers (27). Plus `npm run perf`, which measures drag, streaming and
+gutter latency against fixed budgets.
 
 ```bash
 npm test              # unit tests
@@ -418,11 +441,13 @@ npm run perf          # performance budgets
 ```
 
 **What CI does and does not do.** Every push runs typecheck, the unit tests and a
-build on Ubuntu and Windows, plus seven end-to-end runs on a real Electron window
+build on Ubuntu and Windows, plus ten end-to-end runs on a real Electron window
 under xvfb: panes, the language switch, download progress, the agent engines on a
 fake driver, importing a speech model from disk (folder recognition and its
 refusals — no weights are downloaded), the key router (`Enter` in a rename dialog
-must not also approve a tool waiting in a pane), and sidebar folding. The rest — the speech
+must not also approve a tool waiting in a pane), sidebar folding, the difference
+between "working" and "waiting for you", the floor under autopilot, and the MCP
+health panel. The rest — the speech
 engine on real weights, the real Claude Code driver, the update page, performance
 budgets — need network, hardware or a live agent, so they stay manual before a
 release. A green tick therefore means *types check,
