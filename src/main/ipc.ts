@@ -470,10 +470,45 @@ export function registerIpc(ctx: IpcContext): void {
    * агента «перезапустите сессию».
    */
   ipcMain.handle(CH.agentReloadExtras, async (_e, engine: AgentEngine) => {
-    const driver = driverFor(engine) as { reloadExtras?: () => Promise<unknown> } | undefined
+    const driver = driverFor(engine)
     if (!driver?.reloadExtras) return { ok: false, unsupported: true }
     return driver.reloadExtras()
   })
+  /**
+   * Состав инструментов ОДНОЙ беседы.
+   *
+   * requestId обязателен по смыслу задачи: `.mcp.json` проектный, окно
+   * контекста — сессии. Ответ без него был бы «инструментами вообще», а таких
+   * не бывает: в двух панелях из разных репозиториев наборы разные.
+   *
+   * `probe` приходит только с нажатия «Проверить»: проверка связи запускает
+   * серверы по-настоящему (`uvx`, `npx`, `uv run` — чужие процессы), и делать
+   * это на открытие окна нельзя.
+   */
+  ipcMain.handle(
+    CH.agentMcpStatus,
+    async (_e, engine: AgentEngine, requestId: string | undefined, probe?: boolean) => {
+      const driver = driverFor(engine)
+      if (!driver?.mcpStatus) return { unsupported: true, servers: [] }
+      return driver.mcpStatus(requestId, { probe: !!probe })
+    }
+  )
+  ipcMain.handle(
+    CH.agentMcpReconnect,
+    async (_e, engine: AgentEngine, requestId: string, name: string) => {
+      const driver = driverFor(engine)
+      if (!driver?.mcpReconnect) return { ok: false, reason: 'unsupported' as const }
+      return driver.mcpReconnect(requestId, name)
+    }
+  )
+  ipcMain.handle(
+    CH.agentMcpToggle,
+    async (_e, engine: AgentEngine, requestId: string, name: string, enabled: boolean) => {
+      const driver = driverFor(engine)
+      if (!driver?.mcpToggle) return { ok: false, reason: 'unsupported' as const }
+      return driver.mcpToggle(requestId, name, enabled)
+    }
+  )
   ipcMain.handle(CH.agentListCommands, async (_e, engine: AgentEngine) => {
     // Спросили команды — значит панель работает с агентом: самое время начать
     // замечать, что на диске появляется новое.

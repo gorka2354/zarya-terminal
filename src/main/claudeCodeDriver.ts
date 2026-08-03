@@ -24,6 +24,14 @@ import { bundledPkgName, claudeExeName, resolveClaudeExe, type ExePick } from '.
 // package; the runtime value is loaded via a dynamic import below.
 import { cleanCommands } from '@shared/agentCommands'
 import { irreversible } from '@shared/irreversible'
+import {
+  foldMcpTokens,
+  mcpRowFrom,
+  sortMcpRows,
+  type RawMcpStatus,
+  type RawMcpTool
+} from '@shared/mcp'
+import type { McpSnapshot } from '@shared/types'
 import type {
   CanUseTool,
   Options,
@@ -385,9 +393,21 @@ export class ClaudeCodeDriver implements AgentDriver {
     rewind: true,
     // Родной формат SDK: изображение уходит блоком в том же сообщении.
     images: true,
+    // mcpServerStatus / reconnectMcpServer / toggleMcpServer + getContextUsage.
+    mcp: true,
     vendorFlags: [{ key: 'ultracode', label: 'ULTRACODE', desc: tm('drv.ultracode') }]
   }
   private sessions = new Map<string, Session>()
+  /**
+   * Последний состав инструментов каждой беседы.
+   *
+   * Нужен, чтобы после закрытия панели окно показало прошлый снимок с честной
+   * пометкой «не свежий», а не пустоту (пустота читается как «серверов нет»).
+   * Живёт в памяти и умирает вместе с окном: файл на диске был бы ровно тем
+   * мусором, который мы обещали не оставлять. Размер ограничен — беседы за
+   * день накапливаются, а снимки нужны только недавним.
+   */
+  private mcpSnapshots = new Map<string, McpSnapshot>()
   private getWindow: () => BrowserWindow | null
   private usageTimer?: ReturnType<typeof setInterval>
   private ambientTimer?: ReturnType<typeof setInterval>
@@ -1096,6 +1116,138 @@ export class ClaudeCodeDriver implements AgentDriver {
       }
     } catch {
       return { ok: false, commands: [], plugins: 0, mcpServers: [], errors: 0 }
+    }
+  }
+
+  /**
+   * Состав и здоровье MCP-серверов ОДНОЙ беседы.
+   *
+   * Беседа названа не для порядка: `.mcp.json` лежит в папке проекта, а окно
+   * контекста принадлежит сессии. Две панели в разных репозиториях видят
+   * разные наборы, и отдать набор соседней панели за эту — та самая ложь
+   * интерфейса, против которой всё остальное.
+   *
+   * Живой беседы нет — отдаём прошлый снимок с пометкой `stale`. Поднимать
+   * движок ради свежего можно только с `probe`, то есть по нажатию человека:
+   * проверка связи ЗАПУСКАЕТ серверы по-настоящему, а это чужие процессы
+   * (`uvx`, `npx`, `uv run`) и секунды ожидания на ровном месте.
+   */
+  async mcpStatus(
+    requestId: string | undefined,
+    opts?: { probe?: boolean }
+  ): Promise<McpSnapshot> {
+    const live = requestId ? this.sessions.get(requestId) : undefined
+    if (live) {
+      const fresh = await this.mcpFromQuery(live.query)
+      if (fresh) {
+        this.rememberSnapshot(requestId!, fresh)
+        return fresh
+      }
+    }
+    const past = requestId ? this.mcpSnapshots.get(requestId) : undefined
+    if (!opts?.probe) return past ? { ...past, stale: true } : { servers: [], stale: true }
+    const probed = await this.withIdleQuery((query) => this.mcpFromQuery(query))
+    if (probed) {
+      if (requestId) this.rememberSnapshot(requestId, probed)
+      return probed
+    }
+    return past ? { ...past, stale: true } : { servers: [], stale: true }
+  }
+
+  /** Переподключить один сервер живой беседы. */
+  async mcpReconnect(
+    requestId: string,
+    name: string
+  ): Promise<{ ok: boolean; error?: string; reason?: 'no-session' | 'unsupported' }> {
+    const live = this.sessions.get(requestId)
+    if (!live) return { ok: false, reason: 'no-session' }
+    const q = live.query as unknown as { reconnectMcpServer?: (n: string) => Promise<void> }
+    if (typeof q.reconnectMcpServer !== 'function') return { ok: false, reason: 'unsupported' }
+    try {
+      await q.reconnectMcpServer(name)
+      return { ok: true }
+    } catch (e) {
+      // Причина — от движка, дословно: наш пересказ «не получилось» человеку
+      // ничего не даёт, а текст SDK обычно называет и хост, и код.
+      return { ok: false, error: e instanceof Error ? e.message : String(e) }
+    }
+  }
+
+  /**
+   * Включить или выключить сервер живой беседы.
+   *
+   * Пишет в `~/.claude.json` — конфиг ДВИЖКА, не наш, и делает это для текущего
+   * проекта. Окно обязано сказать это словами до нажатия.
+   */
+  async mcpToggle(
+    requestId: string,
+    name: string,
+    enabled: boolean
+  ): Promise<{ ok: boolean; error?: string; reason?: 'no-session' | 'unsupported' }> {
+    const live = this.sessions.get(requestId)
+    if (!live) return { ok: false, reason: 'no-session' }
+    const q = live.query as unknown as {
+      toggleMcpServer?: (n: string, on: boolean) => Promise<void>
+    }
+    if (typeof q.toggleMcpServer !== 'function') return { ok: false, reason: 'unsupported' }
+    try {
+      await q.toggleMcpServer(name, enabled)
+      return { ok: true }
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : String(e) }
+    }
+  }
+
+  /** Спросить у одного query состав серверов и цену их инструментов. */
+  private async mcpFromQuery(query: unknown): Promise<McpSnapshot | undefined> {
+    const q = query as {
+      mcpServerStatus?: () => Promise<RawMcpStatus[]>
+      getContextUsage?: () => Promise<{
+        mcpTools?: RawMcpTool[]
+        totalTokens?: number
+        maxTokens?: number
+      }>
+    }
+    if (typeof q.mcpServerStatus !== 'function') return undefined
+    let raw: RawMcpStatus[]
+    try {
+      raw = await q.mcpServerStatus()
+    } catch {
+      return undefined
+    }
+    // Цена контекста — вторым вопросом и необязательна. Движок постарше её не
+    // отдаёт, но это не повод не показать состояние серверов: без цены список
+    // всё ещё полезен, а без состояния — бессмыслен.
+    let tokensBy: Record<string, number> = {}
+    let contextTokens: number | undefined
+    let contextMax: number | undefined
+    if (typeof q.getContextUsage === 'function') {
+      try {
+        const usage = await q.getContextUsage()
+        tokensBy = foldMcpTokens(usage?.mcpTools)
+        if (typeof usage?.totalTokens === 'number') contextTokens = usage.totalTokens
+        if (typeof usage?.maxTokens === 'number') contextMax = usage.maxTokens
+      } catch {
+        /* цены не будет — состояние покажем всё равно */
+      }
+    }
+    const servers = sortMcpRows(
+      (Array.isArray(raw) ? raw : []).map((r) =>
+        mcpRowFrom(r, tokensBy[typeof r?.name === 'string' ? r.name : ''])
+      )
+    )
+    return { servers, at: Date.now(), contextTokens, contextMax }
+  }
+
+  /** Запомнить снимок, не давая карте расти без предела. */
+  private rememberSnapshot(requestId: string, snap: McpSnapshot): void {
+    this.mcpSnapshots.set(requestId, snap)
+    // Панелей не больше четырёх, но беседы за день накапливаются. Держим
+    // последние восемь: снимок беседы, закрытой полдня назад, никому не нужен.
+    while (this.mcpSnapshots.size > 8) {
+      const oldest = this.mcpSnapshots.keys().next().value
+      if (oldest === undefined) break
+      this.mcpSnapshots.delete(oldest)
     }
   }
 

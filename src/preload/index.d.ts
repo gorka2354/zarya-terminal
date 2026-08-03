@@ -151,6 +151,28 @@ export interface ZaryaApi {
     }>
     /** На диске появились новые скиллы/плагины/MCP. */
     onExtrasChanged(cb: () => void): Unsub
+    /**
+     * Состав и здоровье MCP-серверов ОДНОЙ беседы.
+     *
+     * `probe` разрешает поднять движок, когда живой беседы нет, — передаётся
+     * только по нажатию «Проверить»: health-check реально запускает серверы.
+     */
+    mcpStatus(
+      engine: AgentEngine,
+      requestId: string | undefined,
+      probe?: boolean
+    ): Promise<import('@shared/types').McpSnapshot>
+    mcpReconnect(
+      engine: AgentEngine,
+      requestId: string,
+      name: string
+    ): Promise<{ ok: boolean; error?: string; reason?: 'no-session' | 'unsupported' }>
+    mcpToggle(
+      engine: AgentEngine,
+      requestId: string,
+      name: string,
+      enabled: boolean
+    ): Promise<{ ok: boolean; error?: string; reason?: 'no-session' | 'unsupported' }>
     debugFlags(engine: AgentEngine, requestId?: string): Promise<Record<string, unknown>>
   }
   /** Back-compat shim over `agent` with engine 'claude-code'. Removed after inc-9 Ф3. */

@@ -112,7 +112,12 @@ if (process.env.ZARYA_FAKE_AGENT) {
         bypass: true,
         resumableSessions: true,
         usage: false,
-        structuredQuestions: false
+        structuredQuestions: false,
+        // Состав инструментов умеет ЭТОТ фейк, а соседний (gemini) — нет:
+        // прогон обязан увидеть обе ветки, и список, и честное «движок так не
+        // умеет». Про настоящий Codex это ничего не говорит — фейк проверяет
+        // абстракцию, а не заявляет о чужом движке.
+        mcp: true
       },
       () => mainWindow
     )

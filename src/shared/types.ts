@@ -719,8 +719,75 @@ export interface AgentCapabilities {
    * агент его помнит.
    */
   rewind?: boolean
+  /**
+   * Движок называет состав своих инструментов: MCP-серверы, их состояние и цену
+   * в контексте (см. {@link McpSnapshot}). Где false — вкладка «Инструменты»
+   * говорит «этот движок так не умеет». Показать вместо этого пустой список
+   * значило бы сказать «серверов нет», а это другая мысль.
+   */
+  mcp?: boolean
   /** Extra named toggles beyond the common set (e.g. Claude's 'ultracode'); UI renders generically. */
   vendorFlags?: { key: string; label: string; desc?: string }[]
+}
+
+/**
+ * MCP-сервер в том виде, в каком его МОЖНО показать человеку.
+ *
+ * Урезано намеренно. У SDK в `McpServerStatus.config` лежат `env` (stdio) и
+ * `headers` (http/sse) — то есть ключи и токены. Строку собирает главный
+ * процесс и отдаёт только её: секрет не пересекает IPC вообще. «Оно в
+ * рендерере, но мы его не рисуем» — не защита, а обещание не смотреть, и
+ * первый же дамп памяти или открытый DevTools это обещание отменяет.
+ */
+export interface McpServerRow {
+  name: string
+  /** Состояние ровно как его назвал движок — без наших догадок. */
+  status: 'connected' | 'failed' | 'needs-auth' | 'pending' | 'disabled'
+  /** Причина отказа, дословно от движка. Пусто — причина не названа. */
+  error?: string
+  /** Как подключён: stdio, http, sse, ws, sdk. */
+  transport?: string
+  /** Хост (для сетевых) или имя команды (для локальных). Без query и заголовков. */
+  origin?: string
+  /** Откуда конфиг: project, user, local, claudeai, managed. */
+  scope?: string
+  /** Версия сервера — есть только у подключённых. */
+  version?: string
+  /** Сколько инструментов сервер отдал. */
+  tools?: number
+  /** Во сколько эти инструменты обходятся в КАЖДОМ запросе. Считает движок. */
+  tokens?: number
+}
+
+/**
+ * Состав инструментов ОДНОЙ беседы.
+ *
+ * Именно одной: `.mcp.json` живёт в папке проекта, а окно контекста — у
+ * конкретной сессии. Две панели в разных репозиториях видят разные наборы, и
+ * снимок обязан называть, чей он.
+ */
+export interface McpSnapshot {
+  /** Движок не умеет — окно скажет словами, а не покажет пустоту. */
+  unsupported?: boolean
+  /** Живой беседы нет: это прошлый снимок, свежий — по кнопке. */
+  stale?: boolean
+  /** Когда снят, мс. Без этого «прошлый снимок» неотличим от свежего. */
+  at?: number
+  servers: McpServerRow[]
+  /** Занято в окне и потолок окна — цифры движка, своей арифметики не изобретаем. */
+  contextTokens?: number
+  contextMax?: number
+}
+
+/** Что нашлось на диске, когда живую беседу попросили перечитать скиллы и MCP. */
+export interface AgentExtrasReload {
+  ok: boolean
+  /** Движок так не умеет — не путать с «ничего не нашлось». */
+  unsupported?: boolean
+  commands: import('./agentCommands').AgentCommand[]
+  plugins: number
+  mcpServers: { name: string; status?: string }[]
+  errors: number
 }
 
 // --- Back-compat aliases (Claude Code was the first driver). Remove after inc-9. ---

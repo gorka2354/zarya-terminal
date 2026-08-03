@@ -128,6 +128,16 @@ const api = {
     reloadExtras: (engine: AgentEngine) => ipcRenderer.invoke(CH.agentReloadExtras, engine),
     /** На диске появились новые скиллы/плагины/MCP. */
     onExtrasChanged: (cb: () => void) => on(CH.agentExtrasChanged, cb),
+    /**
+     * Состав инструментов ОДНОЙ беседы. `probe` — только с нажатия человека:
+     * проверка связи запускает серверы по-настоящему.
+     */
+    mcpStatus: (engine: AgentEngine, requestId: string | undefined, probe?: boolean) =>
+      ipcRenderer.invoke(CH.agentMcpStatus, engine, requestId, probe),
+    mcpReconnect: (engine: AgentEngine, requestId: string, name: string) =>
+      ipcRenderer.invoke(CH.agentMcpReconnect, engine, requestId, name),
+    mcpToggle: (engine: AgentEngine, requestId: string, name: string, enabled: boolean) =>
+      ipcRenderer.invoke(CH.agentMcpToggle, engine, requestId, name, enabled),
     debugFlags: (engine: AgentEngine, requestId?: string) =>
       ipcRenderer.invoke(CH.agentDebugFlags, engine, requestId)
   },

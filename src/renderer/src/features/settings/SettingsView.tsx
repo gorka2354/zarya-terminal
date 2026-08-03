@@ -13,6 +13,7 @@ import { Icon, type IconName } from '@/components/Icon'
 import { chordFromEvent, formatChord } from '@/features/palette/keybindings'
 import { getThemes } from '@/features/themes/themes'
 import { setIdeMode } from '@/features/ide/ideMode'
+import { ToolsTab } from './ToolsTab'
 import {
   isProtectionRisky,
   protectionHint,
@@ -40,6 +41,7 @@ type TabId =
   | 'terminal'
   | 'blocks'
   | 'ai'
+  | 'tools'
   | 'voice'
   | 'sessions'
   | 'editor'
@@ -53,6 +55,10 @@ const TABS: Array<{ id: TabId; labelKey: string; sub: string; icon: IconName; gr
   { id: 'blocks', labelKey: 'set.tab.blocks', sub: 'BLOCKS', icon: 'split-h', group: 'base' },
   { id: 'voice', labelKey: 'set.tab.voice', sub: 'VOICE', icon: 'mic', group: 'base' },
   { id: 'sessions', labelKey: 'set.tab.sessions', sub: 'SESSIONS', icon: 'save', group: 'base' },
+  // Инструменты агента живут в БАЗОВОЙ группе, а не в IDE: надстройку можно
+  // выключить целиком, но агент в строке панели работает и без неё — и его
+  // MCP-серверы всё так же ломаются молча.
+  { id: 'tools', labelKey: 'set.tab.tools', sub: 'MCP · TOOLS', icon: 'bolt', group: 'base' },
   { id: 'keybindings', labelKey: 'set.tab.keys', sub: 'KEYBINDINGS', icon: 'gear', group: 'base' },
   // IDE superstructure — only shown when the IDE layer is enabled.
   { id: 'ai', labelKey: 'set.tab.ai', sub: 'IDE · AGENT', icon: 'sputnik', group: 'ide' },
@@ -179,6 +185,7 @@ export default function SettingsView(): React.JSX.Element | null {
             {tab === 'terminal' && <TerminalTab />}
             {tab === 'blocks' && <BlocksTab />}
             {tab === 'ai' && <AiTab />}
+            {tab === 'tools' && <ToolsTab />}
             {tab === 'voice' && <VoiceTab />}
             {tab === 'sessions' && <SessionsTab />}
             {tab === 'editor' && <EditorTab />}

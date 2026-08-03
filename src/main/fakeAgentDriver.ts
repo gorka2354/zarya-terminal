@@ -274,6 +274,94 @@ export class FakeAgentDriver implements AgentDriver {
   setBypass(): void {}
   setVendorFlag(): void {}
 
+  /**
+   * Состав инструментов — разыгранный, но со всеми состояниями сразу.
+   *
+   * Здесь нарочно есть каждое: упавший сервер с причиной, ждущий логина,
+   * работающий с ценой в токенах и выключенный. Прогон должен видеть все
+   * четыре строки, потому что в жизни человек видит именно такую смесь (на
+   * машине владельца из четырнадцати серверов три упали и пять ждут логина).
+   *
+   * Возможность объявляется через `capabilities.mcp`: у движка без неё этих
+   * методов нет вовсе, и окно скажет «не умеет» вместо пустого списка.
+   */
+  private mcpDisabled = new Set<string>()
+
+  async mcpStatus(
+    requestId: string | undefined,
+    opts?: { probe?: boolean }
+  ): Promise<import('@shared/types').McpSnapshot> {
+    if (!this.capabilities.mcp) return { unsupported: true, servers: [] }
+    // Живой беседы нет: без нажатия — прошлый снимок (у фейка его нет, значит
+    // пусто с пометкой), с нажатием — «проверили».
+    const live = !!requestId && this.started.has(requestId)
+    if (!live && !opts?.probe) return { servers: [], stale: true }
+    const off = (name: string): boolean => this.mcpDisabled.has(name)
+    return {
+      at: Date.now(),
+      contextTokens: 42_000,
+      contextMax: 200_000,
+      servers: [
+        {
+          name: 'broken-one',
+          status: off('broken-one') ? 'disabled' : 'failed',
+          error: 'MCP endpoint not found at https://example.invalid',
+          transport: 'http',
+          origin: 'example.invalid',
+          scope: 'user'
+        },
+        {
+          name: 'needs-login',
+          status: off('needs-login') ? 'disabled' : 'needs-auth',
+          transport: 'http',
+          origin: 'login.example.com',
+          scope: 'user'
+        },
+        {
+          name: 'working-one',
+          status: off('working-one') ? 'disabled' : 'connected',
+          transport: 'stdio',
+          origin: 'npx',
+          scope: 'project',
+          version: '1.2.3',
+          tools: 12,
+          tokens: 8_400
+        },
+        {
+          name: 'switched-off',
+          status: 'disabled',
+          transport: 'stdio',
+          origin: 'uvx',
+          scope: 'local'
+        }
+      ]
+    }
+  }
+
+  async mcpReconnect(
+    requestId: string,
+    name: string
+  ): Promise<{ ok: boolean; error?: string; reason?: 'no-session' | 'unsupported' }> {
+    if (!this.capabilities.mcp) return { ok: false, reason: 'unsupported' }
+    if (!this.started.has(requestId)) return { ok: false, reason: 'no-session' }
+    // Сломанный остаётся сломанным: кнопка, которая «чинит» одним нажатием всё,
+    // научила бы человека верить ей и там, где чинить нечего.
+    if (name === 'broken-one') return { ok: false, error: 'connection refused' }
+    return { ok: true }
+  }
+
+  async mcpToggle(
+    requestId: string,
+    name: string,
+    enabled: boolean
+  ): Promise<{ ok: boolean; error?: string; reason?: 'no-session' | 'unsupported' }> {
+    if (!this.capabilities.mcp) return { ok: false, reason: 'unsupported' }
+    if (!this.started.has(requestId)) return { ok: false, reason: 'no-session' }
+    if (enabled) this.mcpDisabled.delete(name)
+    else this.mcpDisabled.add(name)
+    return { ok: true }
+  }
+
   killAll(): void {
     this.timers.forEach((ts) => ts.forEach(clearTimeout))
     this.timers.clear()

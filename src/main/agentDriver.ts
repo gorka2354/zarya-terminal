@@ -1,12 +1,14 @@
 import type {
   AgentCapabilities,
   AgentEngine,
+  AgentExtrasReload,
   AgentModelInfo,
   AgentPermissionDecision,
   AgentQuestionAnswer,
   AgentSessionInfo,
   AgentStartOpts,
-  AiMessage
+  AiMessage,
+  McpSnapshot
 } from '@shared/types'
 
 /**
@@ -60,6 +62,46 @@ export interface AgentDriver {
    * и окно скажет об этом разными словами.
    */
   listCommands?(): Promise<import('@shared/agentCommands').AgentCommand[]>
+  /**
+   * Состав и здоровье MCP-серверов ОДНОЙ беседы (гейт: `capabilities.mcp`).
+   *
+   * Беседа названа не для красоты: `.mcp.json` лежит в папке проекта, а окно
+   * контекста принадлежит сессии. «Инструменты вообще» не существует — две
+   * панели в разных репозиториях видят разные наборы. Если беседа не названа
+   * или уже закрыта, драйвер отдаёт прошлый снимок с пометкой `stale`, но
+   * никогда не выдаёт набор чужой панели за её.
+   *
+   * `probe: true` разрешает поднять движок ради ответа, когда живой беседы
+   * нет. По умолчанию нельзя: проверка связи ЗАПУСКАЕТ серверы по-настоящему,
+   * то есть чужие процессы (`uvx`, `npx`, `uv run`) и секунды ожидания. Это
+   * делается только по нажатию человека.
+   */
+  mcpStatus?(requestId: string | undefined, opts?: { probe?: boolean }): Promise<McpSnapshot>
+  /** Переподключить один сервер живой беседы. */
+  mcpReconnect?(
+    requestId: string,
+    name: string
+  ): Promise<{ ok: boolean; error?: string; reason?: 'no-session' | 'unsupported' }>
+  /**
+   * Включить или выключить сервер живой беседы.
+   *
+   * Пишет в конфиг ДВИЖКА (`~/.claude.json`), а не в наш, и делает это для
+   * текущего проекта. Окно обязано сказать это словами: человек должен знать,
+   * чей файл меняет Заря.
+   */
+  mcpToggle?(
+    requestId: string,
+    name: string,
+    enabled: boolean
+  ): Promise<{ ok: boolean; error?: string; reason?: 'no-session' | 'unsupported' }>
+  /**
+   * Перечитать скиллы, плагины и MCP, не перезапуская беседу.
+   *
+   * Раньше вызывалось из ipc кастом мимо этого интерфейса — а `capabilities`
+   * существует ровно для того, чтобы окно знало, что движок умеет, без
+   * догадок по типу.
+   */
+  reloadExtras?(): Promise<AgentExtrasReload>
   setModel?(requestId: string, model: string | undefined): void
   setEffort?(requestId: string, effort: string | undefined): void
   setBypass?(requestId: string, bypass: boolean): void

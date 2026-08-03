@@ -106,3 +106,10 @@ jobs:
       # снимает вопрос только про ту самую команду.
       - name: Gate floor
         run: xvfb-run -a node scripts/gate-floor-test.mjs
+
+      # Здоровье инструментов: состояние каждого MCP-сервера, причина отказа
+      # дословно, и четыре отказа, которые легче всего подменить пустотой —
+      # включая «без нажатия движок не опрашиваем» (health-check запускает
+      # серверы по-настоящему).
+      - name: MCP panel
+        run: xvfb-run -a node scripts/mcp-panel-test.mjs

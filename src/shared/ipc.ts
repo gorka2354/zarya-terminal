@@ -100,6 +100,12 @@ export const CH = {
   agentExtrasChanged: 'agent:extras-changed',
   /** Движок сообщил, что список команд изменился (main -> renderer). */
   agentCommandsChanged: 'agent:commands-changed',
+  /** Состав и здоровье MCP-серверов ОДНОЙ беседы. */
+  agentMcpStatus: 'agent:mcp-status',
+  /** Переподключить сервер живой беседы. */
+  agentMcpReconnect: 'agent:mcp-reconnect',
+  /** Включить/выключить сервер живой беседы (пишет в конфиг движка). */
+  agentMcpToggle: 'agent:mcp-toggle',
   /** Своя модель с диска: main спрашивает папку сам, renderer путей не подаёт. */
   sttAddCustom: 'stt:add-custom',
   sttForgetCustom: 'stt:forget-custom',
