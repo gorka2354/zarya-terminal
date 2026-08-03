@@ -6,6 +6,7 @@ import { useSettingsStore } from '@/state/settingsStore'
 import { paneDraft, setPaneDraft } from '@/state/paneDrafts'
 import { paneHistory, pushPaneHistory } from '@/state/paneHistory'
 import { currentLang, t } from '@/lib/i18n'
+import { formatCost } from '@shared/cost'
 import {
   agentStatusOf,
   barModeOf,
@@ -399,6 +400,16 @@ export const AgentBar = memo(function AgentBar({
    */
   const paneStatus = useUiStore((s) => agentStatusOf(s, activeSessionId))
   const activeConv = useAiStore((s) => convForSession(s, activeSessionId))
+  /*
+   * Стоимость разговора и то, чем она является.
+   *
+   * `subscriptionType` есть — человек на подписке, и сумма расчётная: тарифы
+   * API, по которым ничего не списывается. Нет — работает по своему ключу, и
+   * это счёт. Одну и ту же цифру эти два случая делают противоположной по
+   * смыслу, поэтому подпись выбирается здесь, а не «где-нибудь потом».
+   */
+  const costLabel = formatCost(activeConv?.costUsd)
+  const onPlan = !!claudeStatus.usage?.subscriptionType
   // АВТОПИЛОТ показывается по СВОЕЙ беседе: общий переключатель с несколькими
   // панелями врал бы о том, спросят ли вас.
   // Хук вызывается всегда и безусловно: под условием React рвёт порядок хуков,
@@ -1366,6 +1377,23 @@ ${prev}`
           <Icon name={usageOpen ? 'chevron-down' : 'chevron-up'} size={10} />
         </button>
         <span className="zy-agentbar-fuel-spacer" />
+        {/*
+          Во сколько обошёлся ЭТОТ разговор — цифра самого движка, которую он
+          считал всегда, а мы выбрасывали.
+
+          Подпись обязательна и разная. На подписке это РАСЧЁТ по тарифам API:
+          деньги за ход не списываются, и показать сумму молча значит соврать
+          человеку о его деньгах. По своему ключу — наоборот, это счёт, который
+          он оплатит.
+        */}
+        {costLabel && (
+          <span
+            className="zy-agentbar-fuel-cost"
+            title={t(onPlan ? 'bar.costHintPlan' : 'bar.costHintApi')}
+          >
+            {costLabel}
+          </span>
+        )}
         {showModel && (paneStatus.model || paneStatus.effort || ultracode) && (
           <button
             className="zy-agentbar-fuel-model"

@@ -21,6 +21,7 @@ import { useBlocksStore } from '@/state/blocksStore'
 import { getSettings, useSettingsStore } from '@/state/settingsStore'
 import { useSessionsStore } from '@/state/sessionsStore'
 import { setAgentStatusFor, useUiStore } from '@/state/uiStore'
+import { addCost } from '@shared/cost'
 import { registerAiBridge } from './aiBridge'
 import { gateLabel } from './gates'
 import { applySubagentEvent, type SubagentRun } from './subagents'
@@ -169,6 +170,14 @@ export interface Conversation {
   subagents?: Record<string, SubagentRun>
   /** Working directory the conversation was opened in (folder the AI worked in). */
   cwd?: string
+  /**
+   * Во сколько обошёлся ЭТОТ разговор, по счёту самого движка.
+   *
+   * Копится по ходам и переживает перезапуск вместе с беседой. На подписке это
+   * расчёт по тарифам API, а не списание — интерфейс обязан это сказать рядом
+   * с цифрой (см. `bar.costHintPlan`).
+   */
+  costUsd?: number
   /**
    * АВТОПИЛОТ этой беседы: агент выполняет инструменты, не спрашивая. Своё у
    * каждой панели — общий переключатель с четырьмя панелями неизбежно врал бы о
@@ -885,6 +894,12 @@ export const useAiStore = create<AiState>((set, get) => {
           streaming: false,
           activeRequestId: undefined,
           claudeSessionId: ev.sessionId ?? c.claudeSessionId,
+          // Сколько стоил разговор. Движок считает это сам и до сих пор цифра
+          // выбрасывалась; копим по БЕСЕДЕ, потому что «сколько стоило» человек
+          // спрашивает про разговор, а не про приложение. Что именно означает
+          // сумма на подписке — говорит подпись в баре: там она расчётная, а
+          // не списанная.
+          costUsd: addCost(c.costUsd, ev.costUsd),
           // The wave is a live readout of THIS turn — leaving it on screen after
           // the turn ends would show a finished count as if it were still work.
           subagents: undefined
@@ -1828,7 +1843,10 @@ function seedPatch(convId: string, fn: (c: Conversation) => Conversation): void 
           // строки, и путать их нельзя ни человеку, ни харнессу.
           mcpMark: t.mcpMark
         })),
-        msgs: c.messages.length
+        msgs: c.messages.length,
+        // Во сколько обошёлся разговор: прогон обязан видеть, что сумма КОПИТСЯ
+        // по ходам, а не переписывается последним.
+        costUsd: c.costUsd
       }
     : null
 }

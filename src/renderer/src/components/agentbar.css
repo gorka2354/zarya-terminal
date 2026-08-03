@@ -44,6 +44,14 @@
   color: inherit;
   cursor: pointer;
 }
+/* Стоимость разговора. Не кнопка — нажимать нечему; и тише модели, потому что
+   на подписке это мера расхода, а не счёт (подробности в подсказке). */
+.zy-agentbar-fuel-cost {
+  padding: 2px 6px;
+  color: var(--fg-faint);
+  cursor: default;
+  white-space: nowrap;
+}
 .zy-agentbar-fuel-main:hover,
 .zy-agentbar-fuel-model:hover,
 .zy-agentbar-fuel-pult:hover {

@@ -138,7 +138,7 @@ export class FakeAgentDriver implements AgentDriver {
       })
     if (mute) {
       this.schedule(requestId, 8000, () =>
-        this.emit(requestId, { type: 'result', isError: false, models: [`${this.engine}-model`] })
+        this.emit(requestId, { type: 'result', isError: false, costUsd: 0.04, models: [`${this.engine}-model`] })
       )
     } else if (/tool/i.test(opts.prompt)) {
       if (/slow/i.test(opts.prompt)) this.slowTools.add(requestId)
@@ -196,11 +196,11 @@ export class FakeAgentDriver implements AgentDriver {
       // агент работает: очередь, Esc, прерывание. На 500мс такие сценарии
       // превращаются в гонку с самим тестом.
       this.schedule(requestId, 8000, () =>
-        this.emit(requestId, { type: 'result', isError: false, models: [`${this.engine}-model`] })
+        this.emit(requestId, { type: 'result', isError: false, costUsd: 0.04, models: [`${this.engine}-model`] })
       )
     } else {
       this.schedule(requestId, 500, () =>
-        this.emit(requestId, { type: 'result', isError: false, models: [`${this.engine}-model`] })
+        this.emit(requestId, { type: 'result', isError: false, costUsd: 0.04, models: [`${this.engine}-model`] })
       )
     }
   }
@@ -213,7 +213,7 @@ export class FakeAgentDriver implements AgentDriver {
       })
     )
     this.schedule(requestId, 300, () =>
-      this.emit(requestId, { type: 'result', isError: false, models: [`${this.engine}-model`] })
+      this.emit(requestId, { type: 'result', isError: false, costUsd: 0.04, models: [`${this.engine}-model`] })
     )
   }
 
@@ -252,7 +252,7 @@ export class FakeAgentDriver implements AgentDriver {
         isError: decision.behavior === 'deny'
       })
       this.schedule(requestId, 120, () =>
-        this.emit(requestId, { type: 'result', isError: false, models: [`${this.engine}-model`] })
+        this.emit(requestId, { type: 'result', isError: false, costUsd: 0.04, models: [`${this.engine}-model`] })
       )
     }
     if (slow) this.schedule(requestId, 6000, emitResult)
@@ -267,7 +267,7 @@ export class FakeAgentDriver implements AgentDriver {
       isError: false
     })
     this.schedule(requestId, 120, () =>
-      this.emit(requestId, { type: 'result', isError: false, models: [`${this.engine}-model`] })
+      this.emit(requestId, { type: 'result', isError: false, costUsd: 0.04, models: [`${this.engine}-model`] })
     )
   }
 

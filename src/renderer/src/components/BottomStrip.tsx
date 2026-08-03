@@ -1,7 +1,9 @@
 import { useRef, useState } from 'react'
-import { useAiStore } from '@/features/ai/aiStore'
+import { convForSession, useAiStore } from '@/features/ai/aiStore'
 import { nextGate } from '@/features/ai/gates'
 import { useUiStore } from '@/state/uiStore'
+import { useSessionsStore } from '@/state/sessionsStore'
+import { formatCost } from '@shared/cost'
 import { t, useLang } from '@/lib/i18n'
 import { FuelGauge, UsagePanel } from './AgentBar'
 import { Icon } from './Icon'
@@ -37,6 +39,13 @@ export function BottomStrip(): React.JSX.Element {
   const waiting = useAiStore(
     (s) => s.conversations.filter((c) => nextGate(c) !== undefined).length
   )
+
+  // Стоимость — у беседы ТОЙ панели, на которую человек смотрит: полоса одна на
+  // окно, а разговоров в нём столько же, сколько панелей.
+  const activeSessionId = useSessionsStore((s) => s.activeSessionId())
+  const activeConv = useAiStore((s) => convForSession(s, activeSessionId))
+  const costLabel = formatCost(activeConv?.costUsd)
+  const onPlan = !!claudeStatus.usage?.subscriptionType
 
   const showFuel = Object.values(agentCaps).some((c) => c?.usage)
   const lead = ((): { short: string; label: string; pct: number } | null => {
@@ -87,6 +96,22 @@ export function BottomStrip(): React.JSX.Element {
           <Icon name={usageOpen ? 'chevron-down' : 'chevron-up'} size={10} />
         </button>
       </div>
+      {/*
+        Во сколько обошёлся разговор АКТИВНОЙ панели.
+
+        Движок считает это сам и до сих пор цифру выбрасывали. Стоит рядом с
+        топливом, но говорит о другом: топливо — общий лимит аккаунта, а это
+        деньги за конкретный разговор. Подпись обязательна и разная: на подписке
+        сумма расчётная (ничего не списывается), по своему ключу — счёт.
+      */}
+      {costLabel && (
+        <span
+          className="zy-agentbar-fuel-cost"
+          title={t(onPlan ? 'bar.costHintPlan' : 'bar.costHintApi')}
+        >
+          {costLabel}
+        </span>
+      )}
       <button
         className="zy-agentbar-fuel-pult"
         onClick={() => useUiStore.getState().set({ launchPadOpen: true })}

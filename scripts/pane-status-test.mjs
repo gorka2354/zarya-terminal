@@ -15,6 +15,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 const root = process.cwd()
+const shots = process.env.ZARYA_SHOTS || ''
 let pass = 0,
   fail = 0
 const ok = (name, cond, extra) => {
@@ -110,6 +111,41 @@ try {
   const st2 = await page.evaluate(() => window.__zaryaUi?.().agentStatusBySession ?? {})
   ok('новая панель заведена', !!added, all.length)
   ok('и о её модели ничего не выдумано', !st2[added], st2[added])
+
+  /*
+   * Во сколько обошёлся разговор.
+   *
+   * Движок считал это всегда, а мы выбрасывали (пункт E1 аудита). Считается по
+   * БЕСЕДЕ: «сколько стоило» спрашивают про разговор, а не про приложение.
+   * Подпись обязательна и разная — на подписке сумма расчётная, по своему ключу
+   * это счёт; молча показать одну и ту же цифру значит соврать о деньгах.
+   */
+  console.log('\n[5] Стоимость разговора видна и копится по ходам')
+  const convId = await page.evaluate((ids) =>
+    window.__zaryaStartAgentIn?.('codex', 'привет', ids[0]), sids)
+  await page.waitForTimeout(1500)
+  const after1 = await page.evaluate((id) => window.__zaryaConvById?.(id)?.costUsd, convId)
+  ok('после хода стоимость появилась', typeof after1 === 'number' && after1 > 0, after1)
+
+  await page.evaluate((id) => window.__zaryaSendIn?.(id, 'ещё раз'), convId)
+  await page.waitForTimeout(1800)
+  const after2 = await page.evaluate((id) => window.__zaryaConvById?.(id)?.costUsd, convId)
+  ok('второй ход прибавился, а не заменил', after2 > after1, { after1, after2 })
+
+  await page.evaluate((id) => window.__zaryaFocusPane?.(id), sids[0])
+  await page.waitForTimeout(600)
+  const cost = await page.evaluate(() => {
+    const el = document.querySelector('.zy-agentbar-fuel-cost')
+    return { text: (el?.textContent ?? '').trim(), title: el?.getAttribute('title') ?? '' }
+  })
+  ok('цифра на экране', /^\$|^<\$/.test(cost.text), cost)
+  ok(
+    'и сказано, ЧТО это за деньги',
+    /списывают|счёт|тариф/i.test(cost.title),
+    cost.title.slice(0, 80)
+  )
+
+  if (shots) await page.screenshot({ path: join(shots, 'cost-strip.png') })
 
   console.log(`\n[pane-status] PASS ${pass} · FAIL ${fail}`)
 } finally {
