@@ -52,6 +52,14 @@ export interface AgentDriver {
   listSessions?(cwd: string | undefined): Promise<AgentSessionInfo[]>
   loadSessionMessages?(sessionId: string, cwd: string | undefined): Promise<AiMessage[]>
   listModels?(): Promise<AgentModelInfo[]>
+  /**
+   * Команды движка («/review», «/plan»…) — то, что человек набирает через слэш.
+   *
+   * Необязательный: движок, который своих команд не называет, не должен
+   * притворяться, что их нет. Отсутствие метода и пустой список — разные вещи,
+   * и окно скажет об этом разными словами.
+   */
+  listCommands?(): Promise<import('@shared/agentCommands').AgentCommand[]>
   setModel?(requestId: string, model: string | undefined): void
   setEffort?(requestId: string, effort: string | undefined): void
   setBypass?(requestId: string, bypass: boolean): void

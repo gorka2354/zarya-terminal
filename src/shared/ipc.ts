@@ -92,6 +92,10 @@ export const CH = {
   sttRemoveModel: 'stt:remove-model',
   /** Агент встал и ждёт человека, а окно не в фокусе — позвать. */
   notifyWaiting: 'app:notify-waiting',
+  /** Команды движка для палитры «/». */
+  agentListCommands: 'agent:list-commands',
+  /** Движок сообщил, что список команд изменился (main -> renderer). */
+  agentCommandsChanged: 'agent:commands-changed',
   /** Своя модель с диска: main спрашивает папку сам, renderer путей не подаёт. */
   sttAddCustom: 'stt:add-custom',
   sttForgetCustom: 'stt:forget-custom',

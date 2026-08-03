@@ -450,6 +450,27 @@ export function registerIpc(ctx: IpcContext): void {
       driverFor(engine)?.setVendorFlag?.(requestId, key, value)
   )
   ipcMain.handle(CH.agentListModels, (_e, engine: AgentEngine) => driverFor(engine)?.listModels?.() ?? [])
+  /**
+   * Команды движка для палитры «/».
+   *
+   * Ответ говорит не только СПИСОК, но и ОТКУДА он: движок, который команд не
+   * называет, и движок, у которого их нет, — разные вещи. Пустой список без
+   * этой пометки человек прочитает как «команд нет», и это будет неправдой.
+   */
+  ipcMain.handle(CH.agentListCommands, async (_e, engine: AgentEngine) => {
+    const driver = driverFor(engine)
+    if (!driver?.listCommands) return { commands: [], source: 'unknown' }
+    try {
+      const commands = await driver.listCommands()
+      return { commands, source: 'engine' }
+    } catch (e) {
+      return {
+        commands: [],
+        source: 'unknown',
+        note: e instanceof Error ? e.message : String(e)
+      }
+    }
+  })
   ipcMain.handle(CH.agentDebugFlags, (_e, engine: AgentEngine, requestId?: string) =>
     driverFor(engine)?.debugFlags?.(requestId) ?? {}
   )

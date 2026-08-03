@@ -134,6 +134,12 @@ export interface ZaryaApi {
     setEffort(engine: AgentEngine, requestId: string, effort: string | undefined): void
     setVendorFlag(engine: AgentEngine, requestId: string, key: string, value: unknown): void
     listModels(engine: AgentEngine): Promise<AgentModelInfo[]>
+    /** Команды движка для палитры «/». */
+    listCommands(engine: AgentEngine): Promise<{
+      commands: Array<{ name: string; description: string; argumentHint?: string; aliases?: string[] }>
+      source: 'engine' | 'unknown'
+      note?: string
+    }>
     debugFlags(engine: AgentEngine, requestId?: string): Promise<Record<string, unknown>>
   }
   /** Back-compat shim over `agent` with engine 'claude-code'. Removed after inc-9 Ф3. */

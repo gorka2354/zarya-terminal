@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useRef, useState, useMemo } from 'react'
 import type { AgentEngine, AgentUsage, AiEffort, ClaudeCliQuestion } from '@shared/types'
 import { EFFORT_TUNING } from '@shared/defaults'
 import { useSessionsStore } from '@/state/sessionsStore'
@@ -32,6 +32,8 @@ import { useContextMenu, type MenuItem } from './ContextMenu'
 import { ClaudeQuestionBar } from './ClaudeQuestionBar'
 import { launchClaudeNative } from './AiCliLauncher'
 import './agentbar.css'
+import { applyCommand, cleanCommands, commandQuery, matchCommands, type AgentCommand } from '@shared/agentCommands'
+import { CommandList } from './CommandList'
 
 const EFFORTS: AiEffort[] = ['low', 'medium', 'high', 'max']
 /** Стабильная пустая ссылка для селектора вложений — см. AgentBar. */
@@ -580,6 +582,92 @@ ${prev}`
       return
     }
     askAgent(engine)
+  }
+
+  /*
+   * Команды движка для «/».
+   *
+   * Список берётся у самого движка (Claude Code отдаёт его SDK-методом
+   * supportedCommands) и живёт в памяти панели. Грузится один раз при первом
+   * вызове «/», а не при открытии панели: у большинства запусков команду никто
+   * не набирает, а поднимать ради этого лишний процесс — плата ни за что.
+   */
+  const [cmdList, setCmdList] = useState<AgentCommand[]>([])
+  const [cmdSource, setCmdSource] = useState<'engine' | 'unknown'>('engine')
+  /*
+   * Список приходит не мгновенно: у Claude Code это ~2 секунды (SDK поднимает
+   * процесс и спрашивает CLI). Пока он идёт, показывать «0 команд» нельзя —
+   * человек прочитает это как «команд нет» и уйдёт, а правда — «ещё спрашиваю».
+   */
+  const [cmdLoading, setCmdLoading] = useState(false)
+  const [cmdCursor, setCmdCursor] = useState(0)
+  const cmdLoaded = useRef(false)
+  /** Что набрано после «/» прямо сейчас; null — список закрыт. */
+  const [cmdQuery, setCmdQuery] = useState<string | null>(null)
+  /**
+   * Текст в момент, когда команду ВЫБРАЛИ.
+   *
+   * Без этого список открывался снова сразу после подстановки: строка «/review»
+   * по всем признакам и есть начатая команда. Но человек уже ответил на этот
+   * вопрос — снова показывать ему тот же список значит спорить с его выбором.
+   * Список вернётся, как только текст изменится.
+   */
+  const pickedText = useRef<string | null>(null)
+
+  const commandsShown = useMemo(
+    () => (cmdQuery === null ? [] : matchCommands(cmdList, cmdQuery)),
+    [cmdList, cmdQuery]
+  )
+
+  const loadCommands = (): void => {
+    if (cmdLoaded.current) return
+    cmdLoaded.current = true
+    const engine = mode === 'zarya' || mode === 'shell' ? null : (mode as AgentEngine)
+    if (!engine) {
+      setCmdSource('unknown')
+      return
+    }
+    setCmdLoading(true)
+    void window.zarya.agent
+      .listCommands(engine)
+      .then((r) => {
+        setCmdList(cleanCommands(r?.commands))
+        setCmdSource(r?.source === 'engine' ? 'engine' : 'unknown')
+      })
+      .catch(() => setCmdSource('unknown'))
+      .finally(() => setCmdLoading(false))
+  }
+
+  /** Пересчитать, открыт ли список, по тексту и позиции каретки. */
+  const syncCommandQuery = (value: string, caret: number): void => {
+    if (pickedText.current !== null && value === pickedText.current) {
+      setCmdQuery(null)
+      return
+    }
+    pickedText.current = null
+    const q = commandQuery(value, caret)
+    setCmdQuery(q)
+    if (q !== null) {
+      loadCommands()
+      setCmdCursor(0)
+    }
+  }
+
+  const pickCommand = (cmd: AgentCommand, el?: HTMLTextAreaElement | null): void => {
+    const caret = el?.selectionStart ?? text.length
+    const next = applyCommand(text, caret, cmd)
+    setText(next.text)
+    setCmdQuery(null)
+    pickedText.current = next.text
+    // Каретка встаёт за подставленным именем — иначе следующий символ уедет в
+    // начало строки, и человек будет думать, что список «сломал ввод».
+    requestAnimationFrame(() => {
+      const node = el ?? ref.current
+      if (node) {
+        node.focus()
+        node.selectionStart = node.selectionEnd = next.caret
+      }
+    })
   }
 
   // CLI-style keys: ↑ first pulls a queued message back to edit, then walks input
@@ -1176,6 +1264,18 @@ ${prev}`
 
   return (
     <div className="zy-agentbar">
+      {/* Список команд движка: вырастает НАД строкой, строка остаётся на месте
+          и остаётся полем — человек продолжает печатать, список сужается. */}
+      {cmdQuery !== null && (
+        <CommandList
+          commands={commandsShown}
+          cursor={cmdCursor}
+          source={cmdSource}
+          loading={cmdLoading}
+          onPick={(c) => pickCommand(c, ref.current)}
+          onHover={setCmdCursor}
+        />
+      )}
       {usageOpen && (
         <UsagePanel
           usage={showFuel ? claudeStatus.usage : undefined}
@@ -1412,10 +1512,18 @@ ${prev}`
           value={text}
           onChange={(e) => {
             setText(e.target.value)
+            syncCommandQuery(e.target.value, e.target.selectionStart ?? e.target.value.length)
             // The user edited a recalled item → leave history-browse mode.
             if (histIdx !== -1 && e.target.value !== paneHistory(activeSessionId)[histIdx])
               setHistIdx(-1)
           }}
+          // Каретку двигают не только набором: клик и стрелки влево-вправо тоже
+          // меняют ответ на вопрос «человек сейчас пишет команду или путь».
+          onSelect={(e) => {
+            const el = e.currentTarget as HTMLTextAreaElement
+            syncCommandQuery(el.value, el.selectionStart ?? el.value.length)
+          }}
+          onBlur={() => setCmdQuery(null)}
           onKeyDown={(e) => {
             // Shift+Enter / Ctrl+Enter insert a line break — a multi-line prompt
             // is normal for an agent, and a plain <input> could never do it.
@@ -1430,6 +1538,39 @@ ${prev}`
               requestAnimationFrame(() => {
                 el.selectionStart = el.selectionEnd = at + 1
               })
+              return
+            }
+            /*
+             * Пока открыт список команд, стрелки и Enter принадлежат ЕМУ.
+             *
+             * Порядок здесь важнее самого списка: ↑/↓ в этой строке уже заняты
+             * историей панели, а Enter — отправкой. Ошибка в приоритете ломает
+             * не список, а историю — то есть регрессию искали бы совсем в
+             * другом месте.
+             */
+            if (cmdQuery !== null && commandsShown.length) {
+              if (e.key === 'ArrowDown') {
+                e.preventDefault()
+                setCmdCursor((i) => (i + 1) % commandsShown.length)
+                return
+              }
+              if (e.key === 'ArrowUp') {
+                e.preventDefault()
+                setCmdCursor((i) => (i - 1 + commandsShown.length) % commandsShown.length)
+                return
+              }
+              if (e.key === 'Enter' || e.key === 'Tab') {
+                e.preventDefault()
+                pickCommand(commandsShown[cmdCursor], e.currentTarget as HTMLTextAreaElement)
+                return
+              }
+            }
+            if (cmdQuery !== null && e.key === 'Escape') {
+              // Список закрывается, набранное остаётся: Esc здесь — «убери
+              // подсказку», а не «сотри мой текст».
+              e.preventDefault()
+              e.stopPropagation()
+              setCmdQuery(null)
               return
             }
             if (onNavKey(e)) return

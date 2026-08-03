@@ -22,6 +22,7 @@ import type { AgentDriver } from './agentDriver'
 import { bundledPkgName, claudeExeName, resolveClaudeExe, type ExePick } from './claudeExe'
 // Types only (erased at runtime) — safe to import statically from the ESM-only
 // package; the runtime value is loaded via a dynamic import below.
+import { cleanCommands } from '@shared/agentCommands'
 import type {
   CanUseTool,
   Options,
@@ -1008,6 +1009,39 @@ export class ClaudeCodeDriver implements AgentDriver {
       if (models.length) this.emit(requestId, { type: 'models', models })
     } catch {
       // supported-models unavailable — the renderer keeps its fallback list.
+    }
+  }
+
+  /**
+   * Команды движка для палитры «/».
+   *
+   * В отличие от моделей, здесь снимок живой сессии — ПРАВИЛЬНЫЙ источник:
+   * `supportedCommands()` в рантайме возвращает `latestCommands ?? initial`, а
+   * `latestCommands` обновляется push-сообщением `commands_changed` (SDK шлёт
+   * его, когда агент нашёл скиллы в подкаталоге или поставили плагин). Поэтому
+   * спрашиваем живую сессию, если она есть, и поднимаем холостую, только когда
+   * бесед нет вовсе — до первого запроса человека список уже нужен.
+   */
+  async listCommands(): Promise<import('@shared/agentCommands').AgentCommand[]> {
+    const entry = this.sessions.entries().next().value
+    if (entry) {
+      const list = await this.commandsOf(entry[1].query)
+      if (list.length) return list
+    }
+    const fresh = await this.withIdleQuery(async (query) => this.commandsOf(query))
+    return fresh ?? []
+  }
+
+  /** Спросить у одного query его команды и привести их к показываемому виду. */
+  private async commandsOf(query: unknown): Promise<import('@shared/agentCommands').AgentCommand[]> {
+    try {
+      const q = query as { supportedCommands?: () => Promise<unknown> }
+      if (typeof q.supportedCommands !== 'function') return []
+      return cleanCommands(await q.supportedCommands())
+    } catch {
+      // Команды недоступны — окно скажет об этом честно, а не покажет пустоту
+      // как «команд нет».
+      return []
     }
   }
 

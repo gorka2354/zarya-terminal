@@ -122,6 +122,8 @@ const api = {
     setVendorFlag: (engine: AgentEngine, requestId: string, key: string, value: unknown) =>
       ipcRenderer.send(CH.agentSetVendorFlag, engine, requestId, key, value),
     listModels: (engine: AgentEngine) => ipcRenderer.invoke(CH.agentListModels, engine),
+    /** Команды движка для палитры «/» — со сведениями о том, откуда список. */
+    listCommands: (engine: AgentEngine) => ipcRenderer.invoke(CH.agentListCommands, engine),
     debugFlags: (engine: AgentEngine, requestId?: string) =>
       ipcRenderer.invoke(CH.agentDebugFlags, engine, requestId)
   },
