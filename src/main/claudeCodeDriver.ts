@@ -23,6 +23,7 @@ import { bundledPkgName, claudeExeName, resolveClaudeExe, type ExePick } from '.
 // Types only (erased at runtime) — safe to import statically from the ESM-only
 // package; the runtime value is loaded via a dynamic import below.
 import { cleanCommands } from '@shared/agentCommands'
+import { irreversible } from '@shared/irreversible'
 import type {
   CanUseTool,
   Options,
@@ -541,7 +542,20 @@ export class ClaudeCodeDriver implements AgentDriver {
         // widget and never auto-answer it, even in bypass. We keep permissionMode
         // 'default' (not 'bypassPermissions') precisely so canUseTool is always
         // consulted here, which keeps the question widget working in every mode.
-        if (!isQuestion && this.sessions.get(requestId)?.bypass) {
+        /*
+         * Пол под автопилотом.
+         *
+         * Автопилот означает «не спрашивай про рутину», а не «делай что
+         * угодно»: `rm -rf`, `push --force`, `DROP TABLE` показываются всегда.
+         * Разница между «переспросил зря» и «день работы пропал» слишком
+         * велика, чтобы отдавать её тумблеру.
+         *
+         * Это НЕ песочница и не защита: изоляции у Зари нет, и то же удаление
+         * внутри скрипта сюда не попадёт. Это список того, что нельзя отменить
+         * — и обещание показать его перед запуском, не более.
+         */
+        const stop = irreversible(toolName, toolInput)
+        if (!isQuestion && !stop && this.sessions.get(requestId)?.bypass) {
           resolve({ behavior: 'allow' })
           return
         }
@@ -554,7 +568,8 @@ export class ClaudeCodeDriver implements AgentDriver {
           input: toolInput,
           title: ctx.title,
           displayName: ctx.displayName,
-          questions: isQuestion ? extractQuestions(toolInput) : undefined
+          questions: isQuestion ? extractQuestions(toolInput) : undefined,
+          irreversible: stop ?? undefined
         })
         ctx.signal.addEventListener('abort', () => {
           if (perms.delete(ctx.toolUseID)) resolve({ behavior: 'deny', message: tm('drv.aborted') })

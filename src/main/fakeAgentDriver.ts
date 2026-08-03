@@ -12,6 +12,7 @@ import type {
 } from '@shared/types'
 import { rewindPoint } from '@shared/rewind'
 import type { AgentDriver } from './agentDriver'
+import { irreversible } from '@shared/irreversible'
 
 /**
  * A scripted in-process AgentDriver for QA (Ф5). It emits the same
@@ -139,14 +140,32 @@ export class FakeAgentDriver implements AgentDriver {
     } else if (/tool/i.test(opts.prompt)) {
       if (/slow/i.test(opts.prompt)) this.slowTools.add(requestId)
       // Gate a tool so approve/deny + concurrent-gate behaviour is testable.
-      this.schedule(requestId, 400, () =>
+      // «danger» в запросе — команда, которую нельзя отменить. Нужна прогонам:
+      // пол под автопилотом проверяется только настоящим необратимым вызовом.
+      const command = /danger/i.test(opts.prompt) ? 'rm -rf build' : 'echo fake'
+      const stop = irreversible('Bash', { command })
+      // Автопилот здесь ведёт себя как у настоящих движков: обычное проходит
+      // молча, необратимое показывается всё равно. Без этого пол нечем
+      // проверить — фейковый драйвер спрашивал бы всегда и «прошёл» бы тест,
+      // ничего не доказав.
+      this.schedule(requestId, 400, () => {
+        if (opts.bypass && !stop) {
+          this.emit(requestId, {
+            type: 'tool_result',
+            toolUseId: `${requestId}-t1`,
+            content: 'fake: выполнено без подтверждения',
+            isError: false
+          })
+          return
+        }
         this.emit(requestId, {
           type: 'permission',
           toolUseId: `${requestId}-t1`,
           toolName: 'Bash',
-          input: { command: 'echo fake' }
+          input: { command },
+          irreversible: stop ?? undefined
         })
-      )
+      })
     } else if (/ask/i.test(opts.prompt) && this.capabilities.structuredQuestions) {
       // Structured AskUserQuestion (only if the driver declares the capability).
       this.schedule(requestId, 400, () =>

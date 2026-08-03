@@ -30,6 +30,7 @@ import { AiCliLauncher, launchAiCli } from './AiCliLauncher'
 import { useContextMenu, type MenuItem } from './ContextMenu'
 import logoZarya from '@/assets/logo-zarya-64.png'
 import './missionfeed.css'
+import { ruleFor } from '@shared/allowRules'
 
 /**
  * The mission feed — Zarya's centre stage, a 1:1 port of the design's unified
@@ -812,8 +813,20 @@ const ToolCard = memo(function ToolCard({
     // то, что делает: одобрение на один запуск и одобрение навсегда — разные
     // решения, и выбирать между ними должен человек, а не подстановка драйвера.
     const always = pending.allowAlwaysOnly === true
+    const stop = pending.irreversible
+    // Правило «до конца сессии» выдаётся не всякому вызову: необратимому — не
+    // выдаётся вообще (иначе пол снимался бы через боковую дверь), и агентам,
+    // у которых своё «разрешить всегда», второе такое же не нужно.
+    const rule = always || stop ? null : ruleFor(pending.name, pending.input)
     body = (
       <div className="zy-mf-tool-actions">
+        {stop && (
+          /* Почему спросили при включённом автопилоте. Без этой строки вопрос
+             читается как поломка тумблера, а не как защита от потери работы. */
+          <div className="zy-mf-tool-stop">
+            {t('feed.irreversible', { hit: stop.hit })}
+          </div>
+        )}
         <button
           className={`zy-mf-btn-run${always ? ' zy-mf-btn-run--always' : ''}`}
           title={
@@ -825,6 +838,18 @@ const ToolCard = memo(function ToolCard({
         >
           {t(always ? 'feed.approveAlways' : 'feed.approve')}
         </button>
+        {rule && (
+          <button
+            className="zy-mf-btn-session"
+            // Правило показывается ДОСЛОВНО ещё до нажатия: человек должен
+            // видеть, что именно он разрешает, а не догадываться о ширине
+            // разрешения по названию кнопки.
+            title={t('feed.allowSessionHint', { rule })}
+            onClick={() => void store.allowForSession(conv.id, id)}
+          >
+            {t('feed.allowSession')}
+          </button>
+        )}
         <button className="zy-mf-btn-deny" onClick={() => store.denyTool(conv.id, id)}>
           {t('feed.deny')}
         </button>

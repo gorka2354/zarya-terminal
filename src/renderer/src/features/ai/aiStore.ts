@@ -26,6 +26,8 @@ import { gateLabel } from './gates'
 import { applySubagentEvent, type SubagentRun } from './subagents'
 import { sameModel } from './modelMatch'
 import { nativeGateOpts } from './startOpts'
+import { irreversible } from '@shared/irreversible'
+import { matchesRule, ruleFor, withRule } from '@shared/allowRules'
 
 /**
  * AI chat store: multiple conversations, streaming assistant text, and an
@@ -87,6 +89,11 @@ export interface PendingTool {
    * а человек думает, что разрешил один запуск.
    */
   allowAlwaysOnly?: boolean
+  /**
+   * Гейт показан НЕСМОТРЯ на автопилот: команда необратима. Карточка обязана
+   * назвать причину, иначе вопрос при снятом гейте читается как поломка.
+   */
+  irreversible?: { kind: string; hit: string }
   /**
    * Когда этот гейт встал и начал ждать человека.
    *
@@ -162,6 +169,18 @@ export interface Conversation {
    * возвращать спрашивание, а не тихо взводить автопилот заново.
    */
   bypass?: boolean
+  /**
+   * Что человек разрешил в этой беседе до конца сессии.
+   *
+   * Середина между «спрашивать всё» и «не спрашивать ничего»: за день человек
+   * сто раз подтверждает `git status` и к пятидесятому перестаёт читать
+   * карточку — гейт вроде есть, а решения уже нет. Правило создаёт он сам и
+   * видит дословно; необратимое сюда не попадает никогда (см. allowRules).
+   *
+   * На диск не сохраняется намеренно, как и автопилот: перезапуск возвращает
+   * спрашивание, а не тихо восстанавливает вчерашние разрешения.
+   */
+  sessionAllows?: string[]
   agentMode: boolean
   /** True only while an ai.chat request is in flight (between dispatch and done/error). */
   streaming: boolean
@@ -295,6 +314,10 @@ interface AiState {
 
   /** Approve a pending tool by id (defaults to the first unsettled one). */
   approveTool: (conversationId?: string, toolId?: string) => Promise<void>
+  /** Разрешить ровно это до конца сессии и сразу выполнить. */
+  allowForSession: (conversationId: string, toolId: string) => Promise<void>
+  /** Снять ранее выданное разрешение. */
+  revokeSessionRule: (conversationId: string, rule: string) => void
   /** Deny a pending tool by id (defaults to the first unsettled one). */
   denyTool: (conversationId?: string, toolId?: string) => void
   /** Answer a Claude Code AskUserQuestion (maps question text -> chosen labels). */
@@ -779,10 +802,20 @@ export const useAiStore = create<AiState>((set, get) => {
               title: ev.title,
               displayName: ev.displayName,
               allowAlwaysOnly: ev.allowAlwaysOnly,
+              irreversible: ev.irreversible,
               askedAt: Date.now()
             }
           ]
         }))
+        // Человек уже разрешил ровно эту команду до конца сессии — исполняем
+        // без вопроса. Необратимое сюда не попадёт: matchesRule отказывает ему
+        // независимо от списка (пол выше правил).
+        if (!ev.questions) {
+          const conv = get().conversations.find((c) => c.id === convId)
+          if (matchesRule(conv?.sessionAllows, ev.toolName, ev.input)) {
+            void get().approveTool(convId, ev.toolUseId)
+          }
+        }
         break
 
       case 'tool_result':
@@ -935,7 +968,18 @@ export const useAiStore = create<AiState>((set, get) => {
 
       case 'tool_use': {
         patchConversation(convId, (c) => appendToolUse(c, ev.id, ev.name, ev.input))
-        const auto = ev.name === 'run_command' ? getSettings().ai.autoApprove : true
+        /*
+         * Пол над автоодобрением встроенного агента: необратимое спрашивают
+         * всегда, даже когда «без подтверждений» включено. Плюс правила «до
+         * конца сессии» — то, что человек уже разрешал сам.
+         */
+        const stop = irreversible(ev.name, ev.input)
+        const convNow = get().conversations.find((c) => c.id === convId)
+        const allowed = matchesRule(convNow?.sessionAllows, ev.name, ev.input)
+        const auto =
+          ev.name === 'run_command'
+            ? !stop && (allowed || getSettings().ai.autoApprove)
+            : true
         // Queue the tool; parallel tool_use blocks each get their own card.
         patchConversation(convId, (c) => ({
           ...c,
@@ -947,6 +991,7 @@ export const useAiStore = create<AiState>((set, get) => {
               input: ev.input,
               autoApproved: auto,
               settled: auto,
+              irreversible: stop ?? undefined,
               // Автоодобренный инструмент никого не ждёт — время ставим только
               // тому, кто действительно встал перед человеком.
               askedAt: auto ? undefined : Date.now()
@@ -1321,6 +1366,28 @@ export const useAiStore = create<AiState>((set, get) => {
       if (conv.engine !== 'builtin') window.zarya.agent.setBypass(conv.engine, conv.id, on)
     },
 
+    allowForSession: async (conversationId, toolId) => {
+      const conv = get().conversations.find((c) => c.id === conversationId)
+      const tool = conv?.pendingTools.find((t) => t.id === toolId)
+      if (!conv || !tool) return
+      const rule = ruleFor(tool.name, tool.input)
+      // Необратимому правила не выдаются вообще — кнопка для него и не
+      // показывается, но проверка стоит и здесь: путь к действию не один.
+      if (!rule) return
+      patchConversation(conversationId, (c) => ({
+        ...c,
+        sessionAllows: withRule(c.sessionAllows, rule)
+      }))
+      await get().approveTool(conversationId, toolId)
+    },
+
+    revokeSessionRule: (conversationId, rule) => {
+      patchConversation(conversationId, (c) => ({
+        ...c,
+        sessionAllows: (c.sessionAllows ?? []).filter((r) => r !== rule)
+      }))
+    },
+
     approveTool: async (conversationId, toolId) => {
       const conv = resolveConv(conversationId)
       if (!conv) return
@@ -1555,6 +1622,21 @@ onBus('terminal:focus', ({ sessionId }) => {
 ;(
   window as unknown as { __zaryaSetBypassFor?: (convId: string, on: boolean) => void }
 ).__zaryaSetBypassFor = (convId, on) => useAiStore.getState().setBypass(convId, on)
+
+// Разрешение «до конца сессии» из прогона: проверяется не кнопка, а то, что
+// после неё ТА ЖЕ команда проходит молча, а другая — нет.
+;(
+  window as unknown as { __zaryaAllowForSession?: (convId: string, toolId: string) => void }
+).__zaryaAllowForSession = (convId, toolId) =>
+  void useAiStore.getState().allowForSession(convId, toolId)
+
+// Второй ход В ТОЙ ЖЕ беседе. Правила «до конца сессии» — свойство беседы, и
+// проверять их новым запуском бессмысленно: у новой беседы своих правил нет,
+// как и должно быть.
+;(
+  window as unknown as { __zaryaSendIn?: (convId: string, text: string) => void }
+).__zaryaSendIn = (convId, text) =>
+  void useAiStore.getState().send(text, { conversationId: convId })
 /** Правка беседы для прогонов скорости — тем же путём, что и настоящая. */
 function seedPatch(convId: string, fn: (c: Conversation) => Conversation): void {
   useAiStore.setState((s) => ({
@@ -1664,6 +1746,10 @@ function seedPatch(convId: string, fn: (c: Conversation) => Conversation): void 
         // по конкретной беседе, а не только по активной.
         queued: c.queued,
         bypass: c.bypass === true,
+        // Правила «до конца сессии» — часть наблюдаемого состояния: на них
+        // держится ответ на вопрос «почему в этот раз не спросили», и прогон
+        // обязан видеть их дословно, а не догадываться по поведению.
+        sessionAllows: c.sessionAllows ?? [],
         userTexts: c.messages
           .filter((m) => m.role === 'user')
           .map((m) =>
@@ -1682,6 +1768,9 @@ function seedPatch(convId: string, fn: (c: Conversation) => Conversation): void 
           kind: t.kind,
           name: t.name,
           settled: t.settled,
+          // Почему гейт показан вопреки автопилоту. Без этого прогон не отличит
+          // «пол сработал» от «автопилот не включился».
+          irreversible: t.irreversible,
           // `label` is what the approval card actually shows. A harness that only
           // saw id/name could not tell a gate describing its files from one
           // reading a bare «ApplyPatch» — the exact defect this dump must catch.

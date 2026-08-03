@@ -101,3 +101,8 @@ jobs:
       # приходит только когда окно не в фокусе.
       - name: Attention
         run: xvfb-run -a node scripts/attention-test.mjs
+
+      # Пол под автопилотом: необратимое спрашивают всегда, а «до конца сессии»
+      # снимает вопрос только про ту самую команду.
+      - name: Gate floor
+        run: xvfb-run -a node scripts/gate-floor-test.mjs

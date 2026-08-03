@@ -907,3 +907,36 @@
   content-visibility: auto;
   contain-intrinsic-size: auto 120px;
 }
+
+/* Третья кнопка гейта: «до конца сессии». Спокойнее «выполнить» — это не
+   действие, а снятие вопроса на потом; и заметнее «отклонить», потому что
+   именно ради неё человек перестанет включать автопилот целиком. */
+.zy-mf-btn-session {
+  padding: 4px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg-dim);
+  font: inherit;
+  font-size: 11.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.zy-mf-btn-session:hover {
+  color: var(--fg);
+  border-color: var(--accent);
+}
+
+/* Почему спросили при включённом автопилоте. Цвет опасности, но без паники:
+   это предупреждение, а не отказ. */
+.zy-mf-tool-stop {
+  flex-basis: 100%;
+  margin-bottom: 6px;
+  padding: 5px 8px;
+  border-left: 2px solid var(--danger);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  color: var(--fg);
+  font-size: 12px;
+  line-height: 1.45;
+}
