@@ -20,7 +20,7 @@ import { uid } from '@/lib/uid'
 import { useBlocksStore } from '@/state/blocksStore'
 import { getSettings, useSettingsStore } from '@/state/settingsStore'
 import { useSessionsStore } from '@/state/sessionsStore'
-import { useUiStore } from '@/state/uiStore'
+import { setAgentStatusFor, useUiStore } from '@/state/uiStore'
 import { registerAiBridge } from './aiBridge'
 import { gateLabel } from './gates'
 import { applySubagentEvent, type SubagentRun } from './subagents'
@@ -776,6 +776,22 @@ export const useAiStore = create<AiState>((set, get) => {
           claudeSessionId: ev.sessionId,
           resumeAt: ev.sessionId === c.claudeSessionId ? c.resumeAt : undefined
         }))
+        /*
+         * Модель и усилие принадлежат ПАНЕЛИ, и записываются для ЛЮБОГО движка.
+         *
+         * Раньше и то и другое писалось в общее состояние и только для Claude —
+         * «остальные движки потом». Получалось двойное враньё: панель на Codex
+         * не подписывалась вовсе, а две панели на разных моделях Claude
+         * показывали ту, чей ход закончился последним. Подпись под строкой
+         * ввода — это ответ на вопрос «кому я сейчас отправляю», и общей она
+         * быть не может.
+         */
+        {
+          const paneId = get().conversations.find((c) => c.id === convId)?.sessionId
+          setAgentStatusFor(paneId, { model: ev.model, effort: ev.effort })
+        }
+        // Общий слот остаётся Claude-специфичным: он кормит поверхности, у
+        // которых своей панели нет, и топливо подписки — оно и правда одно.
         if (isClaudeStatus)
           useUiStore.getState().set({
             claudeStatus: {
@@ -890,6 +906,9 @@ export const useAiStore = create<AiState>((set, get) => {
           if (pinMatches && st.model !== ran[0]) {
             useUiStore.getState().set({ claudeStatus: { ...st, model: ran[0] } })
           }
+          // И у самой панели: поправка касается ТОГО хода, что закончился здесь.
+          const paneId = get().conversations.find((c) => c.id === convId)?.sessionId
+          if (pinMatches) setAgentStatusFor(paneId, { model: ran[0] })
         }
         // Flush a message queued while the agent was working (CLI-style).
         const queued = get().conversations.find((c) => c.id === convId)?.queued

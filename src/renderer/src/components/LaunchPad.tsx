@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { AiEffort, AiProviderKind, ClaudeModelInfo } from '@shared/types'
 import { AI_MODEL_PRESETS, EFFORT_TUNING } from '@shared/defaults'
 import { useSettingsStore } from '@/state/settingsStore'
-import { barModeOf, useUiStore } from '@/state/uiStore'
+import { agentStatusOf, barModeOf, setAgentStatusFor, useUiStore } from '@/state/uiStore'
 import { t, useLang } from '@/lib/i18n'
 import { useSessionsStore } from '@/state/sessionsStore'
 import { convForSession, useAiStore } from '@/features/ai/aiStore'
@@ -132,7 +132,9 @@ export function LaunchPad(): React.JSX.Element | null {
   const activeSessionId = useSessionsStore((s) => s.activeSessionId())
   const claudeMode = useUiStore((s) => barModeOf(s, activeSessionId)) === 'claude-code'
   const claudeModels = useUiStore((s) => s.claudeModels)
-  const claudeStatus = useUiStore((s) => s.claudeStatus)
+  // Что РЕАЛЬНО работает в этой панели: пусковая площадка применяет выбор к
+  // ней же, поэтому и показывать должна её модель, а не последнюю в окне.
+  const paneStatus = useUiStore((s) => agentStatusOf(s, activeSessionId))
   const ultracodeOn = useUiStore((s) => s.ultracode)
   const ai = useSettingsStore((s) => s.settings.ai)
   const clockRef = useRef<HTMLSpanElement>(null)
@@ -228,14 +230,14 @@ export function LaunchPad(): React.JSX.Element | null {
   }, [open])
 
   const committed = claudeMode ? ai.claudeModel : ai.model
-  const runningName = claudeMode && claudeStatus.model ? parseVersion(claudeStatus.model).name : ''
+  const runningName = claudeMode && paneStatus.model ? parseVersion(paneStatus.model).name : ''
 
   // Build the model rows. Claude: an ПО УМОЛЧАНИЮ account row (resolves live) +
   // the real catalog rows (version + tagline). Builtin: provider presets.
   const rows = useMemo<Row[]>(() => {
     if (claudeMode) {
       const catalog = claudeModels.length ? claudeModels : CLAUDE_MODEL_FALLBACK
-      const runningId = claudeStatus.model || ''
+      const runningId = paneStatus.model || ''
       // No separate ПО УМОЛЧАНИЮ row: an empty pin ('' = no override) resolves to
       // whichever catalog row matches the model actually running, so the markers
       // land on a real row (e.g. Fable) instead of a redundant default entry.
@@ -305,7 +307,7 @@ export function LaunchPad(): React.JSX.Element | null {
     ai.model,
     model,
     committed,
-    claudeStatus.model
+    paneStatus.model
   ])
 
   // Effort levels available for the selected Claude model (from the effective
@@ -313,7 +315,7 @@ export function LaunchPad(): React.JSX.Element | null {
   // resolves to the model actually running so e.g. Haiku correctly shows none.
   const claudeEfforts = useMemo<string[]>(() => {
     const catalog = claudeModels.length ? claudeModels : CLAUDE_MODEL_FALLBACK
-    const runningId = claudeStatus.model || ''
+    const runningId = paneStatus.model || ''
     // Same rendered-rows resolve as the model list, so the chips always belong
     // to the row the user sees highlighted (never the hidden 'default' entry).
     const shown = shownRows(catalog)
@@ -322,7 +324,7 @@ export function LaunchPad(): React.JSX.Element | null {
     const info = shown.find((m) => m.value === val) ?? shown.find((m) => sameModel(m.value, val))
     if (info && effortOffFor(info)) return []
     return info?.supportedEffortLevels ?? ['low', 'medium', 'high', 'xhigh', 'max']
-  }, [claudeModels, model, claudeStatus.model])
+  }, [claudeModels, model, paneStatus.model])
 
   const accFull = claudeMode
     ? t('lp.claudePlan')
@@ -408,6 +410,9 @@ export function LaunchPad(): React.JSX.Element | null {
       useUiStore.getState().set({
         claudeStatus: { ...cur, model: model || cur.model, effort }
       })
+      // И для самой панели: выбор применён к ней, значит и подпись под ним —
+      // её. Иначе бар остался бы с прошлой моделью до первого хода.
+      setAgentStatusFor(sid, { model: model || cur.model, effort })
     } else {
       void useSettingsStore.getState().update({ ai: { provider, model, effort } as never })
     }

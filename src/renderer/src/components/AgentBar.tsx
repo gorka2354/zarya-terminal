@@ -6,7 +6,14 @@ import { useSettingsStore } from '@/state/settingsStore'
 import { paneDraft, setPaneDraft } from '@/state/paneDrafts'
 import { paneHistory, pushPaneHistory } from '@/state/paneHistory'
 import { currentLang, t } from '@/lib/i18n'
-import { barModeOf, setBarModeOf, setPaneBarMode, setRaw, useUiStore } from '@/state/uiStore'
+import {
+  agentStatusOf,
+  barModeOf,
+  setBarModeOf,
+  setPaneBarMode,
+  setRaw,
+  useUiStore
+} from '@/state/uiStore'
 import { getTerminal } from '@/terminal/terminalRegistry'
 import { convForSession, useAiStore } from '@/features/ai/aiStore'
 import { nextGate } from '@/features/ai/gates'
@@ -378,6 +385,19 @@ export const AgentBar = memo(function AgentBar({
     })
   }
   // The conversation belongs to the active terminal — each terminal its own chat.
+  /*
+   * Модель и усилие — СВОЕЙ панели.
+   *
+   * Топливо остаётся общим: лимит подписки один на аккаунт, сколько бы панелей
+   * ни работало. А модель и усилие у каждой свои, и общее значение показывало
+   * ту, чей ход закончился последним: панель на Opus подписывалась Sonnet, если
+   * в соседней только что отработал он.
+   *
+   * Читаем ПОСЛЕ того, как известна панель: первая версия стояла выше по файлу
+   * и валила окно на старте («Cannot access before initialization») — панелей
+   * не рисовалось вовсе.
+   */
+  const paneStatus = useUiStore((s) => agentStatusOf(s, activeSessionId))
   const activeConv = useAiStore((s) => convForSession(s, activeSessionId))
   // АВТОПИЛОТ показывается по СВОЕЙ беседе: общий переключатель с несколькими
   // панелями врал бы о том, спросят ли вас.
@@ -1346,17 +1366,17 @@ ${prev}`
           <Icon name={usageOpen ? 'chevron-down' : 'chevron-up'} size={10} />
         </button>
         <span className="zy-agentbar-fuel-spacer" />
-        {showModel && (claudeStatus.model || claudeStatus.effort || ultracode) && (
+        {showModel && (paneStatus.model || paneStatus.effort || ultracode) && (
           <button
             className="zy-agentbar-fuel-model"
             onClick={openLaunchPad}
             title={t('bar.engineHint')}
           >
-            {claudeStatus.model ? prettyModel(claudeStatus.model) : ''}
+            {paneStatus.model ? prettyModel(paneStatus.model) : ''}
             {ultracode
               ? ' · ⚡ULTRACODE'
-              : claudeStatus.effort
-                ? ` · ${claudeStatus.effort.toUpperCase()}`
+              : paneStatus.effort
+                ? ` · ${paneStatus.effort.toUpperCase()}`
                 : ''}
           </button>
         )}

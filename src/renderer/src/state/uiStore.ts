@@ -66,8 +66,24 @@ interface UiState {
   barModeBySession: Record<string, 'shell' | 'zarya' | AgentEngine>
   /** Capabilities per native engine (from the driver registry) — drives conditional UI. */
   agentCaps: Partial<Record<AgentEngine, AgentCapabilities>>
-  /** Live Claude Code account status for the fuel gauge (model, effort, limits). */
+  /**
+   * Состояние учётной записи Claude Code: топливо подписки.
+   *
+   * Топливо общее ПО СМЫСЛУ — лимит один на аккаунт, сколько бы панелей ни
+   * работало. Модель и усилие раньше лежали здесь же и потому врали: панель,
+   * работавшая на Opus, показывала Sonnet, если ход в соседней закончился
+   * последним. Они переехали в {@link agentStatusBySession}; здесь остались
+   * как «последнее известное» для поверхностей без своей панели.
+   */
   claudeStatus: { model?: string; effort?: string; usage?: ClaudeUsage }
+  /**
+   * Модель и усилие КАЖДОЙ панели.
+   *
+   * Ключ — sessionId панели. Пусто значит «эта панель ещё не ходила к агенту»,
+   * и показывать нечего: чужая модель на её месте — та самая ложь, ради которой
+   * всё и разводится.
+   */
+  agentStatusBySession: Record<string, { model?: string; effort?: string }>
   /** Context-window fill of the active engine's last turn — UNIVERSAL (Claude,
    *  Codex, ACP all report it), unlike the Claude-only subscription fuel. */
   agentContext: { pct?: number; tokens?: number; window?: number; engine?: AgentEngine }
@@ -119,6 +135,7 @@ export const useUiStore = create<UiState>((set, get) => ({
   barModeBySession: {},
   agentCaps: {},
   claudeStatus: {},
+  agentStatusBySession: {},
   agentContext: {},
   claudeModels: [],
   ultracode: false,
@@ -194,6 +211,39 @@ export function setRaw(sessionId: string | null | undefined, on: boolean): void 
   else delete next[sessionId]
   useUiStore.getState().set({ rawBySession: next })
 }
+/**
+ * Модель и усилие ЭТОЙ панели.
+ *
+ * Без sessionId ответа нет: «какая сейчас модель» при четырёх панелях — вопрос
+ * без смысла. Пустой ответ честнее подстановки соседней: панель, которая ещё не
+ * ходила к агенту, ничего о своей модели не знает.
+ */
+export function agentStatusOf(
+  state: UiState,
+  sessionId: string | null | undefined
+): { model?: string; effort?: string } {
+  // Пустой ответ — ОДИН И ТОТ ЖЕ объект, а не новый на каждый вызов. Селектор
+  // zustand сравнивает ссылки: свежий `{}` каждый раз означает «значение
+  // изменилось» всегда, и компонент перерисовывается без остановки. Первая
+  // версия так и делала — приложение переставало рисовать панели вовсе, и это
+  // поймали сразу пять прогонов.
+  return (sessionId && state.agentStatusBySession[sessionId]) || NO_STATUS
+}
+const NO_STATUS: { model?: string; effort?: string } = {}
+
+/** Запомнить, на чём работает панель. Пустой патч ничего не меняет. */
+export function setAgentStatusFor(
+  sessionId: string | null | undefined,
+  patch: { model?: string; effort?: string }
+): void {
+  if (!sessionId) return
+  const st = useUiStore.getState()
+  const cur = st.agentStatusBySession[sessionId] ?? {}
+  const next = { ...cur, ...patch }
+  if (cur.model === next.model && cur.effort === next.effort) return
+  st.set({ agentStatusBySession: { ...st.agentStatusBySession, [sessionId]: next } })
+}
+
 /** Режим строки этой панели; пока не выбран — общее умолчание. */
 export function barModeOf(
   state: UiState,
