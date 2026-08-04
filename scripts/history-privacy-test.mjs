@@ -126,8 +126,59 @@ try {
   const after2 = await page.evaluate(() => window.zarya.history.stats())
   ok('статистика обнулилась', after2.entries === 0, after2)
 
-  console.log(`\n[history-privacy] PASS ${pass} · FAIL ${fail}`)
 } finally {
   await app.close()
 }
+
+/*
+ * Находка аудита 2026-08-04: ПЕРВАЯ запись терялась при каждой загрузке.
+ *
+ * Срез хвоста считал смещение как `indexOf('\n') + (start > 0 ? 1 : 0)`: при
+ * чтении с начала файла прибавлялся ноль, и срез шёл ПО первому переводу
+ * строки — то есть первая запись выбрасывалась. Уплотнение потом переписывало
+ * файл из памяти, и она пропадала с диска насовсем. Файл из одной команды
+ * грузился как пустой.
+ *
+ * Проверяем на ПОДЛОЖЕННОМ файле: своей записью такое не поймать — она
+ * добавляется в память, минуя разбор.
+ */
+{
+  console.log('\n[5] Самая старая запись не теряется при загрузке')
+  const ud = mkdtempSync(join(tmpdir(), 'zarya-hist1-'))
+  writeFileSync(
+    join(ud, 'settings.json'),
+    JSON.stringify({ appearance: { language: 'ru' }, history: { record: true, maxEntries: 100 } })
+  )
+  writeFileSync(
+    join(ud, 'history.jsonl'),
+    ['первая-команда-уникальная', 'вторая', 'третья']
+      .map((c, i) => JSON.stringify({ command: c, cwd: 'C:/x', at: 1700000000000 + i }))
+      .join('\n') + '\n'
+  )
+  const app5 = await electron.launch({
+    args: [join(root, 'out', 'main', 'index.js')],
+    env: {
+      ...process.env,
+      ...(process.env.ZARYA_SHOW ? {} : { ZARYA_QA_OFFSCREEN: '1' }),
+      ZARYA_USER_DATA: ud,
+      ZARYA_NO_ONBOARDING: '1',
+      NODE_ENV: 'production'
+    }
+  })
+  try {
+    const p5 = await app5.firstWindow()
+    await p5.waitForLoadState('domcontentloaded')
+    await p5.waitForTimeout(2500)
+    const found = await p5.evaluate(() =>
+      window.zarya.history.search('первая-команда-уникальная')
+    )
+    ok('самая старая запись видна в поиске', found.length === 1, found.length)
+    const st = await p5.evaluate(() => window.zarya.history.stats())
+    ok('счётчик считает все три', st.entries === 3, st)
+  } finally {
+    await app5.close()
+  }
+}
+
+console.log(`\n[history-privacy] PASS ${pass} · FAIL ${fail}`)
 process.exit(fail ? 1 : 0)

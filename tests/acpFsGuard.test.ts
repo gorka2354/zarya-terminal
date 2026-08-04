@@ -64,4 +64,44 @@ describe('isRealWithinRoot — symlink/junction escape (the review finding)', ()
 
     rmSync(base, { recursive: true, force: true })
   })
+
+  /*
+   * ВИСЯЧАЯ ссылка — та, чьей цели ЕЩЁ НЕТ.
+   *
+   * Прошлая проверка поднималась к «существующему предку» через `existsSync`, а
+   * он идёт через stat, то есть следует по ссылке: для битой ссылки отвечал «не
+   * существует», подъём перескакивал через неё на обычного родителя внутри
+   * проекта, и оба рубежа пропускали. Дальше запись открывала файл с O_CREAT,
+   * следовала по ссылке и создавала его СНАРУЖИ корня.
+   *
+   * Достаточно было положить в репозиторий `notes.md -> ~/.zshenv`: агент
+   * пишет «внутрь проекта», а файл появляется в домашней папке — и исполняется
+   * при следующем входе в оболочку. Проверено на живом Linux: старая логика
+   * пропускала и запись реально уходила наружу.
+   */
+  it('rejects a DANGLING link whose target does not exist yet', () => {
+    const base = mkdtempSync(join(tmpdir(), 'zy-fsg-dangling-'))
+    const cwd = join(base, 'proj')
+    const outside = join(base, 'outside')
+    mkdirSync(cwd)
+    mkdirSync(outside)
+
+    let linked = false
+    try {
+      // Цели НЕТ намеренно: именно этот случай обходил рубеж.
+      symlinkSync(join(outside, 'not-yet.txt'), join(cwd, 'notes.md'), 'file')
+      linked = true
+    } catch {
+      /* нет прав на симлинки (Windows без режима разработчика) — пропускаем */
+    }
+
+    if (linked) {
+      expect(isRealWithinRoot(join(cwd, 'notes.md'), cwd)).toBe(false)
+    }
+    // Контроль: новый файл внутри проекта (цели тоже ещё нет) обязан проходить,
+    // иначе «починили» превратилось бы в «запретили всё».
+    expect(isRealWithinRoot(join(cwd, 'brand-new.txt'), cwd)).toBe(true)
+
+    rmSync(base, { recursive: true, force: true })
+  })
 })

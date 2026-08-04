@@ -75,6 +75,60 @@ function scopeLabel(scope: string): string {
   return key ? t(key) : scope
 }
 
+/**
+ * Путь входа для сервера, который ждёт авторизации.
+ *
+ * Готовую строку показываем ТОЛЬКО когда имя сервера безопасно для командной
+ * строки. Имя приходит из `.mcp.json` открытого проекта — это чужой текст, и
+ * раньше «опасное» имя заворачивалось в кавычки по правилам sh. Вставляют же
+ * команду в PowerShell, где обратный слэш не экранирует ничего: строка
+ * закрывалась раньше времени, и хвост имени исполнялся как отдельная команда.
+ * Экранирования, годного сразу для sh, PowerShell и cmd, не существует —
+ * поэтому здесь либо честная команда, либо честный отказ с именем отдельно.
+ */
+function LoginHint({
+  name,
+  say
+}: {
+  name: string
+  say: (text: string, bad?: boolean) => void
+}): React.JSX.Element {
+  const cmd = mcpLoginCommand(name)
+  if (!cmd) {
+    return (
+      <div className="zy-tools-login zy-tools-login--unsafe">
+        <span className="zy-tools-why">{t('tools.unsafeName')}</span>
+        <code className="zy-tools-cmd">{name}</code>
+        <button
+          type="button"
+          className="zy-tools-btn"
+          onClick={() => {
+            void navigator.clipboard.writeText(name)
+            say(t('tools.nameCopied'))
+          }}
+        >
+          {t('tools.copyName')}
+        </button>
+      </div>
+    )
+  }
+  return (
+    <div className="zy-tools-login">
+      <code className="zy-tools-cmd">{cmd}</code>
+      <button
+        type="button"
+        className="zy-tools-btn"
+        onClick={() => {
+          void navigator.clipboard.writeText(cmd)
+          say(t('tools.copied'))
+        }}
+      >
+        {t('tools.copy')}
+      </button>
+    </div>
+  )
+}
+
 export function ToolsTab(): React.JSX.Element {
   // Подписка на язык: без неё надписи сменились бы не в момент переключения, а
   // при следующей перерисовке по другой причине.
@@ -252,21 +306,7 @@ export function ToolsTab(): React.JSX.Element {
                   изменит. Логинить из Зари мы пока не умеем — значит честный
                   путь руками, а не кнопка, которая сделает вид.
                 */}
-                {s.status === 'needs-auth' && !stale && (
-                  <div className="zy-tools-login">
-                    <code className="zy-tools-cmd">{mcpLoginCommand(s.name)}</code>
-                    <button
-                      type="button"
-                      className="zy-tools-btn"
-                      onClick={() => {
-                        void navigator.clipboard.writeText(mcpLoginCommand(s.name))
-                        say(t('tools.copied'))
-                      }}
-                    >
-                      {t('tools.copy')}
-                    </button>
-                  </div>
-                )}
+                {s.status === 'needs-auth' && !stale && <LoginHint name={s.name} say={say} />}
                 {!stale && (
                   <div className="zy-tools-actions">
                     {s.status !== 'disabled' &&

@@ -1,6 +1,14 @@
 import { spawn, type ChildProcess } from 'child_process'
 import { tm } from './lang'
-import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'fs'
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  readlinkSync,
+  realpathSync,
+  writeFileSync
+} from 'fs'
 import { dirname, isAbsolute, relative, resolve as resolvePath } from 'path'
 import { type BrowserWindow } from 'electron'
 import { CH } from '@shared/ipc'
@@ -130,10 +138,41 @@ export function isRealWithinRoot(abs: string, cwd: string): boolean {
   try {
     const realCwd = realpathSync.native(cwd)
     let probe = abs
-    while (!existsSync(probe)) {
+    // ВАЖНО: существование проверяем через lstat, а НЕ через existsSync.
+    //
+    // `existsSync` идёт через stat, то есть следует по ссылке. Для ВИСЯЧЕГО
+    // симлинка (цели ещё нет) он отвечает «не существует» — и подъём
+    // перескакивал через сам симлинк на его обычного родителя внутри проекта.
+    // Обе половины рубежа проходили, а `writeFileSync` дальше открывал файл с
+    // O_CREAT, следовал по ссылке и создавал его СНАРУЖИ корня. Достаточно было
+    // положить в репозиторий битую ссылку вида `notes.md -> ~/.zshenv`.
+    const missing = (path: string): boolean => {
+      try {
+        lstatSync(path)
+        return false
+      } catch {
+        return true
+      }
+    }
+    while (missing(probe)) {
       const parent = dirname(probe)
       if (parent === probe) return false
       probe = parent
+    }
+    // Сам путь оказался симлинком (в том числе висячим) — резолвим ЕГО цель, а
+    // не родителя: именно туда уйдёт запись.
+    const st = lstatSync(probe)
+    if (st.isSymbolicLink()) {
+      const target = resolvePath(dirname(probe), readlinkSync(probe))
+      // Цели может ещё не быть — поднимаемся к существующему предку уже цели.
+      let t = target
+      while (missing(t)) {
+        const parent = dirname(t)
+        if (parent === t) return false
+        t = parent
+      }
+      const realTarget = realpathSync.native(t)
+      return realTarget === realCwd || isWithinRoot(realTarget, realCwd)
     }
     const realProbe = realpathSync.native(probe)
     return realProbe === realCwd || isWithinRoot(realProbe, realCwd)

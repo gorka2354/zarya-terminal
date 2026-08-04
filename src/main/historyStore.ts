@@ -39,7 +39,15 @@ export class HistoryStore {
    * запуска — иначе выключатель не выключатель.
    */
   configure(opts: { record: boolean; maxEntries: number }): void {
+    const was = this.record
     this.record = opts.record
+    // Выключили — забываем то, что уже подняли в память. Иначе загруженный
+    // хвост пережил бы выключение до перезапуска приложения, и поиск ещё
+    // отвечал бы старыми командами.
+    if (was && !opts.record) {
+      this.entries = []
+      this.loaded = false
+    }
     this.maxEntries = Math.max(0, Math.floor(opts.maxEntries))
     if (this.limit && this.entries.length > this.limit) {
       this.entries = this.entries.slice(-this.limit)
@@ -67,7 +75,13 @@ export class HistoryStore {
       await fh.read(buf, 0, buf.length, start)
       await fh.close()
       const text = buf.toString('utf8')
-      const lines = text.slice(text.indexOf('\n') + (start > 0 ? 1 : 0)).split('\n')
+      // Смещение считается ОТДЕЛЬНО от индекса. Раньше стояло
+      // `slice(indexOf('\n') + (start > 0 ? 1 : 0))`: при чтении с начала файла
+      // прибавлялся ноль, и срез шёл ПО первому переводу строки — то есть
+      // первая запись выбрасывалась при каждой загрузке, а уплотнение потом
+      // стирало её с диска. Файл из одной команды грузился как пустой.
+      const from = start > 0 ? text.indexOf('\n') + 1 : 0
+      const lines = text.slice(from).split('\n')
       for (const line of lines) {
         if (!line.trim()) continue
         try {
@@ -136,6 +150,19 @@ export class HistoryStore {
 
   /** Сколько записей сейчас хранится и сколько весит файл. */
   async stats(): Promise<{ entries: number; bytes: number }> {
+    // Счётчик тоже не поднимает файл с диска: он стоит рядом с выключателем, и
+    // «0 записей» при выключенной истории честнее числа, ради которого пришлось
+    // прочитать то, что человек просил не трогать. Размер файла показываем
+    // всегда — он и так виден в проводнике, а по нему видно, что чистить есть что.
+    if (!this.record) {
+      let bytes = 0
+      try {
+        bytes = (await fs.stat(this.file)).size
+      } catch {
+        /* файла нет */
+      }
+      return { entries: 0, bytes }
+    }
     await this.ensureLoaded()
     let bytes = 0
     try {
@@ -181,6 +208,12 @@ export class HistoryStore {
    * Matching: every whitespace-separated token must appear in command or cwd.
    */
   async search(query: string, limit = 100): Promise<HistoryEntry[]> {
+    // Выключенная история не читается ВООБЩЕ. Гейт стоял только на записи, и
+    // «не вести историю» означало лишь «не дописывать»: Ctrl+R и подсказки
+    // терминала по-прежнему поднимали с диска всё, что человек набирал раньше,
+    // — включая строки с ключами и паролями. Настройка обещает обратное
+    // дословно, и обещание обязано исполняться сразу, а не после перезапуска.
+    if (!this.record) return []
     await this.ensureLoaded()
     const tokens = query.toLowerCase().split(/\s+/).filter(Boolean)
     const seen = new Set<string>()

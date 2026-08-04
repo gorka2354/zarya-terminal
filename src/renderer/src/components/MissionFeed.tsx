@@ -25,6 +25,7 @@ import {
 import { parseProgress, progressText } from '@shared/progress'
 import { renderMarkdown } from '@/features/ai/markdown'
 import { getTerminal } from '@/terminal/terminalRegistry'
+import { sendCodeToTerminal } from '@/features/ai/pasteGuard'
 import { Icon } from './Icon'
 import { PixelIcon } from './PixelIcon'
 import { AiCliLauncher, launchAiCli } from './AiCliLauncher'
@@ -324,11 +325,11 @@ export const MissionFeed = memo(function MissionFeed({
       useUiStore.getState().toast(t('common.copied'), 'success')
       return
     }
-    if (action === 'insert') {
-      window.zarya.pty.write(sessionId, code.replace(/\r?\n$/, ''))
-    } else if (action === 'run') {
-      window.zarya.pty.write(sessionId, code + '\r')
-    }
+    // Общая функция на оба места, где есть такая кнопка. Здесь подтверждения на
+    // многострочный код не было вовсе: «Вставить» отправляло внутренние
+    // переводы строк, оболочка принимала их за Enter — и первая строка
+    // исполнялась раньше, чем человек её прочитывал (см. pasteGuard.ts).
+    if (action === 'insert' || action === 'run') sendCodeToTerminal(sessionId, code, action)
   }
 
   const hasConv = !!conv && conv.messages.length > 0

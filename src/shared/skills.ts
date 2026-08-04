@@ -1,4 +1,5 @@
 import type { SkillState, SkillLayer } from './types'
+import { shellSafeName } from './mcp'
 
 /**
  * Скиллы: состояние, слои настроек и цена.
@@ -120,9 +121,11 @@ export function pluginOf(name: string): string | undefined {
  * них развалится на два аргумента, и подсказка окажется той самой кнопкой,
  * которая соврала.
  */
-export function pluginDisableCommand(plugin: string): string {
-  const safe = /^[A-Za-z0-9._:-]+$/.test(plugin)
-  return `claude plugin disable ${safe ? plugin : `"${plugin.replace(/(["\\$`])/g, '\\$1')}"`}`
+export function pluginDisableCommand(plugin: string): string | null {
+  // Тот же рубеж, что у `claude mcp login`: имя плагина — чужой текст, а
+  // экранирования, годного сразу для sh и PowerShell, не существует.
+  if (!shellSafeName(plugin)) return null
+  return `claude plugin disable ${plugin.includes(' ') ? `"${plugin}"` : plugin}`
 }
 
 /** Слова для состояний — в интерфейсе кодов быть не должно. */

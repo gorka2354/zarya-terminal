@@ -8,6 +8,7 @@ import { useSessionsStore } from '@/state/sessionsStore'
 import { useSettingsStore } from '@/state/settingsStore'
 import { useUiStore } from '@/state/uiStore'
 import { getTerminal } from '@/terminal/terminalRegistry'
+import { sendCodeToTerminal } from './pasteGuard'
 import './ai.css'
 import { renderMarkdown } from './markdown'
 import { useAiStore } from './aiStore'
@@ -161,22 +162,9 @@ export default function AiPanel(): React.JSX.Element {
       useUiStore.getState().toast(t('ide.noSession'), 'error')
       return
     }
-    if (action === 'insert') {
-      // "Insert" must not silently execute. A trailing newline (and any
-      // embedded ones in multi-line snippets) would submit the command to the
-      // shell — strip the trailing one, and for multi-line snippets require the
-      // same explicit confirmation as "run".
-      const noTrailing = code.replace(/\r?\n$/, '')
-      const lineCount = noTrailing.split('\n').length
-      if (lineCount > 1 && !window.confirm(t('ide.pasteAsk', { n: lineCount }))) return
-      window.zarya.pty.write(sid, noTrailing)
-      getTerminal(sid)?.focus()
-    } else if (action === 'run') {
-      const lineCount = code.trim().split('\n').length
-      if (lineCount > 1 && !window.confirm(t('ide.runAsk', { n: lineCount }))) return
-      window.zarya.pty.write(sid, code + '\r')
-      getTerminal(sid)?.focus()
-    }
+    // Общая функция на оба места: копии этого обработчика уже разошлись
+    // однажды, и в ленте подтверждение потерялось вовсе (см. pasteGuard.ts).
+    if (action === 'insert' || action === 'run') sendCodeToTerminal(sid, code, action)
   }
 
   const lastMsg = conv?.messages[conv.messages.length - 1]

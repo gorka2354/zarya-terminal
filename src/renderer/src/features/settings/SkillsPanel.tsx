@@ -270,20 +270,26 @@ export function SkillsPanel({
       {plugins.length > 0 && (
         <div className="zy-skills-plugins">
           <span className="zy-skills-plugins-text">{t('skills.pluginsFoot')}</span>
-          {plugins.map((p) => (
-            <button
-              key={p}
-              type="button"
-              className="zy-tools-btn zy-skills-plugin-btn"
-              title={pluginDisableCommand(p)}
-              onClick={() => {
-                void navigator.clipboard.writeText(pluginDisableCommand(p))
-                onNote(t('tools.copied'))
-              }}
-            >
-              {p}
-            </button>
-          ))}
+          {plugins.map((p) => {
+            // Имя плагина — чужой текст. Готовую строку даём только когда в ней
+            // нет ничего, что оболочка примет за команду: экранирования,
+            // годного сразу для sh и PowerShell, не существует.
+            const cmd = pluginDisableCommand(p)
+            return (
+              <button
+                key={p}
+                type="button"
+                className="zy-tools-btn zy-skills-plugin-btn"
+                title={cmd ?? t('skills.unsafePlugin')}
+                onClick={() => {
+                  void navigator.clipboard.writeText(cmd ?? p)
+                  onNote(cmd ? t('tools.copied') : t('tools.nameCopied'))
+                }}
+              >
+                {p}
+              </button>
+            )
+          })}
         </div>
       )}
       <div className="zy-tools-foot">{t('skills.writesConfig')}</div>
