@@ -150,6 +150,18 @@ export const TerminalPane = memo(function TerminalPane({
     const conv = convForSession(s, sessionId)
     return !!conv && attentionOf(conv) === 'waiting'
   })
+  /**
+   * Работает ли ЭТА панель прямо сейчас.
+   *
+   * Отдельно от «ждёт», потому что человеку это разные новости: занятой панели
+   * от него ничего не нужно, а ждущая стоит без движения, пока он не подойдёт.
+   * Раньше видно было только второе, и работа шла молча — в сетке из четырёх
+   * панелей неотличимо от «ничего не происходит».
+   */
+  const working = useAiStore((s) => {
+    const conv = convForSession(s, sessionId)
+    return !!conv && attentionOf(conv) === 'working'
+  })
 
   return (
     <div
@@ -165,7 +177,7 @@ export const TerminalPane = memo(function TerminalPane({
        * Метки «неактивна» здесь нет намеренно: неактивные панели ничем не
        * гасятся.
        */
-      className={`zy-pane${active ? ' zy-pane--focused' : ''}${waiting ? ' zy-pane--waiting' : ''}${dropSide ? ' zy-pane--drop' : ''}`}
+      className={`zy-pane${active ? ' zy-pane--focused' : ''}${waiting ? ' zy-pane--waiting' : ''}${working ? ' zy-pane--working' : ''}${dropSide ? ' zy-pane--drop' : ''}`}
       // Чья это панель — видно в разметке. Нужно прогонам: «строка сайдбара
       // указывает на ЭТУ панель» иначе проверяется догадкой по порядку.
       data-session={sessionId}

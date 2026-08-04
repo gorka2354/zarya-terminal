@@ -57,6 +57,28 @@
 .zy-agentbar-fuel-pult:hover {
   background: var(--bg-elev1);
 }
+/*
+ * «панель» — вход в пусковой комплекс, и он обязан выглядеть кнопкой.
+ *
+ * Раньше это была надпись цветом `--fg-faint` без рамки и фона, в самом углу
+ * полосы: при четырёх панелях её попросту не находили. Единственная кнопка на
+ * этой полосе, у которой есть своя область, — остальные тут показатели, и
+ * путать их не с чем.
+ */
+.zy-agentbar-fuel-pult {
+  padding: 2px 9px;
+  border: 1px solid var(--border-strong);
+  color: var(--fg-dim);
+  font-family: var(--font-tech);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+.zy-agentbar-fuel-pult:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
 .zy-agentbar-fuel-icon {
   display: inline-flex;
   flex-shrink: 0;

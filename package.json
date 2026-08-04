@@ -51,6 +51,7 @@
     "qa:routing": "npm run build && node scripts/extras-routing-test.mjs",
     "qa:palette": "npm run build && node scripts/palette-test.mjs",
     "qa:pane-status": "npm run build && node scripts/pane-status-test.mjs",
+    "qa:signals": "node scripts/pane-signals-test.mjs",
     "qa:find": "npm run build && node scripts/feed-search-test.mjs",
     "qa:onboarding": "npm run build && node scripts/onboarding-test.mjs"
   },

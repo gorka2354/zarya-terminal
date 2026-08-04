@@ -1009,6 +1009,40 @@ body {
   height: 6px;
   cursor: row-resize;
 }
+/*
+ * Сам шов. Раньше его не было вовсе: панели различались только рамкой активной,
+ * и на светлой теме четыре панели сливались в одно белое поле — граница между
+ * ними существовала на ощупь (курсор менялся), но не на глаз.
+ *
+ * Линия рисуется отдельным слоем внутри зоны захвата: тащить удобно за шесть
+ * пикселей, а видеть достаточно один. Цвет — `--border-strong`, а не `--border`:
+ * на бумажном фоне светлой темы полупрозрачные 15% не видит никто.
+ */
+.zy-gutter::before {
+  content: '';
+  position: absolute;
+  background: var(--border-strong);
+  pointer-events: none;
+}
+.zy-gutter--row::before {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-0.5px);
+}
+.zy-gutter--col::before {
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  transform: translateY(-0.5px);
+}
+/* Под курсором шов сам подсвечивается — вторая линия поверх заливки лишняя. */
+.zy-gutter:hover::before,
+.zy-gutter.zy-split-gutter--dragging::before {
+  opacity: 0;
+}
 .zy-gutter:hover,
 .zy-gutter.zy-split-gutter--dragging {
   background: var(--accent);
@@ -1105,36 +1139,100 @@ body {
  * Пульс медленный (2.4 с) и неяркий. Быстрый мигающий кант в рабочем окне на
  * восемь часов — не сигнал, а раздражитель, от которого сигнал выключают.
  */
-.zy-pane--waiting {
-  border-color: color-mix(in srgb, var(--accent) 46%, transparent);
-}
-.zy-pane--waiting::before {
+/*
+ * СОСТОЯНИЕ — ПОЛОСОЙ СВЕРХУ, А НЕ РАМКОЙ.
+ *
+ * Раньше ждущая панель обводилась пульсирующим кантом по периметру. Смысл был
+ * верный, а форма — чужая: рамка в этом интерфейсе уже занята и отвечает на
+ * другой вопрос («куда уйдёт Enter»). Два акцентных периметра рядом
+ * различались только пульсацией, и человек читал их как одно и то же —
+ * «активная панель». Признак, который нельзя отличить, сигналом не является.
+ *
+ * Теперь состояние живёт на своём месте — тонкой полосой у верхнего края, — и
+ * различается ЦВЕТОМ по правилам всей Зари: accent = «ждёт тебя», success =
+ * «работает». Рамке остаётся её единственный смысл.
+ */
+.zy-pane--waiting::before,
+.zy-pane--working::before {
   content: '';
   position: absolute;
-  inset: 0;
-  z-index: 6;
+  top: 0;
+  left: 0;
+  right: 0;
+  /* Четыре пикселя, а не три: на кромке рядом с рамкой панели тонкая линия
+     теряется — проверено кадром, сигнала не читалось вовсе. */
+  height: 4px;
+  z-index: 7;
   pointer-events: none;
-  box-shadow: inset 0 0 0 2px var(--accent);
+}
+/*
+ * Ждёт человека. Пульс медленный (2.4 с) и неяркий: быстрый мигающий сигнал в
+ * рабочем окне на восемь часов — не зов, а раздражитель, от которого сигнал
+ * выключают. Движение здесь важнее яркости — оно и ловится боковым зрением.
+ */
+.zy-pane--waiting::before {
+  background: var(--accent);
   animation: zy-wait-pulse 2.4s ease-in-out infinite;
 }
 @keyframes zy-wait-pulse {
   0%,
   100% {
-    opacity: 0.3;
+    opacity: 0.35;
   }
   50% {
-    opacity: 0.9;
+    opacity: 1;
   }
 }
 /* Человек уже смотрит на эту панель — звать его в неё незачем. */
 .zy-pane--waiting.zy-pane--focused::before {
   animation: none;
-  opacity: 0.5;
+  opacity: 0.75;
+}
+/*
+ * Работает. Бегущий блик, а не пульс: процесс идёт — это видно движением вдоль,
+ * и его невозможно спутать с зовом. Цвет спокойный: агент занят, от человека
+ * ничего не требуется.
+ */
+.zy-pane--working::before {
+  /* Два слоя: бегущий блик И ровная подложка под ним. Без подложки полоса
+     пропадала бы каждый раз, когда блик уходит за край, — состояние моргало бы
+     впустую, а «работает» должно читаться в любой момент. */
+  background:
+    linear-gradient(
+        90deg,
+        transparent 0%,
+        color-mix(in srgb, var(--success) 90%, transparent) 50%,
+        transparent 100%
+      )
+      no-repeat,
+    linear-gradient(color-mix(in srgb, var(--success) 34%, transparent), color-mix(in srgb, var(--success) 34%, transparent));
+  background-size:
+    38% 100%,
+    100% 100%;
+  animation: zy-work-run 1.9s linear infinite;
+}
+@keyframes zy-work-run {
+  from {
+    background-position:
+      -40% 0,
+      0 0;
+  }
+  to {
+    background-position:
+      140% 0,
+      0 0;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .zy-pane--waiting::before {
     animation: none;
-    opacity: 0.6;
+    opacity: 0.9;
+  }
+  /* Без движения бегущий блик неотличим от полосы — оставляем ровный цвет. */
+  .zy-pane--working::before {
+    animation: none;
+    background: color-mix(in srgb, var(--success) 70%, transparent);
+    background-size: auto;
   }
 }
 
