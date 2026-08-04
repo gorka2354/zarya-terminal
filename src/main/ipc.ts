@@ -514,6 +514,20 @@ export function registerIpc(ctx: IpcContext): void {
       return driver.mcpToggle(requestId, name, enabled)
     }
   )
+  ipcMain.handle(
+    CH.agentSkillOverride,
+    async (
+      _e,
+      engine: AgentEngine,
+      requestId: string | undefined,
+      name: string,
+      state: import('@shared/types').SkillState
+    ) => {
+      const driver = driverFor(engine)
+      if (!driver?.skillOverride) return { ok: false, error: 'движок так не умеет' }
+      return driver.skillOverride(requestId, name, state)
+    }
+  )
   ipcMain.handle(CH.agentListCommands, async (_e, engine: AgentEngine, requestId?: string) => {
     const driver = driverFor(engine)
     // Спросили команды — значит панель работает с агентом: самое время начать

@@ -106,6 +106,8 @@ export const CH = {
   agentMcpReconnect: 'agent:mcp-reconnect',
   /** Включить/выключить сервер живой беседы (пишет в конфиг движка). */
   agentMcpToggle: 'agent:mcp-toggle',
+  /** Состояние скилла в настройках движка: в работе / только имя / «/» / выкл. */
+  agentSkillOverride: 'agent:skill-override',
   /** Своя модель с диска: main спрашивает папку сам, renderer путей не подаёт. */
   sttAddCustom: 'stt:add-custom',
   sttForgetCustom: 'stt:forget-custom',

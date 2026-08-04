@@ -1,4 +1,5 @@
 import type { McpServerRow } from './types'
+import { effectiveState } from './skills'
 
 /**
  * Стрижка ответа SDK до того, что можно показать человеку.
@@ -183,6 +184,70 @@ export function markIndex(
     }
   }
   return out
+}
+
+/**
+ * Скиллы из ответа движка — в вид, пригодный для показа.
+ *
+ * Здесь же чистка от мусора: незаполненное имя, отрицательные токены, вообще
+ * отсутствующий список. Скилл без имени показывать нечем, а «0 токенов» у
+ * скилла означает не «бесплатно», а «движок не сказал».
+ */
+export function skillsFrom(
+  raw:
+    | {
+        totalSkills?: unknown
+        includedSkills?: unknown
+        tokens?: unknown
+        skillFrontmatter?: { name?: unknown; source?: unknown; tokens?: unknown }[]
+      }
+    | undefined,
+  /** Слои `skillOverrides` — чем скилл выключен и кем, если выключен. */
+  layers?: Partial<Record<import('./types').SkillLayer, Record<string, unknown> | undefined>>
+): import('./types').McpSkills | undefined {
+  if (!raw || typeof raw !== 'object') return undefined
+  const num = (v: unknown): number => (typeof v === 'number' && v > 0 ? v : 0)
+  const items = (Array.isArray(raw.skillFrontmatter) ? raw.skillFrontmatter : [])
+    .map((s) => {
+      const name = typeof s?.name === 'string' ? s.name.trim() : ''
+      return {
+        name,
+        source: typeof s?.source === 'string' ? s.source.trim() : '',
+        tokens: num(s?.tokens),
+        ...effectiveState(name, layers ?? {})
+      }
+    })
+    .filter((s) => s.name)
+  // Выключенные скиллы движок не присылает вовсе: он отдаёт то, что ВОШЛО в
+  // контекст. Без этого шага дверь открывалась бы в одну сторону — выключить
+  // можно, а найти и вернуть уже нечем. Достаём их из самих настроек; цены у
+  // них нет, потому что в контексте их нет.
+  const known = new Set(items.map((s) => s.name))
+  for (const layer of ['user', 'project', 'local'] as import('./types').SkillLayer[]) {
+    for (const name of Object.keys(layers?.[layer] ?? {})) {
+      if (known.has(name)) continue
+      const st = effectiveState(name, layers ?? {})
+      if (st.state === 'on') continue
+      known.add(name)
+      items.push({ name, source: '', tokens: 0, ...st })
+    }
+  }
+  items.sort(
+    (a, b) =>
+      // Выключенные — вниз: это уже решённое, а разговор здесь про то, за что
+      // платится сейчас.
+      Number(a.state === 'off') - Number(b.state === 'off') ||
+      b.tokens - a.tokens ||
+      a.name.localeCompare(b.name, 'en')
+  )
+  const total = num(raw.totalSkills) || items.length
+  if (!total && !items.length) return undefined
+  return {
+    total,
+    included: num(raw.includedSkills) || items.length,
+    tokens: num(raw.tokens),
+    items
+  }
 }
 
 /**

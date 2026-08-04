@@ -57,8 +57,15 @@ export function toolLabel(
   displayName?: string
 ): string {
   const o = input as
-    | { command?: string; file_path?: string; path?: string; title?: string }
+    | { command?: string; file_path?: string; path?: string; title?: string; skill?: string }
     | null
+  // Скилл называет себя в `input.skill`, и больше нигде: без этой ветки карточка
+  // выводила голое «Skill» — то есть агент брал скилл, а человек не видел какой.
+  // Аргумент дописываем, если он есть: у скилла это его задание.
+  if (typeof o?.skill === 'string' && o.skill.trim()) {
+    const args = typeof (o as { args?: unknown }).args === 'string' ? (o as { args: string }).args.trim() : ''
+    return `${t('gates.skill')} ${o.skill.trim()}${args ? ` · ${args}` : ''}`
+  }
   if (typeof o?.command === 'string' && o.command.trim()) return o.command
   const path =
     typeof o?.file_path === 'string' ? o.file_path : typeof o?.path === 'string' ? o.path : ''

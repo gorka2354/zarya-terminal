@@ -143,6 +143,13 @@ const api = {
       ipcRenderer.invoke(CH.agentMcpReconnect, engine, requestId, name),
     mcpToggle: (engine: AgentEngine, requestId: string, name: string, enabled: boolean) =>
       ipcRenderer.invoke(CH.agentMcpToggle, engine, requestId, name, enabled),
+    /** Состояние скилла: пишется в личные настройки движка, не в наши. */
+    skillOverride: (
+      engine: AgentEngine,
+      requestId: string | undefined,
+      name: string,
+      state: import('@shared/types').SkillState
+    ) => ipcRenderer.invoke(CH.agentSkillOverride, engine, requestId, name, state),
     debugFlags: (engine: AgentEngine, requestId?: string) =>
       ipcRenderer.invoke(CH.agentDebugFlags, engine, requestId)
   },

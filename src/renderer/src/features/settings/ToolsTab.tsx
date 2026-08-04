@@ -5,6 +5,7 @@ import { useAiStore } from '@/features/ai/aiStore'
 import { useUiStore } from '@/state/uiStore'
 import { shortenPath } from '@/lib/ansi'
 import { mcpLoginCommand } from '@shared/mcp'
+import { SkillsPanel } from './SkillsPanel'
 import './toolstab.css'
 
 /**
@@ -97,7 +98,11 @@ export function ToolsTab(): React.JSX.Element {
 
   const [snap, setSnap] = useState<McpSnapshot | null>(null)
   const [busy, setBusy] = useState(false)
-  const [note, setNote] = useState('')
+  // Сообщение и его тон. Тон нужен потому, что здесь встречаются оба: отказ
+  // движка и ответ на удачное нажатие. Красить «команда скопирована» цветом
+  // danger — врать цветом, а цвет в Заре значит «сломано» или «ждёт тебя».
+  const [note, setNote] = useState<{ text: string; bad?: boolean }>({ text: '' })
+  const say = useCallback((text: string, bad = false) => setNote({ text, bad }), [])
 
   const engine = chosen?.engine as AgentEngine | undefined
   const caps = engine ? agentCaps?.[engine] : undefined
@@ -107,10 +112,13 @@ export function ToolsTab(): React.JSX.Element {
   const unsupported = caps ? !caps.mcp : false
 
   const load = useCallback(
-    async (probe: boolean): Promise<void> => {
+    // `keepNote` — для перезагрузки ПОСЛЕ действия: без него ответ на нажатие
+    // («подействует со следующей беседы») стирался бы обновлением списка через
+    // долю секунды, и человек не успевал его прочитать.
+    async (probe: boolean, keepNote = false): Promise<void> => {
       if (!chosen || !engine || unsupported) return
       setBusy(true)
-      setNote('')
+      if (!keepNote) setNote({ text: '' })
       try {
         setSnap(await window.zarya.agent.mcpStatus(engine, chosen.id, probe))
       } finally {
@@ -138,12 +146,12 @@ export function ToolsTab(): React.JSX.Element {
       if (r.ok) {
         await load(false)
       } else if (r.reason === 'no-session') {
-        setNote(t('tools.noSession'))
+        say(t('tools.noSession'), true)
       } else if (r.reason === 'unsupported') {
-        setNote(t('tools.unsupported'))
+        say(t('tools.unsupported'), true)
       } else {
         // Причина — от движка, дословно: наш пересказ «не вышло» бесполезен.
-        setNote(r.error || t('tools.failedPlain'))
+        say(r.error || t('tools.failedPlain'), true)
       }
     } finally {
       setBusy(false)
@@ -205,7 +213,11 @@ export function ToolsTab(): React.JSX.Element {
                 : t('tools.staleNone')}
             </div>
           )}
-          {note && <div className="zy-tools-note">{note}</div>}
+          {note.text && (
+            <div className={`zy-tools-note${note.bad ? ' zy-tools-note--bad' : ''}`}>
+              {note.text}
+            </div>
+          )}
 
           {!rows.length && !busy && (
             <div className="zy-tools-empty">
@@ -248,7 +260,7 @@ export function ToolsTab(): React.JSX.Element {
                       className="zy-tools-btn"
                       onClick={() => {
                         void navigator.clipboard.writeText(mcpLoginCommand(s.name))
-                        setNote(t('tools.copied'))
+                        say(t('tools.copied'))
                       }}
                     >
                       {t('tools.copy')}
@@ -316,6 +328,24 @@ export function ToolsTab(): React.JSX.Element {
 
           {/* Кто чей файл правит — это человек должен знать ДО нажатия. */}
           <div className="zy-tools-foot">{t('tools.writesConfig')}</div>
+
+          {/*
+            Скиллы — вторая половина той же цены. MCP-серверы и скиллы платят из
+            одного окна контекста, поэтому и живут на одной вкладке: решение
+            «что выключить» человек принимает про весь оброк сразу.
+          */}
+          {snap?.skills && chosen && engine && (
+            <SkillsPanel
+              engine={engine}
+              requestId={chosen.id}
+              skills={snap.skills}
+              stale={stale}
+              busy={busy}
+              used={chosen.skillsUsed ?? []}
+              onNote={say}
+              onChanged={() => void load(false, true)}
+            />
+          )}
         </>
       )}
     </section>

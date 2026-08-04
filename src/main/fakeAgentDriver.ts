@@ -140,6 +140,32 @@ export class FakeAgentDriver implements AgentDriver {
       this.schedule(requestId, 8000, () =>
         this.emit(requestId, { type: 'result', isError: false, costUsd: 0.04, models: [`${this.engine}-model`] })
       )
+    } else if (/skill/i.test(opts.prompt)) {
+      // Скилл, взятый агентом. Настоящий движок объявляет это обычным `tool_use`
+      // с именем `Skill` и именем скилла в `input.skill` — проверено по записям
+      // Claude Code. Прогону это нужно, чтобы увидеть две вещи: что карточка в
+      // ленте называет скилл, а не пишет голое «Skill», и что раздел настроек
+      // отмечает сработавший.
+      this.schedule(requestId, 400, () => {
+        this.emit(requestId, {
+          type: 'assistant',
+          content: [
+            {
+              type: 'tool_use',
+              id: `${requestId}-s1`,
+              name: 'Skill',
+              input: { skill: 'code-review', args: 'дифф ветки' }
+            }
+          ]
+        })
+        this.emit(requestId, {
+          type: 'tool_result',
+          toolUseId: `${requestId}-s1`,
+          content: 'fake: скилл отработал',
+          isError: false
+        })
+        this.emit(requestId, { type: 'result', isError: false, costUsd: 0.01 })
+      })
     } else if (/tool/i.test(opts.prompt)) {
       if (/slow/i.test(opts.prompt)) this.slowTools.add(requestId)
       // Gate a tool so approve/deny + concurrent-gate behaviour is testable.
@@ -365,6 +391,7 @@ export class FakeAgentDriver implements AgentDriver {
    * методов нет вовсе, и окно скажет «не умеет» вместо пустого списка.
    */
   private mcpDisabled = new Set<string>()
+  private skillStates = new Map<string, import('@shared/types').SkillState>()
 
   async mcpStatus(
     requestId: string | undefined,
@@ -376,10 +403,38 @@ export class FakeAgentDriver implements AgentDriver {
     const live = !!requestId && this.started.has(requestId)
     if (!live && !opts?.probe) return { servers: [], stale: true }
     const off = (name: string): boolean => this.mcpDisabled.has(name)
+    const sk = (
+      name: string,
+      source: string,
+      tokens: number,
+      extra?: Partial<import('@shared/types').SkillRow>
+    ): import('@shared/types').SkillRow => ({
+      name,
+      source,
+      tokens,
+      state: this.skillStates.get(name) ?? 'on',
+      ...extra
+    })
     return {
       at: Date.now(),
       contextTokens: 42_000,
       contextMax: 200_000,
+      // Разыгранные скиллы покрывают все случаи, из-за которых строка ведёт
+      // себя по-разному: дорогой личный, встроенный, плагинный (его
+      // `skillOverrides` не берёт), перекрытый настройкой проекта и уже
+      // выключенный — тот, которого в контексте нет и цена которого неизвестна.
+      skills: {
+        total: 5,
+        included: 4,
+        tokens: 1_190,
+        items: [
+          sk('code-review', 'userSettings', 620),
+          sk('dataviz', 'built-in', 380),
+          sk('cloudflare:email-service', 'plugin', 190),
+          sk('team-deploy', 'projectSettings', 0, { state: 'name-only', from: 'project' }),
+          sk('legacy-context', '', 0, { state: 'off', from: 'user' })
+        ]
+      },
       servers: [
         {
           name: 'broken-one',
@@ -438,6 +493,30 @@ export class FakeAgentDriver implements AgentDriver {
     if (!this.started.has(requestId)) return { ok: false, reason: 'no-session' }
     if (enabled) this.mcpDisabled.delete(name)
     else this.mcpDisabled.add(name)
+    return { ok: true }
+  }
+
+  /**
+   * Состояние скилла — в памяти прогона.
+   *
+   * Настоящий драйвер пишет в `~/.claude/settings.json`; фейку это запрещено:
+   * прогон не имеет права трогать настройки человека, а на машине QA их может
+   * не быть вовсе. Отказ на перекрытом ключе разыгран, потому что именно он
+   * решает, показывать ли переключатель.
+   */
+  async skillOverride(
+    _requestId: string | undefined,
+    name: string,
+    state: import('@shared/types').SkillState
+  ): Promise<{
+    ok: boolean
+    error?: string
+    reason?: 'overridden'
+    by?: import('@shared/types').SkillLayer
+  }> {
+    if (name === 'team-deploy') return { ok: false, reason: 'overridden', by: 'project' }
+    if (name === 'cloudflare:email-service') return { ok: false, error: 'скилл плагина' }
+    this.skillStates.set(name, state)
     return { ok: true }
   }
 

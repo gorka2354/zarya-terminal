@@ -179,6 +179,17 @@ export interface ZaryaApi {
       name: string,
       enabled: boolean
     ): Promise<{ ok: boolean; error?: string; reason?: 'no-session' | 'unsupported' }>
+    skillOverride(
+      engine: AgentEngine,
+      requestId: string | undefined,
+      name: string,
+      state: import('@shared/types').SkillState
+    ): Promise<{
+      ok: boolean
+      error?: string
+      reason?: 'overridden'
+      by?: import('@shared/types').SkillLayer
+    }>
     debugFlags(engine: AgentEngine, requestId?: string): Promise<Record<string, unknown>>
   }
   /** Back-compat shim over `agent` with engine 'claude-code'. Removed after inc-9 Ф3. */

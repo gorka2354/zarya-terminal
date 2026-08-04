@@ -15,9 +15,15 @@ import type {
   ClaudePermissionDecision,
   ClaudeSessionInfo,
   ClaudeStartOpts,
-  ClaudeStreamEvent
+  ClaudeStreamEvent,
+  SkillLayer,
+  SkillState
 } from '@shared/types'
 import { rewindPoint } from '@shared/rewind'
+import { asSkillState, withSkillOverride } from '@shared/skills'
+// Та же атомарная запись, что у собственных настроек: правка чужого конфига —
+// тем более не то место, где допустим полуписаный файл после падения.
+import { writeJsonAtomic } from './jsonStore'
 import type { AgentDriver } from './agentDriver'
 import { bundledPkgName, claudeExeName, resolveClaudeExe, type ExePick } from './claudeExe'
 // Types only (erased at runtime) — safe to import statically from the ESM-only
@@ -28,6 +34,7 @@ import {
   foldMcpTokens,
   markIndex,
   mcpRowFrom,
+  skillsFrom,
   sortMcpRows,
   type RawMcpStatus,
   type RawMcpTool
@@ -272,6 +279,49 @@ function readClaudeEffort(): string | undefined {
   } catch {
     return undefined
   }
+}
+
+/** Пути настроек Claude Code: личные и два проектных. */
+function skillSettingsPaths(cwd?: string): Record<SkillLayer, string | undefined> {
+  return {
+    user: join(homedir(), '.claude', 'settings.json'),
+    project: cwd ? join(cwd, '.claude', 'settings.json') : undefined,
+    local: cwd ? join(cwd, '.claude', 'settings.local.json') : undefined
+  }
+}
+
+function readJsonObject(path: string | undefined): Record<string, unknown> | undefined {
+  if (!path) return undefined
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(path, 'utf8'))
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : undefined
+  } catch {
+    // Файла нет или он сломан — это не ошибка Зари: значит, переопределений нет.
+    return undefined
+  }
+}
+
+/**
+ * `skillOverrides` из всех трёх слоёв настроек движка.
+ *
+ * Читаем все, а не только тот, куда пишем сами: у проектных слоёв приоритет
+ * выше личного, и скилл, выключенный настройкой проекта, обязан выглядеть
+ * выключенным — вместе с именем виноватого файла.
+ */
+function readSkillOverrides(
+  cwd?: string
+): Partial<Record<SkillLayer, Record<string, unknown> | undefined>> {
+  const paths = skillSettingsPaths(cwd)
+  const out: Partial<Record<SkillLayer, Record<string, unknown> | undefined>> = {}
+  for (const layer of ['user', 'project', 'local'] as SkillLayer[]) {
+    const cfg = readJsonObject(paths[layer])
+    const raw = cfg?.skillOverrides
+    if (raw && typeof raw === 'object' && !Array.isArray(raw))
+      out[layer] = raw as Record<string, unknown>
+  }
+  return out
 }
 
 /** Normalize the SDK's /usage response into our ClaudeUsage shape. */
@@ -1235,7 +1285,7 @@ export class ClaudeCodeDriver implements AgentDriver {
   ): Promise<McpSnapshot> {
     const live = requestId ? this.sessions.get(requestId) : undefined
     if (live) {
-      const fresh = await this.mcpFromQuery(live.query)
+      const fresh = await this.mcpFromQuery(live.query, live.cwd)
       if (fresh) {
         this.rememberSnapshot(requestId!, fresh)
         return fresh
@@ -1299,6 +1349,40 @@ export class ClaudeCodeDriver implements AgentDriver {
   }
 
   /**
+   * Переключить состояние скилла.
+   *
+   * Пишем в ЛИЧНЫЕ настройки движка (`~/.claude/settings.json`) — окно обязано
+   * сказать это словами до нажатия: файл чужой, наш там только один ключ.
+   * Проектные слои сильнее личного, поэтому перекрытый ключ трогать
+   * отказываемся: запись прошла бы успешно и не изменила ничего.
+   */
+  async skillOverride(
+    requestId: string | undefined,
+    name: string,
+    state: SkillState
+  ): Promise<{ ok: boolean; error?: string; reason?: 'overridden'; by?: SkillLayer }> {
+    if (!asSkillState(state)) return { ok: false, error: 'неизвестное состояние' }
+    if (!name.trim()) return { ok: false, error: 'скилл без имени' }
+    // Папка — у беседы, а не из аргумента: рендерер не должен уметь показать
+    // главному процессу произвольный путь и заставить его туда писать.
+    const cwd = requestId ? this.sessions.get(requestId)?.cwd : undefined
+    const layers = readSkillOverrides(cwd)
+    for (const layer of ['project', 'local'] as SkillLayer[]) {
+      if (asSkillState(layers[layer]?.[name])) return { ok: false, reason: 'overridden', by: layer }
+    }
+    const path = skillSettingsPaths(cwd).user!
+    try {
+      // Читаем ЦЕЛИКОМ и кладём обратно целиком: в файле живут чужие ключи
+      // (модель, хуки, плагины), и потерять их правкой скилла недопустимо.
+      const cfg = readJsonObject(path) ?? {}
+      await writeJsonAtomic(path, withSkillOverride(cfg, name, state))
+      return { ok: true }
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : String(e) }
+    }
+  }
+
+  /**
    * Карта пометок для беседы: спрашиваем один раз и запоминаем.
    *
    * Инструменты меняются вместе с составом серверов, поэтому карта сбрасывается
@@ -1331,13 +1415,19 @@ export class ClaudeCodeDriver implements AgentDriver {
   }
 
   /** Спросить у одного query состав серверов и цену их инструментов. */
-  private async mcpFromQuery(query: unknown): Promise<McpSnapshot | undefined> {
+  private async mcpFromQuery(query: unknown, cwd?: string): Promise<McpSnapshot | undefined> {
     const q = query as {
       mcpServerStatus?: () => Promise<RawMcpStatus[]>
       getContextUsage?: () => Promise<{
         mcpTools?: RawMcpTool[]
         totalTokens?: number
         maxTokens?: number
+        skills?: {
+          totalSkills?: number
+          includedSkills?: number
+          tokens?: number
+          skillFrontmatter?: { name?: unknown; source?: unknown; tokens?: unknown }[]
+        }
       }>
     }
     if (typeof q.mcpServerStatus !== 'function') return undefined
@@ -1353,12 +1443,18 @@ export class ClaudeCodeDriver implements AgentDriver {
     let tokensBy: Record<string, number> = {}
     let contextTokens: number | undefined
     let contextMax: number | undefined
+    let skills: import('@shared/types').McpSkills | undefined
     if (typeof q.getContextUsage === 'function') {
       try {
         const usage = await q.getContextUsage()
         tokensBy = foldMcpTokens(usage?.mcpTools)
         if (typeof usage?.totalTokens === 'number') contextTokens = usage.totalTokens
         if (typeof usage?.maxTokens === 'number') contextMax = usage.maxTokens
+        // Скиллы: их описания сидят в контексте всегда, и движок считает это
+        // поимённо. Раньше цифра терялась вместе с остальным ответом. Состояние
+        // читаем с диска, а не из ответа: движок присылает только то, что
+        // ВОШЛО в контекст, — выключенного скилла в списке нет вовсе.
+        skills = skillsFrom(usage?.skills, readSkillOverrides(cwd))
       } catch {
         /* цены не будет — состояние покажем всё равно */
       }
@@ -1368,7 +1464,7 @@ export class ClaudeCodeDriver implements AgentDriver {
         mcpRowFrom(r, tokensBy[typeof r?.name === 'string' ? r.name : ''])
       )
     )
-    return { servers, at: Date.now(), contextTokens, contextMax }
+    return { servers, at: Date.now(), contextTokens, contextMax, skills }
   }
 
   /** Запомнить снимок, не давая карте расти без предела. */

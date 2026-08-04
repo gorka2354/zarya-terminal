@@ -197,6 +197,18 @@ export interface Conversation {
    * спрашивание, а не тихо восстанавливает вчерашние разрешения.
    */
   sessionAllows?: string[]
+  /**
+   * Какие скиллы агент РЕАЛЬНО взял в этой беседе.
+   *
+   * Платится за все: описание каждого скилла лежит в контексте любого запроса,
+   * а срабатывают единицы. Без этого списка «83 скилла, 5 347 токенов» — просто
+   * число, и решить по нему нечего. С ним видно, за что деньги уходят впустую,
+   * а какой скилл трогать нельзя, потому что он работает.
+   *
+   * На диск не сохраняется: это наблюдение за живой беседой, и после
+   * перезапуска честнее пустой список, чем вчерашний, выданный за сегодняшний.
+   */
+  skillsUsed?: string[]
   agentMode: boolean
   /** True only while an ai.chat request is in flight (between dispatch and done/error). */
   streaming: boolean
@@ -620,6 +632,28 @@ export const useAiStore = create<AiState>((set, get) => {
     set((s) => ({ conversations: s.conversations.map((c) => (c.id === id ? fn(c) : c)) }))
   }
 
+  /**
+   * Запомнить скиллы, которые агент реально взял.
+   *
+   * Единственный момент, когда видно, что из оплаченного контекста пошло в
+   * дело: сам скилл о себе не сообщает, а движок такого счёта не ведёт. Имя
+   * лежит в `input.skill` — проверено по записям Claude Code.
+   */
+  const noteSkills = (id: string, calls: { name: string; input: unknown }[]): void => {
+    const names = calls
+      .filter((c) => c.name === 'Skill')
+      .map((c) => {
+        const v = (c.input as { skill?: unknown } | null)?.skill
+        return typeof v === 'string' ? v.trim() : ''
+      })
+      .filter(Boolean)
+    if (!names.length) return
+    patchConversation(id, (c) => {
+      const fresh = names.filter((n) => !c.skillsUsed?.includes(n))
+      return fresh.length ? { ...c, skillsUsed: [...(c.skillsUsed ?? []), ...fresh] } : c
+    })
+  }
+
   const resolveConv = (conversationId?: string): Conversation | undefined => {
     const s = get()
     const id = conversationId ?? s.activeId
@@ -816,6 +850,15 @@ export const useAiStore = create<AiState>((set, get) => {
           ...c,
           messages: [...c.messages, { role: 'assistant', content: ev.content }]
         }))
+        // Вызовы инструментов приходят ВНУТРИ ответа модели, а не отдельным
+        // событием: у Claude Code это единственный путь, и учитывать скиллы
+        // только в `case 'tool_use'` значило бы не учитывать их вовсе.
+        noteSkills(
+          convId,
+          ev.content.flatMap((p) =>
+            p.type === 'tool_use' ? [{ name: p.name, input: p.input }] : []
+          )
+        )
         break
 
       case 'permission':
@@ -1026,6 +1069,7 @@ export const useAiStore = create<AiState>((set, get) => {
 
       case 'tool_use': {
         patchConversation(convId, (c) => appendToolUse(c, ev.id, ev.name, ev.input))
+        noteSkills(convId, [{ name: ev.name, input: ev.input }])
         /*
          * Пол над автоодобрением встроенного агента: необратимое спрашивают
          * всегда, даже когда «без подтверждений» включено. Плюс правила «до

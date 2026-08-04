@@ -105,6 +105,23 @@ export interface AgentDriver {
     enabled: boolean
   ): Promise<{ ok: boolean; error?: string; reason?: 'no-session' | 'unsupported' }>
   /**
+   * Переключить состояние скилла в настройках движка.
+   *
+   * Пишет в личные настройки Claude Code (`~/.claude/settings.json`), ключ
+   * `skillOverrides`. Отказывается, если тот же ключ задан настройками проекта:
+   * они сильнее, и запись прошла бы «успешно», ничего не изменив.
+   */
+  skillOverride?(
+    requestId: string | undefined,
+    name: string,
+    state: import('@shared/types').SkillState
+  ): Promise<{
+    ok: boolean
+    error?: string
+    reason?: 'overridden'
+    by?: import('@shared/types').SkillLayer
+  }>
+  /**
    * Перечитать скиллы, плагины и MCP, не перезапуская беседу.
    *
    * Раньше вызывалось из ipc кастом мимо этого интерфейса — а `capabilities`
