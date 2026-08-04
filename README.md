@@ -8,7 +8,7 @@
 exactly enough light to work by.*
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-ffb05c.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.7.2%20%22Callsign%22-ffb05c.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.7.4%20%22Stocktake%22-ffb05c.svg)](CHANGELOG.md)
 [![Languages](https://img.shields.io/badge/UI-English%20%7C%20%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9-4fd6d6.svg)](#language)
 [![Electron](https://img.shields.io/badge/Electron-43-4fd6d6.svg)](https://www.electronjs.org/)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-5fb88a.svg)](#install)
@@ -48,6 +48,15 @@ no account, no telemetry.
   with their real state, the engine's own words for a failure, what each one costs you
   in tokens **per request**, and buttons to reconnect or turn one off. The tools of 14
   servers can quietly eat half your context; now that number is on screen.
+- **📊 Skills, priced** — the same tab prices every skill you have. A skill's
+  description sits in the context of *every* request, so it is billed whether it fires
+  or not: on the author's machine that is 83 skills and **5,347 tokens per request**.
+  Next to the price is what actually fired, counted on your machine and stored nowhere
+  else — plus the blunt answer to "what can I turn off": *"82 never fired, ~4,986
+  tokens"*. Each one has the four states Claude Code itself supports (in play · name
+  only · by "/" only · off). Where a switch would not work — plugin skills, or a skill
+  overridden by project settings — there is no switch, just the name of the file that
+  overrode it.
 - **🌅 Model & effort** — a console for picking the model and reasoning
   effort (`LOW` → `MAX`), with every current Claude version, live-switchable
   mid-session.
@@ -152,7 +161,7 @@ a desk of its own, because past four the feed collapses into a strip of lines.
 <img src="docs/img/launchpad-tight.png" align="right" width="290" alt="Model and effort picker" />
 
 The signature control — a console instead of a boring dropdown. Every
-current Claude model is version-qualified (**Opus 4.8**, **Fable 5**, **Sonnet 5**,
+current Claude model is version-qualified (**Opus 5**, **Fable 5**, **Sonnet 5**,
 **Haiku 4.5**) with a one-line purpose and a live "active" marker on whatever is
 actually running. Pick an **engine** (model) and its **effort** (from `LOW`
 to `MAX`, gated per model — the same names the CLI uses), flip **ULTRACODE** for xhigh + workflow
@@ -177,8 +186,9 @@ and the agents, and it auto-follows — launching an interactive CLI (`claude`, 
 `ssh`, a TUI) flips into raw-terminal mode automatically. Message queueing, `↑/↓`
 input history, `Esc` to interrupt and approve/deny keys are all there.
 
-The bar carries one figure of your limits — whichever window is closest to running
-out — and opens the rest on click: a line per limit with its own gauge and reset time.
+One figure of your limits — whichever window is closest to running out — lives in the
+strip along the bottom of the window (one gauge per window, not per pane) and opens
+the rest on click: a line per limit with its own gauge and reset time.
 Engine and permission mode are icons; their labels live in tooltips, but the gate
 **keeps its colour**, because «will I be asked?» must be readable without hovering.
 
@@ -264,7 +274,12 @@ you opt in.
 
 ### Time Machine
 Global, cross-session command history (`Ctrl+R`) — every command with cwd, shell and
-exit code, fuzzy-searchable across every session you've ever had.
+exit code, fuzzy-searchable across sessions. It is bounded and switchable, both in
+**Settings → Terminal**: a ceiling on how many entries are kept (20,000 by default —
+older ones are dropped from the file, not just from the view), and a switch that stops
+recording *and* stops answering — with the switch off, `Ctrl+R` and the terminal's
+suggestions find nothing, immediately, not after a restart. There is a button to
+erase the lot.
 
 ### Images
 Paste (`Ctrl+V`) or drop a picture into the bar and it attaches to **that** pane, shows
@@ -318,8 +333,9 @@ Remappable in Settings → Keys (`Ctrl+,`). Full reference:
 ## Install
 
 ### Prebuilt (Windows)
-Grab `Zarya-<version>-win-x64.exe` from the GitHub Releases page and run it — a per-user
-installer, no admin required. A portable `.exe` is built alongside it.
+Grab `Zarya-Setup-<version>-win-x64.exe` from the GitHub Releases page and run it — a
+per-user installer, no admin required. `Zarya-Portable-<version>-win-x64.exe` is built
+alongside it if you would rather not install anything.
 
 ### From source
 
@@ -333,9 +349,9 @@ npm run pack         # unpacked build -> release/win-unpacked
 npx electron-builder # installer + portable -> release/
 ```
 
-**Notes.** Node 20.14+ works for dev and build. Packaging uses **electron-builder 24**
-(v26 requires Node ≥ 20.19). On macOS/Linux `electron-builder` produces a `.dmg` /
-AppImage + `.deb`. Native Claude Code needs the bundled `@anthropic-ai/claude-agent-sdk`
+**Notes.** Node **20.19+** is required for dev and build (`engines` enforces it; CI runs
+Node 22). Packaging uses **electron-builder 26**, which is what set that floor. On
+macOS/Linux `electron-builder` produces a `.dmg` / AppImage + `.deb`. Native Claude Code needs the bundled `@anthropic-ai/claude-agent-sdk`
 and an existing `claude` login (`claude` in a terminal, once).
 
 ## Architecture
@@ -390,10 +406,17 @@ Details: [docs/shell-integration.md](docs/shell-integration.md).
 
 ## Security & privacy
 
-- **No account, no telemetry.** Zarya never phones home; the only outbound requests go
-  to the AI provider you configure. Native Claude Code uses your existing `claude` login.
-- **API keys encrypted at rest** via Electron `safeStorage` (DPAPI / Keychain / Secret
-  Service) — never plaintext, never sent anywhere but the provider you set.
+- **No account, no telemetry.** Nothing about you or your work is collected, and there
+  is no analytics endpoint anywhere in the code. Zarya makes exactly three kinds of
+  outbound request, all of them nameable: to the AI provider you configure; to GitHub
+  to look for a new version (one anonymous request at launch — switch it off in
+  **Settings → Updates**); and to `huggingface.co` if you ask it to download a speech
+  model. Native Claude Code uses your existing `claude` login.
+- **API keys are encrypted at rest when the OS can do it** — Electron `safeStorage`
+  (DPAPI / Keychain / Secret Service). When it cannot, the key is stored base64-encoded,
+  which is *not* protection, and the settings screen says so in as many words
+  ("Key in plain text"). See [SECURITY.md](SECURITY.md) for what each state means.
+  Either way the key goes nowhere but the provider you set.
 - **Hardened renderer** — `contextIsolation` + `sandbox`, a strict CSP (`script-src
   'self'`, no inline/eval), navigation locked to its own origin, and DOMPurify on all
   AI/tool output.
@@ -426,13 +449,16 @@ report), the project list order and path comparison, key-protection classificati
 shell-profile validation, and the completeness of both language dictionaries.
 
 **End-to-end** (`scripts/*.mjs`, Playwright driving Electron) — the real app in a
-throwaway profile, never touching your sessions or settings. Panes (140 checks),
-the language switch across every screen (10), download progress and the tool clock
-(16), the agent engines on a protocol-accurate fake driver (21), the model picker
-(41), the update page (27), menus (27), key badges (9), who is waiting for you and
-when Zarya may call (11), the floor under autopilot (12), and the health of the
-agent's MCP servers (27). Plus `npm run perf`, which measures drag, streaming and
-gutter latency against fixed budgets.
+throwaway profile, never touching your sessions or settings — and offscreen, so a run
+never steals focus while you work. Panes (140 checks), the language switch across every
+screen (10), download progress and the tool clock (16), the agent engines on a
+protocol-accurate fake driver (21), the model picker (41), the update page (30), menus
+(27), key badges (9), command history and its off switch (13), who is waiting for you
+and when Zarya may call (11), the floor under autopilot (26), the health of the agent's
+MCP servers (27), the skills tab (49), writing skill state into Claude Code's own
+settings on a redirected home (14), the usage counter across restarts (12), pane
+signals (36), and the first-run screen (18). Plus `npm run perf`, which measures drag,
+streaming and gutter latency against fixed budgets.
 
 ```bash
 npm test              # unit tests
@@ -441,13 +467,16 @@ npm run perf          # performance budgets
 ```
 
 **What CI does and does not do.** Every push runs typecheck, the unit tests and a
-build on Ubuntu and Windows, plus ten end-to-end runs on a real Electron window
-under xvfb: panes, the language switch, download progress, the agent engines on a
-fake driver, importing a speech model from disk (folder recognition and its
+build on Ubuntu and Windows, plus **nineteen** end-to-end runs on a real Electron
+window under xvfb: panes, the language switch, download progress, the agent engines on
+a fake driver, importing a speech model from disk (folder recognition and its
 refusals — no weights are downloaded), the key router (`Enter` in a rename dialog
 must not also approve a tool waiting in a pane), sidebar folding, the difference
-between "working" and "waiting for you", the floor under autopilot, and the MCP
-health panel. The rest — the speech
+between "working" and "waiting for you", the floor under autopilot, the MCP health
+panel, the three skill runs (what the tab shows, what gets written into Claude Code's
+own settings, and the usage counter's life across restarts), per-pane routing of engine
+commands, the palette, per-pane model and effort, the pane signals (seam, state stripe,
+one header), find-in-feed, and the first-run screen. The rest — the speech
 engine on real weights, the real Claude Code driver, the update page, performance
 budgets — need network, hardware or a live agent, so they stay manual before a
 release. A green tick therefore means *types check,

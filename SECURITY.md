@@ -34,10 +34,20 @@ single-maintainer project, not a company with an SLA.
 
   **No telemetry follows from this.** Reporting the protection level is a local
   UI decision; nothing about your keys leaves the machine.
-- **No telemetry.** Zarya does not phone home, collect analytics, or send crash
-  reports anywhere. The only outbound network requests it ever makes are to the AI
-  provider endpoint you explicitly configure (and to a self-hosted Ollama/OpenAI
-  Ollama-compatible host if you point it at one).
+- **No telemetry.** Zarya collects no analytics and sends no crash reports; there is
+  no endpoint of ours anywhere in the code. It does, however, make outbound requests —
+  all of them nameable, and this list is exhaustive:
+  1. the AI provider endpoint you explicitly configure (including a self-hosted
+     Ollama / OpenAI-compatible host if you point it at one);
+  2. **GitHub, to look for a new version** — one anonymous request at launch, plus
+     the download itself if you press install. Hosts are pinned in
+     `src/main/updateService.ts`; the whole check switches off in
+     **Settings → Updates**, and the release manifest is signature-checked before
+     anything is installed;
+  3. **`huggingface.co`, to download a speech-recognition model** — only when you
+     ask for one. No weights ship with the app.
+
+  Nothing in these requests carries your prompts, your files, or an identifier of you.
 - **No account, no server component.** There is nothing to breach on Zarya's side
   beyond your own machine — session data, history, workflows and settings are all
   local files under the OS `userData` directory.
