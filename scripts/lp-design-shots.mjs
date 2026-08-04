@@ -23,7 +23,10 @@ const CATALOG = [
   { value: 'haiku', resolvedModel: 'claude-haiku-4-5-20251001', displayName: 'Haiku', description: 'Haiku 4.5' }
 ]
 
-const app = await electron.launch({ args: [join(root, 'out', 'main', 'index.js')], env: { ...process.env, ZARYA_USER_DATA: userData,
+const app = await electron.launch({ args: [join(root, 'out', 'main', 'index.js')], env: { ...process.env,
+      // Тихо: окно уезжает за край экрана, чтобы прогон не отбирал фокус
+      // посреди работы человека. ZARYA_SHOW=1 возвращает его на экран.
+      ...(process.env.ZARYA_SHOW ? {} : { ZARYA_QA_OFFSCREEN: '1' }), ZARYA_USER_DATA: userData,
       // Первый экран в прогонах не нужен: он про нового человека, а здесь
       // проверяется другое — и он вставал бы поверх проверяемого окна.
       ZARYA_NO_ONBOARDING: '1', NODE_ENV: 'production' } })

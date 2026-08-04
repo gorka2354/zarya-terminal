@@ -40,7 +40,10 @@ const app = await electron.launch({
     '--use-fake-device-for-media-stream',
     '--use-fake-ui-for-media-stream'
   ],
-  env: { ...process.env, ZARYA_USER_DATA: userData,
+  env: { ...process.env,
+      // Тихо: окно уезжает за край экрана, чтобы прогон не отбирал фокус
+      // посреди работы человека. ZARYA_SHOW=1 возвращает его на экран.
+      ...(process.env.ZARYA_SHOW ? {} : { ZARYA_QA_OFFSCREEN: '1' }), ZARYA_USER_DATA: userData,
       // Первый экран в прогонах не нужен: он про нового человека, а здесь
       // проверяется другое — и он вставал бы поверх проверяемого окна.
       ZARYA_NO_ONBOARDING: '1', NODE_ENV: 'production' }
@@ -216,6 +219,9 @@ try {
     args: [join(root, 'out', 'main', 'index.js'), '--use-fake-device-for-media-stream'],
     env: {
       ...process.env,
+      // Тихо: окно уезжает за край экрана, чтобы прогон не отбирал фокус
+      // посреди работы человека. ZARYA_SHOW=1 возвращает его на экран.
+      ...(process.env.ZARYA_SHOW ? {} : { ZARYA_QA_OFFSCREEN: '1' }),
       ZARYA_USER_DATA: mkdtempSync(join(tmpdir(), 'zarya-mic2-')),
       NODE_ENV: 'production'
     }

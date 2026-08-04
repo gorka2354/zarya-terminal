@@ -42,6 +42,9 @@ const launch = (userData) =>
     ],
     env: {
       ...process.env,
+      // Тихо: окно уезжает за край экрана, чтобы прогон не отбирал фокус
+      // посреди работы человека. ZARYA_SHOW=1 возвращает его на экран.
+      ...(process.env.ZARYA_SHOW ? {} : { ZARYA_QA_OFFSCREEN: '1' }),
       ZARYA_USER_DATA: userData,
       ZARYA_NO_UPDATE_CHECK: '1',
       // Дублируем для systemd-окружения раннера: Chromium читает локаль и

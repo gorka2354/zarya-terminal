@@ -36,6 +36,9 @@ const launch = () =>
     args: [join(root, 'out', 'main', 'index.js')],
     env: {
       ...process.env,
+      // Тихо: окно уезжает за край экрана, чтобы прогон не отбирал фокус
+      // посреди работы человека. ZARYA_SHOW=1 возвращает его на экран.
+      ...(process.env.ZARYA_SHOW ? {} : { ZARYA_QA_OFFSCREEN: '1' }),
       ZARYA_USER_DATA: userData,
       // Первый экран в прогонах не нужен: он про нового человека, а здесь
       // проверяется другое — и он вставал бы поверх проверяемого окна.
@@ -117,7 +120,10 @@ try {
     )
     const app = await electron.launch({
       args: [join(root, 'out', 'main', 'index.js')],
-      env: { ...process.env, ZARYA_USER_DATA: fresh, ZARYA_NO_UPDATE_CHECK: '1', NODE_ENV: 'production' }
+      env: { ...process.env,
+      // Тихо: окно уезжает за край экрана, чтобы прогон не отбирал фокус
+      // посреди работы человека. ZARYA_SHOW=1 возвращает его на экран.
+      ...(process.env.ZARYA_SHOW ? {} : { ZARYA_QA_OFFSCREEN: '1' }), ZARYA_USER_DATA: fresh, ZARYA_NO_UPDATE_CHECK: '1', NODE_ENV: 'production' }
     })
     const page = await boot(app)
     const folded = await page.evaluate(() => window.__zaryaSettings?.().sessions?.collapsed)

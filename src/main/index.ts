@@ -177,6 +177,28 @@ function createWindow(): void {
   const reveal = (): void => {
     if (shown || !mainWindow) return
     shown = true
+    /*
+     * ТИХИЙ ПРОГОН. Окно нужно показать — иначе Chromium не рисует, и снимки
+     * выходят пустыми, — но показывать его человеку незачем: за день прогоны
+     * запускаются десятки раз, и каждый отбирает фокус посреди работы.
+     * Уводим за край экрана: система считает окно видимым, человек — нет.
+     */
+    if (process.env.ZARYA_QA_OFFSCREEN) {
+      const win = mainWindow
+      win.setSkipTaskbar(true)
+      win.showInactive()
+      const park = (): void => {
+        // Сравниваем перед сдвигом: setPosition сам поднимает 'move', и без
+        // проверки получился бы бесконечный круг.
+        if (win.isDestroyed()) return
+        if (win.getPosition()[0] > -30000) win.setPosition(-32000, -32000)
+      }
+      // Прогоны задают размер и зовут center() — это вернуло бы окно человеку
+      // на экран посреди его работы. Возвращаем за край.
+      win.on('move', park)
+      park()
+      return
+    }
     mainWindow.show()
     const opacity = settingsStore.get().appearance.windowOpacity
     if (opacity < 1) mainWindow.setOpacity(Math.max(0.3, opacity))

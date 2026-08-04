@@ -30,15 +30,20 @@ const ok = (name, cond, extra) => {
 
 const app = await electron.launch({
   args: [join(root, 'out', 'main', 'index.js')],
-  env: { ...process.env, ZARYA_USER_DATA: userData, ZARYA_FAKE_AGENT: '1', NODE_ENV: 'production' }
+  env: { ...process.env,
+      // Тихо: окно уезжает за край экрана, чтобы прогон не отбирал фокус
+      // посреди работы человека. ZARYA_SHOW=1 возвращает его на экран.
+      ...(process.env.ZARYA_SHOW ? {} : { ZARYA_QA_OFFSCREEN: '1' }), ZARYA_USER_DATA: userData, ZARYA_FAKE_AGENT: '1', NODE_ENV: 'production' }
 })
 
 /** Что реально отрисовано внизу фида. */
 const feedState = (page) =>
   page.evaluate(() => ({
     ready: !!document.querySelector('.zy-mf-ready'),
-    // непустая ветка = есть секция ответа агента (значит не EmptyHero)
-    populated: !!document.querySelector('.zy-mf-divider, .zy-mf-block')
+    // Непустая лента = в ней есть НАСТОЯЩЕЕ содержимое. Раньше признаком
+    // служил разделитель «ОТВЕТ АГЕНТА», но он рисуется только там, где выше
+    // есть команды терминала: в чистой беседе его нет, а лента непуста.
+    populated: !!document.querySelector('.zy-mf-user, .zy-mf-answer, .zy-mf-block')
   }))
 const convById = (page, id) => page.evaluate((i) => window.__zaryaConvById?.(i), id)
 async function waitIdle(page, id, ms = 15000) {

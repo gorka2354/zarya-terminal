@@ -31,7 +31,10 @@ const ok = (name, cond, extra) => {
 
 const app = await electron.launch({
   args: [join(root, 'out', 'main', 'index.js')],
-  env: { ...process.env, ZARYA_USER_DATA: userData,
+  env: { ...process.env,
+      // Тихо: окно уезжает за край экрана, чтобы прогон не отбирал фокус
+      // посреди работы человека. ZARYA_SHOW=1 возвращает его на экран.
+      ...(process.env.ZARYA_SHOW ? {} : { ZARYA_QA_OFFSCREEN: '1' }), ZARYA_USER_DATA: userData,
       // Первый экран в прогонах не нужен: он про нового человека, а здесь
       // проверяется другое — и он вставал бы поверх проверяемого окна.
       ZARYA_NO_ONBOARDING: '1', NODE_ENV: 'production' }
@@ -73,7 +76,9 @@ try {
   await page.waitForTimeout(500)
 
   await toggleCycle(page, '.zy-agentbar-fuel-main', '.zy-usage-panel', 'Панель расхода')
-  await toggleCycle(page, '.zy-mf-head-btn', '.zy-context-menu', 'Меню сессий (↺ в шапке ленты)')
+  // Кнопки ленты переехали в шапку ПАНЕЛИ: своя шапка у ленты дублировала её и
+// добавляла вторую горизонтальную линию. «Прошлые сессии» — первая из них.
+await toggleCycle(page, '.zy-pane .zy-icon-btn', '.zy-context-menu', 'Меню сессий (в шапке панели)')
 
   console.log(`\n[popup-toggle] PASS ${pass} · FAIL ${fail}`)
 } finally {
