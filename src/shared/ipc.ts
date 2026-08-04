@@ -108,6 +108,12 @@ export const CH = {
   agentMcpToggle: 'agent:mcp-toggle',
   /** Состояние скилла в настройках движка: в работе / только имя / «/» / выкл. */
   agentSkillOverride: 'agent:skill-override',
+  /** Скилл сработал — счётчик на ЭТОЙ машине, наружу ничего не уходит. */
+  agentSkillUsed: 'agent:skill-used',
+  /** Сводка срабатываний: сколько раз что сработало и сколько дней смотрим. */
+  agentSkillUsage: 'agent:skill-usage',
+  /** Забыть наблюдение и начать заново. */
+  agentSkillUsageClear: 'agent:skill-usage-clear',
   /** Своя модель с диска: main спрашивает папку сам, renderer путей не подаёт. */
   sttAddCustom: 'stt:add-custom',
   sttForgetCustom: 'stt:forget-custom',

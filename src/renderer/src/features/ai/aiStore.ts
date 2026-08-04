@@ -648,6 +648,10 @@ export const useAiStore = create<AiState>((set, get) => {
       })
       .filter(Boolean)
     if (!names.length) return
+    // Счётчик на диске — отдельно от беседы: одна беседа отвечает «сработал 1 из
+    // 83», и по этому числу решать нечего. Файл живёт в данных Зари и никуда не
+    // отправляется (см. shared/skillUsage.ts).
+    window.zarya.agent.skillUsed(names)
     patchConversation(id, (c) => {
       const fresh = names.filter((n) => !c.skillsUsed?.includes(n))
       return fresh.length ? { ...c, skillsUsed: [...(c.skillsUsed ?? []), ...fresh] } : c

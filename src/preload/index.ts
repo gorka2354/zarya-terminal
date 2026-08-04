@@ -150,6 +150,10 @@ const api = {
       name: string,
       state: import('@shared/types').SkillState
     ) => ipcRenderer.invoke(CH.agentSkillOverride, engine, requestId, name, state),
+    /** Скилл сработал. Счётчик локальный — ответа не ждём. */
+    skillUsed: (names: string[]) => ipcRenderer.send(CH.agentSkillUsed, names),
+    skillUsage: () => ipcRenderer.invoke(CH.agentSkillUsage),
+    skillUsageClear: () => ipcRenderer.invoke(CH.agentSkillUsageClear),
     debugFlags: (engine: AgentEngine, requestId?: string) =>
       ipcRenderer.invoke(CH.agentDebugFlags, engine, requestId)
   },

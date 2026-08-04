@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { AgentEngine, McpSkills, SkillRow, SkillState } from '@shared/types'
 import { t } from '@/lib/i18n'
 import { SKILL_STATES, isPluginSkill, pluginDisableCommand, pluginOf, sourceLabel } from '@shared/skills'
+import { idleSkills, type SkillUsageSummary } from '@shared/skillUsage'
 
 /**
  * Скиллы панели: во сколько обходятся и чем управляются.
@@ -42,6 +43,25 @@ export function SkillsPanel({
   // чего сюда пришли, видно без раскрытия. У человека их бывает под сотню.
   const FIRST = 12
   const [all, setAll] = useState(false)
+  /** Только те, что ни разу не сработали, — режим «показать кандидатов». */
+  const [onlyIdle, setOnlyIdle] = useState(false)
+
+  /**
+   * История срабатываний с диска: одной беседы мало.
+   *
+   * «Сработал 1 из 83» ничего не решает — остальные 82 могли сработать вчера в
+   * другой задаче. Ответ на «что выключить» даёт только наблюдение за дни, и
+   * живёт оно на этой машине (см. shared/skillUsage.ts).
+   */
+  const [usage, setUsage] = useState<SkillUsageSummary | null>(null)
+  const reloadUsage = (): void => {
+    void window.zarya.agent.skillUsage().then(setUsage)
+  }
+  useEffect(reloadUsage, [skills])
+
+  const counts = usage?.counts ?? {}
+  const seenTotal = skills.items.filter((s) => counts[s.name]).length
+  const idle = idleSkills(skills.items, counts)
   // Сработавшие — наверх, поверх сортировки по цене: их трогать нельзя, а
   // остальное и есть предмет разговора. Иначе рабочий скилл терялся бы на
   // восьмидесятой строке ровно тогда, когда человек решает, что выключить.
@@ -50,8 +70,9 @@ export function SkillsPanel({
         (a, b) => Number(used.includes(b.name)) - Number(used.includes(a.name))
       )
     : skills.items
-  const items = all ? ranked : ranked.slice(0, FIRST)
-  const hidden = ranked.length - items.length
+  const shown = onlyIdle ? ranked.filter((x) => idle.names.includes(x.name)) : ranked
+  const items = all || onlyIdle ? shown : shown.slice(0, FIRST)
+  const hidden = shown.length - items.length
   // Плагины — по всему списку, а не по видимой части: строка внизу отвечает за
   // весь раздел, и сворачивание не должно менять её состав.
   const plugins = [
@@ -69,6 +90,16 @@ export function SkillsPanel({
       onChanged()
     } else if (r.reason === 'overridden') {
       onNote(t('skills.fromLayer', { where: t(`skills.layer.${r.by ?? 'project'}`) }), true)
+    } else if (r.reason === 'unreadable') {
+      // Заря отказалась писать поверх файла, который не смогла прочитать, — и
+      // обязана сказать какого и почему. Молчаливое «не вышло» отправило бы
+      // человека искать причину там, где её нет.
+      onNote(
+        t('skills.unreadable', {
+          file: r.error || (r.by ? t(`skills.layer.${r.by}`) : 'settings.json')
+        }),
+        true
+      )
     } else {
       onNote(r.error || t('tools.failedPlain'), true)
     }
@@ -103,6 +134,55 @@ export function SkillsPanel({
           ? t('skills.usedSome', { n: used.length, total: skills.total })
           : t('skills.usedNone')}
       </div>
+      {/*
+        История за дни — то, ради чего раздел вообще решаем. Период называем
+        ЧЕСТНО: «ни разу за 30 дней» на второй день наблюдения — неправда, за
+        которую человек выключит рабочий скилл.
+      */}
+      {usage && (
+        <div className="zy-skills-sub">
+          {t('skills.seen', {
+            days:
+              usage.observedDays === 1
+                ? t('skills.seenDay')
+                : t('skills.seenDays', { n: usage.observedDays }),
+            n: seenTotal,
+            total: skills.total
+          })}
+          <button
+            type="button"
+            className="zy-skills-link"
+            onClick={() => {
+              void window.zarya.agent.skillUsageClear().then(() => {
+                onNote(t('skills.forgotten'))
+                reloadUsage()
+              })
+            }}
+          >
+            {t('skills.forget')}
+          </button>
+        </div>
+      )}
+      {/*
+        Прямой ответ на «что выключить»: сколько скиллов не сработали ни разу и
+        во сколько они обходятся. Именно ТОКЕНЫ, а не штуки — решение принимают
+        по цене. Кнопка только показывает их, ничего не выключая: скилл может
+        быть нужен раз в квартал, и тогда — критично.
+      */}
+      {usage && idle.names.length > 0 && (
+        <div className="zy-skills-idle">
+          <span>
+            {t('skills.idle', {
+              n: idle.names.length,
+              tok: idle.tokens.toLocaleString('en-US').replace(/,/g, ' ')
+            })}
+          </span>
+          <button type="button" className="zy-tools-btn" onClick={() => setOnlyIdle(!onlyIdle)}>
+            {onlyIdle ? t('skills.showAllAgain') : t('skills.showIdle')}
+          </button>
+          <div className="zy-skills-idle-hint">{t('skills.idleHint')}</div>
+        </div>
+      )}
 
       <div className="zy-skills-list">
         {items.map((s) => {
@@ -123,6 +203,20 @@ export function SkillsPanel({
                     ? t('tools.tokens', { n: s.tokens.toLocaleString('en-US').replace(/,/g, ' ') })
                     : t('skills.noPrice')}
                 </span>
+                {usage && (
+                  <span
+                    className={`zy-skills-freq${counts[s.name] ? '' : ' zy-skills-freq--never'}`}
+                    // «Ни разу» — это «Заря не видела», а не «не срабатывал»:
+                    // счётчик берёт вызовы из ленты, и скилл, сработавший внутри
+                    // субагента, сюда не попадёт. Разница решает, выключит ли
+                    // человек рабочий скилл.
+                    title={counts[s.name] ? undefined : t('skills.neverHint')}
+                  >
+                    {counts[s.name]
+                      ? t('skills.times', { n: counts[s.name], days: usage.observedDays })
+                      : t('skills.never')}
+                  </span>
+                )}
                 {plugin || lockedBy || stale ? (
                   <span className="zy-skills-state">{t(`skills.state.${s.state}`)}</span>
                 ) : (

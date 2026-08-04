@@ -227,7 +227,82 @@ try {
   await page.evaluate(() => window.__zaryaSetUi?.({ settingsOpen: true }))
   await page.waitForTimeout(600)
 
-  console.log('\n[9] Отказ на перекрытом ключе — не молчаливая «удача»')
+  console.log('\n[9] История наблюдения честно называет период')
+  const seen = await page.evaluate(() =>
+    [...document.querySelectorAll('.zy-skills-sub')].map((el) => el.textContent ?? '')
+  )
+  ok(
+    'период назван честно — один день наблюдения, а не «за 30 дней»',
+    seen.some((x) => /1 день наблюдения/.test(x)),
+    seen
+  )
+  ok('и сказано, что счёт локальный', seen.some((x) => /на этой машине/.test(x)), seen)
+  const freq = await page.evaluate(() =>
+    [...document.querySelectorAll('.zy-skills-row')].map((el) => ({
+      name: el.querySelector('.zy-skills-name')?.textContent ?? '',
+      freq: el.querySelector('.zy-skills-freq')?.textContent ?? ''
+    }))
+  )
+  ok(
+    'у сработавшего показана частота',
+    /1×/.test(freq.find((r) => r.name === 'code-review')?.freq ?? ''),
+    freq
+  )
+  ok(
+    'у остальных — честное «ни разу»',
+    freq.filter((r) => r.name !== 'code-review').every((r) => r.freq === 'ни разу'),
+    freq
+  )
+
+  console.log('\n[10] Прямой ответ на «что выключить»')
+  const idle = await page.evaluate(() => {
+    const box = document.querySelector('.zy-skills-idle')
+    return box ? { text: box.textContent ?? '' } : null
+  })
+  ok('названы те, что не сработали ни разу', !!idle, idle)
+  ok('и их цена в токенах, а не только число', /токенов/.test(idle?.text ?? ''), idle)
+  // Кандидаты — не приговор: скилл может быть нужен раз в квартал.
+  ok('сказано, что это кандидаты, а не приговор', /кандидаты/.test(idle?.text ?? ''), idle)
+  await page.evaluate(() => {
+    const b = document.querySelector('.zy-skills-idle button')
+    b?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  })
+  await page.waitForTimeout(500)
+  const shownIdle = await page.evaluate(() =>
+    [...document.querySelectorAll('.zy-skills-row .zy-skills-name')].map((el) => el.textContent)
+  )
+  ok('нажатие показывает именно их', !shownIdle.includes('code-review'), shownIdle)
+  await page.evaluate(() => {
+    const b = document.querySelector('.zy-skills-idle button')
+    b?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  })
+  await page.waitForTimeout(400)
+
+  console.log('\n[11] Нечитаемый файл настроек — отказ, а не затирание')
+  // Самая дорогая ошибка этого инкремента: раньше «не смог прочитать» было
+  // неотличимо от «файла нет», и переключение скилла клало поверх чужого
+  // конфига объект из одного ключа — модель, хуки и плагины исчезали молча.
+  await page.evaluate(() => {
+    const row = [...document.querySelectorAll('.zy-skills-row')].find(
+      (el) => el.querySelector('.zy-skills-name')?.textContent === 'dataviz'
+    )
+    const sel = row?.querySelector('.zy-skills-select')
+    if (sel) {
+      sel.value = 'off'
+      sel.dispatchEvent(new Event('change', { bubbles: true }))
+    }
+  })
+  await page.waitForTimeout(800)
+  const badNote = await page.evaluate(() => {
+    const el = document.querySelector('.zy-tools-note')
+    return el ? { text: el.textContent ?? '', bad: el.className.includes('--bad') } : null
+  })
+  ok('сказано, что файл прочитать не удалось', /не удалось прочитать/i.test(badNote?.text ?? ''), badNote)
+  ok('назван сам файл', /settings\.json/.test(badNote?.text ?? ''), badNote)
+  ok('и дан ручной путь — что чинить', /запятая|BOM/i.test(badNote?.text ?? ''), badNote)
+  ok('это показано как отказ, а не как удача', badNote?.bad === true, badNote)
+
+  console.log('\n[12] Отказ на перекрытом ключе — не молчаливая «удача»')
   const denied = await page.evaluate(
     (cid) => window.zarya.agent.skillOverride('codex', cid, 'team-deploy', 'off'),
     id
@@ -235,7 +310,7 @@ try {
   ok('движок отказал', denied?.ok === false, denied)
   ok('и назвал слой, который перебил', denied?.reason === 'overridden' && denied?.by === 'project', denied)
 
-  console.log('\n[10] Чей файл правится — сказано ДО нажатия')
+  console.log('\n[13] Чей файл правится — сказано ДО нажатия')
   const foots = await page.evaluate(() =>
     [...document.querySelectorAll('.zy-tools-foot')].map((el) => el.textContent ?? '')
   )

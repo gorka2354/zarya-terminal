@@ -22,6 +22,7 @@ import type {
 } from '@shared/types'
 import type { AiProxy } from './aiProxy'
 import { ModelCatalogStore } from './modelCatalogStore'
+import { SkillUsageStore } from './skillUsageStore'
 import { ExtrasWatcher } from './extrasWatcher'
 import { withCustom } from '@shared/sttCustom'
 import type { AgentDriver } from './agentDriver'
@@ -64,6 +65,14 @@ const extrasWatcher = new ExtrasWatcher()
 
 /** Последний известный каталог моделей: свой на процесс, файл в userData. */
 const modelCatalogStore = new ModelCatalogStore()
+
+/** Счётчик срабатываний скиллов: файл в данных Зари, наружу ничего не уходит. */
+const skillUsageStore = new SkillUsageStore()
+
+/** Дописать счётчик при выходе: иначе последняя минута работы теряется. */
+export function flushSkillUsage(): Promise<void> {
+  return skillUsageStore.flush()
+}
 
 export function registerIpc(ctx: IpcContext): void {
   const {
@@ -528,6 +537,21 @@ export function registerIpc(ctx: IpcContext): void {
       return driver.skillOverride(requestId, name, state)
     }
   )
+  /*
+   * Счётчик срабатываний. Ходит из окна, потому что вызовы инструментов видит
+   * рендерер — у каждого драйвера свой путь событий, а место, где они сходятся
+   * все, ровно одно. Данные не покидают машину: это ответ человеку на его же
+   * вопрос «за что я плачу, если оно не работает».
+   */
+  ipcMain.on(CH.agentSkillUsed, (_e, names: unknown) => {
+    if (!Array.isArray(names)) return
+    // Предел на пачку — не от человека, а от испорченного вызова: файл Зари не
+    // должен расти от того, что кто-то прислал тысячу имён разом.
+    skillUsageStore.note(names.slice(0, 50).filter((n): n is string => typeof n === 'string'))
+  })
+  ipcMain.handle(CH.agentSkillUsage, () => skillUsageStore.summary())
+  ipcMain.handle(CH.agentSkillUsageClear, () => skillUsageStore.clear())
+
   ipcMain.handle(CH.agentListCommands, async (_e, engine: AgentEngine, requestId?: string) => {
     const driver = driverFor(engine)
     // Спросили команды — значит панель работает с агентом: самое время начать

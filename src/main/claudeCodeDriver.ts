@@ -21,6 +21,7 @@ import type {
 } from '@shared/types'
 import { rewindPoint } from '@shared/rewind'
 import { asSkillState, withSkillOverride } from '@shared/skills'
+import { readSettingsFile, readSkillOverrides, skillSettingsPaths } from './skillSettings'
 // Та же атомарная запись, что у собственных настроек: правка чужого конфига —
 // тем более не то место, где допустим полуписаный файл после падения.
 import { writeJsonAtomic } from './jsonStore'
@@ -281,49 +282,6 @@ function readClaudeEffort(): string | undefined {
   }
 }
 
-/** Пути настроек Claude Code: личные и два проектных. */
-function skillSettingsPaths(cwd?: string): Record<SkillLayer, string | undefined> {
-  return {
-    user: join(homedir(), '.claude', 'settings.json'),
-    project: cwd ? join(cwd, '.claude', 'settings.json') : undefined,
-    local: cwd ? join(cwd, '.claude', 'settings.local.json') : undefined
-  }
-}
-
-function readJsonObject(path: string | undefined): Record<string, unknown> | undefined {
-  if (!path) return undefined
-  try {
-    const parsed: unknown = JSON.parse(readFileSync(path, 'utf8'))
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : undefined
-  } catch {
-    // Файла нет или он сломан — это не ошибка Зари: значит, переопределений нет.
-    return undefined
-  }
-}
-
-/**
- * `skillOverrides` из всех трёх слоёв настроек движка.
- *
- * Читаем все, а не только тот, куда пишем сами: у проектных слоёв приоритет
- * выше личного, и скилл, выключенный настройкой проекта, обязан выглядеть
- * выключенным — вместе с именем виноватого файла.
- */
-function readSkillOverrides(
-  cwd?: string
-): Partial<Record<SkillLayer, Record<string, unknown> | undefined>> {
-  const paths = skillSettingsPaths(cwd)
-  const out: Partial<Record<SkillLayer, Record<string, unknown> | undefined>> = {}
-  for (const layer of ['user', 'project', 'local'] as SkillLayer[]) {
-    const cfg = readJsonObject(paths[layer])
-    const raw = cfg?.skillOverrides
-    if (raw && typeof raw === 'object' && !Array.isArray(raw))
-      out[layer] = raw as Record<string, unknown>
-  }
-  return out
-}
-
 /** Normalize the SDK's /usage response into our ClaudeUsage shape. */
 function usageFromResponse(resp: unknown): import('@shared/types').ClaudeUsage {
   const r = resp as {
@@ -461,6 +419,15 @@ export class ClaudeCodeDriver implements AgentDriver {
    * день накапливаются, а снимки нужны только недавним.
    */
   private mcpSnapshots = new Map<string, McpSnapshot>()
+  /**
+   * Папка беседы — переживает закрытие сессии.
+   *
+   * Настройки проекта лежат на диске и не исчезают вместе с сессией: без этой
+   * карты вкладка «Инструменты» показывала бы переключатель скилла, который
+   * перекрыт настройками проекта, — кнопку, которая «сработает» и ничего не
+   * изменит. Ограничена по размеру, как и снимки: строки, а не архив.
+   */
+  private lastCwd = new Map<string, string>()
   /**
    * Чем серверы пометили свои инструменты — по беседам.
    *
@@ -774,6 +741,12 @@ export class ClaudeCodeDriver implements AgentDriver {
         : {})
     }
     this.sessions.set(requestId, session)
+    if (session.cwd) {
+      this.lastCwd.set(requestId, session.cwd)
+      // Столько же, сколько снимков: беседы за день копятся, а папка нужна
+      // только недавним. Мусора не оставляем даже в памяти.
+      if (this.lastCwd.size > 8) this.lastCwd.delete(this.lastCwd.keys().next().value as string)
+    }
 
     void this.pump(requestId, session)
     // Пометки инструментов спрашиваем сразу и в фоне: к первому гейту карта
@@ -1360,26 +1333,57 @@ export class ClaudeCodeDriver implements AgentDriver {
     requestId: string | undefined,
     name: string,
     state: SkillState
-  ): Promise<{ ok: boolean; error?: string; reason?: 'overridden'; by?: SkillLayer }> {
+  ): Promise<{
+    ok: boolean
+    error?: string
+    /** `unreadable` — файл настроек есть, но не читается: писать поверх нельзя. */
+    reason?: 'overridden' | 'unreadable'
+    by?: SkillLayer
+  }> {
     if (!asSkillState(state)) return { ok: false, error: 'неизвестное состояние' }
     if (!name.trim()) return { ok: false, error: 'скилл без имени' }
     // Папка — у беседы, а не из аргумента: рендерер не должен уметь показать
-    // главному процессу произвольный путь и заставить его туда писать.
-    const cwd = requestId ? this.sessions.get(requestId)?.cwd : undefined
-    const layers = readSkillOverrides(cwd)
+    // главному процессу произвольный путь и заставить его туда писать. Берём и
+    // у мёртвой беседы тоже: настройки проекта никуда не делись оттого, что
+    // сессия закрылась, а без них переключатель обещал бы несбыточное.
+    const cwd = requestId ? this.cwdOf(requestId) : undefined
+    const { layers, broken } = readSkillOverrides(cwd)
     for (const layer of ['project', 'local'] as SkillLayer[]) {
       if (asSkillState(layers[layer]?.[name])) return { ok: false, reason: 'overridden', by: layer }
+      // Слой, который не читается, мог запрещать этот скилл — мы не знаем.
+      // Записать «успешно» и промолчать значило бы соврать дважды.
+      if (broken.includes(layer)) return { ok: false, reason: 'unreadable', by: layer }
     }
     const path = skillSettingsPaths(cwd).user!
+    // Читаем ЦЕЛИКОМ и кладём обратно целиком: в файле живут чужие ключи
+    // (модель, хуки, плагины), и потерять их правкой скилла недопустимо.
+    const read = readSettingsFile(path)
+    if (read.kind === 'unreadable') {
+      // САМОЕ ВАЖНОЕ МЕСТО ФАЙЛА. Раньше «не смог прочитать» было неотличимо от
+      // «файла нет», и запись клала поверх чужого конфига объект из одного
+      // ключа: достаточно было BOM от PowerShell или висячей запятой, чтобы
+      // человек молча потерял модель, хуки и плагины. Теперь — честный отказ с
+      // именем файла: пусть чинит руками, это его файл.
+      return { ok: false, reason: 'unreadable', error: path }
+    }
     try {
-      // Читаем ЦЕЛИКОМ и кладём обратно целиком: в файле живут чужие ключи
-      // (модель, хуки, плагины), и потерять их правкой скилла недопустимо.
-      const cfg = readJsonObject(path) ?? {}
+      const cfg = read.kind === 'ok' ? read.value : {}
       await writeJsonAtomic(path, withSkillOverride(cfg, name, state))
       return { ok: true }
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : String(e) }
     }
+  }
+
+  /**
+   * Папка беседы — даже если сессия уже закрыта.
+   *
+   * Настройки проекта живут на диске и не исчезают вместе с сессией. Спрашивать
+   * их только у живой беседы значило бы показывать переключатель там, где ключ
+   * перекрыт проектом, — кнопку, которая «сработает» и ничего не изменит.
+   */
+  private cwdOf(requestId: string): string | undefined {
+    return this.sessions.get(requestId)?.cwd ?? this.lastCwd.get(requestId)
   }
 
   /**
@@ -1454,7 +1458,7 @@ export class ClaudeCodeDriver implements AgentDriver {
         // поимённо. Раньше цифра терялась вместе с остальным ответом. Состояние
         // читаем с диска, а не из ответа: движок присылает только то, что
         // ВОШЛО в контекст, — выключенного скилла в списке нет вовсе.
-        skills = skillsFrom(usage?.skills, readSkillOverrides(cwd))
+        skills = skillsFrom(usage?.skills, readSkillOverrides(cwd).layers)
       } catch {
         /* цены не будет — состояние покажем всё равно */
       }

@@ -364,6 +364,21 @@ export const RU: Dict = {
   'skills.used': 'сработал здесь',
   'skills.usedNone': 'В этой беседе не сработал ни один — платится за все',
   'skills.usedSome': 'В этой беседе сработали: {n} из {total}',
+  'skills.seen': 'За {days} — сработали {n} из {total}. Считается на этой машине',
+  'skills.seenDay': '1 день наблюдения',
+  'skills.seenDays': '{n} дн. наблюдения',
+  'skills.times': '{n}× за {days} дн.',
+  'skills.never': 'ни разу',
+  'skills.idle': 'Ни разу не сработали: {n} шт. на ~{tok} токенов в каждом запросе',
+  'skills.idleHint':
+    'Это кандидаты, а не приговор. Заря видит вызовы в ленте: скилл, сработавший внутри субагента, сюда не попадёт — и он может быть нужен раз в квартал',
+  'skills.neverHint': 'Заря не видела, чтобы он срабатывал за это время',
+  'skills.unreadable':
+    'Не удалось прочитать {file} — Заря не станет писать поверх файла, который не понимает. Почините его (частая причина — лишняя запятая или BOM), и переключатель заработает',
+  'skills.showIdle': 'Показать их',
+  'skills.showAllAgain': 'Показать все',
+  'skills.forget': 'Забыть наблюдение',
+  'skills.forgotten': 'Счёт начат заново',
   'skills.writesConfig':
     'Состояние скиллов пишется в личные настройки Claude Code (~/.claude/settings.json), а не в настройки Зари',
   'cmd.fromEngine': '{n} · список от движка',
@@ -1461,6 +1476,21 @@ export const EN: Dict = {
   'skills.used': 'used here',
   'skills.usedNone': 'None of them fired in this conversation — you pay for all',
   'skills.usedSome': 'Fired in this conversation: {n} of {total}',
+  'skills.seen': 'Over {days} — {n} of {total} fired. Counted on this machine',
+  'skills.seenDay': '1 day of watching',
+  'skills.seenDays': '{n} days of watching',
+  'skills.times': '{n}× in {days}d',
+  'skills.never': 'never',
+  'skills.idle': 'Never fired: {n} of them, ~{tok} tokens in every request',
+  'skills.idleHint':
+    'Candidates, not a verdict. Zarya sees calls in the feed: a skill that fired inside a subagent will not show up here — and it may be needed once a quarter',
+  'skills.neverHint': 'Zarya has not seen it fire in this period',
+  'skills.unreadable':
+    'Could not read {file} — Zarya will not write over a file it cannot parse. Fix it (usually a trailing comma or a BOM) and the switch will work',
+  'skills.showIdle': 'Show them',
+  'skills.showAllAgain': 'Show all',
+  'skills.forget': 'Forget the count',
+  'skills.forgotten': 'Counting started over',
   'skills.writesConfig':
     'Skill state is written to Claude Code personal settings (~/.claude/settings.json), not to Zarya settings',
   'cmd.fromEngine': '{n} · from the engine',

@@ -511,10 +511,13 @@ export class FakeAgentDriver implements AgentDriver {
   ): Promise<{
     ok: boolean
     error?: string
-    reason?: 'overridden'
+    reason?: 'overridden' | 'unreadable'
     by?: import('@shared/types').SkillLayer
   }> {
     if (name === 'team-deploy') return { ok: false, reason: 'overridden', by: 'project' }
+    // Нечитаемый файл настроек: настоящий драйвер тут отказывается писать, и
+    // окно обязано сказать почему — иначе человек потерял бы чужой конфиг.
+    if (name === 'dataviz') return { ok: false, reason: 'unreadable', error: '~/.claude/settings.json' }
     if (name === 'cloudflare:email-service') return { ok: false, error: 'скилл плагина' }
     this.skillStates.set(name, state)
     return { ok: true }

@@ -118,7 +118,8 @@ export interface AgentDriver {
   ): Promise<{
     ok: boolean
     error?: string
-    reason?: 'overridden'
+    /** `unreadable` — файл настроек есть, но не читается: писать поверх нельзя. */
+    reason?: 'overridden' | 'unreadable'
     by?: import('@shared/types').SkillLayer
   }>
   /**

@@ -380,3 +380,54 @@
   padding: 0 5px;
   flex-shrink: 0;
 }
+
+/* Частота — рядом с ценой: два числа, по которым принимают решение. «Ни разу»
+   гасим, а не красим в danger: это не поломка, а факт. */
+.zy-skills-freq {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg-dim);
+  flex-shrink: 0;
+  min-width: 92px;
+  text-align: right;
+}
+.zy-skills-freq--never {
+  color: var(--fg-faint);
+}
+
+/* Прямой ответ на «что выключить». Рамка акцентом: это то, что ждёт решения
+   человека, — ровно тот смысл, который accent несёт во всей Заре. */
+.zy-skills-idle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 8px 0 10px;
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--fg);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+  border-radius: var(--radius-sm);
+}
+.zy-skills-idle-hint {
+  flex-basis: 100%;
+  font-size: 11px;
+  color: var(--fg-faint);
+}
+/* «Забыть наблюдение» — ссылка, а не кнопка: действие редкое и необязательное,
+   и заводить под него кнопку значило бы спорить за внимание с тем, что важнее. */
+.zy-skills-link {
+  margin-left: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--fg-dim);
+  font: inherit;
+  font-size: 11px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.zy-skills-link:hover {
+  color: var(--accent);
+}

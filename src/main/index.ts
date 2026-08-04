@@ -10,7 +10,7 @@ import { ClaudeCodeDriver } from './claudeCodeDriver'
 import { CodexDriver } from './codexDriver'
 import { FakeAgentDriver } from './fakeAgentDriver'
 import { HistoryStore } from './historyStore'
-import { registerIpc } from './ipc'
+import { flushSkillUsage, registerIpc } from './ipc'
 import { PtyManager } from './ptyManager'
 import { SessionStore } from './sessionStore'
 import { SttService } from './sttService'
@@ -416,5 +416,8 @@ if (!gotLock) {
     // Flush any settings edit made within the last debounce window (250ms)
     // so it isn't lost on quit.
     settingsStore.flush()
+    // То же для счётчика скиллов: он копится пачками, и без этого терялась бы
+    // последняя минута работы — как раз та, ради которой человек и смотрит.
+    void flushSkillUsage()
   })
 }

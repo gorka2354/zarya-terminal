@@ -187,9 +187,12 @@ export interface ZaryaApi {
     ): Promise<{
       ok: boolean
       error?: string
-      reason?: 'overridden'
+      reason?: 'overridden' | 'unreadable'
       by?: import('@shared/types').SkillLayer
     }>
+    skillUsed(names: string[]): void
+    skillUsage(): Promise<import('@shared/skillUsage').SkillUsageSummary>
+    skillUsageClear(): Promise<void>
     debugFlags(engine: AgentEngine, requestId?: string): Promise<Record<string, unknown>>
   }
   /** Back-compat shim over `agent` with engine 'claude-code'. Removed after inc-9 Ф3. */
