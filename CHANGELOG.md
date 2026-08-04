@@ -5,6 +5,70 @@ All notable changes to Zarya are documented here. This project uses
 
 Русская версия этого файла — [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## 0.7.4 — "Stocktake" (2026-08-04)
+
+The theme of this release: **what you have and what it costs you**. With dozens of
+skills and a dozen MCP servers, half the set does not work — and you pay for all
+of it, on every single request. This release counts out loud.
+
+### Added
+
+- **Skills are no longer free-looking.** Every skill's description sits in the
+  context of EVERY request — otherwise the agent would not know the skill exists.
+  The body loads on demand; the description is always billed. The engine counts
+  this per skill, and nobody has been showing the number. Measured on the owner's
+  machine on release day: 83 skills, **5,347 tokens in every request**.
+
+- **You can see which of them actually fire.** Zarya remembers which skills were
+  used and answers the real question — "what can I turn off": "82 never fired,
+  ~4,986 tokens". The count stays on this machine: the file holds only your own
+  skill names and numbers — no prompts, no answers, no paths. The period is named
+  honestly ("over 1 day of watching"), never "over 30 days" before they passed.
+
+- **Four states from Claude Code itself**, not a checkbox: in play · name only ·
+  by "/" only · off. The middle two matter most: "name only" keeps the skill
+  working for a fraction of the cost, "by / only" takes it out of context without
+  taking away your ability to call it.
+
+### Fixed
+
+- **Sandbox escape through a dangling symlink** (security, HIGH). The "inside the
+  project" check followed the link and therefore could not see a broken one: the
+  agent wrote "into the project" and the file appeared outside it — for example in
+  the home directory, from where it would run at the next shell login. Affected
+  macOS and Linux.
+
+- **The "Insert" button in the feed executed code.** The multi-line confirmation
+  existed in the side panel and had been lost in the feed: embedded newlines went
+  to the terminal, and the first line ran before it could be read.
+
+- **The MCP login command was escaped for sh**, but people paste it into
+  PowerShell, where a backslash escapes nothing. The server name comes from a file
+  in the opened project — it is someone else's text. The ready-made line is now
+  shown only for safe names; for the rest Zarya says plainly that there will be no
+  command.
+
+- **Command history that was switched off still answered** in Ctrl+R and in the
+  terminal's suggestions: the gate was only on writing. The setting promised the
+  opposite in so many words.
+
+- **History lost its oldest entry** on every load, and compaction then wiped it
+  from disk.
+
+- **Agent state is no longer drawn as a border.** A waiting pane was outlined in
+  the same colour as the active one, so two signals read as one. State now lives
+  in a stripe at the top edge, and the colours differ: amber calls you, green says
+  "busy". "Working" appeared as a state at all — it used to be silent.
+
+- **The seam between panes is visible on light themes** — four panes used to merge
+  into one white field.
+
+- **The "/" palette stopped jumping** on a command with a long description: the
+  panel grew upwards and slid out from under the cursor.
+
+- **A pane has one header instead of two.** The feed drew its own on top of the
+  pane's, leaving an empty strip with a spare line.
+
 ## 0.7.3 — "Watch" (2026-08-03)
 
 The theme of this release: **your attention**. Four panes, each with its own agent
