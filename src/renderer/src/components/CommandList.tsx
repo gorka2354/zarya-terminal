@@ -50,7 +50,16 @@ export function CommandList({
   const active = commands[cursor]
 
   return (
-    <div className="zy-cmdlist" data-command-list>
+    <div
+      className="zy-cmdlist"
+      data-command-list
+      /*
+       * Пустой `title` гасит подсказку ПАНЕЛИ («сюда уходят Enter и Esc»): она
+       * висит на корне панели и всплывала поверх списка, закрывая собой
+       * команды — ровно там, где человек читает и целится мышью.
+       */
+      title=""
+    >
       <div className="zy-cmdlist-head">
         <span className="zy-cmdlist-title">{t('cmd.title')}</span>
         {/* Шапка называет источник. «Движок команд не назвал» и «команд нет» —

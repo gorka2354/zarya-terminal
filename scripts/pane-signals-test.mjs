@@ -197,7 +197,63 @@ try {
     { waitingBorder, waitingIsFocused }
   )
 
-  console.log('\n[5] Кнопка «панель» выглядит кнопкой')
+  console.log('\n[5] Палитра «/» не меняет высоту при переходе по списку')
+  /*
+   * Потолок стоял только на списке команд, а описание справа росло свободно.
+   * Палитра прижата к строке ввода и потому вырастала ВВЕРХ: у команды с
+   * десятистрочным описанием (у Claude Code это, например, `/doctor`) вся
+   * панель подпрыгивала на полсотни пикселей — и уезжала из-под курсора ровно
+   * в момент, когда человек в неё целился.
+   *
+   * Замеряется положение и высота на первой строке и на строке с длинным
+   * описанием. Без общего потолка эти числа расходятся — проверено подрывом:
+   * верх уезжал с 293 на 205, высота росла с 288 до 376.
+   */
+  // Колонка описания живёт только в широкой панели (в сетке 2×2 её прячет
+  // контейнерный запрос), а без неё проверять нечего — оставляем одну панель.
+  await page.evaluate((sid) => window.__zaryaCloseSession?.(sid), ids[1])
+  await page.waitForTimeout(1200)
+  await page.evaluate((sid) => window.__zaryaFocusPane?.(sid), ids[0])
+  await page.waitForTimeout(400)
+  await page.evaluate(() => document.querySelector('.zy-agentbar-input')?.focus())
+  await page.waitForTimeout(300)
+  await page.keyboard.type('/')
+  await page.waitForTimeout(1200)
+  const palette = async () =>
+    await page.evaluate(() => {
+      const el = document.querySelector('.zy-cmdlist')
+      const prev = document.querySelector('.zy-cmdlist-preview')
+      if (!el) return null
+      const b = el.getBoundingClientRect()
+      return {
+        top: Math.round(b.top),
+        h: Math.round(b.height),
+        hasPreview: !!prev,
+        prevScrolls: prev ? prev.scrollHeight > prev.clientHeight : false,
+        cur: document.querySelector('.zy-cmdlist-item--on')?.textContent?.slice(0, 12) ?? ''
+      }
+    })
+  const p1 = await palette()
+  ok('палитра открылась со списком', !!p1 && !!p1.cur, p1)
+  // Список циклический: два шага вверх от начала — команда фейка с самым
+  // длинным описанием.
+  await page.keyboard.press('ArrowUp')
+  await page.keyboard.press('ArrowUp')
+  await page.waitForTimeout(500)
+  const p2 = await palette()
+  ok('дошли до команды с длинным описанием', /fake-long/.test(p2?.cur ?? ''), p2)
+  ok('колонка описания на экране есть', p2?.hasPreview === true, p2)
+  ok(
+    'описание действительно длиннее области — иначе проверка ничего не значит',
+    p2?.prevScrolls === true,
+    p2
+  )
+  ok('верх палитры не сдвинулся', p1?.top === p2?.top, { p1: p1?.top, p2: p2?.top })
+  ok('и высота осталась прежней', p1?.h === p2?.h, { p1: p1?.h, p2: p2?.h })
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(300)
+
+  console.log('\n[6] Кнопка «панель» выглядит кнопкой')
   const pult = await page.evaluate(() => {
     const b = [...document.querySelectorAll('.zy-agentbar-fuel-pult')][0]
     if (!b) return null
