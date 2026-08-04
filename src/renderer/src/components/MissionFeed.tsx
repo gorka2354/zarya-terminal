@@ -23,6 +23,7 @@ import {
   summarizeWave
 } from '@/features/ai/subagents'
 import { parseProgress, progressText } from '@shared/progress'
+import { planSummary } from '@shared/agentPlan'
 import { renderMarkdown } from '@/features/ai/markdown'
 import { getTerminal } from '@/terminal/terminalRegistry'
 import { sendCodeToTerminal } from '@/features/ai/pasteGuard'
@@ -45,6 +46,9 @@ import { ruleFor } from '@shared/allowRules'
 // Stable empty reference: a fresh `[]` in the selector makes zustand see a new
 // value every render → infinite re-render loop (React #185).
 const NO_BLOCKS: BlockRecord[] = []
+
+/** Инструменты плана: их содержание живёт в панели плана, а не в карточках. */
+const PLAN_TOOLS = new Set(['TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet'])
 
 /** HH:MM for the right-aligned send time on a user turn. */
 function fmtClock(ts: number): string {
@@ -616,6 +620,9 @@ function AgentSection({
           isNextGate={gateId === t.id}
         />
       ))}
+      {/* План выше волны: он про то, КУДА идёт агент, а волна — про то, чем
+          заняты его помощники прямо сейчас. */}
+      <PlanPanel plan={conv.plan} />
       <SubagentWave conv={conv} />
       {conv.streaming && conv.messages[conv.messages.length - 1]?.role === 'user' && (
         <div className="zy-mf-typing">
@@ -682,6 +689,54 @@ function SubagentWave({
       ))}
       {w.running.length > 4 && (
         <div className="zy-mf-wave-row zy-mf-wave-row--more">{t('feed.andMore', { n: w.running.length - 4 })}</div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * План агента — чек-лист, который он ведёт себе сам.
+ *
+ * Единственное место в ленте, где видно НАМЕРЕНИЕ, а не следы: что впереди и на
+ * каком шаге агент сейчас. Стоит там же, где строка волны субагентов, и живёт по
+ * тем же правилам — узкая полоса, а не второй экран.
+ *
+ * Показываем пять пунктов: у человека их бывает пятнадцать, и полный список
+ * закрыл бы ленту, ради которой он в панель и смотрит. Приоритет у идущего —
+ * именно он отвечает на вопрос «оно движется?».
+ */
+function PlanPanel({ plan }: { plan?: import('@shared/agentPlan').AgentPlan }): React.JSX.Element | null {
+  useLang()
+  const SHOWN = 5
+  if (!plan?.tasks.length) return null
+  const { total, done, running } = planSummary(plan)
+  const allDone = done === total
+  // Идущая задача первой, дальше — по порядку плана. Так строка «чем занят
+  // сейчас» не уезжает вниз, когда план длинный.
+  const ordered = running ? [running, ...plan.tasks.filter((t) => t !== running)] : plan.tasks
+  const shown = ordered.slice(0, SHOWN)
+  return (
+    <div className={`zy-mf-plan${allDone ? ' zy-mf-plan--done' : ''}`}>
+      <div className="zy-mf-plan-head">
+        {allDone ? <Icon name="check" size={12} /> : <span className="zy-mf-spinner" aria-hidden />}
+        <span className="zy-mf-plan-title">{t('plan.title')}</span>
+        <span className="zy-mf-plan-count">{t('plan.progress', { done, total })}</span>
+      </div>
+      {shown.map((task) => (
+        <div key={task.id} className={`zy-mf-plan-row zy-mf-plan-row--${task.status}`}>
+          <span className="zy-mf-plan-mark" aria-hidden>
+            {task.status === 'completed' ? '✓' : task.status === 'in_progress' ? '▸' : '·'}
+          </span>
+          <span className="zy-mf-plan-what">
+            {/* У идущей задачи движок даёт свою форму: «Запускаю тесты». */}
+            {task.status === 'in_progress' && task.activeForm ? task.activeForm : task.subject}
+          </span>
+        </div>
+      ))}
+      {ordered.length > SHOWN && (
+        <div className="zy-mf-plan-row zy-mf-plan-row--more">
+          {t('plan.more', { n: ordered.length - SHOWN })}
+        </div>
       )}
     </div>
   )
@@ -776,6 +831,10 @@ const AgentMessage = memo(function AgentMessage({
           // cost. Showing both is the same information twice, the useless copy
           // on top.
           if (covered.has(p.id)) return null
+          // Задачи плана рисует панель выше, целиком и с состояниями. Карточка
+          // «TaskCreate», а следом две «TaskUpdate» — это тот же список,
+          // размазанный по ленте и потерявший связь между собой.
+          if (PLAN_TOOLS.has(p.name)) return null
           return (
             <ToolCard
               key={i}

@@ -103,6 +103,10 @@ export const RU: Dict = {
 
   // --- лента
   'feed.ready': 'готов · введите запрос в строку ниже ↓',
+  'plan.title': 'План агента',
+  'plan.progress': '{done} из {total}',
+  'plan.more': 'ещё {n}',
+  'plan.done': 'план выполнен',
   'feed.agentAnswer': 'ОТВЕТ АГЕНТА',
   'feed.typing': 'агент отвечает…',
   'feed.queued': 'в очереди: {text}',
@@ -1223,6 +1227,10 @@ export const EN: Dict = {
   'close.queued': 'queued message: “{text}”',
 
   'feed.ready': 'ready · type a command or a request below ↓',
+  'plan.title': 'Agent plan',
+  'plan.progress': '{done} of {total}',
+  'plan.more': '{n} more',
+  'plan.done': 'plan complete',
   'feed.agentAnswer': 'AGENT REPLY',
   'feed.typing': 'agent is typing…',
   'feed.queued': 'queued: {text}',

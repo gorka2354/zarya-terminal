@@ -1099,3 +1099,86 @@
   background: color-mix(in srgb, var(--accent-2) 18%, transparent);
   outline: 1px solid color-mix(in srgb, var(--accent-2) 45%, transparent);
 }
+
+/* План агента — то же семейство, что строка волны субагентов: узкая полоса с
+   левым кантом, а не второй экран. Разница смысловая: волна про помощников,
+   которые работают прямо сейчас, план — про то, куда агент идёт. */
+.zy-mf-plan {
+  margin: 0 0 12px 16px;
+  max-width: 560px;
+  padding: 7px 10px;
+  border: 1px solid color-mix(in srgb, var(--accent-2) 32%, var(--border));
+  border-left-width: 2px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--accent-2) 5%, var(--bg-elev1));
+}
+/* План выполнен — тот же зелёный, что у завершённой волны: одно значение цвета
+   на всю ленту. */
+.zy-mf-plan--done {
+  border-color: color-mix(in srgb, var(--success) 30%, var(--border));
+  background: color-mix(in srgb, var(--success) 5%, var(--bg-elev1));
+}
+.zy-mf-plan-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 4px;
+}
+.zy-mf-plan-title {
+  font-family: var(--font-tech);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent-2);
+}
+.zy-mf-plan-count {
+  margin-left: auto;
+  font-family: var(--font-tech);
+  font-size: 11.5px;
+  color: var(--fg-faint);
+  font-variant-numeric: tabular-nums;
+}
+.zy-mf-plan-row {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--fg-dim);
+}
+/* Значок состояния — в моноширинном: три разных знака в пропорциональном
+   шрифте дают разную ширину, и текст задач ходил бы влево-вправо построчно. */
+.zy-mf-plan-mark {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  width: 10px;
+  flex-shrink: 0;
+  color: var(--fg-faint);
+}
+.zy-mf-plan-what {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Идущая задача — единственная выделенная: она отвечает на вопрос «оно
+   движется?», ради которого в панель и смотрят. */
+.zy-mf-plan-row--in_progress {
+  color: var(--fg);
+}
+.zy-mf-plan-row--in_progress .zy-mf-plan-mark {
+  color: var(--accent);
+}
+/* Сделанное гасим, а не вычёркиваем: перечёркнутый текст в ленте читается как
+   «отменено», а это выполненная работа. */
+.zy-mf-plan-row--completed {
+  color: var(--fg-faint);
+}
+.zy-mf-plan-row--completed .zy-mf-plan-mark {
+  color: var(--success);
+}
+.zy-mf-plan-row--more {
+  color: var(--fg-faint);
+  font-size: 11.5px;
+  padding-left: 17px;
+}

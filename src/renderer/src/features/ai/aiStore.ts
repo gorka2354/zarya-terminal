@@ -28,6 +28,7 @@ import { applySubagentEvent, type SubagentRun } from './subagents'
 import { sameModel } from './modelMatch'
 import { nativeGateOpts } from './startOpts'
 import { irreversible } from '@shared/irreversible'
+import { EMPTY_PLAN, planOnToolResult, planOnToolUse } from '@shared/agentPlan'
 import { matchesRule, ruleFor, withRule } from '@shared/allowRules'
 
 /**
@@ -209,6 +210,15 @@ export interface Conversation {
    * перезапуска честнее пустой список, чем вчерашний, выданный за сегодняшний.
    */
   skillsUsed?: string[]
+  /**
+   * План агента: чек-лист, который он ведёт себе сам (TaskCreate/TaskUpdate).
+   *
+   * Единственное место, где видно НАМЕРЕНИЕ агента, а не следы его работы. Без
+   * него лента — поток действий без цели, и на всякую заминку остаётся вопрос
+   * «оно вообще движется?». На диск не сохраняется: план принадлежит живому
+   * ходу, и вчерашний, выданный за сегодняшний, врал бы хуже, чем его отсутствие.
+   */
+  plan?: import('@shared/agentPlan').AgentPlan
   agentMode: boolean
   /** True only while an ai.chat request is in flight (between dispatch and done/error). */
   streaming: boolean
@@ -658,6 +668,30 @@ export const useAiStore = create<AiState>((set, get) => {
     })
   }
 
+  /**
+   * План агента из вызовов инструментов.
+   *
+   * Отдельного события у движка нет: план приходит теми же `TaskCreate` и
+   * `TaskUpdate`, а номер задачи называется только в тексте результата. Поэтому
+   * здесь два входа — на вызов и на результат (см. shared/agentPlan.ts).
+   */
+  const notePlanUse = (id: string, calls: { toolUseId: string; name: string; input: unknown }[]): void => {
+    const useful = calls.filter((c) => c.name === 'TaskCreate' || c.name === 'TaskUpdate')
+    if (!useful.length) return
+    patchConversation(id, (c) => {
+      let plan = c.plan ?? EMPTY_PLAN
+      for (const call of useful) plan = planOnToolUse(plan, call.toolUseId, call.name, call.input)
+      return plan === (c.plan ?? EMPTY_PLAN) ? c : { ...c, plan }
+    })
+  }
+
+  const notePlanResult = (id: string, toolUseId: string, content: string): void => {
+    patchConversation(id, (c) => {
+      const plan = planOnToolResult(c.plan ?? EMPTY_PLAN, toolUseId, content)
+      return plan === (c.plan ?? EMPTY_PLAN) ? c : { ...c, plan }
+    })
+  }
+
   const resolveConv = (conversationId?: string): Conversation | undefined => {
     const s = get()
     const id = conversationId ?? s.activeId
@@ -863,6 +897,13 @@ export const useAiStore = create<AiState>((set, get) => {
             p.type === 'tool_use' ? [{ name: p.name, input: p.input }] : []
           )
         )
+        // План агента приходит теми же вызовами: ловим их там же, где скиллы.
+        notePlanUse(
+          convId,
+          ev.content.flatMap((p) =>
+            p.type === 'tool_use' ? [{ toolUseId: p.id, name: p.name, input: p.input }] : []
+          )
+        )
         break
 
       case 'permission':
@@ -915,6 +956,9 @@ export const useAiStore = create<AiState>((set, get) => {
         break
 
       case 'tool_result':
+        // Номер созданной задачи движок называет только здесь, в тексте
+        // результата: «Task #3 created successfully: …».
+        notePlanResult(convId, ev.toolUseId, ev.content)
         patchConversation(convId, (c) => ({
           ...c,
           pendingTools: c.pendingTools.filter((t) => t.id !== ev.toolUseId),
@@ -1074,6 +1118,7 @@ export const useAiStore = create<AiState>((set, get) => {
       case 'tool_use': {
         patchConversation(convId, (c) => appendToolUse(c, ev.id, ev.name, ev.input))
         noteSkills(convId, [{ name: ev.name, input: ev.input }])
+        notePlanUse(convId, [{ toolUseId: ev.id, name: ev.name, input: ev.input }])
         /*
          * Пол над автоодобрением встроенного агента: необратимое спрашивают
          * всегда, даже когда «без подтверждений» включено. Плюс правила «до

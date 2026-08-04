@@ -56,25 +56,79 @@ export function toolLabel(
   title?: string,
   displayName?: string
 ): string {
-  const o = input as
-    | { command?: string; file_path?: string; path?: string; title?: string; skill?: string }
-    | null
+  const o = (input ?? null) as Record<string, unknown> | null
+  const str = (k: string): string => {
+    const v = o?.[k]
+    return typeof v === 'string' && v.trim() ? v.trim() : ''
+  }
+
   // Скилл называет себя в `input.skill`, и больше нигде: без этой ветки карточка
   // выводила голое «Skill» — то есть агент брал скилл, а человек не видел какой.
   // Аргумент дописываем, если он есть: у скилла это его задание.
-  if (typeof o?.skill === 'string' && o.skill.trim()) {
-    const args = typeof (o as { args?: unknown }).args === 'string' ? (o as { args: string }).args.trim() : ''
-    return `${t('gates.skill')} ${o.skill.trim()}${args ? ` · ${args}` : ''}`
+  const skill = str('skill')
+  if (skill) {
+    const args = str('args')
+    return `${t('gates.skill')} ${skill}${args ? ` · ${args}` : ''}`
   }
-  if (typeof o?.command === 'string' && o.command.trim()) return o.command
-  const path =
-    typeof o?.file_path === 'string' ? o.file_path : typeof o?.path === 'string' ? o.path : ''
+  const command = str('command')
+  if (command) return command
+
+  /*
+   * ПРЕДМЕТ ВЫЗОВА, а не имя инструмента.
+   *
+   * Раньше здесь знали пять полей, и всё остальное выпадало в голое «WebSearch»,
+   * «Glob», «ToolSearch», «SendUserFile». На машине владельца это каждый второй
+   * ход: 6 254 вызова поиска в вебе, 6 018 поисков по файлам. Карточка занимала
+   * строку и не говорила ничего.
+   *
+   * Порядок веток имеет значение. `pattern` идёт ПЕРЕД `path`, потому что у
+   * Grep есть оба, и раньше побеждал путь: карточка показывала папку и теряла
+   * сам шаблон — искали-то не папку.
+   */
+  const query = str('query')
+  if (query) return query
+  const url = str('url')
+  if (url) return url
+  const pattern = str('pattern')
+  if (pattern) {
+    const where = str('path') || str('glob')
+    return where ? `${pattern} · ${where}` : pattern
+  }
+  // Задача из плана агента (TaskCreate). Панель плана показывает список целиком,
+  // но подпись нужна и здесь: карточка живёт в ленте своей жизнью.
+  const subject = str('subject')
+  if (subject) return subject
+  // Поручение субагенту: что именно поручили, а не «Agent».
+  const description = str('description')
+  if (description) {
+    const kind = str('subagent_type')
+    return kind ? `${description} · ${kind}` : description
+  }
+  // Файлы, которые агент отдаёт человеку.
+  const files = Array.isArray(o?.files) ? (o.files as unknown[]).filter((f) => typeof f === 'string') : []
+  if (files.length) {
+    const first = shortName(files[0] as string)
+    return files.length > 1 ? `${first} +${files.length - 1}` : first
+  }
+  // За чем следит Monitor — цель, а не слово «Monitor».
+  const target = str('target')
+  if (target) return target
+
+  const path = str('file_path') || str('path')
   if (path) return `${name || t('gates.tool')} · ${path}`
   // ACP (Gemini/Kimi/Qwen) carries the human description in `input.title` and in
   // `displayName`, never in a top-level `title` — without this the label decayed
   // to the bare tool name («Bash», «Edit») and the card described nothing.
-  if (typeof o?.title === 'string' && o.title.trim()) return o.title.trim()
+  const inputTitle = str('title')
+  if (inputTitle) return inputTitle
   return title?.trim() || displayName?.trim() || name || t('gates.request')
+}
+
+/** Имя файла без пути: в карточке важно ЧТО отдали, а не откуда. */
+function shortName(p: string): string {
+  // Оба разделителя: пути приходят и в виде `C:\Users\…`, и в виде `/home/…`.
+  const leaf = p.split(/[\\/]/).pop()
+  return leaf || p
 }
 
 /** Label for a gate that has no `tool_use` block to describe it. */

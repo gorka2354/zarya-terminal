@@ -140,6 +140,92 @@ export class FakeAgentDriver implements AgentDriver {
       this.schedule(requestId, 8000, () =>
         this.emit(requestId, { type: 'result', isError: false, costUsd: 0.04, models: [`${this.engine}-model`] })
       )
+    } else if (/подписи|labels/i.test(opts.prompt)) {
+      /*
+       * Инструменты, которые раньше выпадали в голое имя. Нужны прогону, чтобы
+       * подписи проверялись НА ЭКРАНЕ, а не только юнитом: между toolLabel и
+       * карточкой лежит вся лента, и связь могла потеряться там.
+       */
+      this.schedule(requestId, 350, () => {
+        this.emit(requestId, {
+          type: 'assistant',
+          content: [
+            { type: 'tool_use', id: `${requestId}-l1`, name: 'WebSearch', input: { query: 'kimi cli acp' } },
+            {
+              type: 'tool_use',
+              id: `${requestId}-l2`,
+              name: 'Grep',
+              input: { pattern: 'launchPadOpen', path: 'C:/p/src', output_mode: 'files_with_matches' }
+            },
+            {
+              type: 'tool_use',
+              id: `${requestId}-l3`,
+              name: 'SendUserFile',
+              input: { files: ['C:/p/shots/hero.png'] }
+            }
+          ]
+        })
+        for (const [i, out] of ['нашлось 4', 'совпадений: 12', 'файл отправлен'].entries()) {
+          this.emit(requestId, {
+            type: 'tool_result',
+            toolUseId: `${requestId}-l${i + 1}`,
+            content: out,
+            isError: false
+          })
+        }
+        this.emit(requestId, { type: 'result', isError: false, costUsd: 0.01 })
+      })
+    } else if (/plan|план/i.test(opts.prompt)) {
+      /*
+       * План агента. Настоящий движок ведёт его обычными вызовами инструментов,
+       * и номер задачи называет ТОЛЬКО в тексте результата — «Task #1 created
+       * successfully: …». Фейк повторяет это дословно, иначе прогон проверял бы
+       * не тот путь: связать TaskUpdate с задачей можно лишь по этому номеру.
+       */
+      const plan = [
+        { subject: 'Прочитать конфиг', activeForm: 'Читаю конфиг' },
+        { subject: 'Переписать разбор', activeForm: 'Переписываю разбор' },
+        { subject: 'Прогнать тесты', activeForm: 'Гоняю тесты' }
+      ]
+      let at = 300
+      plan.forEach((task, i) => {
+        const id = `${requestId}-tc${i}`
+        this.schedule(requestId, at, () => {
+          this.emit(requestId, {
+            type: 'assistant',
+            content: [{ type: 'tool_use', id, name: 'TaskCreate', input: task }]
+          })
+          this.emit(requestId, {
+            type: 'tool_result',
+            toolUseId: id,
+            content: `Task #${i + 1} created successfully: ${task.subject}`,
+            isError: false
+          })
+        })
+        at += 200
+      })
+      // Первая задача пошла в работу, вторая успела закрыться — так на экране
+      // видны СРАЗУ три состояния, а не одно.
+      this.schedule(requestId, at + 200, () => {
+        this.emit(requestId, {
+          type: 'assistant',
+          content: [
+            {
+              type: 'tool_use',
+              id: `${requestId}-tu1`,
+              name: 'TaskUpdate',
+              input: { taskId: '1', status: 'completed' }
+            },
+            {
+              type: 'tool_use',
+              id: `${requestId}-tu2`,
+              name: 'TaskUpdate',
+              input: { taskId: '2', status: 'in_progress' }
+            }
+          ]
+        })
+        this.emit(requestId, { type: 'result', isError: false, costUsd: 0.02 })
+      })
     } else if (/skill/i.test(opts.prompt)) {
       // Скилл, взятый агентом. Настоящий движок объявляет это обычным `tool_use`
       // с именем `Skill` и именем скилла в `input.skill` — проверено по записям
