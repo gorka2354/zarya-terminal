@@ -360,7 +360,9 @@ export const MissionFeed = memo(function MissionFeed({
                 liveTail={b.id === runningId ? liveTail : undefined}
               />
             ))}
-            {hasConv && conv && <AgentSection conv={conv} cwd={cwdShort} />}
+            {hasConv && conv && (
+              <AgentSection conv={conv} cwd={cwdShort} afterBlocks={blocks.length > 0} />
+            )}
             {conv?.queued && (
               <div className="zy-mf-queued">
                 <Icon name="chevron-up" size={11} />
@@ -535,7 +537,15 @@ function buildResultIndex(conv: Conversation): FeedConv['results'] {
 
 
 function AgentSection({
- conv, cwd }: { conv: Conversation; cwd: string }): React.JSX.Element {
+  conv,
+  cwd,
+  afterBlocks
+}: {
+  conv: Conversation
+  cwd: string
+  /** Выше в ленте есть команды терминала — тогда границу видно и она нужна. */
+  afterBlocks: boolean
+}): React.JSX.Element {
   // Подписка на язык: без неё надписи этого компонента сменились бы не в
   // момент переключения, а при следующей перерисовке по другой причине.
   useLang()
@@ -553,14 +563,23 @@ function AgentSection({
   const interrupted = conv.interrupted
   return (
     <FeedConvContext.Provider value={feed}>
-      <div className="zy-mf-divider">
-        <span className="zy-mf-divider-line" />
-        <span className="zy-mf-divider-label">
-          <Icon name="bolt" size={11} />
-          {t('feed.agentAnswer')}
-        </span>
-        <span className="zy-mf-divider-line" />
-      </div>
+      {/*
+        Полоса «ОТВЕТ АГЕНТА» — ГРАНИЦА между командами терминала и беседой, а
+        не заголовок беседы. Раньше она рисовалась всегда: в панели, где команд
+        нет вовсе, получалась линия во всю ширину, которая ничего не отделяет, —
+        а в пустой беседе и вовсе пустая полоса под шапкой. Отделять нечего —
+        значит и полосы нет.
+      */}
+      {afterBlocks && (
+        <div className="zy-mf-divider">
+          <span className="zy-mf-divider-line" />
+          <span className="zy-mf-divider-label">
+            <Icon name="bolt" size={11} />
+            {t('feed.agentAnswer')}
+          </span>
+          <span className="zy-mf-divider-line" />
+        </div>
+      )}
       {conv.messages.map((m, i) => (
         <AgentMessage
           key={i}

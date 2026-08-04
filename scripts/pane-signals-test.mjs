@@ -253,7 +253,49 @@ try {
   await page.keyboard.press('Escape')
   await page.waitForTimeout(300)
 
-  console.log('\n[6] Кнопка «панель» выглядит кнопкой')
+  console.log('\n[6] Полоса «ОТВЕТ АГЕНТА» — только там, где есть что отделять')
+  /*
+   * Она граница между командами терминала и беседой, а не заголовок беседы.
+   * Рисовалась всегда: в панели, где команд нет, получалась линия во всю
+   * ширину, которая ничего не отделяет, — а в пустой беседе просто пустая
+   * полоса под шапкой. Именно её и видно на скриншотах как «тонкую полосу».
+   */
+  const noBlocks = await page.evaluate(() => {
+    const pane = [...document.querySelectorAll('.zy-pane')].find(
+      (p) => p.querySelector('.zy-mf-user') && p.getBoundingClientRect().width > 100
+    )
+    return pane
+      ? {
+          hasDivider: !!pane.querySelector('.zy-mf-divider'),
+          shell: pane.querySelectorAll('.zy-mf-block').length
+        }
+      : null
+  })
+  ok('в панели с беседой команд терминала нет', noBlocks?.shell === 0, noBlocks)
+  ok('и полосы тоже нет — отделять нечего', noBlocks?.hasDivider === false, noBlocks)
+
+  // А теперь СМЕШАННАЯ лента: команды выше беседы. Здесь полоса — настоящая
+  // граница, и убрать её значило бы потерять смысл, а не шум.
+  const sid = await page.evaluate(() => {
+    const pane = [...document.querySelectorAll('.zy-pane')].find((p) => p.querySelector('.zy-mf-user'))
+    return pane?.getAttribute('data-session')
+  })
+  await page.evaluate((x) => window.__zaryaSeedBlocks?.(x, 2, 3), sid)
+  await page.waitForTimeout(1200)
+  const mixed = await page.evaluate(() => {
+    const pane = [...document.querySelectorAll('.zy-pane')].find((p) => p.querySelector('.zy-mf-user'))
+    const d = pane?.querySelector('.zy-mf-divider')
+    return {
+      hasDivider: !!d,
+      text: (d?.textContent ?? '').trim(),
+      shell: pane?.querySelectorAll('.zy-mf-block').length ?? 0
+    }
+  })
+  ok('команды терминала появились', mixed.shell > 0, mixed)
+  ok('полоса вернулась — ей есть что разделять', mixed.hasDivider === true, mixed)
+  ok('и она подписана', /ОТВЕТ АГЕНТА/.test(mixed.text), mixed.text)
+
+  console.log('\n[7] Кнопка «панель» выглядит кнопкой')
   const pult = await page.evaluate(() => {
     const b = [...document.querySelectorAll('.zy-agentbar-fuel-pult')][0]
     if (!b) return null
