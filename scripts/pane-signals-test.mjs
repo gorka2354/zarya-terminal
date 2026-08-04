@@ -104,10 +104,12 @@ try {
     if (!e) return null
     const cs = getComputedStyle(e)
     const mark = e.querySelector('.zy-mf-empty-mark')?.getBoundingClientRect()
-    const head = e.closest('.zy-mf')?.querySelector('.zy-mf-head')?.getBoundingClientRect()
+    // Своей шапки у ленты больше нет — меряем зазор до верха области
+    // прокрутки: именно её край и подпирал знак.
+    const head = e.closest('.zy-mf-scroll')?.getBoundingClientRect()
     return {
       justify: cs.justifyContent,
-      gap: mark && head ? Math.round(mark.top - head.bottom) : null,
+      gap: mark && head ? Math.round(mark.top - head.top) : null,
       titleFont: getComputedStyle(e.querySelector('.zy-mf-empty-title') ?? e).fontFamily
     }
   })
@@ -295,7 +297,50 @@ try {
   ok('полоса вернулась — ей есть что разделять', mixed.hasDivider === true, mixed)
   ok('и она подписана', /ОТВЕТ АГЕНТА/.test(mixed.text), mixed.text)
 
-  console.log('\n[7] Кнопка «панель» выглядит кнопкой')
+  console.log('\n[7] У панели ОДНА шапка, а не две')
+  /*
+   * Лента рисовала собственную шапку поверх шапки панели: та же марка, тот же
+   * путь. Внутри панели их приходилось скрывать — и оставалась пустая полоса
+   * со своей нижней границей. Две горизонтальные линии подряд, между ними
+   * ничего: ровно та «полоса везде», которую видно на скриншотах.
+   */
+  const heads = await page.evaluate(() => {
+    const pane = [...document.querySelectorAll('.zy-pane')].find(
+      (p) => p.getBoundingClientRect().width > 300
+    )
+    if (!pane) return null
+    const paneTop = pane.getBoundingClientRect().top
+    const lines = []
+    for (const el of pane.querySelectorAll('*')) {
+      const cs = getComputedStyle(el)
+      const r = el.getBoundingClientRect()
+      if (r.width < 300 || r.height > 50 || r.height < 1) continue
+      if (r.top - paneTop > 120) continue
+      if (cs.borderBottomWidth !== '0px' && cs.borderBottomStyle !== 'none')
+        lines.push({ cls: String(el.className).slice(0, 24) || el.tagName, h: Math.round(r.height) })
+    }
+    return {
+      lines,
+      feedHead: !!pane.querySelector('.zy-mf-head'),
+      buttons: pane.querySelectorAll('.zy-icon-btn').length
+    }
+  })
+  ok('своей шапки у ленты больше нет', heads?.feedHead === false, heads)
+  ok('и линия под шапкой ровно одна', heads?.lines.length === 1, heads?.lines)
+  // Кнопки не потерялись при переезде — иначе «убрали полосу» означало бы
+  // «убрали доступ к прошлым сессиям».
+  ok('кнопки ленты переехали в шапку панели', (heads?.buttons ?? 0) >= 5, heads?.buttons)
+  const menuItems = await page.evaluate(async () => {
+    const b = [...document.querySelectorAll('.zy-pane .zy-icon-btn')][0]
+    b?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await new Promise((r) => setTimeout(r, 900))
+    return document.querySelectorAll('.zy-context-item').length
+  })
+  ok('и «прошлые сессии» на новом месте открываются', menuItems > 0, menuItems)
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(300)
+
+  console.log('\n[8] Кнопка «панель» выглядит кнопкой')
   const pult = await page.evaluate(() => {
     const b = [...document.querySelectorAll('.zy-agentbar-fuel-pult')][0]
     if (!b) return null

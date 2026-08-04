@@ -3,7 +3,7 @@ import { rememberProject } from '@/actions/projects'
 import type { DropSide } from '@shared/paneTree'
 import { memo, useEffect, useRef, useState } from 'react'
 import { XtermView } from '@/terminal/XtermView'
-import { MissionFeed } from './MissionFeed'
+import { MissionFeed, PaneFeedButtons } from './MissionFeed'
 import { AgentBar } from './AgentBar'
 import { getTerminal } from '@/terminal/terminalRegistry'
 import { closePaneAsking, toggleMaximizePane } from '@/actions/panes'
@@ -331,6 +331,9 @@ const PaneHeader = memo(function PaneHeader({
         )}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+        {/* Кнопки ленты — здесь, а не в своей шапке: та дублировала эту и
+            добавляла вторую горизонтальную линию под первой. */}
+        <PaneFeedButtons sessionId={sessionId} />
         <button
           className="zy-icon-btn"
           title={t('feed.toBlocks')}

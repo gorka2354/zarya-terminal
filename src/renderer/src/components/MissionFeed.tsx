@@ -57,23 +57,19 @@ function fmtClock(ts: number): string {
  * экране (сотни блоков, разметка, карточки инструментов). Свои данные она берёт
  * из сторов сама, поэтому пропуск чужой перерисовки ничего не «замораживает».
  */
-export const MissionFeed = memo(function MissionFeed({
-  sessionId
-}: {
-  sessionId: string
-}): React.JSX.Element {
-  // Подписка на язык: без неё надписи этого компонента сменились бы не в
-  // момент переключения, а при следующей перерисовке по другой причине.
+/**
+ * Кнопки ленты в шапке ПАНЕЛИ: прошлые сессии Claude и запуск CLI.
+ *
+ * Раньше они жили в собственной шапке ленты, а та дублировала шапку панели —
+ * марку и путь приходилось скрывать, и оставалась пустая полоса со своей
+ * границей. Две линии подряд, между ними ничего. Лента используется ТОЛЬКО
+ * внутри панели, поэтому кнопки переехали к остальным кнопкам панели, а вторая
+ * шапка исчезла вместе с лишней линией и двумя десятками точек по вертикали.
+ */
+export function PaneFeedButtons({ sessionId }: { sessionId: string }): React.JSX.Element {
   useLang()
-
-  const blocks = useBlocksStore((s) => s.bySession[sessionId] ?? NO_BLOCKS)
-  const cwd = useSessionsStore((s) => s.sessions[sessionId]?.cwd ?? '')
-  // Each terminal shows its OWN agent conversation (bound by sessionId).
-  const conv = useAiStore((s) => convForSession(s, sessionId))
-  const [branch, setBranch] = useState('')
-  const [liveTail, setLiveTail] = useState('')
-  const scrollRef = useRef<HTMLDivElement>(null)
   const { menu: cliMenu, open: openMenu } = useContextMenu()
+
 
   // Header ↺ button → past Claude Code sessions for THIS folder (resume one).
   const openSessionsMenu = (e: React.MouseEvent): void => {
@@ -140,6 +136,35 @@ export const MissionFeed = memo(function MissionFeed({
     })
   }
 
+  return (
+    <>
+      <button className="zy-icon-btn" title={t('feed.resumeHint')} onClick={openSessionsMenu}>
+        <Icon name="history" size={13} />
+      </button>
+      <button className="zy-icon-btn" title={t('feed.launchHint')} onClick={openCliMenu}>
+        <Icon name="bolt" size={13} />
+      </button>
+      {cliMenu}
+    </>
+  )
+}
+
+export const MissionFeed = memo(function MissionFeed({
+  sessionId
+}: {
+  sessionId: string
+}): React.JSX.Element {
+  // Подписка на язык: без неё надписи этого компонента сменились бы не в
+  // момент переключения, а при следующей перерисовке по другой причине.
+  useLang()
+
+  const blocks = useBlocksStore((s) => s.bySession[sessionId] ?? NO_BLOCKS)
+  const cwd = useSessionsStore((s) => s.sessions[sessionId]?.cwd ?? '')
+  // Each terminal shows its OWN agent conversation (bound by sessionId).
+  const conv = useAiStore((s) => convForSession(s, sessionId))
+  const [branch, setBranch] = useState('')
+  const [liveTail, setLiveTail] = useState('')
+  const scrollRef = useRef<HTMLDivElement>(null)
   // Current git branch for the prompt line — refreshed when the cwd changes or
   // a command finishes (a checkout/commit could have moved the branch).
   useEffect(() => {
@@ -310,34 +335,18 @@ export const MissionFeed = memo(function MissionFeed({
   const isEmpty = blocks.length === 0 && !hasConv
   const cwdShort = shortenPath(cwd || '', 34)
 
+  /*
+   * СВОЕЙ ШАПКИ У ЛЕНТЫ БОЛЬШЕ НЕТ.
+   *
+   * Она дублировала шапку панели: та же марка «CLI-АГЕНТ · ЗАРЯ», тот же путь.
+   * Внутри панели марку и путь пришлось скрыть, и осталась пустая полоса с
+   * двумя кнопками — но со своей нижней границей. Получались ДВЕ линии подряд
+   * с ничем между ними, и это ровно та «полоса везде», которую видно на
+   * скриншотах. Кнопки переехали в шапку панели (см. PaneFeedButtons ниже) —
+   * лента используется только внутри панели, дублировать её шапку незачем.
+   */
   return (
     <div className="zy-mf">
-      <div className="zy-mf-head">
-        <span className="zy-mf-head-mark">
-          <Icon name="star" size={12} />
-          {t('feed.mark')}
-        </span>
-        {cwd && (
-          <span className="zy-mf-head-cwd" title={cwd}>
-            {cwdShort}
-          </span>
-        )}
-        <div className="zy-mf-head-spacer" />
-        <button
-          className="zy-mf-head-btn"
-          title={t('feed.resumeHint')}
-          onClick={openSessionsMenu}
-        >
-          <Icon name="history" size={13} />
-        </button>
-        <button
-          className="zy-mf-head-btn"
-          title={t('feed.launchHint')}
-          onClick={openCliMenu}
-        >
-          <Icon name="bolt" size={13} />
-        </button>
-      </div>
 
       <div
         className="zy-mf-scroll"
@@ -389,7 +398,6 @@ export const MissionFeed = memo(function MissionFeed({
           </>
         )}
       </div>
-      {cliMenu}
     </div>
   )
 })
