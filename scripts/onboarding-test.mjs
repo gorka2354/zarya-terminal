@@ -31,11 +31,23 @@ const ok = (name, cond, extra) => {
 
 const launch = (userData) =>
   electron.launch({
-    args: [join(root, 'out', 'main', 'index.js')],
+    args: [
+      join(root, 'out', 'main', 'index.js'),
+      // Язык — системной локалью, а НЕ файлом настроек: весь смысл первого
+      // экрана в том, что настроек ещё нет, и подкладывать их сюда значило бы
+      // проверять другой сценарий. На машине разработчика локаль русская, на
+      // ubuntu-раннере английская — без этого флага прогон падал в CI, ловя
+      // английские надписи русскими проверками.
+      '--lang=ru-RU'
+    ],
     env: {
       ...process.env,
       ZARYA_USER_DATA: userData,
       ZARYA_NO_UPDATE_CHECK: '1',
+      // Дублируем для systemd-окружения раннера: Chromium читает локаль и
+      // отсюда, а app.getLocale() обязан отдать ru в обоих случаях.
+      LANG: 'ru_RU.UTF-8',
+      LC_ALL: 'ru_RU.UTF-8',
       NODE_ENV: 'production'
     }
   })
