@@ -107,6 +107,67 @@ try {
   ok('и середина не потеряна', /СТРОКА-3/.test(out), out.slice(0, 200))
   if (shots) await page.screenshot({ path: join(shots, 'report-live.png') })
 
+  console.log('\n[3] Ответ печатается на глазах — на настоящем движке')
+  /*
+   * Единственное, чего фейк доказать не может: что форма дельт у SDK и правда
+   * та, которую мы разбираем (`content_block_delta` → `delta.text_delta`).
+   * Ошибись мы в имени поля — печать просто не появилась бы, а прогон на фейке
+   * остался бы зелёным.
+   */
+  const id2 = await page.evaluate(() =>
+    window.__zaryaStartAgent?.(
+      'claude-code',
+      'Ответь ровно пятью предложениями о том, зачем нужен терминал. ' +
+        'Без списков, без кода, без инструментов — просто текст.'
+    )
+  )
+  // Ловим МОМЕНТ печати: опрашиваем часто и запоминаем самый первый непустой
+  // кусок. «Подождать и посмотреть» здесь не годится — ответ придёт целиком.
+  let firstSeen = ''
+  let sawCaret = false
+  const dl2 = Date.now() + 90_000
+  while (Date.now() < dl2) {
+    const snap = await page.evaluate(() => {
+      const el = document.querySelector('.zy-mf-answer--typing')
+      return el ? { text: el.textContent ?? '', caret: !!el.querySelector('.zy-mf-caret') } : null
+    })
+    if (snap && snap.text.trim()) {
+      if (!firstSeen) firstSeen = snap.text
+      sawCaret = sawCaret || snap.caret
+      break
+    }
+    const c = await page.evaluate((i) => window.__zaryaConvById?.(i), id2)
+    if (c && c.streaming === false) break
+    await page.waitForTimeout(120)
+  }
+  ok('печать видна до конца ответа', !!firstSeen, firstSeen.slice(0, 80))
+  ok('и с курсором', sawCaret, sawCaret)
+
+  console.log('\n[4] Куски печати не осели в истории')
+  const dl3 = Date.now() + 120_000
+  let done2 = null
+  while (Date.now() < dl3) {
+    done2 = await page.evaluate((i) => window.__zaryaConvById?.(i), id2)
+    if (done2 && done2.streaming === false && (done2.text ?? '').length) break
+    await page.waitForTimeout(500)
+  }
+  const shape = await page.evaluate(() => ({
+    typing: !!document.querySelector('.zy-mf-answer--typing'),
+    answers: document.querySelectorAll('.zy-mf-answer').length
+  }))
+  ok('печать убралась', shape.typing === false, shape)
+  // Ровно ОДИН ответ в этой беседе: кусок и целое сообщение — не два ответа, а
+  // один и тот же. Два означали бы, что поток осел в истории отдельным ходом.
+  ok('в ленте один ответ, а не два', shape.answers === 1, shape.answers)
+  // И напечатанное — часть настоящего ответа, а не что-то своё. `text` моста
+  // сшивает ВСЕ сообщения беседы, включая наш вопрос, поэтому ищем вхождение.
+  ok(
+    'напечатанное вошло в настоящий ответ',
+    !!firstSeen && (done2?.text ?? '').includes(firstSeen.trim().slice(0, 24)),
+    { typed: firstSeen.slice(0, 40), full: (done2?.text ?? '').slice(-60) }
+  )
+  if (shots) await page.screenshot({ path: join(shots, 'report-live-typing.png') })
+
   console.log(`\n[agent-report-live] PASS ${pass} · FAIL ${fail}`)
 } finally {
   await app.close()

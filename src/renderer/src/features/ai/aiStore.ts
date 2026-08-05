@@ -221,6 +221,14 @@ export interface Conversation {
   plan?: import('@shared/agentPlan').AgentPlan
   /** Движок сжимает контекст прямо сейчас — в ленте идёт строка со спиннером. */
   compacting?: boolean
+  /**
+   * Текст, который печатается прямо сейчас.
+   *
+   * НЕ история: целое сообщение придёт следом и ляжет в `messages`, а это
+   * стирается. Держать его отдельно — единственный способ показать печать и не
+   * запомнить обрывок как сказанное.
+   */
+  typed?: string
   agentMode: boolean
   /** True only while an ai.chat request is in flight (between dispatch and done/error). */
   streaming: boolean
@@ -757,7 +765,17 @@ export const useAiStore = create<AiState>((set, get) => {
       ...c,
       streaming: true,
       activeRequestId: convId,
-      error: undefined
+      error: undefined,
+      /*
+       * Волна — про ОДИН ход. Она остаётся на экране после его конца (иначе от
+       * упавшей задачи не оставалось бы следа ровно тогда, когда о ней надо
+       * узнать), но новый ход начинает счёт заново: «3 из 7», сложенные из двух
+       * ходов, не описывали бы ни один из них.
+       *
+       * Сбрасывается ЗДЕСЬ, а не при одобрении инструмента: одобрение
+       * продолжает тот же ход, и его задачи — те же самые.
+       */
+      subagents: undefined
     }))
     // Opts are Claude-sourced today (the only native engine); per-engine settings
     // (settings.ai.byEngine) arrive with Codex/Gemini in Ф4.
@@ -885,9 +903,22 @@ export const useAiStore = create<AiState>((set, get) => {
           })
         break
 
+      /*
+       * Кусок ответа, пока он печатается.
+       *
+       * Живёт ОТДЕЛЬНО от истории и стирается, как только придёт целое
+       * сообщение движка. Так в беседе остаётся ровно то, что агент сказал:
+       * оборванный на середине поток не осядет в памяти как его ответ, и
+       * следующий ход не унесёт полфразы в контекст.
+       */
+      case 'text_delta':
+        patchConversation(convId, (c) => ({ ...c, typed: (c.typed ?? '') + ev.text }))
+        break
+
       case 'assistant':
         patchConversation(convId, (c) => ({
           ...c,
+          typed: undefined,
           messages: [...c.messages, { role: 'assistant', content: ev.content }]
         }))
         // Вызовы инструментов приходят ВНУТРИ ответа модели, а не отдельным
@@ -985,6 +1016,7 @@ export const useAiStore = create<AiState>((set, get) => {
         patchConversation(convId, (c) => ({
           ...c,
           streaming: false,
+          typed: undefined,
           activeRequestId: undefined,
           claudeSessionId: ev.sessionId ?? c.claudeSessionId,
           // Сколько стоил разговор. Движок считает это сам и до сих пор цифра
@@ -992,10 +1024,20 @@ export const useAiStore = create<AiState>((set, get) => {
           // спрашивает про разговор, а не про приложение. Что именно означает
           // сумма на подписке — говорит подпись в баре: там она расчётная, а
           // не списанная.
-          costUsd: addCost(c.costUsd, ev.costUsd),
-          // The wave is a live readout of THIS turn — leaving it on screen after
-          // the turn ends would show a finished count as if it were still work.
-          subagents: undefined
+          costUsd: addCost(c.costUsd, ev.costUsd)
+          /*
+           * Волна ОСТАЁТСЯ на экране. Раньше здесь стояло `subagents:
+           * undefined` — «законченный счётчик выглядел бы как работа». Но
+           * стирался с ним и след: после «18 из 18» не оставалось ничего о
+           * том, кто что сделал и кто не смог, а упавшая задача исчезала
+           * ровно в тот миг, когда о ней надо узнать.
+           *
+           * Настоящее возражение было к ВИДУ, а не к записи: теперь
+           * законченная волна и выглядит законченной — без крутилки, со своим
+           * знаком, и с отдельной строкой на каждую неудачу. Волну сбрасывает
+           * начало СЛЕДУЮЩЕГО хода (см. send): так «3 из 7» всегда про один
+           * ход, а не про два сложенных вместе.
+           */
         }))
         // Correct the fuel readout to the model that actually ran this turn.
         // Only when a single model ran (subagents would add extra keys → keep config).
@@ -1075,6 +1117,7 @@ export const useAiStore = create<AiState>((set, get) => {
         patchConversation(convId, (c) => ({
           ...c,
           streaming: false,
+          typed: undefined,
           activeRequestId: undefined,
           pendingTools: [],
           error: ev.message
@@ -1243,7 +1286,7 @@ export const useAiStore = create<AiState>((set, get) => {
         requestConv.delete(requestId)
         patchConversation(convId, (c) =>
           c.activeRequestId === requestId
-            ? { ...c, streaming: false, activeRequestId: undefined }
+            ? { ...c, streaming: false, typed: undefined, activeRequestId: undefined }
             : c
         )
         // If the finished turn contained tool calls that are already all
@@ -1256,6 +1299,7 @@ export const useAiStore = create<AiState>((set, get) => {
         patchConversation(convId, (c) => ({
           ...c,
           streaming: false,
+          typed: undefined,
           activeRequestId: undefined,
           pendingTools: [],
           error: ev.message
@@ -1472,6 +1516,7 @@ export const useAiStore = create<AiState>((set, get) => {
       patchConversation(conv.id, (c) => ({
         ...c,
         streaming: false,
+        typed: undefined,
         activeRequestId: undefined,
         pendingTools: [],
         interrupted:
@@ -1511,6 +1556,7 @@ export const useAiStore = create<AiState>((set, get) => {
         ...c,
         messages: c.messages.slice(0, -1),
         streaming: false,
+        typed: undefined,
         activeRequestId: undefined,
         pendingTools: [],
         subagents: undefined,

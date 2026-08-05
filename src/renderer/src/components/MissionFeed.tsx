@@ -20,6 +20,7 @@ import {
   coveredToolUseIds,
   fmtElapsed,
   fmtTokens as fmtWaveTokens,
+  runLabel,
   summarizeWave
 } from '@/features/ai/subagents'
 import { parseProgress, progressText } from '@shared/progress'
@@ -280,7 +281,12 @@ export const MissionFeed = memo(function MissionFeed({
     if (waitingGateId) return
     const el = scrollRef.current
     if (el && stickRef.current) el.scrollTop = el.scrollHeight
-  }, [blocks, conv?.messages, liveTail, waitingGateId])
+    // `conv?.typed` — печатающийся ответ. Без него лента следовала бы только за
+    // готовыми сообщениями, и длинный ответ уезжал бы под нижний край ровно в
+    // тот единственный момент, ради которого печать и показывают. Правило
+    // «следуем, только если человек и так внизу» здесь то же: читающего выше
+    // текста никуда не тянет.
+  }, [blocks, conv?.messages, conv?.typed, liveTail, waitingGateId])
 
   // Anchor to the waiting card — NOT to the end of the feed: with parallel tool
   // calls the bottom card is not the one Enter acts on.
@@ -630,8 +636,25 @@ function AgentSection({
           {t('feed.compacting')}
         </div>
       )}
+      {/*
+        Ответ, пока он печатается. Раньше на его месте были три точки до самого
+        конца: на длинном ответе по экрану нельзя было отличить «пишет» от
+        «завис», и человек ждал вслепую по минуте.
+
+        Текст здесь — ПОКАЗ, а не история: настоящим станет целое сообщение
+        движка, которое придёт следом и это место займёт. Разметку не разбираем
+        на лету — на полуфразе она то и дело оказывается незакрытой и дёргала бы
+        экран; markdown ляжет ровно в тот миг, когда ответ дойдёт целиком.
+      */}
+      {conv.streaming && !conv.compacting && !!conv.typed && (
+        <div className="zy-mf-answer zy-mf-answer--typing">
+          {conv.typed}
+          <span className="zy-mf-caret" aria-hidden />
+        </div>
+      )}
       {conv.streaming &&
         !conv.compacting &&
+        !conv.typed &&
         conv.messages[conv.messages.length - 1]?.role === 'user' && (
           <div className="zy-mf-typing">
             <span className="zy-mf-spinner" />
@@ -670,12 +693,30 @@ function SubagentWave({
 
   const w = summarizeWave(runs, Date.now())
   const allDone = w.done === w.total
+  const bad = w.failed.length > 0
+  // Задачи — не всегда агенты: воркфлоу в счётчике «агентов» назвался бы тем,
+  // чем не является. Слово выбирается по составу волны.
+  const noun = w.mixed
+    ? t(w.total === 1 ? 'feed.taskOne' : 'feed.taskMany')
+    : t(w.total === 1 ? 'feed.agentOne' : 'feed.agentMany')
   return (
-    <div className={`zy-mf-wave${allDone ? ' zy-mf-wave--done' : ''}`}>
+    <div
+      className={`zy-mf-wave${allDone ? ' zy-mf-wave--done' : ''}${bad ? ' zy-mf-wave--bad' : ''}`}
+    >
       <div className="zy-mf-wave-head">
-        {allDone ? <Icon name="check" size={12} /> : <span className="zy-mf-spinner" aria-hidden />}
+        {/* Галочка означает «всё получилось». Ставить её, когда две задачи
+            упали, — врать значком там, где цифры ещё честные. */}
+        {!allDone ? (
+          <span className="zy-mf-spinner" aria-hidden />
+        ) : bad ? (
+          <span className="zy-mf-wave-bad-mark" aria-hidden>
+            ✗
+          </span>
+        ) : (
+          <Icon name="check" size={12} />
+        )}
         <span className="zy-mf-wave-count">
-          {w.done}/{w.total} {t(w.total === 1 ? 'feed.agentOne' : 'feed.agentMany')}
+          {w.done}/{w.total} {noun}
         </span>
         <span className="zy-mf-wave-sep">·</span>
         <span className="zy-mf-wave-time">{fmtElapsed(w.elapsedMs)}</span>
@@ -687,16 +728,49 @@ function SubagentWave({
             </span>
           </>
         )}
+        {bad && (
+          <>
+            <span className="zy-mf-wave-sep">·</span>
+            <span className="zy-mf-wave-bad">{t('feed.waveFailed', { n: w.failed.length })}</span>
+          </>
+        )}
       </div>
       {w.running.slice(0, 4).map((r) => (
         <div key={r.taskId} className="zy-mf-wave-row">
           <span className="zy-mf-wave-dot" />
-          <span className="zy-mf-wave-what">{r.description ?? r.subagentType ?? t('feed.subagent')}</span>
+          <span className="zy-mf-wave-what">{runLabel(r)}</span>
+          {/* Задачу увели в фон: ход идёт дальше, а она осталась работать.
+              Без пометки она читалась бы как обычная, задержавшаяся. */}
+          {r.backgrounded && <span className="zy-mf-wave-bg">{t('feed.inBackground')}</span>}
           {r.lastTool && <span className="zy-mf-wave-tool">{r.lastTool}</span>}
         </div>
       ))}
       {w.running.length > 4 && (
         <div className="zy-mf-wave-row zy-mf-wave-row--more">{t('feed.andMore', { n: w.running.length - 4 })}</div>
+      )}
+      {/*
+        Неудачи — всегда на виду и всегда своими словами. Успешную задачу можно
+        свернуть в счётчик: её итог и есть счётчик. Упавшую — нельзя: ради неё
+        человек в волну и смотрит, и «18 из 18» вместо неё было бы ложью.
+      */}
+      {w.failed.slice(0, 4).map((r) => (
+        <div
+          key={r.taskId}
+          className={`zy-mf-wave-row zy-mf-wave-row--${r.status === 'stopped' ? 'stopped' : 'failed'}`}
+        >
+          <span className="zy-mf-wave-mark" aria-hidden>
+            {r.status === 'stopped' ? '⏹' : '✗'}
+          </span>
+          <span className="zy-mf-wave-what">{runLabel(r)}</span>
+          {/* Пересказ движка о том, ЧТО пошло не так. Своих слов тут нет: у нас
+              нет знания о чужой неудаче, кроме этого. */}
+          {r.summary && <span className="zy-mf-wave-why">{r.summary}</span>}
+        </div>
+      ))}
+      {w.failed.length > 4 && (
+        <div className="zy-mf-wave-row zy-mf-wave-row--more">
+          {t('feed.andMore', { n: w.failed.length - 4 })}
+        </div>
       )}
     </div>
   )

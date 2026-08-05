@@ -130,7 +130,10 @@ export class FakeAgentDriver implements AgentDriver {
     const mute = /mute/i.test(opts.prompt)
     // Оборванный ход обязан быть НЕМЫМ: весь смысл строки движка в том, что
     // ответа не будет вовсе. Скажи фейк хоть слово — прогон проверял бы не то.
-    const silent = mute || /оборв|abort/i.test(opts.prompt)
+    // Печать говорит сама за себя и шлёт своё сообщение в конце: лишнее здесь
+    // сделало бы в беседе два ответа вместо одного и спрятало бы главное —
+    // что куски печати в историю НЕ ложатся.
+    const silent = mute || /оборв|abort|печат|typing/i.test(opts.prompt)
     if (!silent)
       this.schedule(requestId, 250, () => {
         session.lastAssistantUuid = `fake-uuid-${++this.seq}`
@@ -228,6 +231,106 @@ export class FakeAgentDriver implements AgentDriver {
           ]
         })
         this.emit(requestId, { type: 'result', isError: false, costUsd: 0.02 })
+      })
+    } else if (/волн|wave/i.test(opts.prompt)) {
+      /*
+       * Волна задач с РАЗНЫМ исходом. Ровно то, чего фейк раньше не умел, а
+       * значит и на экране не проверялось: успешная, упавшая, остановленная и
+       * воркфлоу. До этой правки все четыре получили бы один зелёный чек, а
+       * воркфлоу не показался бы вовсе — его глушил белый список драйвера.
+       */
+      const wave = [
+        { id: 'w1', what: 'считает файлы', kind: 'local_agent' as const },
+        { id: 'w2', what: 'читает версию', kind: 'local_agent' as const },
+        { id: 'w3', what: 'ищет по коду', kind: 'local_agent' as const },
+        { id: 'w4', what: 'ревью ветки', kind: 'local_workflow' as const, name: 'review-changes' }
+      ]
+      this.schedule(requestId, 300, () => {
+        for (const w of wave) {
+          this.emit(requestId, {
+            type: 'subagent',
+            taskId: w.id,
+            phase: 'started',
+            description: w.what,
+            subagentType: w.kind === 'local_agent' ? 'general-purpose' : undefined,
+            taskType: w.kind,
+            workflowName: 'name' in w ? w.name : undefined
+          })
+        }
+      })
+      this.schedule(requestId, 900, () => {
+        for (const w of wave) {
+          this.emit(requestId, {
+            type: 'subagent',
+            taskId: w.id,
+            phase: 'progress',
+            totalTokens: 31_899,
+            toolUses: 4,
+            durationMs: 3440,
+            lastTool: 'Grep'
+          })
+        }
+        // Одна уходит в фон: ход идёт дальше, а она остаётся работать.
+        this.emit(requestId, {
+          type: 'subagent',
+          taskId: 'w3',
+          phase: 'progress',
+          backgrounded: true
+        })
+      })
+      this.schedule(requestId, 1700, () => {
+        this.emit(requestId, { type: 'subagent', taskId: 'w1', phase: 'done', status: 'completed' })
+        this.emit(requestId, {
+          type: 'subagent',
+          taskId: 'w2',
+          phase: 'done',
+          status: 'failed',
+          summary: 'не нашёл package.json'
+        })
+        this.emit(requestId, { type: 'subagent', taskId: 'w4', phase: 'done', status: 'stopped' })
+        // Последним — событие БЕЗ исхода: если оно затрёт статус, неудача тихо
+        // станет успехом. Здесь это и проверяется.
+        this.emit(requestId, { type: 'subagent', taskId: 'w2', phase: 'done' })
+        this.emit(requestId, { type: 'result', isError: false, costUsd: 0.05 })
+      })
+      // Ушедшая в фон досчитывает ПОСЛЕ конца хода — так и бывает: ход кончился,
+      // а задача осталась. Пока она идёт, у волны законная крутилка; знак
+      // неудачи встаёт только когда доработали все.
+      this.schedule(requestId, 2900, () =>
+        this.emit(requestId, { type: 'subagent', taskId: 'w3', phase: 'done', status: 'completed' })
+      )
+    } else if (/печат|typing/i.test(opts.prompt)) {
+      /*
+       * Ответ, который печатается на глазах. Куски идут отдельными событиями и
+       * в историю НЕ попадают: настоящим текстом становится целое сообщение,
+       * которое приходит в конце. Прогон проверяет обе половины — что печать
+       * видна и что в беседе осталось ровно одно сообщение, а не два.
+       */
+      // Текста нарочно много: он обязан ПЕРЕПОЛНИТЬ ленту. На коротком ответе
+      // проверка «лента следует за печатью» проходила бы и без слежения — то
+      // есть не проверяла бы ничего.
+      const parts = [
+        'Смотрю, ',
+        // Объём — в ПЕРВЫХ кусках: лента должна переполниться уже к середине
+        // потока, иначе прогон проверял бы слежение на тексте, который и так
+        // весь помещается на экране.
+        'что тут происходит: файл на месте, конфиг читается, зависимости встали. ' +
+          'Дальше по порядку — сборка, типы, юниты. '.repeat(40),
+        'Ничего из этого не падает, и это хорошо. '.repeat(40),
+        'Осталось прогнать ленту и посмотреть глазами. '.repeat(40),
+        'тест зелёный.'
+      ]
+      parts.forEach((chunk, i) => {
+        this.schedule(requestId, 300 + i * 260, () =>
+          this.emit(requestId, { type: 'text_delta', text: chunk })
+        )
+      })
+      this.schedule(requestId, 300 + parts.length * 260 + 400, () => {
+        this.emit(requestId, {
+          type: 'assistant',
+          content: [{ type: 'text', text: parts.join('') }]
+        })
+        this.emit(requestId, { type: 'result', isError: false, costUsd: 0.01 })
       })
     } else if (/вывод|output/i.test(opts.prompt)) {
       /*

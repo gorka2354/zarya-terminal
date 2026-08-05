@@ -20,6 +20,22 @@ export interface SubagentRun {
   durationMs?: number
   lastTool?: string
   done: boolean
+  /**
+   * Чем кончилась — слово движка.
+   *
+   * Раньше исход не читался вовсе: упавшая, остановленная и успешная задачи
+   * получали один зелёный чек. «18 из 18» при двух упавших — это неправда,
+   * сказанная уверенным тоном.
+   */
+  status?: 'completed' | 'failed' | 'stopped'
+  /** Чем кончилась по существу — пересказ движка (или его же текст ошибки). */
+  summary?: string
+  /** Род задачи: `local_agent`, `local_workflow`, что появится дальше. */
+  taskType?: string
+  /** Имя воркфлоу из его скрипта. */
+  workflowName?: string
+  /** Задачу увели в фон: ход пошёл дальше, а она осталась работать. */
+  backgrounded?: boolean
   /** When we first heard about it, for a live timer between SDK updates. */
   startedAt: number
 }
@@ -33,6 +49,15 @@ export interface WaveSummary {
   elapsedMs: number
   /** Still-running descriptions, for the detail list. */
   running: SubagentRun[]
+  /**
+   * Кончившиеся НЕ успехом — упавшие и остановленные.
+   *
+   * Отдельным списком, потому что показывать их надо всегда: успешные можно
+   * свернуть в счётчик, неудачу — нельзя. Ради неё человек и смотрит.
+   */
+  failed: SubagentRun[]
+  /** Есть ли среди задач хоть одна не-субагент (воркфлоу и прочее). */
+  mixed: boolean
 }
 
 /** Fold one driver event into the map of runs. */
@@ -48,6 +73,11 @@ export function applySubagentEvent(
     toolUses?: number
     durationMs?: number
     lastTool?: string
+    status?: 'completed' | 'failed' | 'stopped'
+    summary?: string
+    taskType?: string
+    workflowName?: string
+    backgrounded?: boolean
   },
   now: number
 ): Record<string, SubagentRun> {
@@ -65,9 +95,21 @@ export function applySubagentEvent(
     toolUses: ev.toolUses ?? prev?.toolUses,
     durationMs: ev.durationMs ?? prev?.durationMs,
     lastTool: ev.lastTool ?? prev?.lastTool,
+    // Исход не затирается пустотой: последним событием часто приходит
+    // `task_updated` без слов, и неудача иначе тихо превратилась бы в успех.
+    status: ev.status ?? prev?.status,
+    summary: ev.summary ?? prev?.summary,
+    taskType: ev.taskType ?? prev?.taskType,
+    workflowName: ev.workflowName ?? prev?.workflowName,
+    backgrounded: ev.backgrounded ?? prev?.backgrounded,
     done: ev.phase === 'done' || prev?.done === true
   }
   return { ...runs, [ev.taskId]: next }
+}
+
+/** Как назвать задачу одной строкой: имя воркфлоу, дело субагента, род. */
+export function runLabel(r: SubagentRun): string {
+  return r.workflowName || r.description || r.subagentType || t('feed.subagent')
 }
 
 /** Roll the runs up into the one line the feed shows. */
@@ -75,7 +117,9 @@ export function summarizeWave(runs: Record<string, SubagentRun>, now: number): W
   const all = Object.values(runs)
   let tokens = 0
   let elapsed = 0
+  let mixed = false
   const running: SubagentRun[] = []
+  const failed: SubagentRun[] = []
   for (const r of all) {
     tokens += r.totalTokens ?? 0
     // A finished task keeps the SDK's own duration; a live one is measured from
@@ -84,13 +128,19 @@ export function summarizeWave(runs: Record<string, SubagentRun>, now: number): W
     const dur = r.done ? (r.durationMs ?? 0) : Math.max(r.durationMs ?? 0, now - r.startedAt)
     if (dur > elapsed) elapsed = dur
     if (!r.done) running.push(r)
+    else if (r.status === 'failed' || r.status === 'stopped') failed.push(r)
+    // «Агентов» — только когда это и правда агенты. Воркфлоу в том же счётчике
+    // назвался бы агентом, которым он не является.
+    if (r.taskType && r.taskType !== 'local_agent') mixed = true
   }
   return {
     total: all.length,
     done: all.filter((r) => r.done).length,
     tokens,
     elapsedMs: elapsed,
-    running
+    running,
+    failed,
+    mixed
   }
 }
 

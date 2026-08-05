@@ -106,6 +106,97 @@ describe('summarizeWave', () => {
   })
 })
 
+/**
+ * Исход задачи. Движок называет его словом — `completed`, `failed`, `stopped`
+ * (последнее приходит и как `patch.status: 'killed'`). Раньше не читалось
+ * НИЧЕГО из этого: упавшей, остановленной и успешной рисовался один зелёный
+ * чек, и «18 из 18» при двух упавших было обычным делом.
+ */
+describe('исход задачи', () => {
+  const settle = (
+    taskId: string,
+    status: 'completed' | 'failed' | 'stopped',
+    summary?: string
+  ) => ({ taskId, phase: 'done' as const, status, summary })
+
+  it('упавшая и остановленная отделены от успешных', () => {
+    const runs = fold([
+      started('a', 'раз'),
+      started('b', 'два'),
+      started('c', 'три'),
+      settle('a', 'completed'),
+      settle('b', 'failed', 'не нашёл файл'),
+      settle('c', 'stopped')
+    ])
+    const w = summarizeWave(runs, 0)
+    expect(w.done).toBe(3)
+    expect(w.failed.map((r) => r.taskId)).toEqual(['b', 'c'])
+    expect(w.failed[0].summary).toBe('не нашёл файл')
+  })
+
+  it('успех в отдельный список не попадает — его итог и есть счётчик', () => {
+    const runs = fold([started('a', 'раз'), settle('a', 'completed')])
+    expect(summarizeWave(runs, 0).failed).toEqual([])
+  })
+
+  it('исход не затирается последующим событием без слов', () => {
+    // Последним часто приходит `task_updated` без статуса. Если бы он обнулял
+    // исход, неудача тихо превращалась бы в успех — ровно та ложь, от которой
+    // всё это и делалось.
+    const runs = fold([started('a', 'раз'), settle('a', 'failed', 'упал'), done('a')])
+    expect(runs.a.status).toBe('failed')
+    expect(runs.a.summary).toBe('упал')
+    expect(summarizeWave(runs, 0).failed).toHaveLength(1)
+  })
+
+  it('задача без исхода вовсе неудачей не считается', () => {
+    // Старый движок статуса не шлёт. Молчание — это «не знаем», а не «упало»:
+    // придумать неудачу так же нечестно, как её спрятать.
+    const runs = fold([started('a', 'раз'), done('a')])
+    expect(summarizeWave(runs, 0).failed).toEqual([])
+  })
+})
+
+describe('род задачи', () => {
+  it('воркфлоу узнаётся и волна перестаёт звать всех агентами', () => {
+    const runs = fold([
+      { ...started('a', 'раз'), taskType: 'local_agent' },
+      { ...started('b', 'сборка'), taskType: 'local_workflow', workflowName: 'review-changes' }
+    ])
+    expect(summarizeWave(runs, 0).mixed).toBe(true)
+    expect(runs.b.workflowName).toBe('review-changes')
+  })
+
+  it('одни субагенты — волна остаётся волной агентов', () => {
+    const runs = fold([
+      { ...started('a', 'раз'), taskType: 'local_agent' },
+      { ...started('b', 'два'), taskType: 'local_agent' }
+    ])
+    expect(summarizeWave(runs, 0).mixed).toBe(false)
+  })
+
+  it('род приходит один раз и не теряется в следующих событиях', () => {
+    // `task_type` движок шлёт только при запуске: если его не запомнить,
+    // воркфлоу опознавался бы лишь в первый миг своей жизни.
+    const runs = fold([
+      { ...started('a', 'сборка'), taskType: 'local_workflow', workflowName: 'ship' },
+      progress('a', 100),
+      done('a')
+    ])
+    expect(runs.a.taskType).toBe('local_workflow')
+    expect(runs.a.workflowName).toBe('ship')
+    expect(summarizeWave(runs, 0).mixed).toBe(true)
+  })
+
+  it('незнакомый род не глушится — он просто не агент', () => {
+    // Белый список уже один раз проглотил Workflow целиком. Новое обязано
+    // появляться на экране, а не исчезать до следующего разбора.
+    const runs = fold([{ ...started('a', 'что-то новое'), taskType: 'remote_agent' }])
+    expect(summarizeWave(runs, 0).total).toBe(1)
+    expect(summarizeWave(runs, 0).mixed).toBe(true)
+  })
+})
+
 describe('formatting', () => {
   // См. tests/uiLang.ts: без явного языка проверка зависит от локали машины.
   beforeEach(() => setUiLang('ru'))

@@ -31,6 +31,7 @@ import { bundledPkgName, claudeExeName, resolveClaudeExe, type ExePick } from '.
 // package; the runtime value is loaded via a dynamic import below.
 import { cleanCommands } from '@shared/agentCommands'
 import { irreversible } from '@shared/irreversible'
+import { taskDone, taskHidden, taskOutcome } from '@shared/agentTasks'
 import {
   foldMcpTokens,
   markIndex,
@@ -272,6 +273,14 @@ function toolResultText(content: unknown): string {
 /** Permission modes the driver will forward — never 'bypassPermissions'/'dontAsk'. */
 const SAFE_PERMISSION_MODES = new Set(['default', 'acceptEdits', 'plan'])
 
+/**
+ * Как часто отдавать накопленный текст ответа, мс.
+ *
+ * 50 мс — ровно печать на глаз (20 обновлений в секунду) и предел, за которым
+ * лента начинает перерисовываться чаще, чем экран успевает показать.
+ */
+const DELTA_MS = 50
+
 function readClaudeEffort(): string | undefined {
   try {
     const raw = readFileSync(join(homedir(), '.claude', 'settings.json'), 'utf8')
@@ -361,6 +370,18 @@ interface Session {
   interrupted?: boolean
   /** Task ids that are plain shell commands, not subagents — filtered from the count. */
   shellTasks: Set<string>
+  /**
+   * taskId → род задачи, как назвал его движок при запуске.
+   *
+   * Помним отдельно, потому что род приходит ОДИН раз, в `task_started`: без
+   * этого воркфлоу опознавался бы только в первый миг своей жизни, а во всех
+   * последующих событиях выглядел бы безымянной задачей.
+   */
+  taskKinds: Map<string, string>
+  /** Накопленные куски ответа, ещё не отданные на экран. */
+  deltaBuf?: string
+  /** Таймер отдачи накопленного. */
+  deltaTimer?: ReturnType<typeof setTimeout>
   /**
    * UUID последнего ОТВЕТА агента. Точка, с которой можно продолжить беседу, не
    * взяв в контекст то, что было после неё, — см. rewindAfterInterrupt.
@@ -685,7 +706,9 @@ export class ClaudeCodeDriver implements AgentDriver {
       permissionMode: SAFE_PERMISSION_MODES.has(opts.permissionMode as string)
         ? (opts.permissionMode as 'default' | 'acceptEdits' | 'plan')
         : 'default',
-      includePartialMessages: false,
+      // Ответ печатается на глазах. Куски идут пачками (см. queueDelta) и в
+      // историю беседы НЕ попадают — там остаётся целое сообщение движка.
+      includePartialMessages: true,
       stderr: (data) => {
         // The bundled CLI writes interactive-picker keybinding hints and other TUI
         // chatter to stderr even in headless mode — pure noise in a GUI. Keep it
@@ -733,6 +756,7 @@ export class ClaudeCodeDriver implements AgentDriver {
       model: opts.model,
       ultracode: !!opts.ultracode,
       shellTasks: new Set<string>(),
+      taskKinds: new Map<string, string>(),
       resumed: !!opts.resume,
       // Ветка запомнила, откуда началась: если человек нажмёт Esc и здесь, до
       // первого слова агента, отматывать будем к той же точке.
@@ -755,6 +779,34 @@ export class ClaudeCodeDriver implements AgentDriver {
     void this.ensureMcpMarks(requestId)
   }
 
+  /**
+   * Копить куски ответа и отдавать их пачками.
+   *
+   * Движок шлёт дельты по нескольку слов — на длинном ответе это сотни
+   * сообщений через IPC в секунду, и лента, самое дорогое место на экране,
+   * перерисовывалась бы на каждое. Пачка раз в {@link DELTA_MS} читается глазом
+   * как ровная печать и стоит два десятка сообщений в секунду вместо сотен.
+   */
+  private queueDelta(requestId: string, session: Session, chunk: string): void {
+    session.deltaBuf = (session.deltaBuf ?? '') + chunk
+    if (session.deltaTimer) return
+    session.deltaTimer = setTimeout(() => {
+      session.deltaTimer = undefined
+      this.flushDelta(requestId, session)
+    }, DELTA_MS)
+  }
+
+  /** Отдать накопленное немедленно — и снять таймер, чтобы не отдать дважды. */
+  private flushDelta(requestId: string, session: Session): void {
+    if (session.deltaTimer) {
+      clearTimeout(session.deltaTimer)
+      session.deltaTimer = undefined
+    }
+    const text = session.deltaBuf
+    session.deltaBuf = undefined
+    if (text) this.emit(requestId, { type: 'text_delta', text })
+  }
+
   /** Drain the query's message stream, translating each into a ClaudeStreamEvent. */
   private async pump(requestId: string, session: Session): Promise<void> {
     try {
@@ -766,6 +818,33 @@ export class ClaudeCodeDriver implements AgentDriver {
         // следующем ходе стало бы некому.
         if (session.rewound) continue
         switch (msg.type) {
+          /*
+           * ОТВЕТ, КОТОРЫЙ ПЕЧАТАЕТСЯ НА ГЛАЗАХ.
+           *
+           * Раньше `includePartialMessages` стоял в `false`, и на длинном
+           * ответе человек смотрел на три точки, пока весь текст не прилетал
+           * разом: по экрану нельзя было отличить «пишет» от «завис».
+           *
+           * Кусок — это ПОКАЗ, а не история. Настоящим текстом остаётся тот,
+           * что придёт целым сообщением в конце (`case 'assistant'`), и только
+           * он ложится в беседу. Иначе оборванный на середине поток осел бы в
+           * памяти как ответ агента — Заря помнила бы то, чего он не говорил.
+           */
+          case 'stream_event': {
+            const p = msg as unknown as {
+              parent_tool_use_id?: string | null
+              event?: { type?: string; delta?: { type?: string; text?: string } }
+            }
+            // Кусок от СУБАГЕНТА (`parent_tool_use_id` не пуст) в главный ответ
+            // не идёт: его слова — не слова агента, с которым говорит человек,
+            // и вперемешку они читались бы как один сбивчивый текст.
+            if (p.parent_tool_use_id) break
+            if (p.event?.type !== 'content_block_delta') break
+            if (p.event.delta?.type !== 'text_delta') break
+            const chunk = p.event.delta.text
+            if (typeof chunk === 'string' && chunk) this.queueDelta(requestId, session, chunk)
+            break
+          }
           case 'system': {
             /*
              * СЖАТИЕ КОНТЕКСТА. В консоли на этом месте строка и полоса
@@ -853,12 +932,21 @@ export class ClaudeCodeDriver implements AgentDriver {
               }
               break
             }
-            // Subagent telemetry. The SDK counts tokens, tool calls and duration
-            // per task itself — we forward its numbers rather than deriving our
-            // own, so the indicator can't drift from reality.
-            //
-            // `local_bash` tasks are ordinary shell commands wearing the same
-            // event shape; counting them as agents would inflate «N of M».
+            /*
+             * ЗАДАЧИ ДВИЖКА: субагенты, воркфлоу, фоновые команды.
+             *
+             * Числа (токены, вызовы, время) считает сам SDK — мы их передаём, а
+             * не выводим сами: показатель, расходящийся с действительностью,
+             * хуже отсутствующего.
+             *
+             * ЧТО ПРЯЧЕМ. Раньше здесь стоял белый список: всё, кроме
+             * `local_agent`, замолкало НАВСЕГДА. Под тот же нож попал `Workflow`
+             * (у него род `local_workflow`) — человек видел «запущено в фоне» и
+             * дальше тишину. Теперь наоборот: прячем только то, что движок сам
+             * пометил служебным (`skip_transcript` — его прямое указание «не
+             * показывай в ленте»), и обычные команды оболочки. Незнакомый род
+             * задачи ПОКАЗЫВАЕТСЯ: молчание о новом — та же ошибка второй раз.
+             */
             if (
               msg.subtype === 'task_started' ||
               msg.subtype === 'task_progress' ||
@@ -872,33 +960,47 @@ export class ClaudeCodeDriver implements AgentDriver {
                 description?: string
                 subagent_type?: string
                 task_type?: string
+                workflow_name?: string
                 last_tool_name?: string
                 status?: string
-                patch?: { status?: string }
+                summary?: string
+                skip_transcript?: boolean
+                patch?: { status?: string; description?: string; error?: string; is_backgrounded?: boolean }
                 usage?: { total_tokens?: number; tool_uses?: number; duration_ms?: number }
               }
               const taskId = t.task_id
               if (taskId) {
-                if (t.subtype === 'task_started' && t.task_type !== 'local_agent') {
-                  // Remember the non-agent ids so their later progress/completion
-                  // events are ignored too.
-                  session.shellTasks.add(taskId)
+                if (t.subtype === 'task_started') {
+                  if (taskHidden(t.task_type, t.skip_transcript)) {
+                    // Запомнить, чтобы и последующие события этой задачи прошли
+                    // мимо: род приходит только в момент запуска.
+                    session.shellTasks.add(taskId)
+                  } else {
+                    session.taskKinds.set(taskId, t.task_type ?? '')
+                  }
                 }
                 if (!session.shellTasks.has(taskId)) {
-                  const done =
-                    t.subtype === 'task_notification' ||
-                    (t.subtype === 'task_updated' && t.patch?.status === 'completed')
+                  const status = taskOutcome(t.subtype, t.status, t.patch?.status)
+                  const done = taskDone(t.subtype, status)
                   this.emit(requestId, {
                     type: 'subagent',
                     taskId,
                     toolUseId: t.tool_use_id,
                     phase: t.subtype === 'task_started' ? 'started' : done ? 'done' : 'progress',
-                    description: t.description,
+                    description: t.description ?? t.patch?.description,
                     subagentType: t.subagent_type,
                     totalTokens: t.usage?.total_tokens,
                     toolUses: t.usage?.tool_uses,
                     durationMs: t.usage?.duration_ms,
-                    lastTool: t.last_tool_name
+                    lastTool: t.last_tool_name,
+                    status,
+                    // Слова движка о том, чем всё кончилось. У неудачи это
+                    // `patch.error` — единственное объяснение, которое вообще
+                    // приходит.
+                    summary: t.summary?.trim() || t.patch?.error?.trim() || undefined,
+                    taskType: session.taskKinds.get(taskId) || undefined,
+                    workflowName: t.workflow_name,
+                    backgrounded: t.patch?.is_backgrounded
                   })
                 }
               }
@@ -967,6 +1069,9 @@ export class ClaudeCodeDriver implements AgentDriver {
             // так требует resumeSessionAt.
             const uuid = (msg as unknown as { uuid?: string }).uuid
             if (uuid) session.lastAssistantUuid = uuid
+            // Недосланные куски — на экран ДО настоящего сообщения: иначе
+            // хвост печати мигнул бы поверх уже пришедшего ответа.
+            this.flushDelta(requestId, session)
             const content = mapAssistantContent((msg.message as { content?: unknown }).content)
             if (content.length) this.emit(requestId, { type: 'assistant', content })
             /*
@@ -1084,6 +1189,12 @@ export class ClaudeCodeDriver implements AgentDriver {
       // Fail any still-pending permission prompts so the SDK isn't left hanging.
       for (const resolve of session.perms.values()) resolve(null)
       session.perms.clear()
+      // Недосланный кусок печати уже не нужен: целое сообщение либо пришло,
+      // либо не придёт вовсе. Отдать его сейчас значило бы дописать в ленту
+      // обрывок фразы после того, как ход закончился.
+      if (session.deltaTimer) clearTimeout(session.deltaTimer)
+      session.deltaTimer = undefined
+      session.deltaBuf = undefined
     }
   }
 
@@ -1788,6 +1899,11 @@ export class ClaudeCodeDriver implements AgentDriver {
     // The queue only closes if interrupt() itself is unavailable or fails, in
     // which case aborting is the only way to stop the turn.
     session.interrupted = true
+    // Накопленный кусок печати — на выброс: человек прервал ход, и дописать
+    // после этого полфразы значило бы показать ответ, которого он не ждёт.
+    if (session.deltaTimer) clearTimeout(session.deltaTimer)
+    session.deltaTimer = undefined
+    session.deltaBuf = undefined
     const q = session.query.interrupt?.()
     if (q) {
       q.catch(() => {
