@@ -50,12 +50,21 @@ export interface WaveSummary {
   /** Still-running descriptions, for the detail list. */
   running: SubagentRun[]
   /**
-   * Кончившиеся НЕ успехом — упавшие и остановленные.
+   * Кончившиеся НЕ успехом — упавшие и остановленные, в порядке появления.
    *
    * Отдельным списком, потому что показывать их надо всегда: успешные можно
    * свернуть в счётчик, неудачу — нельзя. Ради неё человек и смотрит.
    */
   failed: SubagentRun[]
+  /**
+   * Сколько сломалось и сколько прекратили — ПОРОЗНЬ.
+   *
+   * Разница не в оттенке: упала задача сама, а остановил её человек. Сложить их
+   * в одно «не смогли» значит обвинить агента в чужом решении — и показать
+   * тревогу там, где всё пошло ровно так, как велели.
+   */
+  broken: number
+  halted: number
   /** Есть ли среди задач хоть одна не-субагент (воркфлоу и прочее). */
   mixed: boolean
 }
@@ -140,6 +149,8 @@ export function summarizeWave(runs: Record<string, SubagentRun>, now: number): W
     elapsedMs: elapsed,
     running,
     failed,
+    broken: failed.filter((r) => r.status === 'failed').length,
+    halted: failed.filter((r) => r.status === 'stopped').length,
     mixed
   }
 }

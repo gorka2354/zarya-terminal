@@ -139,6 +139,9 @@ const api = {
      */
     mcpStatus: (engine: AgentEngine, requestId: string | undefined, probe?: boolean) =>
       ipcRenderer.invoke(CH.agentMcpStatus, engine, requestId, probe),
+    /** Остановить ОДНУ задачу движка, не обрывая ход. */
+    stopTask: (engine: AgentEngine, requestId: string, taskId: string) =>
+      ipcRenderer.invoke(CH.agentStopTask, engine, requestId, taskId),
     mcpReconnect: (engine: AgentEngine, requestId: string, name: string) =>
       ipcRenderer.invoke(CH.agentMcpReconnect, engine, requestId, name),
     mcpToggle: (engine: AgentEngine, requestId: string, name: string, enabled: boolean) =>

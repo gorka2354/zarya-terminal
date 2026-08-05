@@ -134,6 +134,30 @@ describe('исход задачи', () => {
     expect(w.failed[0].summary).toBe('не нашёл файл')
   })
 
+  it('упавшее и остановленное считаются ПОРОЗНЬ', () => {
+    // Задача, которую прекратил человек, кончилась ровно так, как он велел.
+    // Сложить её с упавшей в одно «не смогли» — значит обвинить агента в чужом
+    // решении и позвать чинить то, что не сломано.
+    const runs = fold([
+      started('a', 'раз'),
+      started('b', 'два'),
+      started('c', 'три'),
+      settle('a', 'failed', 'упал'),
+      settle('b', 'stopped'),
+      settle('c', 'completed')
+    ])
+    const w = summarizeWave(runs, 0)
+    expect(w.broken).toBe(1)
+    expect(w.halted).toBe(1)
+    // На виду обе: успешную можно свернуть в счётчик, эти две — нет.
+    expect(w.failed).toHaveLength(2)
+  })
+
+  it('одни остановленные — это НЕ провалившаяся волна', () => {
+    const runs = fold([started('a', 'раз'), settle('a', 'stopped')])
+    expect(summarizeWave(runs, 0).broken).toBe(0)
+  })
+
   it('успех в отдельный список не попадает — его итог и есть счётчик', () => {
     const runs = fold([started('a', 'раз'), settle('a', 'completed')])
     expect(summarizeWave(runs, 0).failed).toEqual([])

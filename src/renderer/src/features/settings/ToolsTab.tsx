@@ -5,6 +5,13 @@ import { useAiStore } from '@/features/ai/aiStore'
 import { useUiStore } from '@/state/uiStore'
 import { shortenPath } from '@/lib/ansi'
 import { mcpLoginCommand } from '@shared/mcp'
+import {
+  contextDeferred,
+  contextPartKey,
+  contextUsed,
+  fmtCtxTokens,
+  type ContextPart
+} from '@shared/contextParts'
 import { SkillsPanel } from './SkillsPanel'
 import './toolstab.css'
 
@@ -125,6 +132,96 @@ function LoginHint({
       >
         {t('tools.copy')}
       </button>
+    </div>
+  )
+}
+
+/**
+ * Чем занято окно контекста.
+ *
+ * Число «занято» отвечает на вопрос «много ли». Человек следом спрашивает «а
+ * чем?» — и до сих пор ответа не было, хотя движок разбор считает и отдаёт.
+ *
+ * ДВЕ ВЕЩИ, КОТОРЫЕ ЗДЕСЬ НЕ ДЕЛАЮТСЯ. Не складывается отложенное с занятым:
+ * этих описаний в контексте НЕТ, и общая сумма вышла бы вдвое больше правды
+ * (см. @shared/contextParts). И не берётся цвет движка: `color` в его ответе —
+ * не цвет, а имя токена ЕГО темы («promptBorder», «inactive»), в нашем CSS оно
+ * не значит ничего.
+ *
+ * Доля рисуется от САМОЙ КРУПНОЙ статьи, а не от окна: при окне в миллион
+ * токенов все полоски были бы одинаково пустыми, и сравнить статьи между собой
+ * — то, ради чего сюда и смотрят, — стало бы нельзя.
+ */
+function ContextBreakdown({
+  parts,
+  files
+}: {
+  parts?: ContextPart[]
+  files?: McpSnapshot['memoryFiles']
+}): React.JSX.Element | null {
+  const [open, setOpen] = useState(false)
+  if (!parts?.length) return null
+  const live = parts.filter((p) => !p.deferred)
+  const later = parts.filter((p) => p.deferred)
+  const top = live[0]?.tokens || 1
+  return (
+    <div className="zy-ctx">
+      <button type="button" className="zy-ctx-head" onClick={() => setOpen((v) => !v)}>
+        <span className="zy-ctx-caret" aria-hidden>
+          {open ? '▾' : '▸'}
+        </span>
+        {t('ctx.whatFills')}
+      </button>
+      {open && (
+        <div className="zy-ctx-body">
+          {live.map((p) => {
+            const key = contextPartKey(p.name)
+            return (
+              <div key={p.name} className="zy-ctx-row">
+                <span className="zy-ctx-name">{key ? t(key) : p.name}</span>
+                <span className="zy-ctx-bar" aria-hidden>
+                  <span
+                    className="zy-ctx-fill"
+                    style={{ width: `${Math.max(2, Math.round((p.tokens / top) * 100))}%` }}
+                  />
+                </span>
+                <span className="zy-ctx-num">{fmtCtxTokens(p.tokens)}</span>
+              </div>
+            )
+          })}
+          {/*
+            Файлы памяти поимённо. Самая частая неожиданность всего разбора:
+            личный CLAUDE.md молча стоит несколько тысяч токенов в КАЖДОМ
+            запросе, и узнать об этом было неоткуда.
+          */}
+          {!!files?.length && (
+            <>
+              <div className="zy-ctx-sub">{t('ctx.memoryFiles')}</div>
+              {files.map((f) => (
+                <div key={f.path} className="zy-ctx-row zy-ctx-row--file">
+                  <span className="zy-ctx-name" title={f.path}>
+                    {shortenPath(f.path, 44)}
+                  </span>
+                  <span className="zy-ctx-num">{fmtCtxTokens(f.tokens)}</span>
+                </div>
+              ))}
+            </>
+          )}
+          {/*
+            Отложенное — ОТДЕЛЬНО и с объяснением. Это не расход, а то, что
+            подгрузится по требованию; в общей сумме оно удвоило бы цифру и
+            заставило человека выключать сервер, который сейчас бесплатен.
+          */}
+          {!!later.length && (
+            <div className="zy-ctx-later">
+              {t('ctx.deferred', { n: fmtCtxTokens(contextDeferred(parts)) })}
+            </div>
+          )}
+          {/* Наша сумма занятого — рядом с цифрой движка выше. Разойдутся —
+              значит мы что-то посчитали не так, и это видно сразу. */}
+          <div className="zy-ctx-sum">{t('ctx.sum', { n: fmtCtxTokens(contextUsed(parts)) })}</div>
+        </div>
+      )}
     </div>
   )
 }
@@ -365,6 +462,7 @@ export function ToolsTab(): React.JSX.Element {
               })}
             </div>
           )}
+          <ContextBreakdown parts={snap?.contextParts} files={snap?.memoryFiles} />
 
           {/* Кто чей файл правит — это человек должен знать ДО нажатия. */}
           <div className="zy-tools-foot">{t('tools.writesConfig')}</div>

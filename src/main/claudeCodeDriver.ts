@@ -32,6 +32,7 @@ import { bundledPkgName, claudeExeName, resolveClaudeExe, type ExePick } from '.
 import { cleanCommands } from '@shared/agentCommands'
 import { irreversible } from '@shared/irreversible'
 import { taskDone, taskHidden, taskOutcome } from '@shared/agentTasks'
+import { foldContextParts } from '@shared/contextParts'
 import {
   foldMcpTokens,
   markIndex,
@@ -427,6 +428,8 @@ export class ClaudeCodeDriver implements AgentDriver {
     images: true,
     // mcpServerStatus / reconnectMcpServer / toggleMcpServer + getContextUsage.
     mcp: true,
+    // query.stopTask(taskId) — остановить одну задачу, не обрывая ход.
+    stopTask: true,
     vendorFlags: [{ key: 'ultracode', label: 'ULTRACODE', desc: tm('drv.ultracode') }]
   }
   private sessions = new Map<string, Session>()
@@ -1488,6 +1491,30 @@ export class ClaudeCodeDriver implements AgentDriver {
   }
 
   /** Переподключить один сервер живой беседы. */
+  /**
+   * Остановить одну задачу, не обрывая ход.
+   *
+   * Мы только ПРОСИМ. Что задача встала, скажет `task_notification` со статусом
+   * `stopped` — он придёт обычным потоком и сам поставит в волне свою пометку.
+   * Рисовать «остановлено» по успеху этого вызова нельзя: он означает лишь то,
+   * что просьба ушла.
+   */
+  async stopTask(
+    requestId: string,
+    taskId: string
+  ): Promise<{ ok: boolean; error?: string; reason?: 'no-session' | 'unsupported' }> {
+    const live = this.sessions.get(requestId)
+    if (!live) return { ok: false, reason: 'no-session' }
+    const q = live.query as unknown as { stopTask?: (id: string) => Promise<void> }
+    if (typeof q.stopTask !== 'function') return { ok: false, reason: 'unsupported' }
+    try {
+      await q.stopTask(taskId)
+      return { ok: true }
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : String(e) }
+    }
+  }
+
   async mcpReconnect(
     requestId: string,
     name: string
@@ -1639,6 +1666,8 @@ export class ClaudeCodeDriver implements AgentDriver {
         mcpTools?: RawMcpTool[]
         totalTokens?: number
         maxTokens?: number
+        categories?: { name?: unknown; tokens?: unknown; isDeferred?: unknown }[]
+        memoryFiles?: { path?: unknown; type?: unknown; tokens?: unknown }[]
         skills?: {
           totalSkills?: number
           includedSkills?: number
@@ -1660,6 +1689,8 @@ export class ClaudeCodeDriver implements AgentDriver {
     let tokensBy: Record<string, number> = {}
     let contextTokens: number | undefined
     let contextMax: number | undefined
+    let contextParts: import('@shared/contextParts').ContextPart[] | undefined
+    let memoryFiles: import('@shared/types').McpSnapshot['memoryFiles']
     let skills: import('@shared/types').McpSkills | undefined
     if (typeof q.getContextUsage === 'function') {
       try {
@@ -1667,6 +1698,21 @@ export class ClaudeCodeDriver implements AgentDriver {
         tokensBy = foldMcpTokens(usage?.mcpTools)
         if (typeof usage?.totalTokens === 'number') contextTokens = usage.totalTokens
         if (typeof usage?.maxTokens === 'number') contextMax = usage.maxTokens
+        // Разбор по статьям. Остаток окна и отложенное отделяются здесь же —
+        // см. @shared/contextParts: сложить их с занятым значит удвоить цифру.
+        const parts = foldContextParts(usage?.categories)
+        if (parts.length) contextParts = parts
+        // Файлы памяти: чей и почём. `type` движка («User», «Project»,
+        // «AutoMem») оставляем как есть — это его слово о происхождении файла.
+        const mem = (Array.isArray(usage?.memoryFiles) ? usage.memoryFiles : [])
+          .map((f) => ({
+            path: typeof f?.path === 'string' ? f.path : '',
+            kind: typeof f?.type === 'string' ? f.type : '',
+            tokens: typeof f?.tokens === 'number' ? f.tokens : 0
+          }))
+          .filter((f) => f.path && f.tokens > 0)
+          .sort((a, b) => b.tokens - a.tokens)
+        if (mem.length) memoryFiles = mem
         // Скиллы: их описания сидят в контексте всегда, и движок считает это
         // поимённо. Раньше цифра терялась вместе с остальным ответом. Состояние
         // читаем с диска, а не из ответа: движок присылает только то, что
@@ -1681,7 +1727,7 @@ export class ClaudeCodeDriver implements AgentDriver {
         mcpRowFrom(r, tokensBy[typeof r?.name === 'string' ? r.name : ''])
       )
     )
-    return { servers, at: Date.now(), contextTokens, contextMax, skills }
+    return { servers, at: Date.now(), contextTokens, contextMax, contextParts, memoryFiles, skills }
   }
 
   /** Запомнить снимок, не давая карте расти без предела. */

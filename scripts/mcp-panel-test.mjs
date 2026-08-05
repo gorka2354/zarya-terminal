@@ -137,6 +137,48 @@ try {
   ok('строка контекста на месте', /42\s000/.test(ctx) && /200\s000/.test(ctx), ctx)
   ok('и сказано, что цифры движка', /движка/.test(ctx), ctx)
 
+  console.log('\n[3б] Чем именно занято окно')
+  // Свёрнут по умолчанию: разбор нужен тому, кто уже спросил «а чем?», и
+  // развёрнутым он оттеснил бы список серверов, ради которого сюда заходят.
+  const before = await page.evaluate(() => !!document.querySelector('.zy-ctx-body'))
+  ok('разбор свёрнут, пока не спросили', before === false)
+  await page.click('.zy-ctx-head')
+  await page.waitForTimeout(300)
+  const brk = await page.evaluate(() => {
+    const body = document.querySelector('.zy-ctx-body')
+    if (!body) return null
+    return {
+      rows: [...body.querySelectorAll('.zy-ctx-row:not(.zy-ctx-row--file)')].map((r) => ({
+        name: r.querySelector('.zy-ctx-name')?.textContent ?? '',
+        num: r.querySelector('.zy-ctx-num')?.textContent ?? '',
+        // Доля — от самой крупной статьи: при окне в миллион токенов доли от
+        // окна были бы все одинаково пустыми.
+        w: r.querySelector('.zy-ctx-fill')?.getAttribute('style') ?? ''
+      })),
+      files: [...body.querySelectorAll('.zy-ctx-row--file')].map((r) => r.textContent ?? ''),
+      later: body.querySelector('.zy-ctx-later')?.textContent ?? '',
+      sum: body.querySelector('.zy-ctx-sum')?.textContent ?? ''
+    }
+  })
+  ok('разбор раскрылся', !!brk, brk)
+  ok('крупная статья первой', /Встроенные инструменты/.test(brk?.rows[0]?.name ?? ''), brk?.rows[0])
+  ok('и названа своим числом', /14[.]0K/.test(brk?.rows[0]?.num ?? ''), brk?.rows[0])
+  ok('полоса у самой крупной — полная', /width:\s*100%/.test(brk?.rows[0]?.w ?? ''), brk?.rows[0]?.w)
+  // ГЛАВНОЕ. Отложенных статей в контексте НЕТ. Попади они в общую сумму —
+  // человек увидел бы 72 000 вместо 42 000 и пошёл выключать MCP-сервер,
+  // который сейчас не стоит ему ничего.
+  ok('отложенное в список занятого не попало', brk?.rows.length === 5, brk?.rows.length)
+  ok('наша сумма сошлась с цифрой движка', /42[.]0K/.test(brk?.sum ?? ''), brk?.sum)
+  ok('и про отложенное сказано отдельно', /30[.]0K/.test(brk?.later ?? ''), brk?.later)
+  ok('сказано, что его в контексте НЕТ', /НЕ лежат/.test(brk?.later ?? ''), brk?.later)
+  // Файлы памяти поимённо — самая частая неожиданность разбора: личный
+  // CLAUDE.md молча стоит тысячи токенов в каждом запросе.
+  ok('файлы памяти названы', brk?.files.length === 2, brk?.files)
+  ok('и у каждого своя цена', /9[.]4K/.test((brk?.files ?? []).join(' ')), brk?.files)
+  if (shots) await page.screenshot({ path: join(shots, 'tools-context.png') })
+  await page.click('.zy-ctx-head')
+  await page.waitForTimeout(200)
+
   if (shots) await page.screenshot({ path: join(shots, 'tools-1-list.png') })
 
   console.log('\n[3a] Ждущему входа не предлагают кнопку, которая не поможет')

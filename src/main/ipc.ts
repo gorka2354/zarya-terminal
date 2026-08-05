@@ -508,6 +508,14 @@ export function registerIpc(ctx: IpcContext): void {
     }
   )
   ipcMain.handle(
+    CH.agentStopTask,
+    async (_e, engine: AgentEngine, requestId: string, taskId: string) => {
+      const driver = driverFor(engine)
+      if (!driver?.stopTask) return { ok: false, reason: 'unsupported' as const }
+      return driver.stopTask(requestId, taskId)
+    }
+  )
+  ipcMain.handle(
     CH.agentMcpReconnect,
     async (_e, engine: AgentEngine, requestId: string, name: string) => {
       const driver = driverFor(engine)

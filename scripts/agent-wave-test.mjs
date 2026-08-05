@@ -107,6 +107,16 @@ try {
   ok('ушедшая в фон помечена', live?.bg === true, live)
   await shot(page, 'wave-live')
 
+  console.log('\n[1б] Пока задачи идут, у каждой есть выход')
+  // Раньше рычаг был один — Esc, отменяющий работу целиком: человек, видящий,
+  // что субагент ушёл не туда, платил за это всей остальной волной.
+  const stopBtns = await page.evaluate(() =>
+    [...document.querySelectorAll('.zy-mf-wave-row .zy-mf-wave-stop')].map(
+      (b) => b.textContent ?? ''
+    )
+  )
+  ok('у каждой идущей задачи есть «остановить»', stopBtns.length >= 3, stopBtns)
+
   console.log('\n[2] Когда всё кончилось — исход у каждой свой')
   await page.waitForTimeout(1400)
   const settled = await page.evaluate(() => {
@@ -116,6 +126,7 @@ try {
       cls: el.className,
       count: el.querySelector('.zy-mf-wave-count')?.textContent ?? '',
       bad: el.querySelector('.zy-mf-wave-bad')?.textContent ?? '',
+      halted: el.querySelector('.zy-mf-wave-halted')?.textContent ?? '',
       check: !!el.querySelector('.zy-mf-wave-head svg'),
       badMark: !!el.querySelector('.zy-mf-wave-bad-mark'),
       spinner: !!el.querySelector('.zy-mf-wave-head .zy-mf-spinner'),
@@ -131,7 +142,11 @@ try {
     settled?.failed
   )
   ok('остановленная отделена от упавшей', settled?.stopped.length === 1, settled?.stopped)
-  ok('сказано, сколько не смогло', /не смогли: 2/.test(settled?.bad ?? ''), settled?.bad)
+  // Упавшее и остановленное считаются ПОРОЗНЬ. Задача, которую прекратил
+  // человек, кончилась ровно так, как он велел: назвать её «не смогла» значит
+  // обвинить агента в чужом решении.
+  ok('сказано, сколько не смогло', /не смогли: 1/.test(settled?.bad ?? ''), settled?.bad)
+  ok('и сколько остановлено — отдельно', /остановлено: 1/.test(settled?.halted ?? ''), settled?.halted)
   // Галочка означает «всё получилось». С двумя упавшими это ложь значком при
   // честных цифрах — самое незаметное враньё из возможных.
   ok('галочки «всё хорошо» нет', settled?.check === false, settled)
@@ -220,6 +235,53 @@ try {
   // Ровно ОДИН ответ: кусок и целое сообщение — не два ответа, а один и тот же.
   ok('в ленте один ответ, а не два', after.answers === 1, after.answers)
   ok('и это целый текст движка', /тест зелёный/.test(after.last), after.last.slice(-80))
+
+  console.log('\n[5] Останавливается ОДНА задача, а не вся волна')
+  /*
+   * Отдельный ход с задачами, которые сами НЕ кончаются. В волне с расписанием
+   * исходов «остановили одну» не отличить от «остальные доработали сами» — и
+   * прогон подтверждал бы то, чего не проверял.
+   */
+  await page.evaluate(() => window.__zaryaAskAgent?.('останови задачу', 'codex'))
+  await page.waitForTimeout(1100)
+  const before5 = await page.evaluate(
+    () => document.querySelectorAll('.zy-mf-wave-row .zy-mf-wave-stop').length
+  )
+  ok('три задачи идут', before5 === 3, before5)
+  await page.click('.zy-mf-wave-row .zy-mf-wave-stop')
+  await page.waitForTimeout(200)
+  // Кнопка гаснет и меняет слово: нажать второй раз нечего, а «останавливаю…»
+  // честнее галочки — мы только попросили, встала ли задача, скажет движок.
+  const asked = await page.evaluate(() => {
+    const b = document.querySelector('.zy-mf-wave-row .zy-mf-wave-stop')
+    return b ? { text: b.textContent ?? '', off: b.disabled } : null
+  })
+  ok('кнопка сказала, что просьба ушла', /останавливаю/.test(asked?.text ?? ''), asked)
+  ok('и второй раз не нажимается', asked?.off === true, asked)
+  await page.waitForTimeout(800)
+  const after5 = await page.evaluate(() => ({
+    running: document.querySelectorAll('.zy-mf-wave-row .zy-mf-wave-stop').length,
+    stopped: document.querySelectorAll('.zy-mf-wave-row--stopped').length,
+    count: document.querySelector('.zy-mf-wave-count')?.textContent ?? ''
+  }))
+  // Главная проверка: встала ОДНА. Встань вместе с ней остальные — это был бы
+  // тот же Esc, только под другим именем.
+  ok('осталось работать две', after5.running === 2, after5)
+  ok('и остановленная помечена', after5.stopped === 1, after5)
+  ok('счёт это учёл', /1\/3/.test(after5.count), after5.count)
+  await shot(page, 'wave-stop')
+
+  console.log('\n[6] Где движок так не умеет — кнопки нет вовсе')
+  // Кнопка, которая не остановит, хуже отсутствующей: она обещает управление,
+  // которого нет, и человек узнаёт об этом в худший момент.
+  await page.evaluate(() => window.__zaryaAskAgent?.('останови задачу', 'gemini'))
+  await page.waitForTimeout(1100)
+  const noStop = await page.evaluate(() => ({
+    rows: document.querySelectorAll('.zy-mf-wave-row').length,
+    stops: document.querySelectorAll('.zy-mf-wave-stop').length
+  }))
+  ok('задачи показаны', noStop.rows >= 3, noStop)
+  ok('а кнопки остановки нет', noStop.stops === 0, noStop)
 
   console.log(`\n[agent-wave] PASS ${pass} · FAIL ${fail}`)
 } finally {

@@ -87,6 +87,20 @@ export interface AgentDriver {
    * делается только по нажатию человека.
    */
   mcpStatus?(requestId: string | undefined, opts?: { probe?: boolean }): Promise<McpSnapshot>
+  /**
+   * Остановить ОДНУ задачу, не обрывая ход (гейт: `capabilities.stopTask`).
+   *
+   * До этого у человека был один рычаг — Esc, обрывающий работу целиком. Видя,
+   * что субагент ушёл не туда, он платил за это всей остальной волной.
+   *
+   * Успех тут — не «мы попросили», а `task_notification` со статусом
+   * `stopped`, который придёт следом: только он означает, что задача и правда
+   * встала. Поэтому метод отвечает лишь на вопрос «просьба ушла».
+   */
+  stopTask?(
+    requestId: string,
+    taskId: string
+  ): Promise<{ ok: boolean; error?: string; reason?: 'no-session' | 'unsupported' }>
   /** Переподключить один сервер живой беседы. */
   mcpReconnect?(
     requestId: string,

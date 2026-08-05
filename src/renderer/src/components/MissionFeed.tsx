@@ -667,6 +667,46 @@ function AgentSection({
 }
 
 /**
+ * Остановить ОДНУ задачу, не обрывая ход.
+ *
+ * До этого рычаг был один — Esc, отменяющий работу целиком. Человек, видящий,
+ * что субагент десять минут жжёт токены не туда, платил за это всей остальной
+ * волной.
+ *
+ * Кнопки НЕТ, когда движок так не умеет: показать её и не смочь остановить —
+ * хуже, чем не показывать. И она не рисует «остановлено» по своему успеху:
+ * успех означает лишь «просьба ушла». Что задача встала, скажет сам движок
+ * событием со статусом `stopped` — оно и поставит пометку в строке.
+ */
+function StopTaskButton({
+  conv,
+  taskId
+}: {
+  conv: Conversation
+  taskId: string
+}): React.JSX.Element | null {
+  useLang()
+  const [asked, setAsked] = useState(false)
+  const caps = useUiStore((s) => s.agentCaps)
+  const engine = conv.engine
+  if (engine === 'builtin' || !caps?.[engine]?.stopTask) return null
+  return (
+    <button
+      type="button"
+      className="zy-mf-wave-stop"
+      disabled={asked}
+      title={t('feed.stopTaskHint')}
+      onClick={() => {
+        setAsked(true)
+        void window.zarya.agent.stopTask(engine, conv.id, taskId)
+      }}
+    >
+      {asked ? t('feed.stopTaskAsked') : t('feed.stopTask')}
+    </button>
+  )
+}
+
+/**
  * The subagent wave — one line instead of a stack of identical cards.
  *
  * Claude Code spawns these for research and parallel work, and reports each
@@ -693,7 +733,10 @@ function SubagentWave({
 
   const w = summarizeWave(runs, Date.now())
   const allDone = w.done === w.total
-  const bad = w.failed.length > 0
+  // Тревожный вид — только для НАСТОЯЩЕЙ неудачи. Задача, которую остановил сам
+  // человек, кончилась ровно так, как он велел: красить её знаком беды значит
+  // обвинять агента в чужом решении и звать чинить то, что не сломано.
+  const bad = w.broken > 0
   // Задачи — не всегда агенты: воркфлоу в счётчике «агентов» назвался бы тем,
   // чем не является. Слово выбирается по составу волны.
   const noun = w.mixed
@@ -728,10 +771,18 @@ function SubagentWave({
             </span>
           </>
         )}
-        {bad && (
+        {w.broken > 0 && (
           <>
             <span className="zy-mf-wave-sep">·</span>
-            <span className="zy-mf-wave-bad">{t('feed.waveFailed', { n: w.failed.length })}</span>
+            <span className="zy-mf-wave-bad">{t('feed.waveFailed', { n: w.broken })}</span>
+          </>
+        )}
+        {/* Остановленные — своим словом и своим цветом: их прекратил человек,
+            и «не смогли» про них было бы неправдой. */}
+        {w.halted > 0 && (
+          <>
+            <span className="zy-mf-wave-sep">·</span>
+            <span className="zy-mf-wave-halted">{t('feed.waveHalted', { n: w.halted })}</span>
           </>
         )}
       </div>
@@ -743,6 +794,7 @@ function SubagentWave({
               Без пометки она читалась бы как обычная, задержавшаяся. */}
           {r.backgrounded && <span className="zy-mf-wave-bg">{t('feed.inBackground')}</span>}
           {r.lastTool && <span className="zy-mf-wave-tool">{r.lastTool}</span>}
+          <StopTaskButton conv={conv} taskId={r.taskId} />
         </div>
       ))}
       {w.running.length > 4 && (

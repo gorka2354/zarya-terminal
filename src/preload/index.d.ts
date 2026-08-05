@@ -168,6 +168,11 @@ export interface ZaryaApi {
       requestId: string | undefined,
       probe?: boolean
     ): Promise<import('@shared/types').McpSnapshot>
+    stopTask(
+      engine: AgentEngine,
+      requestId: string,
+      taskId: string
+    ): Promise<{ ok: boolean; error?: string; reason?: 'no-session' | 'unsupported' }>
     mcpReconnect(
       engine: AgentEngine,
       requestId: string,

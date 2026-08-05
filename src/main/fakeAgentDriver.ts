@@ -232,6 +232,25 @@ export class FakeAgentDriver implements AgentDriver {
         })
         this.emit(requestId, { type: 'result', isError: false, costUsd: 0.02 })
       })
+    } else if (/останов|stop/i.test(opts.prompt)) {
+      /*
+       * Три задачи, которые сами НЕ кончаются. Нужны ровно затем, чтобы
+       * остановку проверить начисто: в волне с расписанием исходов не отличить
+       * «остановили одну» от «остальные успели доработать сами».
+       */
+      this.schedule(requestId, 300, () => {
+        for (const id of ['s1', 's2', 's3']) {
+          this.emit(requestId, {
+            type: 'subagent',
+            taskId: id,
+            phase: 'started',
+            description: `задача ${id}`,
+            subagentType: 'general-purpose',
+            taskType: 'local_agent'
+          })
+        }
+        this.emit(requestId, { type: 'result', isError: false, costUsd: 0.01 })
+      })
     } else if (/волн|wave/i.test(opts.prompt)) {
       /*
        * Волна задач с РАЗНЫМ исходом. Ровно то, чего фейк раньше не умел, а
@@ -743,6 +762,26 @@ export class FakeAgentDriver implements AgentDriver {
       at: Date.now(),
       contextTokens: 42_000,
       contextMax: 200_000,
+      /*
+       * Разбор по статьям — с той же ловушкой, что у настоящего движка: сумма
+       * ВСЕХ статей вдвое больше «занято», потому что отложенные в контексте не
+       * лежат. Числа подобраны так, чтобы 8 000 + 14 000 + 12 000 + 7 000 +
+       * 1 000 = 42 000 сошлись с `contextTokens`, а отложенные 30 000 остались
+       * за скобками. Сложи прогон одно с другим — и он это увидит.
+       */
+      contextParts: [
+        { name: 'System tools', tokens: 14_000 },
+        { name: 'Memory files', tokens: 12_000 },
+        { name: 'Messages', tokens: 8_000 },
+        { name: 'Skills', tokens: 7_000 },
+        { name: 'System prompt', tokens: 1_000 },
+        { name: 'MCP tools', tokens: 22_000, deferred: true },
+        { name: 'System tools', tokens: 8_000, deferred: true }
+      ],
+      memoryFiles: [
+        { path: 'C:/Users/qa/.claude/CLAUDE.md', kind: 'User', tokens: 9_400 },
+        { path: 'C:/proj/CLAUDE.md', kind: 'Project', tokens: 2_600 }
+      ],
       // Разыгранные скиллы покрывают все случаи, из-за которых строка ведёт
       // себя по-разному: дорогой личный, встроенный, плагинный (его
       // `skillOverrides` не берёт), перекрытый настройкой проекта и уже
@@ -794,6 +833,22 @@ export class FakeAgentDriver implements AgentDriver {
         }
       ]
     }
+  }
+
+  /**
+   * Остановка одной задачи. Фейк повторяет настоящий путь: сам вызов лишь
+   * ПРОСИТ, а «остановлено» приходит отдельным событием — как у движка.
+   */
+  async stopTask(
+    requestId: string,
+    taskId: string
+  ): Promise<{ ok: boolean; error?: string; reason?: 'no-session' | 'unsupported' }> {
+    if (!this.capabilities.stopTask) return { ok: false, reason: 'unsupported' }
+    if (!this.started.has(requestId)) return { ok: false, reason: 'no-session' }
+    this.schedule(requestId, 400, () =>
+      this.emit(requestId, { type: 'subagent', taskId, phase: 'done', status: 'stopped' })
+    )
+    return { ok: true }
   }
 
   async mcpReconnect(
