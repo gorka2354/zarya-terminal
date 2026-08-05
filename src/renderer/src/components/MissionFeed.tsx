@@ -624,12 +624,20 @@ function AgentSection({
           заняты его помощники прямо сейчас. */}
       <PlanPanel plan={conv.plan} />
       <SubagentWave conv={conv} />
-      {conv.streaming && conv.messages[conv.messages.length - 1]?.role === 'user' && (
-        <div className="zy-mf-typing">
+      {conv.compacting && (
+        <div className="zy-mf-typing zy-mf-typing-compact">
           <span className="zy-mf-spinner" />
-          {t('feed.typing')}
+          {t('feed.compacting')}
         </div>
       )}
+      {conv.streaming &&
+        !conv.compacting &&
+        conv.messages[conv.messages.length - 1]?.role === 'user' && (
+          <div className="zy-mf-typing">
+            <span className="zy-mf-spinner" />
+            {t('feed.typing')}
+          </div>
+        )}
       {conv.error && <div className="zy-mf-errbanner">✗ {conv.error}</div>}
     </FeedConvContext.Provider>
   )
@@ -825,6 +833,12 @@ const AgentMessage = memo(function AgentMessage({
             />
           ) : null
         }
+        if (p.type === 'notice') {
+          return <NoticeLine key={i} level={p.level} text={p.text} />
+        }
+        if (p.type === 'compact') {
+          return <CompactMark key={i} before={p.before} after={p.after} auto={p.auto} />
+        }
         if (p.type === 'tool_use') {
           // A subagent's «Agent» card would say only «субагент работает…» while
           // the wave line above already names the task, its runtime and its
@@ -850,6 +864,117 @@ const AgentMessage = memo(function AgentMessage({
     </>
   )
 })
+
+/**
+ * Чем кончился вызов инструмента — и весь вывод, если его попросят.
+ *
+ * ЗАЧЕМ. Лента показывала одну первую строку и слово «готово». Для `ls` этого
+ * хватает, для тестов — нет: агент говорил «готово», а какие тесты упали и
+ * почему, оставалось внутри. Единственным способом узнать это было спросить
+ * агента ещё раз о том, что он уже прочитал.
+ *
+ * Раскрытие даётся НЕ всегда: если весь вывод и есть та самая первая строка,
+ * стрелка обещала бы продолжение, которого нет. Пустое раскрытие — мелкая
+ * ложь, но ложь; кнопка появляется, только когда за ней правда что-то есть.
+ */
+function ToolOutcome({
+  content,
+  isError
+}: {
+  content: string
+  isError: boolean
+}): React.JSX.Element {
+  useLang()
+  const [open, setOpen] = useState(false)
+  const full = content || ''
+  const lines = full.split('\n')
+  const first = lines[0] ?? ''
+  // Есть ли что раскрывать: вторая непустая строка или хвост длинной первой.
+  const more = lines.slice(1).some((l) => l.trim().length > 0) || first.length > 96
+  const head = first.length > 96 ? `${first.slice(0, 96)}…` : first
+  const cls = isError ? 'zy-mf-tool-denied' : 'zy-mf-tool-done'
+  const label = isError
+    ? `✗ ${head || t('feed.denied')}`
+    : `✓ ${head || 'exit 0'} — ${t('feed.done')}`
+
+  if (!more) return <div className={cls}>{label}</div>
+  return (
+    <div className="zy-mf-outcome">
+      <button
+        type="button"
+        className={`${cls} zy-mf-outcome-head`}
+        onClick={() => setOpen((v) => !v)}
+        title={open ? t('feed.outcomeHide') : t('feed.outcomeShow')}
+      >
+        <span className="zy-mf-outcome-text">{label}</span>
+        <Icon name={open ? 'chevron-down' : 'chevron-right'} size={10} />
+      </button>
+      {open && <pre className="zy-mf-outcome-out">{full}</pre>}
+    </div>
+  )
+}
+
+/**
+ * Строка движка: ход оборвался, модель отказала, хук вмешался.
+ *
+ * Раньше такой конец не давал на экране НИЧЕГО: точки «думает» просто гасли, и
+ * отличить оборванный ход от зависшего было нельзя. Текст берём у движка как
+ * есть — своя формулировка тут была бы догадкой о чужой причине.
+ */
+function NoticeLine({
+  level,
+  text
+}: {
+  level: 'info' | 'warn' | 'error'
+  text: string
+}): React.JSX.Element {
+  return (
+    <div className={`zy-mf-notice zy-mf-notice-${level}`}>
+      <span className="zy-mf-notice-mark">{level === 'error' ? '✗' : '!'}</span>
+      <span className="zy-mf-notice-text">{text}</span>
+    </div>
+  )
+}
+
+/**
+ * Отметка о сжатии контекста.
+ *
+ * Движок время от времени сворачивает историю разговора в пересказ — после
+ * этого агент помнит суть, но не буквальные слова. Без отметки это выглядит
+ * как внезапная потеря памяти посреди беседы. Числа — движка; если он их не
+ * назвал, строка молчит о размере, а не выдумывает «примерно».
+ */
+function CompactMark({
+  before,
+  after,
+  auto
+}: {
+  before?: number
+  after?: number
+  auto?: boolean
+}): React.JSX.Element {
+  useLang()
+  const size =
+    before && after ? `${fmtTokens(before)} → ${fmtTokens(after)}` : before ? fmtTokens(before) : ''
+  return (
+    <div className="zy-mf-compact">
+      <span className="zy-mf-compact-line" />
+      <span className="zy-mf-compact-body">
+        <span className="zy-mf-compact-what">
+          {auto ? t('feed.compactAuto') : t('feed.compactDone')}
+        </span>
+        {size && <span className="zy-mf-compact-size">{size}</span>}
+      </span>
+      <span className="zy-mf-compact-line" />
+    </div>
+  )
+}
+
+/** 128000 → «128k»: точные токены здесь ничего не решают, порядок — решает. */
+function fmtTokens(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return ''
+  return n >= 1000 ? `${Math.round(n / 1000)}k` : String(n)
+}
 
 function findToolResult(
   conv: Conversation,
@@ -1005,12 +1130,7 @@ const ToolCard = memo(function ToolCard({
 
   let body: React.JSX.Element
   if (result) {
-    const first = (result.content || '').split('\n')[0]
-    body = result.isError ? (
-      <div className="zy-mf-tool-denied">✗ {first || t('feed.denied')}</div>
-    ) : (
-      <div className="zy-mf-tool-done">✓ {first || 'exit 0'} — {t('feed.done')}</div>
-    )
+    body = <ToolOutcome content={result.content} isError={!!result.isError} />
   } else if (pending && !pending.settled && pending.kind === 'question') {
     // AskUserQuestion — the bottom bar morphs into the selector; just point down.
     body = (

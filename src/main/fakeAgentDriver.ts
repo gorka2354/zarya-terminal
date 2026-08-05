@@ -128,7 +128,10 @@ export class FakeAgentDriver implements AgentDriver {
     // — ход, в котором агент НИЧЕГО не говорит: только в таком окне отмена
     // отправленного и имеет смысл, а иначе тест гонялся бы с таймером.
     const mute = /mute/i.test(opts.prompt)
-    if (!mute)
+    // Оборванный ход обязан быть НЕМЫМ: весь смысл строки движка в том, что
+    // ответа не будет вовсе. Скажи фейк хоть слово — прогон проверял бы не то.
+    const silent = mute || /оборв|abort/i.test(opts.prompt)
+    if (!silent)
       this.schedule(requestId, 250, () => {
         session.lastAssistantUuid = `fake-uuid-${++this.seq}`
         this.emit(requestId, {
@@ -225,6 +228,103 @@ export class FakeAgentDriver implements AgentDriver {
           ]
         })
         this.emit(requestId, { type: 'result', isError: false, costUsd: 0.02 })
+      })
+    } else if (/вывод|output/i.test(opts.prompt)) {
+      /*
+       * Длинный вывод инструмента. Ровно тот случай, ради которого раскрытие и
+       * делалось: первая строка («Test Files 2 failed») говорит, ЧТО не так, а
+       * какие именно тесты упали — только в хвосте. Раньше хвост оставался
+       * внутри агента, и узнать его можно было, лишь спросив его ещё раз.
+       */
+      this.schedule(requestId, 400, () => {
+        this.emit(requestId, {
+          type: 'assistant',
+          content: [
+            {
+              type: 'tool_use',
+              id: `${requestId}-o1`,
+              name: 'Bash',
+              input: { command: 'npm test' }
+            }
+          ]
+        })
+        this.emit(requestId, {
+          type: 'tool_result',
+          toolUseId: `${requestId}-o1`,
+          content: [
+            'Test Files  2 failed | 41 passed (43)',
+            '',
+            'FAIL  tests/gates.test.ts > подпись поиска',
+            '  ожидалось «kimi cli acp», получено «WebSearch»',
+            'FAIL  tests/agentPlan.test.ts > порядок задач',
+            '  ожидалось [1,2,3], получено [2,1,3]',
+            '',
+            'Duration  4.21s'
+          ].join('\n'),
+          isError: false
+        })
+        // Короткий вывод рядом: у него раскрывать нечего, и кнопки быть не
+        // должно. Обещание продолжения там, где продолжения нет, — та же ложь.
+        this.emit(requestId, {
+          type: 'assistant',
+          content: [
+            {
+              type: 'tool_use',
+              id: `${requestId}-o2`,
+              name: 'Bash',
+              input: { command: 'git rev-parse --short HEAD' }
+            }
+          ]
+        })
+        this.emit(requestId, {
+          type: 'tool_result',
+          toolUseId: `${requestId}-o2`,
+          content: 'fc5d8d8',
+          isError: false
+        })
+        this.emit(requestId, { type: 'result', isError: false, costUsd: 0.01 })
+      })
+    } else if (/сжат|compact/i.test(opts.prompt)) {
+      /*
+       * Сжатие контекста. Настоящий движок сперва шлёт `status: compacting`
+       * (работа идёт), потом `compact_boundary` с числами до и после. Порядок и
+       * пауза между ними тут не для красоты: проверяется, что на экране успевает
+       * появиться строка «сворачиваю…», а не только итог.
+       */
+      this.schedule(requestId, 300, () =>
+        this.emit(requestId, { type: 'compact', phase: 'running' })
+      )
+      this.schedule(requestId, 1400, () => {
+        // Настоящий движок объявляет конец ДВАЖДЫ: строкой состояния (без
+        // чисел) и границей (с числами). Фейк повторяет это дословно — иначе
+        // прогон не поймал бы вторую черту об одном и том же событии.
+        this.emit(requestId, { type: 'compact', phase: 'done' })
+        this.emit(requestId, {
+          type: 'compact',
+          phase: 'done',
+          before: 128000,
+          after: 21000,
+          auto: /сам|auto/i.test(opts.prompt)
+        })
+        this.emit(requestId, {
+          type: 'assistant',
+          content: [{ type: 'text', text: 'fake: продолжаю с пересказом' }]
+        })
+        this.emit(requestId, { type: 'result', isError: false, costUsd: 0.01 })
+      })
+    } else if (/оборв|abort/i.test(opts.prompt)) {
+      /*
+       * Ход, оборванный движком. Раньше это не давало на экране НИЧЕГО: точки
+       * гасли, и человек оставался с вопросом «оно упало или думает?». Прогону
+       * нужен именно такой конец — с текстом и без ответа.
+       */
+      this.schedule(requestId, 400, () => {
+        this.emit(requestId, {
+          type: 'notice',
+          level: 'warn',
+          text: 'ход прерван, ответ не дописан'
+        })
+        this.emit(requestId, { type: 'result', isError: false, costUsd: 0.002 })
       })
     } else if (/skill/i.test(opts.prompt)) {
       // Скилл, взятый агентом. Настоящий движок объявляет это обычным `tool_use`

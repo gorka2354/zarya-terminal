@@ -766,7 +766,93 @@ export class ClaudeCodeDriver implements AgentDriver {
         // следующем ходе стало бы некому.
         if (session.rewound) continue
         switch (msg.type) {
-          case 'system':
+          case 'system': {
+            /*
+             * СЖАТИЕ КОНТЕКСТА. В консоли на этом месте строка и полоса
+             * загрузки; в Заре не было ничего — агент просто «забывал» разговор,
+             * и объяснения на экране не находилось.
+             *
+             * Два события: статус (идёт прямо сейчас) и граница (закончилось, и
+             * тогда известны числа). Числа берём у движка — своей арифметики
+             * поверх не изобретаем.
+             */
+            if (msg.subtype === 'status') {
+              const st = msg as unknown as {
+                status?: string
+                compact_result?: string
+                compact_error?: string
+              }
+              if (st.status === 'compacting') {
+                this.emit(requestId, { type: 'compact', phase: 'running' })
+              } else if (st.compact_result === 'success') {
+                this.emit(requestId, { type: 'compact', phase: 'done' })
+              } else if (st.compact_result === 'failed') {
+                this.emit(requestId, {
+                  type: 'compact',
+                  phase: 'failed',
+                  error: st.compact_error
+                })
+              }
+              break
+            }
+            if (msg.subtype === 'compact_boundary') {
+              const m = (msg as unknown as {
+                compact_metadata?: { trigger?: string; pre_tokens?: number; post_tokens?: number }
+              }).compact_metadata
+              this.emit(requestId, {
+                type: 'compact',
+                phase: 'done',
+                before: typeof m?.pre_tokens === 'number' ? m.pre_tokens : undefined,
+                after: typeof m?.post_tokens === 'number' ? m.post_tokens : undefined,
+                auto: m?.trigger === 'auto'
+              })
+              break
+            }
+            /*
+             * СЛУЖЕБНЫЕ СТРОКИ ДВИЖКА: отказ модели (с переходом на запасную и
+             * без), баннеры и ответы хуков. Раньше всё это проваливалось в
+             * пустой `break` — и отказ выглядел на экране как зависание.
+             */
+            if (msg.subtype === 'model_refusal_fallback' || msg.subtype === 'model_refusal_no_fallback') {
+              // Слова движка лежат в `content` (не в `message` — на этом можно
+              // молча потерять всю причину и показать общую заглушку вместо
+              // объяснения). `api_refusal_explanation` — запасной источник:
+              // старый CLI шлёт его, а `content` может прийти пустым.
+              const r = msg as unknown as {
+                content?: string
+                api_refusal_explanation?: string | null
+              }
+              this.emit(requestId, {
+                type: 'notice',
+                level: msg.subtype === 'model_refusal_no_fallback' ? 'error' : 'warn',
+                text: r.content?.trim() || r.api_refusal_explanation?.trim() || tm('drv.refusal')
+              })
+              break
+            }
+            if (msg.subtype === 'informational') {
+              const n = msg as unknown as {
+                content?: string
+                level?: string
+                prevent_continuation?: boolean
+              }
+              const text = n.content?.trim()
+              /*
+               * Служебный шум («info») в ленту не тащим: движок сам помечает
+               * такие строки как «видно только в расшифровке». Но если после
+               * строки работа ОСТАНАВЛИВАЕТСЯ (`prevent_continuation` — хук
+               * запретил продолжать), она показывается при любом уровне: это
+               * единственное объяснение того, почему ход кончился молча.
+               */
+              const stops = n.prevent_continuation === true
+              if (text && (stops || n.level !== 'info')) {
+                this.emit(requestId, {
+                  type: 'notice',
+                  level: stops || n.level === 'warning' ? 'warn' : 'info',
+                  text
+                })
+              }
+              break
+            }
             // Subagent telemetry. The SDK counts tokens, tool calls and duration
             // per task itself — we forward its numbers rather than deriving our
             // own, so the indicator can't drift from reality.
@@ -836,6 +922,7 @@ export class ClaudeCodeDriver implements AgentDriver {
               void this.fetchModels(requestId, session)
             }
             break
+          }
 
           case 'rate_limit_event': {
             const info = (
@@ -882,6 +969,21 @@ export class ClaudeCodeDriver implements AgentDriver {
             if (uuid) session.lastAssistantUuid = uuid
             const content = mapAssistantContent((msg.message as { content?: unknown }).content)
             if (content.length) this.emit(requestId, { type: 'assistant', content })
+            /*
+             * ХОД ОБОРВАЛСЯ. `aborted` движок ставит, когда поток кончился до
+             * `stop_reason`: прервали, упёрлись в предел вывода, отказала
+             * модель. Раньше это не читалось нигде, и при пустом `content` по
+             * ходу не приходило НИ ОДНОГО события — «думающие» точки просто
+             * гасли. На экране это неотличимо от зависания: человек ждёт
+             * ответа, которого уже не будет.
+             */
+            if ((msg as unknown as { aborted?: boolean }).aborted) {
+              this.emit(requestId, {
+                type: 'notice',
+                level: 'warn',
+                text: content.length ? tm('drv.abortedTail') : tm('drv.abortedEmpty')
+              })
+            }
             break
           }
 

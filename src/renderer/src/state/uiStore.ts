@@ -366,6 +366,19 @@ export function forgetSessionUi(sessionId: string): void {
     setBarModeOf(sid, p.barMode as UiState['barMode'])
     delete p.barMode
   }
+  // Модель и усилие, на которых панель работает СЕЙЧАС, живут по сессиям — у
+  // каждой панели свой агент. Прогоны же по старой памяти пишут общий
+  // `claudeStatus`, и запись уходила в никуда: подсветка «эта модель бежит»
+  // читает статус сессии. Зеркалим на активную панель — ровно то же, что при
+  // запуске делает сам пусковой экран (общее поле остаётся: в нём ещё лежит
+  // расход по счёту, а он и правда общий).
+  if (p.claudeStatus && typeof p.claudeStatus === 'object') {
+    const s = p.claudeStatus as { model?: string; effort?: string }
+    if (s.model || s.effort) {
+      const sid = useSessionsStore.getState().activeSessionId()
+      setAgentStatusFor(sid, { model: s.model, effort: s.effort })
+    }
+  }
   useUiStore.getState().set(p as Partial<UiState>)
 }
 /**

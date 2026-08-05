@@ -219,6 +219,8 @@ export interface Conversation {
    * ходу, и вчерашний, выданный за сегодняшний, врал бы хуже, чем его отсутствие.
    */
   plan?: import('@shared/agentPlan').AgentPlan
+  /** Движок сжимает контекст прямо сейчас — в ленте идёт строка со спиннером. */
+  compacting?: boolean
   agentMode: boolean
   /** True only while an ai.chat request is in flight (between dispatch and done/error). */
   streaming: boolean
@@ -1025,6 +1027,50 @@ export const useAiStore = create<AiState>((set, get) => {
         break
       }
 
+      /*
+       * Строка движка: ход оборвался, модель отказала, хук вмешался. Кладём её в
+       * ленту как есть — своих формулировок не изобретаем. До этого такой конец
+       * не давал НИ ОДНОГО события, и «думающие» точки просто гасли: на экране
+       * это неотличимо от зависания.
+       */
+      case 'notice':
+        patchConversation(convId, (c) => ({
+          ...c,
+          messages: [
+            ...c.messages,
+            { role: 'assistant', content: [{ type: 'notice', level: ev.level, text: ev.text }] }
+          ]
+        }))
+        break
+
+      /*
+       * Сжатие контекста. Пока идёт — строка со спиннером у ленты; когда
+       * закончилось — отметка с числами движка. Иначе агент внезапно «забывал»
+       * разговор, и объяснения на экране не было.
+       */
+      case 'compact':
+        if (ev.phase === 'running') {
+          patchConversation(convId, (c) => ({ ...c, compacting: true }))
+          break
+        }
+        patchConversation(convId, (c) => ({
+          ...c,
+          compacting: false,
+          messages:
+            ev.phase === 'failed'
+              ? [
+                  ...c.messages,
+                  {
+                    role: 'assistant',
+                    content: [
+                      { type: 'notice', level: 'warn', text: ev.error || t('feed.compactFailed') }
+                    ]
+                  }
+                ]
+              : mergeCompactMark(c.messages, ev)
+        }))
+        break
+
       case 'error':
         patchConversation(convId, (c) => ({
           ...c,
@@ -1035,6 +1081,46 @@ export const useAiStore = create<AiState>((set, get) => {
         }))
         break
     }
+  }
+
+  /**
+   * Отметка о сжатии — ОДНА на одно сжатие.
+   *
+   * Движок объявляет конец дважды: строкой состояния («compact_result:
+   * success», без чисел) и границей («compact_boundary», с числами до и после).
+   * Порядок между ними не обещан, и приход обоих подряд оставил бы в ленте две
+   * черты об одном событии. Поэтому вторая не добавляется, а ДОПОЛНЯЕТ первую:
+   * числа появляются, когда придут, и не пропадают, если следом придёт пустая.
+   *
+   * Слияние возможно, только пока отметка — самая последняя часть ленты. Как
+   * только после неё появилось хоть что-то (а между двумя настоящими сжатиями
+   * всегда есть ход агента), новое сжатие станет отдельной чертой.
+   */
+  function mergeCompactMark(
+    messages: AiMessage[],
+    ev: { before?: number; after?: number; auto?: boolean }
+  ): AiMessage[] {
+    const mark: AiContentPart = {
+      type: 'compact',
+      before: ev.before,
+      after: ev.after,
+      auto: ev.auto
+    }
+    const last = messages[messages.length - 1]
+    const tail = last?.content[last.content.length - 1]
+    if (last?.role === 'assistant' && tail?.type === 'compact') {
+      const merged: AiContentPart = {
+        type: 'compact',
+        before: ev.before ?? tail.before,
+        after: ev.after ?? tail.after,
+        auto: ev.auto ?? tail.auto
+      }
+      return [
+        ...messages.slice(0, -1),
+        { ...last, content: [...last.content.slice(0, -1), merged] }
+      ]
+    }
+    return [...messages, { role: 'assistant', content: [mark] }]
   }
 
   /** Enqueue a tool execution on the conversation's serial chain. */
