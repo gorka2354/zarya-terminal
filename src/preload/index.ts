@@ -115,6 +115,8 @@ const api = {
       ipcRenderer.invoke(CH.agentSessionMessages, engine, sessionId, cwd),
     setModel: (engine: AgentEngine, requestId: string, model: string | undefined) =>
       ipcRenderer.send(CH.agentSetModel, engine, requestId, model),
+    setPermissionMode: (engine: AgentEngine, requestId: string, mode: 'plan' | 'default') =>
+      ipcRenderer.send(CH.agentSetPermissionMode, engine, requestId, mode),
     setBypass: (engine: AgentEngine, requestId: string, bypass: boolean) =>
       ipcRenderer.send(CH.agentSetBypass, engine, requestId, bypass),
     setEffort: (engine: AgentEngine, requestId: string, effort: string | undefined) =>

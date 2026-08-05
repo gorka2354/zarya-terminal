@@ -147,6 +147,14 @@ export interface AgentDriver {
   setModel?(requestId: string, model: string | undefined): void
   setEffort?(requestId: string, effort: string | undefined): void
   setBypass?(requestId: string, bypass: boolean): void
+  /**
+   * Сменить режим разрешений живой сессии (гейт: `capabilities.planMode`).
+   *
+   * Допущены только `plan` и `default` — режимы, которые гейт НЕ ослабляют.
+   * Главный процесс проверяет это отдельно: драйвер здесь — не единственная
+   * защита, а последняя.
+   */
+  setPermissionMode?(requestId: string, mode: 'plan' | 'default'): void
   /** Generalizes vendor toggles (e.g. Claude's 'ultracode'). */
   setVendorFlag?(requestId: string, key: string, value: unknown): void
   /** QA only — the flag payloads last applied to a session's live backend. */

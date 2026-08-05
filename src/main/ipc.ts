@@ -454,6 +454,16 @@ export function registerIpc(ctx: IpcContext): void {
   ipcMain.on(CH.agentSetBypass, (_e, engine: AgentEngine, requestId: string, bypass: boolean) =>
     driverFor(engine)?.setBypass?.(requestId, bypass)
   )
+  ipcMain.on(
+    CH.agentSetPermissionMode,
+    (_e, engine: AgentEngine, requestId: string, mode: string) => {
+      // Белый список на границе доверия: сюда допущены только режимы, КОТОРЫЕ
+      // НЕ ОСЛАБЛЯЮТ гейт. 'bypassPermissions' и 'acceptEdits' сняли бы вопросы
+      // ниже canUseTool — вне окна одобрений, о котором человек знает.
+      if (mode !== 'plan' && mode !== 'default') return
+      driverFor(engine)?.setPermissionMode?.(requestId, mode)
+    }
+  )
   ipcMain.on(CH.agentSetEffort, (_e, engine: AgentEngine, requestId: string, effort: string | undefined) =>
     driverFor(engine)?.setEffort?.(requestId, effort)
   )

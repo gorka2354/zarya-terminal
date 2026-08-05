@@ -36,6 +36,8 @@ export class FakeAgentDriver implements AgentDriver {
    */
   /** Запросы, чей инструмент должен работать долго (прогон смотрит на «выполняется»). */
   private slowTools = new Set<string>()
+  /** Режим разрешений, установленный на ходу. Прогон читает его через debugFlags. */
+  private modes = new Map<string, 'plan' | 'default'>()
   private sessions = new Map<
     string,
     {
@@ -83,7 +85,12 @@ export class FakeAgentDriver implements AgentDriver {
             requestId,
             prompt: opts.prompt,
             resume: opts.resume ?? null,
-            resumeAt: opts.resumeAt ?? null
+            resumeAt: opts.resumeAt ?? null,
+            // С каким режимом и автопилотом ушёл ход. Проверять это на экране
+            // нельзя: чип показывает НАМЕРЕНИЕ, а спор идёт о том, что и правда
+            // уехало драйверу — единственное, что определяет поведение агента.
+            permissionMode: opts.permissionMode ?? null,
+            bypass: opts.bypass === true
           }) + '\n'
         )
       } catch {
@@ -181,6 +188,20 @@ export class FakeAgentDriver implements AgentDriver {
         }
         this.emit(requestId, { type: 'result', isError: false, costUsd: 0.01 })
       })
+    } else if (/выход из плана|exitplan/i.test(opts.prompt)) {
+      /*
+       * Выход из режима плана. У настоящего движка вход этого вызова ПУСТ:
+       * план лежит в его файле, а сюда приходит голый объект. Фейк повторяет
+       * это дословно — иначе прогон проверял бы подпись, которой в жизни нет.
+       */
+      this.schedule(requestId, 400, () =>
+        this.emit(requestId, {
+          type: 'permission',
+          toolUseId: `${requestId}-plan`,
+          toolName: 'ExitPlanMode',
+          input: {}
+        })
+      )
     } else if (/plan|план/i.test(opts.prompt)) {
       /*
        * План агента. Настоящий движок ведёт его обычными вызовами инструментов,
@@ -231,6 +252,16 @@ export class FakeAgentDriver implements AgentDriver {
           ]
         })
         this.emit(requestId, { type: 'result', isError: false, costUsd: 0.02 })
+      })
+    } else if (/забудь|reset|clear/i.test(opts.prompt)) {
+      /*
+       * Движок начал беседу заново — так бывает от `/clear`, от выхода из
+       * режима плана и при новой сессии. Раньше Заря об этом не знала и
+       * продолжала показывать ленту, которой агент уже не помнит.
+       */
+      this.schedule(requestId, 400, () => {
+        this.emit(requestId, { type: 'reset', sessionId: `fake-${this.engine}-${++this.seq}` })
+        this.emit(requestId, { type: 'result', isError: false, costUsd: 0 })
       })
     } else if (/останов|stop/i.test(opts.prompt)) {
       /*
@@ -839,6 +870,11 @@ export class FakeAgentDriver implements AgentDriver {
    * Остановка одной задачи. Фейк повторяет настоящий путь: сам вызов лишь
    * ПРОСИТ, а «остановлено» приходит отдельным событием — как у движка.
    */
+  /** Смена режима на ходу. Запоминаем — прогон читает её через debugFlags. */
+  setPermissionMode(requestId: string, mode: 'plan' | 'default'): void {
+    this.modes.set(requestId, mode)
+  }
+
   async stopTask(
     requestId: string,
     taskId: string

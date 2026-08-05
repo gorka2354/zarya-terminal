@@ -401,6 +401,29 @@
   color: var(--fg-dim);
 }
 
+/* агент начал заново ---------------------------------------------------- */
+/* Не то же, что сжатие: там разговор остался пересказом, здесь его нет вовсе.
+   Поэтому черта заметнее и слово прямее — это потеря памяти, а не свёртка. */
+.zy-mf-reset {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0 12px 16px;
+  max-width: 560px;
+  font-family: var(--font-tech);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  color: var(--warn);
+}
+.zy-mf-reset-line {
+  flex: 1;
+  height: 1px;
+  background: color-mix(in srgb, var(--warn) 45%, transparent);
+}
+.zy-mf-reset-text {
+  flex: none;
+}
+
 /* spinner shared ------------------------------------------------------- */
 .zy-mf-spinner {
   display: inline-block;

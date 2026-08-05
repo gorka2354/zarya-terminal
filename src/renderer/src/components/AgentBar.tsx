@@ -418,6 +418,12 @@ export const AgentBar = memo(function AgentBar({
     activeSessionId ? !!s.bypassBySession[activeSessionId] : false
   )
   const bypass = activeConv ? !!activeConv.bypass : paneBypass
+  // Режим плана — по той же схеме, что и автопилот: решение принадлежит панели
+  // и живёт до первой беседы, иначе чип был бы мёртвым до отправки.
+  const panePlan = useAiStore((s) =>
+    activeSessionId ? !!s.planBySession[activeSessionId] : false
+  )
+  const planMode = activeConv ? !!activeConv.planMode : panePlan
   // Микрофон занят другой панелью — кнопка обязана это сказать, а не молчать и
   // не начинать вторую запись.
   const micBusy = useMicBusyElsewhere(activeSessionId)
@@ -808,6 +814,23 @@ ${prev}`
   }
 
   const openLaunchPad = (): void => useUiStore.getState().set({ launchPadOpen: true })
+
+  /**
+   * Режим плана: агент ничего не выполняет, пока не расскажет, что собирается.
+   *
+   * Как и автопилот, решение запоминается за ПАНЕЛЬЮ, чтобы чип работал до
+   * первого сообщения. Тон подсказки обратный автопилоту: включение здесь —
+   * осторожность, а не риск.
+   */
+  const togglePlanMode = (): void => {
+    const next = !planMode
+    if (activeConv) useAiStore.getState().setPlanMode(activeConv.id, next)
+    else if (activeSessionId) useAiStore.getState().setPanePlanMode(activeSessionId, next)
+    else return
+    useUiStore
+      .getState()
+      .toast(next ? t('bar.planToastOn') : t('bar.planToastOff'), 'success')
+  }
 
   const toggleBypass = (): void => {
     const next = !bypass
@@ -1279,8 +1302,11 @@ ${prev}`
   // driver was auto-allowing — the exact lie it exists to prevent. Lock it only
   // on an explicit bypass:false.
   const isBuiltinMode = mode === 'zarya'
-  const canToggleGate = isBuiltinMode || caps?.bypass !== false
-  const gateOff = isBuiltinMode ? autoApprove : bypass && caps?.bypass !== false
+  // В режиме плана агент не выполняет ничего — спрашивать не о чем, и замок
+  // здесь не переключатель, а состояние. Оставить его живым значило бы предлагать
+  // ослабить гейт, который сейчас и так закрыт наглухо.
+  const canToggleGate = !planMode && (isBuiltinMode || caps?.bypass !== false)
+  const gateOff = !planMode && (isBuiltinMode ? autoApprove : bypass && caps?.bypass !== false)
   const gateTitle = isBuiltinMode
     ? gateOff
       ? t('bar.gateBuiltinOn')
@@ -1489,6 +1515,25 @@ ${prev}`
         >
           <EngineGlyph engine={mode} size={14} />
         </button>
+        {/*
+          РЕЖИМ ПЛАНА. Отдельным чипом, а не третьим состоянием замка: тот
+          дал бы одному нажатию путь от самого строгого режима к самому
+          свободному, а это разные решения с разной ценой ошибки.
+
+          Чипа НЕТ там, где движок так не умеет: переключатель, который движок
+          пропустит мимо ушей, обещает осторожность, которой не будет.
+        */}
+        {!isShell && !isBuiltinMode && caps?.planMode === true && (
+          <button
+            className={`zy-agentbar-plan${planMode ? ' zy-agentbar-plan--on' : ''}`}
+            title={planMode ? t('bar.planOnHint') : t('bar.planOffHint')}
+            aria-label={t(planMode ? 'bar.planOnHint' : 'bar.planOffHint')}
+            aria-pressed={planMode}
+            onClick={togglePlanMode}
+          >
+            <PixelIcon name="workflows" />
+          </button>
+        )}
         {!isShell && (
           <button
             className={`zy-agentbar-bypass zy-agentbar-bypass--icon${

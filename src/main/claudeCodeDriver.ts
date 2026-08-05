@@ -430,6 +430,8 @@ export class ClaudeCodeDriver implements AgentDriver {
     mcp: true,
     // query.stopTask(taskId) — остановить одну задачу, не обрывая ход.
     stopTask: true,
+    // permissionMode: 'plan' в опциях запуска + setPermissionMode на ходу.
+    planMode: true,
     vendorFlags: [{ key: 'ultracode', label: 'ULTRACODE', desc: tm('drv.ultracode') }]
   }
   private sessions = new Map<string, Session>()
@@ -1171,6 +1173,26 @@ export class ClaudeCodeDriver implements AgentDriver {
             break
           }
 
+          /*
+           * ДВИЖОК ЗАБЫЛ РАЗГОВОР.
+           *
+           * Приходит от `/clear`, от выхода из режима плана и при старте новой
+           * сессии: движок заводит беседу заново, под новым номером. Заря об
+           * этом не знала — и продолжала показывать ленту, которой агент уже не
+           * помнит, а следующий ход уходил с прежним номером сессии. То есть
+           * интерфейс утверждал, что память на месте, когда её нет: ровно та
+           * ложь, которой здесь не должно быть.
+           *
+           * Ленту НЕ стираем: это записи человека, а не агента, и терять их
+           * из-за чужой забывчивости нельзя. Ставим черту и говорим словами.
+           */
+          case 'conversation_reset': {
+            const fresh = (msg as unknown as { new_conversation_id?: string }).new_conversation_id
+            session.claudeSessionId = fresh
+            this.emit(requestId, { type: 'reset', sessionId: fresh })
+            break
+          }
+
           default:
             // partial-assistant / status / hook / task / etc. — ignored for now
             break
@@ -1850,6 +1872,22 @@ export class ClaudeCodeDriver implements AgentDriver {
   /** Generic vendor-flag setter (AgentDriver). Claude's only vendor flag is 'ultracode'. */
   setVendorFlag(requestId: string, key: string, value: unknown): void {
     if (key === 'ultracode') this.setUltracode(requestId, !!value)
+  }
+
+  /**
+   * Сменить режим разрешений живой сессии.
+   *
+   * Нужен режиму плана: движок умеет переключаться на ходу, и заставлять
+   * человека начинать новый ход ради этого незачем. Сюда доходят только `plan`
+   * и `default` — оба проверены на границе IPC.
+   */
+  setPermissionMode(requestId: string, mode: 'plan' | 'default'): void {
+    const s = this.sessions.get(requestId)
+    if (!s) return
+    const q = s.query as unknown as { setPermissionMode?: (m: string) => Promise<void> }
+    // Молча: движок постарше метода не знает, а следующий ход всё равно уйдёт
+    // с нужным режимом в опциях запуска.
+    void q.setPermissionMode?.(mode)?.catch?.(() => {})
   }
 
   /** Toggle bypass ('без спроса') live — flips the canUseTool auto-allow flag. */

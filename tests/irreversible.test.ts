@@ -69,6 +69,15 @@ describe('правила «до конца сессии»', () => {
     expect(ruleFor(...bash('git status'))).toBe('Bash: git status')
   })
 
+  it('выход из режима плана правилом не разрешается', () => {
+    // Правило означало бы: впредь агент выходит из плана САМ, не спрашивая. Но
+    // весь смысл режима — в том, что человек видит план и соглашается с ним;
+    // раздав такое разрешение однажды, он оставил бы себе чип, который больше
+    // ничего не защищает.
+    expect(ruleFor('ExitPlanMode', {})).toBeNull()
+    expect(matchesRule(['ExitPlanMode'], 'ExitPlanMode', {})).toBe(false)
+  })
+
   it('«git status» не разрешает «git push --force»', () => {
     // Соблазн обобщить до «все git» — это и есть источник неправды.
     const rules = [ruleFor(...bash('git status'))!]

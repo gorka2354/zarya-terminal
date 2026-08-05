@@ -408,6 +408,14 @@ export type AiContentPart =
    * а «примерно» здесь было бы хуже молчания.
    */
   | { type: 'compact'; before?: number; after?: number; auto?: boolean }
+  /**
+   * Черта: выше — то, чего агент больше не помнит.
+   *
+   * Не то же, что сжатие: там разговор остался пересказом, здесь его нет
+   * вовсе. Записи человека при этом на месте — стирать их было бы куда хуже,
+   * чем показать границу.
+   */
+  | { type: 'reset' }
 
 export interface AiMessage {
   role: 'user' | 'assistant'
@@ -696,6 +704,14 @@ export type AgentStreamEvent =
    * говорил.
    */
   | { type: 'text_delta'; text: string }
+  /**
+   * Движок начал беседу заново: `/clear`, выход из режима плана, новая сессия.
+   *
+   * Ленту это НЕ стирает — там записи человека. Но номер сессии обязан
+   * смениться, иначе следующий ход попросит продолжить разговор, которого у
+   * движка больше нет, и Заря будет утверждать, что память на месте.
+   */
+  | { type: 'reset'; sessionId?: string }
   | { type: 'assistant'; content: AiContentPart[] }
   | { type: 'tool_result'; toolUseId: string; content: string; isError: boolean }
   | {
@@ -846,6 +862,14 @@ export interface AgentCapabilities {
    * чем не показывать.
    */
   stopTask?: boolean
+  /**
+   * Движок понимает режим плана: сперва рассказать, что собирается сделать, и
+   * ничего не трогать до согласия.
+   *
+   * Где false — чипа нет. Показать переключатель, который движок пропустит
+   * мимо ушей, значит пообещать осторожность, которой не будет.
+   */
+  planMode?: boolean
   /** Extra named toggles beyond the common set (e.g. Claude's 'ultracode'); UI renders generically. */
   vendorFlags?: { key: string; label: string; desc?: string }[]
 }

@@ -57,6 +57,7 @@ export const CH = {
   agentSessionMessages: 'agent:session-messages',
   agentSetModel: 'agent:set-model',
   agentSetBypass: 'agent:set-bypass',
+  agentSetPermissionMode: 'agent:set-permission-mode',
   agentSetEffort: 'agent:set-effort',
   agentSetVendorFlag: 'agent:set-vendor-flag', // generalizes set-ultracode
   agentListModels: 'agent:list-models',

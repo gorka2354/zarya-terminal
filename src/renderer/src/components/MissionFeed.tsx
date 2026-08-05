@@ -965,6 +965,9 @@ const AgentMessage = memo(function AgentMessage({
         if (p.type === 'compact') {
           return <CompactMark key={i} before={p.before} after={p.after} auto={p.auto} />
         }
+        if (p.type === 'reset') {
+          return <ResetMark key={i} />
+        }
         if (p.type === 'tool_use') {
           // A subagent's «Agent» card would say only «субагент работает…» while
           // the wave line above already names the task, its runtime and its
@@ -1092,6 +1095,28 @@ function CompactMark({
         {size && <span className="zy-mf-compact-size">{size}</span>}
       </span>
       <span className="zy-mf-compact-line" />
+    </div>
+  )
+}
+
+/**
+ * Черта: выше — то, чего агент больше не помнит.
+ *
+ * Приходит от `/clear`, от выхода из режима плана, от новой сессии. Не то же,
+ * что сжатие: там разговор остался пересказом, здесь его нет вовсе — и потому
+ * черта другая, сплошная и с прямым словом.
+ *
+ * Ленту это не стирает. Записи выше — человека, и терять их из-за чужой
+ * забывчивости нельзя; а вот молчать о границе значило бы утверждать, что
+ * память на месте, когда её нет.
+ */
+function ResetMark(): React.JSX.Element {
+  useLang()
+  return (
+    <div className="zy-mf-reset">
+      <span className="zy-mf-reset-line" />
+      <span className="zy-mf-reset-text">{t('feed.reset')}</span>
+      <span className="zy-mf-reset-line" />
     </div>
   )
 }

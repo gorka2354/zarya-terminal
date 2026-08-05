@@ -482,6 +482,34 @@
 }
 
 /* dictation ------------------------------------------------------------ */
+/* режим плана ----------------------------------------------------------- */
+/* Отдельный чип, а не третье состояние замка: тот дал бы одному нажатию путь от
+   самого строгого режима к самому свободному. Включённый светится цветом
+   ВНИМАНИЯ, а не опасности: это осторожность, а не риск, — красный тут звал бы
+   выключать то, что защищает. */
+.zy-agentbar-plan {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--fg-faint);
+  cursor: pointer;
+}
+.zy-agentbar-plan:hover {
+  color: var(--fg);
+  border-color: var(--border-strong);
+}
+.zy-agentbar-plan--on {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
 .zy-agentbar-mic {
   flex-shrink: 0;
   width: 34px;

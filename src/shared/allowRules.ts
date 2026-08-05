@@ -47,6 +47,15 @@ export function ruleFor(toolName: string, input: unknown): AllowRule | null {
   const cmd = commandOf(input)
   const tool = toolName.trim()
   if (!tool) return null
+  /*
+   * Выход из режима плана «до конца сессии» не разрешается.
+   *
+   * Правило означало бы: впредь агент выходит из плана САМ, не спрашивая. Но
+   * весь смысл режима — в том, чтобы человек увидел план и согласился с ним;
+   * раздав такое разрешение один раз, он оставил бы себе чип, который больше
+   * ничего не защищает. Кнопка обещала бы удобство, а забирала бы гарантию.
+   */
+  if (tool === 'ExitPlanMode') return null
   const shellish = ['bash', 'run_command', 'shell', 'execute', 'terminal', 'powershell', 'cmd']
   if (shellish.some((x) => tool.toLowerCase().includes(x))) {
     if (!cmd) return null

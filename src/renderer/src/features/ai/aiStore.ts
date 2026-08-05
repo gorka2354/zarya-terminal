@@ -187,6 +187,15 @@ export interface Conversation {
    */
   bypass?: boolean
   /**
+   * Режим плана этой беседы: агент ничего не выполняет, а сперва рассказывает,
+   * что собирается сделать.
+   *
+   * Своё у каждой панели — по той же причине, что и автопилот. И так же не
+   * сохраняется на диск: перезапуск должен возвращать обычную работу, а не
+   * молча оставлять агента связанным.
+   */
+  planMode?: boolean
+  /**
    * Что человек разрешил в этой беседе до конца сессии.
    *
    * Середина между «спрашивать всё» и «не спрашивать ничего»: за день человек
@@ -301,6 +310,7 @@ interface AiState {
    * возвращает спрашивание.
    */
   bypassBySession: Record<string, boolean>
+  planBySession: Record<string, boolean>
   /**
    * Вложенные картинки, ждущие отправки, — по ПАНЕЛИ, а не по беседе. В момент
    * вставки беседы у панели может ещё не быть, а курсор уже в конкретной панели.
@@ -341,6 +351,8 @@ interface AiState {
    * первой же беседе этой панели.
    */
   setPaneBypass: (sessionId: string, on: boolean) => void
+  setPlanMode: (conversationId: string, on: boolean) => void
+  setPanePlanMode: (sessionId: string, on: boolean) => void
   /** Приложить картинку к панели. Отказ (пределы) — на стороне вызывающего. */
   attachImage: (sessionId: string, att: ImageAttachment) => void
   /** Снять одно вложение — крестиком на чипе. */
@@ -790,7 +802,7 @@ export const useAiStore = create<AiState>((set, get) => {
       // SECURITY: permissionMode is always 'default' and gate-weakening comes only
       // from АВТОПИЛОТ — see nativeGateOpts, which owns that invariant and is
       // guarded by tests/startOpts.test.ts.
-      ...nativeGateOpts(settings.ai, conv.bypass),
+      ...nativeGateOpts(settings.ai, conv.bypass, conv.planMode),
       ultracode: useUiStore.getState().ultracode,
       model: settings.ai.claudeModel || undefined,
       // Ultracode forces xhigh; otherwise use the user's effort override.
@@ -1113,6 +1125,25 @@ export const useAiStore = create<AiState>((set, get) => {
         }))
         break
 
+      /*
+       * Движок начал беседу заново. Лента остаётся — это записи человека, и
+       * терять их из-за чужой забывчивости нельзя. Меняем номер сессии (иначе
+       * следующий ход попросит продолжить разговор, которого у движка нет) и
+       * ставим черту: дальше агент отвечает, не помня, что было выше.
+       */
+      case 'reset':
+        patchConversation(convId, (c) => ({
+          ...c,
+          claudeSessionId: ev.sessionId,
+          // Отматывать больше некуда: прежней ветки у движка не осталось.
+          resumeAt: undefined,
+          messages: [
+            ...c.messages,
+            { role: 'assistant', content: [{ type: 'reset' }] }
+          ]
+        }))
+        break
+
       case 'error':
         patchConversation(convId, (c) => ({
           ...c,
@@ -1317,6 +1348,7 @@ export const useAiStore = create<AiState>((set, get) => {
     activeBySession: {},
     commandBarSessionId: null,
   bypassBySession: {},
+  planBySession: {},
   pendingImages: {},
 
     hydrate: async () => {
@@ -1377,6 +1409,10 @@ export const useAiStore = create<AiState>((set, get) => {
         agentMode: (opts?.engine ?? 'builtin') !== 'builtin',
         // Автопилот — из намерения ЭТОЙ панели, а не из настроек и не от соседа.
         bypass: opts?.sessionId ? get().bypassBySession[opts.sessionId] : undefined,
+        // Режим плана — оттуда же и по той же причине. Без этого чип горел бы,
+        // а первый же ход уходил бы обычным: человек видел бы обещание
+        // осторожности, которого никто не давал драйверу.
+        planMode: opts?.sessionId ? get().planBySession[opts.sessionId] : undefined,
         streaming: false,
         pendingTools: [],
         toolStartedAt: {},
@@ -1637,6 +1673,36 @@ export const useAiStore = create<AiState>((set, get) => {
       if (conv) get().setBypass(conv.id, on)
     },
 
+    /**
+     * Режим плана панели. Запоминается за панелью, как и автопилот: чип не
+     * должен быть мёртвым до первого сообщения.
+     */
+    setPanePlanMode: (sessionId, on) => {
+      set((s) => ({ planBySession: { ...s.planBySession, [sessionId]: on } }))
+      const conv = convForSession(get(), sessionId)
+      if (conv) get().setPlanMode(conv.id, on)
+    },
+
+    setPlanMode: (conversationId, on) => {
+      const conv = get().conversations.find((c) => c.id === conversationId)
+      if (!conv) return
+      patchConversation(conv.id, (c) => ({
+        ...c,
+        planMode: on,
+        // «Не выполняй ничего» и «выполняй без спроса» вместе не значат ничего.
+        // Включая план, снимаем автопилот — и на экране это видно сразу, а не
+        // выясняется на первом же вызове инструмента.
+        ...(on ? { bypass: false } : {})
+      }))
+      if (on && conv.bypass) get().setBypass(conv.id, false)
+      if (conv.sessionId)
+        set((s) => ({ planBySession: { ...s.planBySession, [conv.sessionId as string]: on } }))
+      // Живой сессии — сразу: движок умеет менять режим на ходу, и ждать
+      // следующего хода незачем.
+      if (conv.engine !== 'builtin')
+        void window.zarya.agent.setPermissionMode(conv.engine, conv.id, on ? 'plan' : 'default')
+    },
+
     setBypass: (conversationId, on) => {
       const conv = get().conversations.find((c) => c.id === conversationId)
       if (!conv) return
@@ -1694,6 +1760,21 @@ export const useAiStore = create<AiState>((set, get) => {
           behavior: 'allow',
           always: tool.allowAlwaysOnly === true
         })
+        /*
+         * План принят — режим плана кончился.
+         *
+         * Без этого согласие «переходи к работе» ничего бы не меняло: агент
+         * остался бы связанным, и каждая правка упиралась бы в отказ. Человек
+         * нажал бы «выполнить» и получил бы агента, который по-прежнему только
+         * рассказывает — интерфейс пообещал бы действие и не дал его.
+         *
+         * Снимаем ЗДЕСЬ, а не по слову движка: сигнала «режим сменился» в
+         * протоколе нет, а решение уже принято — вот оно, в этом нажатии.
+         */
+        if (tool.name === 'ExitPlanMode' && conv.planMode) {
+          get().setPlanMode(conv.id, false)
+          useUiStore.getState().toast(t('bar.planDone'), 'success')
+        }
         return
       }
       patchConversation(conv.id, (c) => ({

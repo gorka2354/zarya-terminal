@@ -54,6 +54,45 @@ describe('nativeGateOpts', () => {
       })
   })
 
+  /**
+   * Режим плана — единственный, кроме `default`, который сюда допущен, и
+   * допущен потому, что он СТРОЖЕ: агент не выполняет ничего.
+   */
+  describe('режим плана', () => {
+    it('уходит драйверу как plan', () => {
+      expect(nativeGateOpts(ai(), false, true).permissionMode).toBe('plan')
+    })
+
+    it('снимает автопилот, даже если он был включён', () => {
+      // «Выполняй без спроса» и «не выполняй ничего» — противоположные ответы
+      // на один вопрос. Отправить их вместе значит отправить непонятно что;
+      // приоритет у строгого, потому что ошибка в эту сторону стоит лишнего
+      // вопроса, а в обратную — сделанной работы, которую не просили.
+      expect(nativeGateOpts(ai(), true, true)).toEqual({ permissionMode: 'plan', bypass: false })
+    })
+
+    it('выключённый план ничего не меняет', () => {
+      expect(nativeGateOpts(ai(), true, false)).toEqual({ permissionMode: 'default', bypass: true })
+      expect(nativeGateOpts(ai(), true, undefined)).toEqual({
+        permissionMode: 'default',
+        bypass: true
+      })
+    })
+
+    it('и здесь настройки на режим не влияют', () => {
+      for (const autoApprove of [true, false])
+        expect(nativeGateOpts(ai({ autoApprove }), undefined, true).permissionMode).toBe('plan')
+    })
+
+    it("'acceptEdits' не появляется ни при каком сочетании", () => {
+      // Он снимает гейт правки файлов НИЖЕ canUseTool — вне нашего окна
+      // одобрений. Ни один путь сюда не должен его выдавать.
+      for (const bypass of [true, false, undefined])
+        for (const plan of [true, false, undefined])
+          expect(nativeGateOpts(ai(), bypass, plan).permissionMode).not.toBe('acceptEdits')
+    })
+  })
+
   it('is closed by default', () => {
     expect(nativeGateOpts(DEFAULT_SETTINGS.ai, undefined)).toEqual({
       permissionMode: 'default',

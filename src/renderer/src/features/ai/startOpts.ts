@@ -16,7 +16,8 @@ import type { AgentPermissionMode, AiSettings } from '@shared/types'
  */
 export function nativeGateOpts(
   ai: AiSettings,
-  convBypass: boolean | undefined
+  convBypass: boolean | undefined,
+  convPlan?: boolean
 ): {
   permissionMode: AgentPermissionMode
   bypass: boolean
@@ -24,6 +25,18 @@ export function nativeGateOpts(
   // `ai` остаётся в сигнатуре намеренно: инвариант «autoApprove НИКОГДА не
   // доезжает до драйвера» проверяется тестом именно на этой функции.
   void ai
+  /*
+   * РЕЖИМ ПЛАНА — единственный, кроме `default`, который сюда допущен, и
+   * допущен потому, что он СТРОЖЕ: агент ничего не выполняет вовсе, сперва
+   * рассказывает, что собирается делать.
+   *
+   * Автопилот при этом принудительно снят. Не из осторожности, а по смыслу:
+   * «выполняй без спроса» и «не выполняй ничего» — противоположные ответы на
+   * один вопрос, и отправить их вместе значит отправить непонятно что.
+   * Приоритет у строгого: ошибка в эту сторону стоит лишнего вопроса, в
+   * обратную — сделанной работы, которую не просили.
+   */
+  if (convPlan === true) return { permissionMode: 'plan', bypass: false }
   // Не решено — значит спрашивать. Умолчание всегда в сторону вопроса.
   return { permissionMode: 'default', bypass: convBypass === true }
 }

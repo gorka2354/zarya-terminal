@@ -130,6 +130,7 @@ export interface ZaryaApi {
       cwd: string | undefined
     ): Promise<AiMessage[]>
     setModel(engine: AgentEngine, requestId: string, model: string | undefined): void
+    setPermissionMode(engine: AgentEngine, requestId: string, mode: 'plan' | 'default'): void
     setBypass(engine: AgentEngine, requestId: string, bypass: boolean): void
     setEffort(engine: AgentEngine, requestId: string, effort: string | undefined): void
     setVendorFlag(engine: AgentEngine, requestId: string, key: string, value: unknown): void

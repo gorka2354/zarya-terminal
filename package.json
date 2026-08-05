@@ -55,6 +55,7 @@
     "qa:plan": "node scripts/agent-plan-test.mjs",
     "qa:report": "node scripts/agent-report-test.mjs",
     "qa:wave": "node scripts/agent-wave-test.mjs",
+    "qa:plan-mode": "node scripts/plan-mode-test.mjs",
     "qa:find": "npm run build && node scripts/feed-search-test.mjs",
     "qa:onboarding": "npm run build && node scripts/onboarding-test.mjs"
   },
