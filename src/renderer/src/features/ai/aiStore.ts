@@ -215,6 +215,15 @@ export interface Conversation {
    */
   sessionAllows?: string[]
   /**
+   * Папки СВЕРХ рабочей, куда человек пустил агента в этой беседе.
+   *
+   * Такое же разрешение, как и правило выше, и живёт по тем же правилам: выдаёт
+   * его человек, видит дословно, на диск оно не сохраняется. Перезапуск
+   * возвращает агента в одну папку — молча восстановить вчерашний доступ к
+   * чужому каталогу было бы худшим видом удобства.
+   */
+  extraDirs?: string[]
+  /**
    * Какие скиллы агент РЕАЛЬНО взял в этой беседе.
    *
    * Платится за все: описание каждого скилла лежит в контексте любого запроса,
@@ -419,6 +428,18 @@ interface AiState {
   allowForSession: (conversationId: string, toolId: string) => Promise<void>
   /** Снять ранее выданное разрешение. */
   revokeSessionRule: (conversationId: string, rule: string) => void
+  /**
+   * Пустить агента в ещё одну папку. Путь выбирает ОС, а не приложение.
+   *
+   * Возвращает, что вышло: `no-engine` — движок так не умеет; `busy` — идёт ход
+   * (менять доступ на лету значило бы оборвать работу); `already` — папка уже
+   * в списке. Окно обязано сказать это словами, а не молча ничего не сделать.
+   */
+  addWorkDir: (
+    conversationId: string
+  ) => Promise<{ ok: boolean; dir?: string; reason?: 'canceled' | 'busy' | 'already' | 'no-engine' }>
+  /** Забрать доступ к папке обратно. */
+  removeWorkDir: (conversationId: string, dir: string) => Promise<void>
   /** Deny a pending tool by id (defaults to the first unsettled one). */
   /**
    * Отклонить вызов. `reason` — то, что человек написал в строке ввода: «не так,
@@ -862,6 +883,10 @@ export const useAiStore = create<AiState>((set, get) => {
       prompt,
       ...(images.length ? { images } : {}),
       cwd: cwd || conv.cwd,
+      // Папки, куда человек пустил агента сверх рабочей. Едут каждым ходом:
+      // состав живёт в беседе, а не в памяти драйвера, — так он не разойдётся
+      // с тем, что показано в панели допуска.
+      ...(conv.extraDirs?.length ? { extraDirs: conv.extraDirs } : {}),
       // SECURITY: permissionMode is always 'default' and gate-weakening comes only
       // from АВТОПИЛОТ — see nativeGateOpts, which owns that invariant and is
       // guarded by tests/startOpts.test.ts.
@@ -1907,6 +1932,54 @@ export const useAiStore = create<AiState>((set, get) => {
       }))
     },
 
+    /*
+     * ПУСТИТЬ АГЕНТА В ЕЩЁ ОДНУ ПАПКУ.
+     *
+     * Папки — опция запуска движка, а живая сессия переживает все ходы беседы:
+     * поменять её на лету нечем. Драйвер закрывает сессию, и следующий ход
+     * поднимает её заново — с новой папкой и тем же контекстом (`resume`).
+     *
+     * Поэтому только когда ход НЕ идёт. Оборвать работу ради расширения
+     * доступа — обменять сделанное на удобство, о котором никто не просил.
+     */
+    addWorkDir: async (conversationId) => {
+      const conv = get().conversations.find((c) => c.id === conversationId)
+      if (!conv || conv.engine === 'builtin') return { ok: false, reason: 'no-engine' }
+      if (isConversationBusy(conv)) return { ok: false, reason: 'busy' }
+      const dir = await window.zarya.app.pickDirectory()
+      if (!dir) return { ok: false, reason: 'canceled' }
+      // Проверяем ЗАНОВО: диалог ОС держали открытым, и за это время агент мог
+      // начать работу — решение принималось про другое состояние.
+      const now = get().conversations.find((c) => c.id === conversationId)
+      if (!now || now.engine === 'builtin') return { ok: false, reason: 'no-engine' }
+      if (isConversationBusy(now)) return { ok: false, reason: 'busy' }
+      if ((now.extraDirs ?? []).includes(dir) || now.cwd === dir)
+        return { ok: false, dir, reason: 'already' }
+      patchConversation(conversationId, (c) => ({
+        ...c,
+        extraDirs: [...(c.extraDirs ?? []), dir]
+      }))
+      await window.zarya.agent.applyDirs(now.engine, conversationId)
+      return { ok: true, dir }
+    },
+
+    removeWorkDir: async (conversationId, dir) => {
+      const conv = get().conversations.find((c) => c.id === conversationId)
+      if (!conv || conv.engine === 'builtin') return
+      patchConversation(conversationId, (c) => ({
+        ...c,
+        extraDirs: (c.extraDirs ?? []).filter((d) => d !== dir)
+      }))
+      /*
+       * Отзыв не ждёт покоя, в отличие от выдачи. Забрать доступ, пока агент
+       * работает, — законное желание: ждать конца хода, чтобы отменить лишнее
+       * разрешение, значит откладывать ровно то, что делают в спешке. Живая
+       * сессия при этом папку сохранит до конца хода — движку её состав задан
+       * при запуске, — и окно об этом говорит прямо.
+       */
+      await window.zarya.agent.applyDirs(conv.engine, conversationId)
+    },
+
     approveTool: async (conversationId, toolId) => {
       const conv = resolveConv(conversationId)
       if (!conv) return
@@ -2286,6 +2359,12 @@ function seedPatch(convId: string, fn: (c: Conversation) => Conversation): void 
         // держится ответ на вопрос «почему в этот раз не спросили», и прогон
         // обязан видеть их дословно, а не догадываться по поведению.
         sessionAllows: c.sessionAllows ?? [],
+        /*
+         * Папки сверх рабочей — такое же разрешение, как правило выше, и в
+         * наблюдаемом состоянии по той же причине: панель показывает СПИСОК, а
+         * доступ даёт то, что уедет драйверу. Прогон обязан видеть второе.
+         */
+        extraDirs: c.extraDirs ?? [],
         userTexts: c.messages
           .filter((m) => m.role === 'user')
           .map((m) =>

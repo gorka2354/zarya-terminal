@@ -526,6 +526,16 @@ export function registerIpc(ctx: IpcContext): void {
       return driver.stopTask(requestId, taskId)
     }
   )
+  /*
+   * Новый состав рабочих папок беседы. Сам список сюда не едет: он придёт со
+   * следующим `start`, а это просьба принять его к сведению — иначе состав жил
+   * бы в двух местах и однажды разошёлся бы.
+   */
+  ipcMain.handle(CH.agentApplyDirs, async (_e, engine: AgentEngine, requestId: string) => {
+    const driver = driverFor(engine)
+    if (!driver?.applyDirectories) return { ok: false, reason: 'unsupported' as const }
+    return driver.applyDirectories(requestId)
+  })
   ipcMain.handle(
     CH.agentMcpReconnect,
     async (_e, engine: AgentEngine, requestId: string, name: string) => {
@@ -658,6 +668,13 @@ export function registerIpc(ctx: IpcContext): void {
   })
   ipcMain.on(CH.showItemInFolder, (_e, path: string) => shell.showItemInFolder(path))
   ipcMain.handle(CH.pickDirectory, async () => {
+    /*
+     * ZARYA_PICK_DIR — рубильник для прогонов, как и `ZARYA_STT_PICK_DIR` выше:
+     * системный диалог выбора папки не нажимается из Playwright, а проверять
+     * надо всё, что ПОСЛЕ него. Ставится только прогоном.
+     */
+    const forced = process.env.ZARYA_PICK_DIR
+    if (forced) return forced
     const win = getWindow()
     if (!win) return null
     const res = await dialog.showOpenDialog(win, { properties: ['openDirectory'] })

@@ -595,6 +595,15 @@ export interface AgentStartOpts {
   }>
   /** Working directory the agent operates in (the bound session's cwd). */
   cwd?: string
+  /**
+   * Папки СВЕРХ рабочей, куда человек разрешил агенту заходить.
+   *
+   * Это разрешение, а не удобство: за пределами `cwd` движок иначе отказывает
+   * сам, и расширять этот круг вправе только человек. Поэтому список приходит
+   * от него явно (панель разрешений), нигде не собирается по догадке и не
+   * переживает перезапуск.
+   */
+  extraDirs?: string[]
   /** Model id override; omit to use the driver's configured default. */
   model?: string
   /** Reasoning effort override (vendor vocabulary); omit for the account default. */
@@ -974,6 +983,14 @@ export interface AgentCapabilities {
    * чем не показывать.
    */
   stopTask?: boolean
+  /**
+   * Движку можно добавить рабочую папку сверх `cwd`.
+   *
+   * Где false — кнопки «добавить папку» нет вовсе. Показать её у движка,
+   * который папку проигнорирует, значит выдать разрешение, которого не будет:
+   * человек решит, что дал доступ, а агент по-прежнему получит отказ.
+   */
+  directories?: boolean
   /**
    * Движок понимает режим плана: сперва рассказать, что собирается сделать, и
    * ничего не трогать до согласия.

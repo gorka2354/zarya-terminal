@@ -101,6 +101,18 @@ export interface AgentDriver {
     requestId: string,
     taskId: string
   ): Promise<{ ok: boolean; error?: string; reason?: 'no-session' | 'unsupported' }>
+  /**
+   * Принять новый состав рабочих папок беседы (гейт: `capabilities.directories`).
+   *
+   * Папки — опция ЗАПУСКА, а живая сессия переживает все ходы беседы. Драйвер
+   * сам решает, как их применить: Claude Code закрывает сессию, и следующий ход
+   * поднимает её заново с теми же папками и тем же контекстом (`resume`).
+   *
+   * Сам список драйверу не передаём: он придёт со следующим `start`. Это метод
+   * «прими к сведению», а не «вот тебе значение», — иначе состав жил бы в двух
+   * местах и рано или поздно разошёлся бы.
+   */
+  applyDirectories?(requestId: string): { ok: boolean; reason?: 'busy' | 'no-session' }
   /** Переподключить один сервер живой беседы. */
   mcpReconnect?(
     requestId: string,

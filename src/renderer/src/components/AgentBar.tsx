@@ -41,6 +41,7 @@ import {
 } from '@/features/voice/devices'
 import { useContextMenu, type MenuItem } from './ContextMenu'
 import { ClaudeQuestionBar } from './ClaudeQuestionBar'
+import { PermissionsPanel } from './PermissionsPanel'
 import { launchClaudeNative } from './AiCliLauncher'
 import './agentbar.css'
 import { applyCommand, cleanCommands, commandQuery, matchCommands, type AgentCommand } from '@shared/agentCommands'
@@ -357,6 +358,9 @@ export const AgentBar = memo(function AgentBar({
   // (сырой режим, TUI) и вернуться, и набранное обязано вернуться вместе с ней.
   const [text, setText] = useState(() => paneDraft(paneSessionId))
   const [usageOpen, setUsageOpen] = useState(false)
+  /** Панель разрешений беседы — открывается правым щелчком по замку. */
+  const [permOpen, setPermOpen] = useState(false)
+  const gateBtnRef = useRef<HTMLButtonElement>(null)
   /** Кнопка топливной строки — она же открывашка панели расхода. */
   const fuelBtnRef = useRef<HTMLButtonElement>(null)
   const [voice, setVoice] = useState<'idle' | 'rec' | 'work' | 'load'>('idle')
@@ -1576,6 +1580,19 @@ ${prev}`
           anchor={fuelBtnRef.current}
         />
       )}
+      {/*
+        Что разрешено этой панели — там же, где замок, и по правому щелчку по
+        нему. Место выбрано не для экономии: разрешения принадлежат БЕСЕДЕ, у
+        соседней панели свои, и общий экран настроек говорил бы за все четыре
+        сразу. Замок — единственная точка, где эта мысль уже выражена.
+      */}
+      {permOpen && activeConv && (
+        <PermissionsPanel
+          conv={activeConv}
+          onClose={() => setPermOpen(false)}
+          anchor={gateBtnRef.current}
+        />
+      )}
       {/* One headline figure, not four readings queued on a single line. The rest
           opens on demand — see UsagePanel. */}
       {/* Топливомер общий на окно и живёт в нижней полосе: четыре одинаковых
@@ -1756,19 +1773,44 @@ ${prev}`
           </button>
         )}
         {!isShell && (
-          <button
-            className={`zy-agentbar-bypass zy-agentbar-bypass--icon${
-              gateOff ? ' zy-agentbar-bypass--on' : ''
-            }${gateEdits ? ' zy-agentbar-bypass--edits' : ''}${
-              canToggleGate ? '' : ' zy-agentbar-bypass--locked'
-            }`}
-            title={gateTitle}
-            aria-label={t(gateOff ? 'bar.autopilotAria' : gateEdits ? 'bar.editsAria' : 'bar.manualAria')}
-            disabled={!canToggleGate}
-            onClick={canToggleGate ? cycleGate : undefined}
+          /*
+           * ПРАВЫЙ ЩЕЛЧОК ПО ЗАМКУ — что уже разрешено.
+           *
+           * Замок переключает ступень «вперёд по кругу», а панель отвечает на
+           * другой вопрос: что человек нароздал раньше и как это забрать.
+           * Третьим состоянием замка это не сделать — там перебор режимов, а не
+           * открытие экрана.
+           *
+           * Обработчик на ОБЁРТКЕ, а не на кнопке: у выключенной кнопки (движок
+           * не умеет автопилот) браузер не рассылает мышиных событий вовсе, а
+           * посмотреть выданное надо и там — правила «до конца беседы» есть у
+           * любого движка.
+           */
+          <span
+            className="zy-agentbar-gate"
+            onContextMenu={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              setPermOpen((v) => !v)
+            }}
           >
-            {gateOff ? <Icon name="bolt" size={13} /> : <PixelIcon name="lock" />}
-          </button>
+            <button
+              ref={gateBtnRef}
+              className={`zy-agentbar-bypass zy-agentbar-bypass--icon${
+                gateOff ? ' zy-agentbar-bypass--on' : ''
+              }${gateEdits ? ' zy-agentbar-bypass--edits' : ''}${
+                canToggleGate ? '' : ' zy-agentbar-bypass--locked'
+              }`}
+              title={`${gateTitle}\n${t('perm.openHint')}`}
+              aria-label={t(
+                gateOff ? 'bar.autopilotAria' : gateEdits ? 'bar.editsAria' : 'bar.manualAria'
+              )}
+              disabled={!canToggleGate}
+              onClick={canToggleGate ? cycleGate : undefined}
+            >
+              {gateOff ? <Icon name="bolt" size={13} /> : <PixelIcon name="lock" />}
+            </button>
+          </span>
         )}
         {/* Dictation. While recording the button IS the indicator — the mic is
             open, and that must be visible without hunting for a status line. */}

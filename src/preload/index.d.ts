@@ -174,6 +174,14 @@ export interface ZaryaApi {
       requestId: string,
       taskId: string
     ): Promise<{ ok: boolean; error?: string; reason?: 'no-session' | 'unsupported' }>
+    /**
+     * Принять новый состав рабочих папок беседы. Сам список сюда не едет — он
+     * придёт со следующим ходом; это просьба применить его к живой сессии.
+     */
+    applyDirs(
+      engine: AgentEngine,
+      requestId: string
+    ): Promise<{ ok: boolean; reason?: 'busy' | 'no-session' | 'unsupported' }>
     mcpReconnect(
       engine: AgentEngine,
       requestId: string,

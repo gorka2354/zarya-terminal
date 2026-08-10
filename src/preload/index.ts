@@ -144,6 +144,9 @@ const api = {
     /** Остановить ОДНУ задачу движка, не обрывая ход. */
     stopTask: (engine: AgentEngine, requestId: string, taskId: string) =>
       ipcRenderer.invoke(CH.agentStopTask, engine, requestId, taskId),
+    /** Принять новый состав рабочих папок беседы (папки едут со следующим ходом). */
+    applyDirs: (engine: AgentEngine, requestId: string) =>
+      ipcRenderer.invoke(CH.agentApplyDirs, engine, requestId),
     mcpReconnect: (engine: AgentEngine, requestId: string, name: string) =>
       ipcRenderer.invoke(CH.agentMcpReconnect, engine, requestId, name),
     mcpToggle: (engine: AgentEngine, requestId: string, name: string, enabled: boolean) =>

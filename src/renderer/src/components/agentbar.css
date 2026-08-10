@@ -694,3 +694,151 @@
   outline: 1px dashed var(--accent-2);
   outline-offset: 2px;
 }
+
+/* Панель разрешений (inc-28) ------------------------------------------- */
+/* Рамка, тень и заголовок — те же, что у панели расхода: это две панели одного
+   рода, и разный вид говорил бы, будто они про разное по существу. */
+.zy-agentbar-gate {
+  display: inline-flex;
+}
+.zy-perm-panel {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 12px;
+  z-index: 40;
+  width: min(460px, calc(100vw - 40px));
+  max-height: 60vh;
+  overflow: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elev1);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
+}
+.zy-perm-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-family: var(--font-ui);
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--fg-faint);
+}
+.zy-perm-sub {
+  margin-left: auto;
+  font-family: var(--font-tech);
+  letter-spacing: 0.06em;
+  color: var(--accent-2);
+  text-transform: none;
+}
+/* Оговорка о том, чего ступень не покрывает: читается, но не кричит. */
+.zy-perm-note {
+  margin-bottom: 10px;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--fg-faint);
+}
+.zy-perm-note--said {
+  margin: 8px 0 0;
+  color: var(--accent-2);
+}
+.zy-perm-section + .zy-perm-section {
+  margin-top: 12px;
+}
+.zy-perm-label {
+  margin-bottom: 5px;
+  font-family: var(--font-tech);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--fg-dim);
+}
+.zy-perm-empty {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  color: var(--fg-faint);
+}
+.zy-perm-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.zy-perm-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  border-top: 1px solid var(--border);
+  min-width: 0;
+}
+.zy-perm-item:first-child {
+  border-top: none;
+}
+.zy-perm-tool {
+  flex-shrink: 0;
+  font-family: var(--font-tech);
+  font-size: 12px;
+  color: var(--accent);
+}
+/* Правило и путь — ДОСЛОВНО и с переносом: то, что показано многоточием,
+   отзывают вслепую. */
+.zy-perm-cmd,
+.zy-perm-dir {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg-dim);
+  overflow-wrap: anywhere;
+}
+.zy-perm-base {
+  flex-shrink: 0;
+  font-family: var(--font-tech);
+  font-size: 11px;
+  color: var(--fg-faint);
+}
+.zy-perm-revoke {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 3px;
+  background: transparent;
+  font-family: var(--font-tech);
+  font-size: 11px;
+  color: var(--fg-dim);
+  cursor: pointer;
+}
+.zy-perm-revoke:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.zy-perm-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 8px;
+  padding: 3px 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: 3px;
+  background: transparent;
+  font-family: var(--font-tech);
+  font-size: 11px;
+  color: var(--fg-dim);
+  cursor: pointer;
+}
+.zy-perm-add:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.zy-perm-add:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.zy-perm-hint {
+  margin-left: 8px;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  color: var(--fg-faint);
+}

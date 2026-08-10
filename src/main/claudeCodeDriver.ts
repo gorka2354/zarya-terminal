@@ -545,6 +545,8 @@ export class ClaudeCodeDriver implements AgentDriver {
     stopTask: true,
     // permissionMode: 'plan' в опциях запуска + setPermissionMode на ходу.
     planMode: true,
+    // additionalDirectories в опциях запуска: папку сверх рабочей можно выдать.
+    directories: true,
     vendorFlags: [{ key: 'ultracode', label: 'ULTRACODE', desc: tm('drv.ultracode') }]
   }
   private sessions = new Map<string, Session>()
@@ -835,6 +837,16 @@ export class ClaudeCodeDriver implements AgentDriver {
         : { resume: opts.resume }
     const options: Options = {
       cwd: opts.cwd,
+      /*
+       * Папки сверх рабочей — РАЗРЕШЕНИЕ, выданное человеком в панели допуска.
+       *
+       * Кладём в собственное поле опций, а не в слой настроек через
+       * `applyFlagSettings`: тот слой стоит ВЫШЕ пользовательских и проектных
+       * настроек, и наш объект `permissions` мог бы заслонить чужие правила
+       * `deny`. Расширяя доступ, молча снять чужой запрет — худшее, что тут
+       * можно сделать.
+       */
+      ...(opts.extraDirs?.length ? { additionalDirectories: opts.extraDirs } : {}),
       abortController: abort,
       canUseTool,
       // Always 'default' (or acceptEdits/plan) — never 'bypassPermissions'. Bypass
@@ -2328,6 +2340,32 @@ export class ClaudeCodeDriver implements AgentDriver {
       session.abort.abort()
       session.input.close()
     }
+  }
+
+  /**
+   * Применить новый состав рабочих папок к БЕСЕДЕ.
+   *
+   * Папки задаются опцией запуска, а живая сессия переживает все ходы беседы:
+   * поменять её опции на лету нечем. Поэтому сессию закрываем — следующий ход
+   * поднимет её заново, уже с новыми папками, и продолжит ту же беседу по
+   * `resume` (тот же путь, что после перезапуска приложения).
+   *
+   * Только когда ход НЕ идёт. Оборвать работу ради расширения доступа —
+   * обменять сделанное на удобство, и человек этого не просил; окно кнопку в
+   * такой момент и не показывает, но проверка стоит и здесь: путь к действию не
+   * один.
+   */
+  applyDirectories(requestId: string): { ok: boolean; reason?: 'busy' | 'no-session' } {
+    const session = this.sessions.get(requestId)
+    if (!session) return { ok: true, reason: 'no-session' }
+    if (session.perms.size > 0) return { ok: false, reason: 'busy' }
+    // Помечаем прерванной, чтобы закрытие не приехало на экран ошибкой: сессию
+    // гасим мы, и это не сбой хода.
+    session.interrupted = true
+    session.abort.abort()
+    session.input.close()
+    this.sessions.delete(requestId)
+    return { ok: true }
   }
 
   /** List past Claude Code sessions for a folder (for the resume picker). */
