@@ -164,6 +164,13 @@ interface SessionsState {
   refreshSavedList: () => Promise<void>
   toggleFlag: (savedId: string, flag: 'pinned' | 'favorite') => Promise<void>
   renameSession: (sessionId: string, title: string) => Promise<void>
+  /**
+   * Программа подписала вкладку сама (`OSC 0`/`2`): `ssh prod`, `vim файл`,
+   * `htop`. Не то же, что `renameSession`: имя человека всегда сильнее и на
+   * диск это не пишется — это заявление живущей программы, а не свойство
+   * сессии.
+   */
+  setProgramTitle: (sessionId: string, title: string) => void
   deleteSaved: (savedId: string) => Promise<void>
   updateCwd: (sessionId: string, cwd: string) => void
   snapshotSession: (sessionId: string) => Promise<void>
@@ -848,6 +855,26 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
       await get().refreshSavedList()
     },
 
+    setProgramTitle: (sessionId, title) => {
+      const cur = get().sessions[sessionId]
+      if (!cur) return
+      /*
+       * Имя, данное ЧЕЛОВЕКОМ, не трогаем никогда.
+       *
+       * Он переименовал вкладку, потому что ему так удобнее; программа, которая
+       * это перебьёт, отнимет у него то, что он сделал руками, и он даже не
+       * поймёт, кто виноват.
+       */
+      if (cur.customTitle) return
+      const clean = title.trim()
+      if (!clean || clean === cur.title) return
+      setPartial((s) => ({
+        // `customTitle` остаётся ложным: это НЕ выбор человека, и смена папки
+        // вправе вернуть подпись к имени каталога.
+        sessions: { ...s.sessions, [sessionId]: { ...cur, title: clean } }
+      }))
+    },
+
     renameSession: async (sessionId, title) => {
       const runtime = get().sessions[sessionId]
       if (runtime) {
@@ -959,6 +986,20 @@ if (typeof window !== 'undefined') {
    * многопанельным прогонам: «шелл ответил» проверяется тем, что он ОТВЕТИЛ, а
    * адресат клавиш — тем, что фокус переставили явно, а не догадкой.
    */
+  /**
+   * Скормить панели сырую последовательность — так это делает программа.
+   *
+   * Нужно прогонам заголовка (`OSC 0`/`2`) и прочих последовательностей:
+   * заставить настоящую программу их прислать нельзя, а проверять разбор надо
+   * на том же пути, по которому идёт вывод оболочки.
+   */
+  ;(
+    window as unknown as { __zaryaFeedTerm?: (sessionId: string, data: string) => void }
+  ).__zaryaFeedTerm = (sessionId, data) => getTerminal(sessionId)?.write(data)
+  ;(
+    window as unknown as { __zaryaRenameSession?: (sessionId: string, title: string) => void }
+  ).__zaryaRenameSession = (sessionId, title) =>
+    void useSessionsStore.getState().renameSession(sessionId, title)
   ;(window as unknown as { __zaryaTermText?: (sessionId: string) => string }).__zaryaTermText = (
     sessionId
   ) => getTerminal(sessionId)?.serialize(200) ?? ''

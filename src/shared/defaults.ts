@@ -108,7 +108,10 @@ export const DEFAULT_SETTINGS: Settings = {
     collapsed: ['recent']
   },
   notifications: {
-    whenWaiting: true
+    whenWaiting: true,
+    // Включено: ожидание готового ответа уже происходит и без нас, человек
+    // просто о нём не знает.
+    whenLongDone: true
   },
   editor: {
     fontSize: 13,

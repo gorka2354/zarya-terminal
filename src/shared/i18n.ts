@@ -784,6 +784,15 @@ export const RU: Dict = {
   'fact.edit.diff': '+{plus} −{minus}',
   'fact.edit.userModified': 'предложенную правку поправил человек',
 
+  // --- долгая команда докладывает (inc-31)
+  'set.notifyLongDone': 'Звать, когда долгая команда закончилась',
+  'set.notifyLongDoneDesc':
+    'Только если окно не в фокусе и команда шла дольше полуминуты. Короткие не тревожат.',
+  'notify.doneTitle': 'Готово · {pane}',
+  'notify.failTitle': 'Упало · {pane}',
+  'notify.doneBody': '{cmd} — за {sec} с',
+  'notify.doneBodyCode': '{cmd} — за {sec} с, код {code}',
+
   // --- запуск из папки (inc-30)
   'cli.noFolder': 'Папку «{path}» открыть нечем — её нет или к ней нет доступа',
 
@@ -2553,6 +2562,15 @@ export const EN: Dict = {
   'fact.grep.limited': 'at most {n} shown — the rest was cut',
   'fact.edit.diff': '+{plus} −{minus}',
   'fact.edit.userModified': 'the proposed edit was changed by a human',
+
+  // --- a long command reports back (inc-31)
+  'set.notifyLongDone': 'Call me when a long command finishes',
+  'set.notifyLongDoneDesc':
+    'Only when the window is not focused and the command ran longer than half a minute. Short ones stay quiet.',
+  'notify.doneTitle': 'Done · {pane}',
+  'notify.failTitle': 'Failed · {pane}',
+  'notify.doneBody': '{cmd} — in {sec}s',
+  'notify.doneBodyCode': '{cmd} — in {sec}s, exit {code}',
 
   // --- launched with a folder (inc-30)
   'cli.noFolder': 'Cannot open «{path}» — it does not exist or is not reachable',

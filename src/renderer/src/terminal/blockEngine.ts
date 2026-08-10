@@ -19,6 +19,28 @@ type Phase = 'preamble' | 'prompt' | 'input' | 'running'
  * Protocols understood: OSC 133 (A/B/C/D), OSC 7 / 9;9 / 1337 (cwd),
  * OSC 6973;E (Zarya command line + nonce), OSC 633 (VS Code compat).
  */
+/**
+ * Заголовок от программы — чужой текст, пришедший из вывода.
+ *
+ * Управляющие знаки в подписи вкладки превращаются в мусор, а слишком длинная
+ * подпись выдавливает соседние вкладки с экрана. Ни то ни другое программа не
+ * имела в виду: она называет себя, а не переверстывает окно.
+ */
+function cleanTitle(raw: string): string {
+  /*
+   * Управляющие знаки выкидываем ПО КОДУ, а не регулярным выражением с
+   * литеральными байтами: такое выражение нечитаемо в исходнике и ломается
+   * от любой правки файла инструментом, который трогает кодировку.
+   */
+  let clean = ''
+  for (const ch of raw) {
+    const code = ch.codePointAt(0) ?? 0
+    if (code >= 0x20 && code !== 0x7f) clean += ch
+  }
+  clean = clean.trim()
+  return clean.length > 60 ? `${clean.slice(0, 60)}…` : clean
+}
+
 export class BlockEngine {
   readonly sessionId: string
   private term: Terminal
@@ -72,6 +94,22 @@ export class BlockEngine {
       }
       return false
     })
+    /*
+     * ЗАГОЛОВОК ОТ ПРОГРАММЫ: `OSC 0` (значок и заголовок) и `OSC 2` (заголовок).
+     *
+     * Так подписывают себя `ssh prod`, `vim`, `htop`, `tmux` — и до сих пор
+     * Заря это выбрасывала: четыре панели в одном проекте назывались одинаково,
+     * и какая из них та самая, человек выяснял, заглядывая в каждую.
+     *
+     * `OSC 1` (только значок) не берём: это не заголовок, и подставлять его в
+     * подпись значило бы показать не то, что имела в виду программа.
+     */
+    const titleOsc = (data: string): boolean => {
+      useSessionsStore.getState().setProgramTitle(this.sessionId, cleanTitle(data))
+      return true
+    }
+    osc(0, titleOsc)
+    osc(2, titleOsc)
     osc(1337, (data) => {
       if (data.startsWith('CurrentDir=')) {
         this.setCwd(data.slice('CurrentDir='.length))

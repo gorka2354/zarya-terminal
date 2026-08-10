@@ -320,8 +320,12 @@ export interface ZaryaApi {
     ): Promise<{ ok: boolean; text?: string; error?: string }>
   }
   app: {
-    /** Позвать человека: агент встал, а окно не в фокусе. */
-    notifyWaiting(title: string, body: string): void
+    /**
+     * Позвать человека к окну. `kind` решает, каким тумблером это гасится:
+     * `waiting` — агент ждёт решения, `done` — долгая команда закончилась.
+     * Один гейт на оба означал бы, что выключение первого гасит и второй.
+     */
+    notifyWaiting(title: string, body: string, kind?: 'waiting' | 'done'): void
     info(): Promise<AppInfo>
     windowCommand(cmd: WindowCommand): void
     onMaximized(cb: (maximized: boolean) => void): Unsub

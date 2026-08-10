@@ -1155,6 +1155,16 @@ function SessionsTab(): React.JSX.Element {
           onChange={(v) => void update({ notifications: { whenWaiting: v } as never })}
         />
       </Row>
+      <Row
+        title={t('set.notifyLongDone')}
+        sub="NOTIFY WHEN DONE"
+        desc={t('set.notifyLongDoneDesc')}
+      >
+        <Toggle
+          checked={notifications?.whenLongDone ?? true}
+          onChange={(v) => void update({ notifications: { whenLongDone: v } as never })}
+        />
+      </Row>
       <Row title={t('set.restore')} sub="RESTORE ON LAUNCH">
         <SelectField
           value={s.restoreOnLaunch}

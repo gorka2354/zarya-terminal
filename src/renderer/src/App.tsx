@@ -1,5 +1,6 @@
 import { installKeyRouter } from '@/features/ai/keyRouter'
 import { installWaitingCall } from '@/features/ai/waitingCall'
+import { installLongCommandCall } from '@/terminal/longCommandCall'
 import { t } from '@/lib/i18n'
 import { useEffect, useRef, useState } from 'react'
 import { registerCoreActions } from '@/actions/coreActions'
@@ -48,6 +49,8 @@ export default function App(): React.JSX.Element {
   useEffect(() => installKeyRouter(), [])
   // Зов к панели, которая встала: только когда окно не в фокусе (см. модуль).
   useEffect(() => installWaitingCall(), [])
+  // Зов о законченной долгой команде — по тем же правилам, что и зов агента.
+  useEffect(() => installLongCommandCall(), [])
   const [booted, setBooted] = useState(false)
   // QA-хук: открыть контекстное меню с заданными пунктами. Меню — общий
   // компонент, и его геометрия (влезает ли в окно, прокручивается ли длинный

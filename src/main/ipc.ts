@@ -231,10 +231,18 @@ export function registerIpc(ctx: IpcContext): void {
    * Клик по уведомлению поднимает окно — иначе оно сообщает о деле, к которому
    * нельзя перейти.
    */
-  ipcMain.on(CH.notifyWaiting, (_e, title: string, body: string) => {
+  /*
+   * Зов человека к окну. `kind` обязателен по существу: тумблеров теперь два —
+   * «агент ждёт решения» и «долгая команда закончилась», — и один гейт на оба
+   * означал бы, что выключение первого молча гасит второй. Настройка, которая
+   * выключает не только то, что названо, — худший вид настройки.
+   */
+  ipcMain.on(CH.notifyWaiting, (_e, title: string, body: string, kind?: string) => {
     const win = getWindow()
     if (!win || win.isFocused()) return
-    if (!settingsStore.get().notifications?.whenWaiting) return
+    const rules = settingsStore.get().notifications
+    const allowed = kind === 'done' ? rules?.whenLongDone : rules?.whenWaiting
+    if (!allowed) return
     // На Windows это мигание кнопки в панели задач, на macOS — подпрыгивание
     // иконки в доке. Снимается само, когда окно получает фокус.
     win.flashFrame(true)
