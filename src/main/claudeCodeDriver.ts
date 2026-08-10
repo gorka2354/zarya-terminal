@@ -48,6 +48,7 @@ import {
   TOOL_IMAGE_MAX_PER_RESULT,
   type ToolImage
 } from '@shared/images'
+import { partialArg } from '@shared/partialJson'
 import { toolFacts } from '@shared/toolFacts'
 import { taskDone, taskHidden, taskOutcome } from '@shared/agentTasks'
 import { foldContextParts } from '@shared/contextParts'
@@ -486,6 +487,15 @@ interface Session {
   deltaBuf?: string
   /** Таймер отдачи накопленного. */
   deltaTimer?: ReturnType<typeof setTimeout>
+  /**
+   * Вызов, аргументы которого модель печатает прямо сейчас.
+   *
+   * `index` — номер блока в ответе: у `input_json_delta` нет ни имени
+   * инструмента, ни его id, и связать кусок с началом можно только по нему.
+   */
+  typingTool?: { index: number; name: string; json: string }
+  /** Таймер отдачи печатающихся аргументов. */
+  typingTimer?: ReturnType<typeof setTimeout>
   /**
    * UUID последнего ОТВЕТА агента. Точка, с которой можно продолжить беседу, не
    * взяв в контекст то, что было после неё, — см. rewindAfterInterrupt.
@@ -927,6 +937,24 @@ export class ClaudeCodeDriver implements AgentDriver {
     }, DELTA_MS)
   }
 
+  /**
+   * Аргументы вызова — той же пачкой раз в {@link DELTA_MS}, что и текст.
+   *
+   * Разбираем недописанный JSON здесь, а не в окне: наружу уходит короткая
+   * строка для человека, а не растущий кусок чужого JSON. На длинной команде
+   * это разница между двумя десятками мелких сообщений в секунду и тем же
+   * числом мегабайтных.
+   */
+  private queueTypingTool(requestId: string, session: Session): void {
+    if (session.typingTimer) return
+    session.typingTimer = setTimeout(() => {
+      session.typingTimer = undefined
+      const tt = session.typingTool
+      if (!tt) return
+      this.emit(requestId, { type: 'tool_typing', name: tt.name, preview: partialArg(tt.json) })
+    }, DELTA_MS)
+  }
+
   /** Отдать накопленное немедленно — и снять таймер, чтобы не отдать дважды. */
   private flushDelta(requestId: string, session: Session): void {
     if (session.deltaTimer) {
@@ -976,15 +1004,53 @@ export class ClaudeCodeDriver implements AgentDriver {
           case 'stream_event': {
             const p = msg as unknown as {
               parent_tool_use_id?: string | null
-              event?: { type?: string; delta?: { type?: string; text?: string } }
+              event?: {
+                type?: string
+                index?: number
+                content_block?: { type?: string; name?: string }
+                delta?: { type?: string; text?: string; partial_json?: string }
+              }
             }
             // Кусок от СУБАГЕНТА (`parent_tool_use_id` не пуст) в главный ответ
             // не идёт: его слова — не слова агента, с которым говорит человек,
             // и вперемешку они читались бы как один сбивчивый текст.
             if (p.parent_tool_use_id) break
-            if (p.event?.type !== 'content_block_delta') break
-            if (p.event.delta?.type !== 'text_delta') break
-            const chunk = p.event.delta.text
+            const ev = p.event
+            /*
+             * ВЫЗОВ, КОТОРЫЙ ЕЩЁ ПЕЧАТАЕТСЯ.
+             *
+             * Пока модель сочиняет аргументы инструмента, текста нет вовсе — и
+             * на экране оставались три точки: на длинной команде секунд по
+             * десять, неотличимо от зависания. Блок открывается здесь и назван
+             * по имени; сами аргументы приходят кусками ниже.
+             *
+             * Номер блока (`index`) — единственная связь между началом и его
+             * кусками: `input_json_delta` имени инструмента не несёт.
+             */
+            if (ev?.type === 'content_block_start' && ev.content_block?.type === 'tool_use') {
+              if (typeof ev.index === 'number') {
+                session.typingTool = { index: ev.index, name: String(ev.content_block.name ?? ''), json: '' }
+                this.emit(requestId, { type: 'tool_typing', name: session.typingTool.name, preview: '' })
+              }
+              break
+            }
+            if (ev?.type === 'content_block_stop' && session.typingTool?.index === ev.index) {
+              // Аргументы дописаны. Строку не гасим: настоящая карточка встанет
+              // на её место через миг, а мигание пустотой в этом промежутке
+              // читается как «всё пропало».
+              session.typingTool = undefined
+              break
+            }
+            if (ev?.type !== 'content_block_delta') break
+            if (ev.delta?.type === 'input_json_delta') {
+              const tt = session.typingTool
+              if (!tt || tt.index !== ev.index) break
+              tt.json += ev.delta.partial_json ?? ''
+              this.queueTypingTool(requestId, session)
+              break
+            }
+            if (ev.delta?.type !== 'text_delta') break
+            const chunk = ev.delta.text
             if (typeof chunk === 'string' && chunk) this.queueDelta(requestId, session, chunk)
             break
           }
@@ -1287,6 +1353,12 @@ export class ClaudeCodeDriver implements AgentDriver {
             // Недосланные куски — на экран ДО настоящего сообщения: иначе
             // хвост печати мигнул бы поверх уже пришедшего ответа.
             this.flushDelta(requestId, session)
+            // Печать аргументов кончилась: дальше место занимает настоящая
+            // карточка. Таймер снимаем здесь же — иначе он выстрелил бы уже
+            // после неё и вернул строку печати поверх готового вызова.
+            clearTimeout(session.typingTimer)
+            session.typingTimer = undefined
+            session.typingTool = undefined
             const content = mapAssistantContent((msg.message as { content?: unknown }).content)
             // Имя инструмента запоминаем здесь: разобранный результат придёт без
             // него, а прочитать его форму без имени нечем (см. Session.toolNames).

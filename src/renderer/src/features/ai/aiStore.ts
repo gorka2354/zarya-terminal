@@ -245,6 +245,14 @@ export interface Conversation {
    * запомнить обрывок как сказанное.
    */
   typed?: string
+  /**
+   * Вызов, аргументы которого модель печатает прямо сейчас.
+   *
+   * Как и `typed` — показ, а не история: настоящим станет блок `tool_use` в
+   * целом сообщении движка, и он же займёт это место на экране. Держать его в
+   * ленте значило бы запомнить как сделанное то, что ещё только набиралось.
+   */
+  typedTool?: { name: string; preview: string }
   agentMode: boolean
   /** True only while an ai.chat request is in flight (between dispatch and done/error). */
   streaming: boolean
@@ -982,10 +990,22 @@ export const useAiStore = create<AiState>((set, get) => {
         patchConversation(convId, (c) => ({ ...c, typed: (c.typed ?? '') + ev.text }))
         break
 
+      /*
+       * Модель печатает аргументы вызова. Строка живёт до целого сообщения —
+       * настоящая карточка встанет ровно на её место.
+       */
+      case 'tool_typing':
+        patchConversation(convId, (c) => ({
+          ...c,
+          typedTool: { name: ev.name, preview: ev.preview }
+        }))
+        break
+
       case 'assistant':
         patchConversation(convId, (c) => ({
           ...c,
           typed: undefined,
+          typedTool: undefined,
           messages: [...c.messages, { role: 'assistant', content: ev.content }]
         }))
         // Вызовы инструментов приходят ВНУТРИ ответа модели, а не отдельным
@@ -1147,6 +1167,7 @@ export const useAiStore = create<AiState>((set, get) => {
           ...c,
           streaming: false,
           typed: undefined,
+          typedTool: undefined,
           activeRequestId: undefined,
           claudeSessionId: ev.sessionId ?? c.claudeSessionId,
           // Сколько стоил разговор. Движок считает это сам и до сих пор цифра
@@ -1267,6 +1288,7 @@ export const useAiStore = create<AiState>((set, get) => {
           ...c,
           streaming: false,
           typed: undefined,
+          typedTool: undefined,
           activeRequestId: undefined,
           pendingTools: [],
           toolPulses: undefined,
@@ -1436,7 +1458,7 @@ export const useAiStore = create<AiState>((set, get) => {
         requestConv.delete(requestId)
         patchConversation(convId, (c) =>
           c.activeRequestId === requestId
-            ? { ...c, streaming: false, typed: undefined, activeRequestId: undefined }
+            ? { ...c, streaming: false, typed: undefined, typedTool: undefined, activeRequestId: undefined }
             : c
         )
         // If the finished turn contained tool calls that are already all
@@ -1450,6 +1472,7 @@ export const useAiStore = create<AiState>((set, get) => {
           ...c,
           streaming: false,
           typed: undefined,
+          typedTool: undefined,
           activeRequestId: undefined,
           pendingTools: [],
           toolPulses: undefined,
@@ -1675,6 +1698,7 @@ export const useAiStore = create<AiState>((set, get) => {
         ...c,
         streaming: false,
         typed: undefined,
+        typedTool: undefined,
         activeRequestId: undefined,
         pendingTools: [],
         toolPulses: undefined,
@@ -1716,6 +1740,7 @@ export const useAiStore = create<AiState>((set, get) => {
         messages: c.messages.slice(0, -1),
         streaming: false,
         typed: undefined,
+        typedTool: undefined,
         activeRequestId: undefined,
         pendingTools: [],
         toolPulses: undefined,

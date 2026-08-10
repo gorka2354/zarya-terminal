@@ -505,6 +505,41 @@ export class FakeAgentDriver implements AgentDriver {
         })
         this.emit(requestId, { type: 'result', isError: false, costUsd: 0.001 })
       })
+    } else if (/набор|typingtool/i.test(opts.prompt)) {
+      /*
+       * Вызов, который печатается на глазах (inc-27). Отдаём то же, что отдаёт
+       * настоящий драйвер после разбора: имя инструмента и растущее превью
+       * аргумента. Сам разбор недописанного JSON проверяется юнитами — здесь
+       * проверяется ПОКАЗ, и мешать одно с другим значит не проверить ни того
+       * ни другого.
+       */
+      const steps = ['npm ru', 'npm run bu', 'npm run build --if-']
+      steps.forEach((preview, i) =>
+        this.schedule(requestId, 300 + i * 500, () =>
+          this.emit(requestId, { type: 'tool_typing', name: 'Bash', preview })
+        )
+      )
+      // А через миг на это место встаёт настоящая карточка.
+      this.schedule(requestId, 300 + steps.length * 500 + 700, () => {
+        this.emit(requestId, {
+          type: 'assistant',
+          content: [
+            {
+              type: 'tool_use',
+              id: `${requestId}-tt1`,
+              name: 'Bash',
+              input: { command: 'npm run build --if-present' }
+            }
+          ]
+        })
+        this.emit(requestId, {
+          type: 'tool_result',
+          toolUseId: `${requestId}-tt1`,
+          content: 'fake: собрано',
+          isError: false
+        })
+        this.emit(requestId, { type: 'result', isError: false, costUsd: 0.002 })
+      })
     } else if (/факт|facts/i.test(opts.prompt)) {
       /*
        * Что инструмент сделал на самом деле (inc-27). Три вызова, у которых

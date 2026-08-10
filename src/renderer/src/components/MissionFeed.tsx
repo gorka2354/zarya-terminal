@@ -727,9 +727,29 @@ function AgentSection({
           <span className="zy-mf-caret" aria-hidden />
         </div>
       )}
+      {/*
+        Вызов, который модель печатает прямо сейчас.
+
+        До этого на его месте были три точки: текста при сочинении вызова нет
+        вовсе, и на длинной команде человек десять секунд смотрел на «отвечает»,
+        не зная, пишет агент или завис. Строка называет инструмент и показывает
+        то самое поле, которое человек потом прочтёт в карточке, — карточка
+        встанет ровно на это место.
+      */}
+      {conv.streaming && !conv.compacting && conv.typedTool && (
+        <div className="zy-mf-typing zy-mf-typing-tool">
+          <span className="zy-mf-spinner" />
+          <span className="zy-mf-typing-tool-name">{conv.typedTool.name}</span>
+          {conv.typedTool.preview && (
+            <code className="zy-mf-typing-tool-arg">{conv.typedTool.preview}</code>
+          )}
+          <span className="zy-mf-caret" aria-hidden />
+        </div>
+      )}
       {conv.streaming &&
         !conv.compacting &&
         !conv.typed &&
+        !conv.typedTool &&
         conv.messages[conv.messages.length - 1]?.role === 'user' && (
           <div className="zy-mf-typing">
             <span className="zy-mf-spinner" />
