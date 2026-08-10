@@ -21,11 +21,18 @@ export function CommandList({
   cursor,
   source,
   loading,
+  kind = 'commands',
   onPick,
   onHover
 }: {
   commands: AgentCommand[]
   cursor: number
+  /**
+   * Что в списке. Тем же органом интерфейса показываются два разных набора —
+   * команды движка и файлы под упоминание «@», — и путать их нельзя: слэш перед
+   * путём и заголовок «команды» над файлами были бы прямой неправдой.
+   */
+  kind?: 'commands' | 'files'
   /** Откуда список: «engine» — движок назвал сам, «unknown» — не назвал. */
   source: 'engine' | 'unknown'
   /** Список ещё спрашивают у движка — это не то же самое, что «команд нет». */
@@ -61,22 +68,32 @@ export function CommandList({
       title=""
     >
       <div className="zy-cmdlist-head">
-        <span className="zy-cmdlist-title">{t('cmd.title')}</span>
+        <span className="zy-cmdlist-title">{t(kind === 'files' ? 'cmd.filesTitle' : 'cmd.title')}</span>
         {/* Шапка называет источник. «Движок команд не назвал» и «команд нет» —
             разные вещи, и пустой список без этой подписи человек прочитает как
             вторую, хотя правда первая. */}
         <span className="zy-cmdlist-source">
-          {loading
-            ? t('cmd.loading')
-            : source === 'engine'
-              ? t('cmd.fromEngine', { n: commands.length })
-              : t('cmd.unknownSource')}
+          {kind === 'files'
+            ? // У файлов источник один и очевидный — папка панели. Подпись
+              // «список от движка» здесь была бы неправдой о происхождении.
+              t('cmd.filesFound', { n: commands.length })
+            : loading
+              ? t('cmd.loading')
+              : source === 'engine'
+                ? t('cmd.fromEngine', { n: commands.length })
+                : t('cmd.unknownSource')}
         </span>
       </div>
 
       {commands.length === 0 ? (
         <div className="zy-cmdlist-empty">
-          {loading ? t('cmd.loading') : source === 'engine' ? t('cmd.noMatch') : t('cmd.noList')}
+          {kind === 'files'
+            ? t('cmd.noFiles')
+            : loading
+              ? t('cmd.loading')
+              : source === 'engine'
+                ? t('cmd.noMatch')
+                : t('cmd.noList')}
         </div>
       ) : (
         <div className="zy-cmdlist-body">
@@ -95,7 +112,10 @@ export function CommandList({
                 }}
                 onMouseEnter={() => onHover(i)}
               >
-                <span className="zy-cmdlist-name">/{c.name}</span>
+                <span className="zy-cmdlist-name">
+                  {kind === 'files' ? '@' : '/'}
+                  {c.name}
+                </span>
                 {c.argumentHint && <span className="zy-cmdlist-args">{c.argumentHint}</span>}
                 <span className="zy-cmdlist-desc">{c.description}</span>
               </button>
@@ -103,11 +123,20 @@ export function CommandList({
           </div>
           {active && (
             <div className="zy-cmdlist-preview">
-              <div className="zy-cmdlist-preview-name">/{active.name}</div>
+              <div className="zy-cmdlist-preview-name">
+                {kind === 'files' ? '@' : '/'}
+                {active.name}
+              </div>
               {active.argumentHint && (
                 <div className="zy-cmdlist-preview-args">{active.argumentHint}</div>
               )}
-              <div className="zy-cmdlist-preview-desc">{active.description || t('cmd.noDesc')}</div>
+              {/* У файла описания нет и быть не может — «без описания» под путём
+                  это шум, отвечающий на незаданный вопрос. */}
+              {(kind !== 'files' || active.description) && (
+                <div className="zy-cmdlist-preview-desc">
+                  {active.description || t('cmd.noDesc')}
+                </div>
+              )}
               {!!active.aliases?.length && (
                 <div className="zy-cmdlist-preview-alias">
                   {t('cmd.aliases', { list: active.aliases.map((a) => `/${a}`).join(' · ') })}

@@ -1482,3 +1482,12 @@
 .zy-mf-turn-dot {
   opacity: 0.45;
 }
+
+/* Подсказка про отказ с объяснением: тише клавиш, но на том же ряду — жест
+   иначе необнаружим, а место для него есть только здесь. */
+.zy-mf-tool-why {
+  font-family: var(--font-tech);
+  font-size: 11px;
+  color: var(--fg-faint);
+  opacity: 0.75;
+}

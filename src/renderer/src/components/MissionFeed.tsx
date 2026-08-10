@@ -2,6 +2,7 @@ import { createContext, memo, useContext, useEffect, useMemo, useRef, useState }
 import type { AiContentPart, BlockRecord } from '@shared/types'
 import { onBus } from '@/lib/bus'
 import { currentLang, t, useLang } from '@/lib/i18n'
+import { paneDraft } from '@/state/paneDrafts'
 import { formatDuration, formatRelative, shortenPath } from '@/lib/ansi'
 import { editPreview, type EditPreview } from '@shared/editDiff'
 import { useBlocksStore } from '@/state/blocksStore'
@@ -1417,13 +1418,26 @@ const ToolCard = memo(function ToolCard({
             {t('feed.allowSession')}
           </button>
         )}
-        <button className="zy-mf-btn-deny" onClick={() => store.denyTool(conv.id, id)}>
+        <button
+          className="zy-mf-btn-deny"
+          /*
+           * Кнопка делает то же, что и Esc: набранное в строке уходит агенту
+           * объяснением отказа. Черновик читается в момент НАЖАТИЯ, а не при
+           * отрисовке: карта черновиков не рассылает подписок, и надпись,
+           * меняющаяся «иногда», врала бы чаще, чем помогала. Поэтому подпись
+           * постоянна, а про жест говорит строка подсказки ниже.
+           */
+          onClick={() => store.denyTool(conv.id, id, paneDraft(conv.sessionId).trim() || undefined)}
+        >
           {t('feed.deny')}
         </button>
         {/* Enter/Esc act on the FIRST unsettled gate, so only that card may claim
             them — otherwise a second waiting card invites a keystroke that lands
             somewhere else. */}
         {isNextGate && <span className="zy-mf-tool-kbd">Enter · Esc</span>}
+        {/* Жест, которого иначе не найти: отказ с объяснением необнаружим, если
+            о нём не сказать там, где решают. */}
+        {isNextGate && <span className="zy-mf-tool-why">{t('feed.denyHint')}</span>}
       </div>
     )
   } else {

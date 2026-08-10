@@ -387,7 +387,12 @@ interface AiState {
   /** Снять ранее выданное разрешение. */
   revokeSessionRule: (conversationId: string, rule: string) => void
   /** Deny a pending tool by id (defaults to the first unsettled one). */
-  denyTool: (conversationId?: string, toolId?: string) => void
+  /**
+   * Отклонить вызов. `reason` — то, что человек написал в строке ввода: «не так,
+   * сделай иначе». Уходит агенту вместо сухого отказа, поэтому он не пробует
+   * ровно тот же вызов ещё раз.
+   */
+  denyTool: (conversationId?: string, toolId?: string, reason?: string) => void
   /** Answer a Claude Code AskUserQuestion (maps question text -> chosen labels). */
   answerQuestion: (
     conversationId: string,
@@ -1848,7 +1853,7 @@ export const useAiStore = create<AiState>((set, get) => {
       await enqueueTool(conv.id, { id: tool.id, name: tool.name, input: tool.input })
     },
 
-    denyTool: (conversationId, toolId) => {
+    denyTool: (conversationId, toolId, reason) => {
       const conv = resolveConv(conversationId)
       if (!conv) return
       const tool = toolId
@@ -1863,7 +1868,9 @@ export const useAiStore = create<AiState>((set, get) => {
         }))
         window.zarya.agent.permission(conv.engine, conv.id, tool.id, {
           behavior: 'deny',
-          message: t('ai.denied')
+          // Слова человека — дословно. Своей формулировкой отказ снабжаем только
+          // тогда, когда сказать было нечего.
+          message: reason?.trim() || t('ai.denied')
         })
         return
       }
@@ -1878,7 +1885,7 @@ export const useAiStore = create<AiState>((set, get) => {
               {
                 type: 'tool_result',
                 toolUseId: tool.id,
-                content: t('ai.denied'),
+                content: reason?.trim() || t('ai.denied'),
                 isError: true
               }
             ]

@@ -44,6 +44,9 @@ import { ClaudeQuestionBar } from './ClaudeQuestionBar'
 import { launchClaudeNative } from './AiCliLauncher'
 import './agentbar.css'
 import { applyCommand, cleanCommands, commandQuery, matchCommands, type AgentCommand } from '@shared/agentCommands'
+import { applyMention, mentionQuery } from '@shared/mentions'
+import { fuzzyFilter } from '@/lib/fuzzy'
+import { scanFiles, type ScannedFile } from '@/features/palette/fileScan'
 import { CommandList } from './CommandList'
 import { ExtrasBar } from './ExtrasBar'
 
@@ -473,7 +476,21 @@ export const AgentBar = memo(function AgentBar({
         // 2. Висит гейт — Esc отклоняет его.
         const pendingRun = nextGate(conv)
         if (pendingRun) {
-          useAiStore.getState().denyTool(conv.id, pendingRun.id)
+          /*
+           * Отказ с объяснением — то, чего в Заре не было совсем.
+           *
+           * В консоли у отказа два вида: «нет» и «нет, и вот как надо». Без
+           * второго человек отклоняет вызов, ждёт реакции, пишет отдельным
+           * сообщением — а агент к тому времени успевает предложить ровно тот
+           * же вызов снова. Здесь объяснением служит то, что УЖЕ набрано в
+           * строке: писать некуда больше, и лишнего поля заводить незачем.
+           */
+          const reason = ref.current?.value.trim() ?? ''
+          useAiStore.getState().denyTool(conv.id, pendingRun.id, reason || undefined)
+          if (reason) {
+            setHistIdx(-1)
+            setText('')
+          }
           return true
         }
         // 3. Непустая очередь — Esc забирает СВОЮ приписку обратно в строку и НЕ
@@ -650,6 +667,13 @@ ${prev}`
   const cmdLoaded = useRef(false)
   /** Что набрано после «/» прямо сейчас; null — список закрыт. */
   const [cmdQuery, setCmdQuery] = useState<string | null>(null)
+  /*
+   * Упоминание файла через «@». Список тот же, что у «/», и клавиши те же:
+   * это продолжение набора, а не второй орган интерфейса со своими правилами.
+   */
+  const [mentionQ, setMentionQ] = useState<string | null>(null)
+  const [files, setFiles] = useState<ScannedFile[]>([])
+  const filesFor = useRef<string>('')
   /**
    * Текст в момент, когда команду ВЫБРАЛИ.
    *
@@ -659,6 +683,18 @@ ${prev}`
    * Список вернётся, как только текст изменится.
    */
   const pickedText = useRef<string | null>(null)
+
+  /*
+   * Файлы под упоминание — тем же порядком, что и в Ctrl+P (тот же обход, тот
+   * же нечёткий поиск). Показываем как «команды» с путём вместо имени: список
+   * один, и заводить второй похожий значило бы держать два разных вида для
+   * одного жеста.
+   */
+  const mentionsShown = useMemo(() => {
+    if (mentionQ === null) return []
+    const found = fuzzyFilter(mentionQ, files, (f) => f.rel, 40)
+    return found.map((f) => ({ name: f.rel, description: '' }))
+  }, [files, mentionQ])
 
   const commandsShown = useMemo(
     () => (cmdQuery === null ? [] : matchCommands(cmdList, cmdQuery)),
@@ -705,7 +741,39 @@ ${prev}`
     if (q !== null) {
       loadCommands()
       setCmdCursor(0)
+      setMentionQ(null)
+      return
     }
+    // Упоминание файла. Обход папки — лениво и один раз на панель: делать его
+    // на каждое нажатие значило бы читать диск, пока человек печатает.
+    const mq = mentionQuery(value, caret)
+    setMentionQ(mq)
+    if (mq !== null) {
+      setCmdCursor(0)
+      const cwd = activeSessionId
+        ? useSessionsStore.getState().sessions[activeSessionId]?.cwd
+        : undefined
+      if (cwd && filesFor.current !== cwd) {
+        filesFor.current = cwd
+        void scanFiles(cwd).then(setFiles).catch(() => setFiles([]))
+      }
+    }
+  }
+
+  /** Подставить путь вместо набранного «@…» и увести каретку за него. */
+  const pickMention = (path: string, el?: HTMLTextAreaElement | null): void => {
+    const caret = el?.selectionStart ?? text.length
+    const next = applyMention(text, caret, path)
+    setText(next.text)
+    setMentionQ(null)
+    pickedText.current = next.text
+    requestAnimationFrame(() => {
+      const node = el ?? ref.current
+      if (node) {
+        node.focus()
+        node.selectionStart = node.selectionEnd = next.caret
+      }
+    })
   }
 
   const pickCommand = (cmd: AgentCommand, el?: HTMLTextAreaElement | null): void => {
@@ -1417,6 +1485,17 @@ ${prev}`
           onHover={setCmdCursor}
         />
       )}
+      {mentionQ !== null && (
+        <CommandList
+          commands={mentionsShown}
+          cursor={cmdCursor}
+          source="engine"
+          loading={false}
+          kind="files"
+          onPick={(c) => pickMention(c.name, ref.current)}
+          onHover={setCmdCursor}
+        />
+      )}
       {usageOpen && (
         <UsagePanel
           usage={showFuel ? claudeStatus.usage : undefined}
@@ -1734,6 +1813,30 @@ ${prev}`
              * не список, а историю — то есть регрессию искали бы совсем в
              * другом месте.
              */
+            if (mentionQ !== null && mentionsShown.length) {
+              if (e.key === 'ArrowDown') {
+                e.preventDefault()
+                setCmdCursor((i) => (i + 1) % mentionsShown.length)
+                return
+              }
+              if (e.key === 'ArrowUp') {
+                e.preventDefault()
+                setCmdCursor((i) => (i - 1 + mentionsShown.length) % mentionsShown.length)
+                return
+              }
+              if (e.key === 'Enter' || e.key === 'Tab') {
+                e.preventDefault()
+                pickMention(mentionsShown[cmdCursor].name, e.currentTarget as HTMLTextAreaElement)
+                return
+              }
+              if (e.key === 'Escape') {
+                // Как и у «/»: Esc убирает подсказку, а не стирает набранное.
+                e.preventDefault()
+                e.stopPropagation()
+                setMentionQ(null)
+                return
+              }
+            }
             if (cmdQuery !== null && commandsShown.length) {
               if (e.key === 'ArrowDown') {
                 e.preventDefault()

@@ -1,56 +1,11 @@
 import { t } from '@/lib/i18n'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { DirEntry } from '@shared/types'
 import { fuzzyFilter } from '@/lib/fuzzy'
+import { scanFiles, type ScannedFile } from './fileScan'
 import { openFileInEditor } from '@/features/editor/editorBridge'
 import { useSessionsStore } from '@/state/sessionsStore'
 import { useUiStore } from '@/state/uiStore'
 import './palette.css'
-
-const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'out', 'release'])
-const MAX_DEPTH = 4
-const MAX_FILES = 3000
-
-interface ScannedFile {
-  /** Absolute path. */
-  path: string
-  /** Relative to the scan root, forward-slash separated. */
-  rel: string
-  name: string
-}
-
-function toRel(root: string, full: string): string {
-  let rel = full.startsWith(root) ? full.slice(root.length) : full
-  rel = rel.replace(/^[\\/]+/, '')
-  return rel.replace(/\\/g, '/')
-}
-
-async function scanFiles(root: string): Promise<ScannedFile[]> {
-  const files: ScannedFile[] = []
-  let level: string[] = [root]
-  let depth = 0
-  while (level.length && depth < MAX_DEPTH && files.length < MAX_FILES) {
-    const nextLevel: string[] = []
-    const results = await Promise.all(
-      level.map((dir) => window.zarya.fs.readDir(dir).catch(() => [] as DirEntry[]))
-    )
-    for (const entries of results) {
-      for (const entry of entries) {
-        if (files.length >= MAX_FILES) break
-        if (entry.isDir) {
-          if (SKIP_DIRS.has(entry.name)) continue
-          nextLevel.push(entry.path)
-        } else {
-          const rel = toRel(root, entry.path)
-          files.push({ path: entry.path, rel, name: entry.name })
-        }
-      }
-    }
-    level = nextLevel
-    depth++
-  }
-  return files
-}
 
 /**
  * Quick-open (Ctrl+P): fuzzy file finder rooted at the active session's cwd.
