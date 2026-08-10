@@ -49,6 +49,15 @@ export class FakeAgentDriver implements AgentDriver {
    */
   /** Запросы, чей инструмент должен работать долго (прогон смотрит на «выполняется»). */
   private slowTools = new Set<string>()
+  /**
+   * Гейты, которые ещё ждут решения человека, по requestId.
+   *
+   * Нужны не самому фейку, а честности его ответов: настоящий драйвер
+   * отказывается менять состав рабочих папок, пока висит невыясненный вопрос, и
+   * фейк обязан отказывать по тому же поводу — иначе прогон проходит по
+   * короткому пути и не проверяет откат.
+   */
+  private pendingGates = new Map<string, Set<string>>()
   /** Режим разрешений, установленный на ходу. Прогон читает его через debugFlags. */
   private modes = new Map<string, 'plan' | 'default'>()
   private sessions = new Map<
@@ -73,6 +82,13 @@ export class FakeAgentDriver implements AgentDriver {
   }
 
   private emit(requestId: string, ev: AgentStreamEvent): void {
+    // Учёт нерешённых гейтов — здесь, а не в каждой ветке сценария: веток
+    // много, и забытая в одной сделала бы ответ про занятость случайным.
+    if (ev.type === 'permission') {
+      const set = this.pendingGates.get(requestId) ?? new Set<string>()
+      set.add(ev.toolUseId)
+      this.pendingGates.set(requestId, set)
+    }
     this.getWindow()?.webContents.send(CH.agentStream, requestId, this.engine, ev)
   }
 
@@ -505,7 +521,14 @@ export class FakeAgentDriver implements AgentDriver {
         })
         this.emit(requestId, { type: 'result', isError: false, costUsd: 0.001 })
       })
-    } else if (/набор|typingtool/i.test(opts.prompt)) {
+    /*
+     * Английское слово выбрано так, чтобы не попасть под чужой регэксп: ветки
+     * разбираются по порядку, и `/печат|typing/` выше перехватила бы любое
+     * «typing…». Первым совпадением тут выигрывает не более точная ветка, а
+     * более ранняя — так уже терялся один сценарий, и заметно это только по
+     * тому, что прогон проверяет не то, что думает.
+     */
+    } else if (/набор|argstream/i.test(opts.prompt)) {
       /*
        * Вызов, который печатается на глазах (inc-27). Отдаём то же, что отдаёт
        * настоящий драйвер после разбора: имя инструмента и растущее превью
@@ -854,6 +877,7 @@ export class FakeAgentDriver implements AgentDriver {
   }
 
   resolvePermission(requestId: string, toolUseId: string, decision: AgentPermissionDecision): void {
+    this.pendingGates.get(requestId)?.delete(toolUseId)
     // «slow» в запросе — инструмент, который ДОЛГО работает. Настоящая команда
     // агента (клонирование, установка пакетов) идёт секунды и минуты, и всё,
     // что показывает лента в это время, проверить на мгновенном ответе нельзя:
@@ -1101,6 +1125,27 @@ export class FakeAgentDriver implements AgentDriver {
     this.schedule(requestId, 400, () =>
       this.emit(requestId, { type: 'subagent', taskId, phase: 'done', status: 'stopped' })
     )
+    return { ok: true }
+  }
+
+  /**
+   * Принять новый состав рабочих папок (inc-28).
+   *
+   * Настоящий драйвер закрывает живую сессию, чтобы следующий ход поднял её с
+   * новыми папками. Фейку закрывать нечего — но отвечать он обязан ТЕМИ ЖЕ
+   * исходами: окно читает ответ и откатывает список, если движок отказал, и
+   * прогон должен пройти по тому же пути, а не по укороченному.
+   */
+  applyDirectories(requestId: string): { ok: boolean; reason?: 'busy' | 'no-session' } {
+    if (!this.started.has(requestId)) return { ok: true, reason: 'no-session' }
+    /*
+     * «Занято» у настоящего драйвера — нерешённый гейт: закрывать сессию, пока
+     * человек не ответил, значило бы выбросить его вопрос. Фейк меряет тем же:
+     * гейт он держит, пока прогон не нажмёт.
+     */
+    // Именно НЕПУСТОЙ набор: решённый гейт оставляет по себе пустое множество,
+    // и проверка на его наличие объявляла бы занятой уже свободную беседу.
+    if ((this.pendingGates.get(requestId)?.size ?? 0) > 0) return { ok: false, reason: 'busy' }
     return { ok: true }
   }
 

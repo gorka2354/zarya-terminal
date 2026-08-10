@@ -37,7 +37,7 @@ import { useContextMenu, type MenuItem } from './ContextMenu'
 import logoZarya from '@/assets/logo-zarya-64.png'
 import './missionfeed.css'
 import { ruleFor } from '@shared/allowRules'
-import { pulseSilence } from '@shared/toolPulse'
+import { pulseAlive, pulseSilence } from '@shared/toolPulse'
 import type { ToolImage } from '@shared/images'
 import type { ToolFact } from '@shared/toolFacts'
 
@@ -1125,12 +1125,22 @@ const AgentMessage = memo(function AgentMessage({
  * день её записи. Незнакомый ключ пропускаем молча — новая версия движка не
  * должна выводить в ленту служебное имя факта.
  */
+/**
+ * Факты, для которых у словаря ЕСТЬ фраза.
+ *
+ * Словарь отдаёт сам ключ, когда фразы нет: так дыру видно глазами, но в ленте
+ * это выглядело бы как «fact.bash.timeout» на месте объяснения. Отбор нужен в
+ * двух местах сразу — здесь и там, где решается пометка «итог неполный»:
+ * жёлтый восклицательный знак без единого слова под ним пугает, ничего не
+ * сообщая.
+ */
+function knownFacts(facts?: ToolFact[]): ToolFact[] {
+  return (facts ?? []).filter((f) => t(f.key, f.vars) !== f.key)
+}
+
 function ToolFacts({ facts }: { facts?: ToolFact[] }): React.JSX.Element | null {
   useLang()
-  if (!facts?.length) return null
-  // Словарь отдаёт сам ключ, когда фразы для него нет. Так дыру видно глазами —
-  // но в ленте это выглядело бы как «fact.bash.timeout» на месте объяснения.
-  const known = facts.filter((f) => t(f.key, f.vars) !== f.key)
+  const known = knownFacts(facts)
   if (!known.length) return null
   return (
     <div className="zy-mf-tool-facts">
@@ -1160,16 +1170,20 @@ function ToolFacts({ facts }: { facts?: ToolFact[] }): React.JSX.Element | null 
 function ToolImages({
   images,
   count,
-  skipped
+  skipped,
+  overflow
 }: {
   images?: ToolImage[]
   /** Сколько картинок было по данным сообщения — переживает перезапуск. */
   count?: number
+  /** Отклонены форматом или размером. */
   skipped?: number
+  /** Не поместились числом — другая причина, и слова другие. */
+  overflow?: number
 }): React.JSX.Element | null {
   useLang()
   const gone = !images?.length && !!count
-  if (!images?.length && !count && !skipped) return null
+  if (!images?.length && !count && !skipped && !overflow) return null
   return (
     <div className="zy-mf-tool-imgs">
       {images?.map((img, i) => (
@@ -1187,6 +1201,9 @@ function ToolImages({
       {gone && <div className="zy-mf-tool-imgs-gone">{t('feed.toolImagesGone', { n: count })}</div>}
       {!!skipped && (
         <div className="zy-mf-tool-imgs-gone">{t('feed.toolImagesSkipped', { n: skipped })}</div>
+      )}
+      {!!overflow && (
+        <div className="zy-mf-tool-imgs-gone">{t('feed.toolImagesOverflow', { n: overflow })}</div>
       )}
     </div>
   )
@@ -1582,13 +1599,16 @@ const ToolCard = memo(function ToolCard({
         <ToolOutcome
           content={result.content}
           isError={!!result.isError}
-          incomplete={result.facts?.some((f) => f.level === 'warn')}
+          // Только по фактам, которые БУДУТ показаны: пометка «!» без строки
+          // под ней сообщает тревогу и не сообщает причину.
+          incomplete={knownFacts(result.facts).some((f) => f.level === 'warn')}
         />
         <ToolFacts facts={result.facts} />
         <ToolImages
           images={conv.toolImages?.[id]}
           count={result.images}
           skipped={result.imagesSkipped}
+          overflow={result.imagesOverflow}
         />
       </>
     )
@@ -1696,7 +1716,9 @@ const ToolCard = memo(function ToolCard({
         {startedAt && (
           <span className="zy-mf-tool-elapsed">· {fmtElapsed(Date.now() - startedAt)}</span>
         )}
-        {pulse && !quiet && (
+        {/* Точка — только пока пульс СВЕЖИЙ. Один давний удар горел бы зелёным
+            часами, утверждая жизнь там, где судить о ней нечем. */}
+        {pulseAlive(pulse, Date.now()) && (
           <span className="zy-mf-tool-beat" title={t('feed.pulseAlive')} aria-label={t('feed.pulseAlive')} />
         )}
         {quiet != null && (

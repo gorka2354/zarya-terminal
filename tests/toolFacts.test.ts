@@ -131,18 +131,68 @@ describe('Glob и Grep — всё ли показано', () => {
   })
 })
 
-describe('Правка — что вышло на диске, а не что просили', () => {
-  it('размер правки берётся из ответа движка', () => {
-    const f = toolFacts('Edit', { gitDiff: { additions: 4, deletions: 2 } })
-    expect(f).toEqual([{ key: 'fact.edit.diff', vars: { plus: 4, minus: 2 }, level: 'info' }])
+describe('Правка — размер ЭТОЙ правки, а не всего файла', () => {
+  const patch = (lines: string[]): unknown => ({
+    structuredPatch: [{ oldStart: 1, oldLines: 3, newStart: 1, newLines: 4, lines }]
   })
 
-  it('половина цифр — не цифры: молчим', () => {
-    expect(toolFacts('Edit', { gitDiff: { additions: 4 } })).toEqual([])
+  it('считаем по строкам патча', () => {
+    const f = toolFacts('Edit', patch([' keep', '-was', '+now', '+extra']))
+    expect(f).toEqual([{ key: 'fact.edit.diff', vars: { plus: 2, minus: 1 }, level: 'info' }])
   })
 
-  it('файл изменили снаружи — это предупреждение, а не деталь', () => {
+  it('несколько кусков складываются', () => {
+    const f = toolFacts('Edit', {
+      structuredPatch: [
+        { lines: ['+a', '-b'] },
+        { lines: ['+c', '+d', '-e'] }
+      ]
+    })
+    expect(f[0].vars).toEqual({ plus: 3, minus: 2 })
+  })
+
+  it('gitDiff НЕ берём: там дифф всего файла против гита, а не этой правки', () => {
+    /*
+     * Соблазн выглядит готовым ответом: `additions`/`deletions` лежат рядом. Но
+     * это сумма всех правок файла за сессию, а у нового файла — весь файл
+     * целиком. Подписать это под одной карточкой значило бы приписать одной
+     * правке чужую работу.
+     */
+    expect(toolFacts('Edit', { gitDiff: { additions: 400, deletions: 120 } })).toEqual([])
+  })
+
+  it('правка, ничего не изменившая, молчит', () => {
+    expect(toolFacts('Edit', patch([' keep', ' same']))).toEqual([])
+  })
+
+  it('человек поправил предложение агента — справка, а не тревога', () => {
+    // В типах SDK это поле названо дословно: «Whether the user modified the
+    // proposed changes». Не «файл изменился снаружи» — прежняя формулировка
+    // сочиняла гонку, которой не было.
     const f = toolFacts('Write', { userModified: true })
-    expect(f).toEqual([{ key: 'fact.edit.userModified', level: 'warn' }])
+    expect(f).toEqual([{ key: 'fact.edit.userModified', level: 'info' }])
+  })
+})
+
+describe('Таймаут и фон — одна новость, а не две противоречивых', () => {
+  it('истекло время И ушло в фон: сказано одной строкой', () => {
+    const f = toolFacts('Bash', {
+      interrupted: true,
+      timedOutAfterMs: 120_000,
+      backgroundTaskId: 'bg-7'
+    })
+    // Иначе карточка говорила «оборвано по времени» и следом «работает
+    // дальше» — два взаимоисключающих утверждения подряд.
+    expect(f).toEqual([
+      { key: 'fact.bash.timeoutBackground', vars: { sec: 120 }, level: 'warn' }
+    ])
+  })
+
+  it('только таймаут — прежняя строка', () => {
+    expect(keys(toolFacts('Bash', { timedOutAfterMs: 30_000 }))).toEqual(['fact.bash.timeout'])
+  })
+
+  it('только фон — прежняя строка', () => {
+    expect(keys(toolFacts('Bash', { backgroundTaskId: 'bg-1' }))).toEqual(['fact.bash.background'])
   })
 })

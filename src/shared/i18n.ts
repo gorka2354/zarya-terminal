@@ -751,11 +751,13 @@ export const RU: Dict = {
   'feed.toolImage': 'картинка от инструмента №{n}',
   'feed.toolImagesGone': 'картинок от инструмента: {n} — в беседе они не сохраняются',
   'feed.toolImagesSkipped': 'не показано картинок: {n} — не тот формат или слишком велики',
+  'feed.toolImagesOverflow': 'ещё картинок: {n} — за один вызов показываем не больше четырёх',
   'feed.kb': '{n} КБ',
   'feed.mb': '{n} МБ',
 
   // --- что инструмент сделал на самом деле (см. @shared/toolFacts)
   'fact.bash.timeout': 'оборвано по времени через {sec} с',
+  'fact.bash.timeoutBackground': 'истекло {sec} с — команда ушла в фон и работает дальше',
   'fact.bash.interrupted': 'команда прервана — вывод неполный',
   'fact.bash.background': 'ушла в фон и работает дальше',
   'fact.read.part': 'прочитано строк: {n} из {total}',
@@ -768,7 +770,7 @@ export const RU: Dict = {
   'fact.grep.files': 'файлов с совпадениями: {n}',
   'fact.grep.limited': 'показано не больше {n} — остальное отсечено',
   'fact.edit.diff': '+{plus} −{minus}',
-  'fact.edit.userModified': 'файл изменён снаружи — правка легла не на то, что читал агент',
+  'fact.edit.userModified': 'предложенную правку поправил человек',
 
   // --- панель разрешений (inc-28)
   'perm.title': 'ЧТО РАЗРЕШЕНО',
@@ -2466,11 +2468,13 @@ export const EN: Dict = {
   'feed.toolImage': 'tool image #{n}',
   'feed.toolImagesGone': 'images from the tool: {n} — they are not kept in the conversation',
   'feed.toolImagesSkipped': 'images not shown: {n} — wrong format or too large',
+  'feed.toolImagesOverflow': 'more images: {n} — at most four per call are shown',
   'feed.kb': '{n} KB',
   'feed.mb': '{n} MB',
 
   // --- what the tool actually did (see @shared/toolFacts)
   'fact.bash.timeout': 'cut off after {sec}s',
+  'fact.bash.timeoutBackground': '{sec}s elapsed — the command moved to the background and keeps running',
   'fact.bash.interrupted': 'command interrupted — output is incomplete',
   'fact.bash.background': 'moved to the background and still running',
   'fact.read.part': 'lines read: {n} of {total}',
@@ -2483,7 +2487,7 @@ export const EN: Dict = {
   'fact.grep.files': 'files with matches: {n}',
   'fact.grep.limited': 'at most {n} shown — the rest was cut',
   'fact.edit.diff': '+{plus} −{minus}',
-  'fact.edit.userModified': 'file changed outside — the edit landed on different content than the agent read',
+  'fact.edit.userModified': 'the proposed edit was changed by a human',
 
   // --- permissions panel (inc-28)
   'perm.title': 'WHAT IS ALLOWED',

@@ -1147,6 +1147,7 @@ export const useAiStore = create<AiState>((set, get) => {
                   isError: ev.isError,
                   images: ev.images?.length || undefined,
                   imagesSkipped: ev.imagesSkipped,
+                  imagesOverflow: ev.imagesOverflow,
                   facts: ev.facts
                 }
               ]
@@ -1194,6 +1195,15 @@ export const useAiStore = create<AiState>((set, get) => {
           typed: undefined,
           typedTool: undefined,
           activeRequestId: undefined,
+          /*
+           * Пульс живёт только внутри хода.
+           *
+           * Вызов, чей результат так и не пришёл (ход оборвался, движок забыл
+           * инструмент), оставлял по себе запись — и его карточка тикала
+           * секундомером вечно, а через час говорила «пульса нет 58 мин» о
+           * законченном ходе. Это не наблюдение, а бормотание задним числом.
+           */
+          toolPulses: undefined,
           claudeSessionId: ev.sessionId ?? c.claudeSessionId,
           // Сколько стоил разговор. Движок считает это сам и до сих пор цифра
           // выбрасывалась; копим по БЕСЕДЕ, потому что «сколько стоило» человек
@@ -1959,7 +1969,22 @@ export const useAiStore = create<AiState>((set, get) => {
         ...c,
         extraDirs: [...(c.extraDirs ?? []), dir]
       }))
-      await window.zarya.agent.applyDirs(now.engine, conversationId)
+      /*
+       * Ответ драйвера читаем, а не выбрасываем.
+       *
+       * У драйвера своя, последняя проверка занятости, и между нашей и его
+       * успевает начаться ход. Оставить папку в списке после его отказа значило
+       * бы показать выданное разрешение, которого движок не получил, — и сказать
+       * «со следующего хода не спросят» там, где спросят.
+       */
+      const applied = await window.zarya.agent.applyDirs(now.engine, conversationId)
+      if (!applied?.ok) {
+        patchConversation(conversationId, (c) => ({
+          ...c,
+          extraDirs: (c.extraDirs ?? []).filter((d) => d !== dir)
+        }))
+        return { ok: false, dir, reason: applied?.reason === 'busy' ? 'busy' : 'no-engine' }
+      }
       return { ok: true, dir }
     },
 
@@ -1971,12 +1996,16 @@ export const useAiStore = create<AiState>((set, get) => {
         extraDirs: (c.extraDirs ?? []).filter((d) => d !== dir)
       }))
       /*
-       * Отзыв не ждёт покоя, в отличие от выдачи. Забрать доступ, пока агент
-       * работает, — законное желание: ждать конца хода, чтобы отменить лишнее
-       * разрешение, значит откладывать ровно то, что делают в спешке. Живая
-       * сессия при этом папку сохранит до конца хода — движку её состав задан
-       * при запуске, — и окно об этом говорит прямо.
+       * Отзыв не ждёт покоя, в отличие от выдачи: забрать лишнее разрешение
+       * хотят немедленно, и заставлять ждать конца хода здесь неправильно.
+       *
+       * Но и ОБОРВАТЬ ход ради этого нельзя. Живой сессии состав папок задан при
+       * запуске, и снять его можно только закрыв её — то есть убив работу,
+       * которую человек не просил убивать. Поэтому пока ход идёт, драйвера не
+       * трогаем: из списка папка ушла, а движок доработает с ней и потеряет её
+       * со следующего хода. Ровно это и написано в подсказке кнопки.
        */
+      if (isConversationBusy(conv)) return
       await window.zarya.agent.applyDirs(conv.engine, conversationId)
     },
 

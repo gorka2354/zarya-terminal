@@ -173,6 +173,51 @@ try {
   )
   ok('доступ к папке забирается обратно', after.length === 0, after)
 
+  console.log('\n[5] Пока висит вопрос — папку не добавить, и список не врёт')
+  /*
+   * Самая опасная ветка: окно уже положило папку в список, а драйвер отказал.
+   * Оставить её там значило бы показать выданное разрешение, которого движок не
+   * получил. Гейт держим нерешённым — драйвер обязан отказать по нему.
+   */
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(200)
+  await page.evaluate((cid) => window.__zaryaSendIn?.(cid, 'tool once more'), convId)
+  await page.waitForTimeout(1600)
+  await openPanel(page)
+  const addBtn = await page.$('.zy-perm-add')
+  ok('кнопка есть, но выключена на время хода', addBtn !== null, !!addBtn)
+  const disabled = await page.evaluate(
+    () => document.querySelector('.zy-perm-add')?.disabled ?? null
+  )
+  ok('и это видно, а не выясняется нажатием', disabled === true, disabled)
+  const dirsNow = await page.evaluate(
+    (cid) => window.__zaryaConvById?.(cid)?.extraDirs ?? [],
+    convId
+  )
+  ok('в списке по-прежнему пусто', dirsNow.length === 0, dirsNow)
+
+  console.log('\n[6] Движок, который так не умеет, кнопки не показывает')
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(200)
+  await page.evaluate(() => window.__zaryaDenyFirst?.())
+  await page.waitForTimeout(800)
+  // gemini-фейк объявлен БЕЗ возможности «рабочие папки».
+  await page.evaluate(() => window.__zaryaStartAgent?.('gemini', 'просто ответь'))
+  await page.waitForTimeout(1600)
+  await openPanel(page)
+  const geminiAdd = await page.evaluate(() => !!document.querySelector('.zy-perm-add'))
+  ok('кнопки «считать своей» нет вовсе', geminiAdd === false)
+  const geminiSaid = await page.evaluate(() =>
+    Array.from(document.querySelectorAll('.zy-perm-empty'))
+      .map((e) => e.textContent ?? '')
+      .join(' | ')
+  )
+  ok('и сказано, почему', /не умеет/i.test(geminiSaid), geminiSaid)
+  const geminiRules = await page.evaluate(
+    () => !!document.querySelector('.zy-perm-label')
+  )
+  ok('а правила у него по-прежнему видны', geminiRules === true)
+
   console.log(`\n[permissions] PASS ${pass} · FAIL ${fail}`)
 } catch (e) {
   // Ошибка внутри прогона обязана быть ВИДНА: без этого блока упавший прогон

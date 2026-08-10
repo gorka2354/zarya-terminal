@@ -43,9 +43,11 @@ import { irreversible } from '@shared/irreversible'
 import {
   base64Bytes,
   IMAGE_MIMES,
+  imageSize,
   sniffImageMime,
   TOOL_IMAGE_MAX_BYTES,
   TOOL_IMAGE_MAX_PER_RESULT,
+  TOOL_IMAGE_MAX_PIXELS,
   type ToolImage
 } from '@shared/images'
 import { partialArg } from '@shared/partialJson'
@@ -308,14 +310,22 @@ function sessionMsgToAiMessage(sm: Record<string, unknown>): AiMessage | null {
  * `url`-источник не берём вовсе: сходить за ним значило бы, что интерфейс сам
  * лезет в сеть по адресу из чужих рук.
  */
-function toolResultImages(content: unknown): { images: ToolImage[]; skipped: number } {
-  if (!Array.isArray(content)) return { images: [], skipped: 0 }
+function toolResultImages(content: unknown): {
+  images: ToolImage[]
+  skipped: number
+  overflow: number
+} {
+  if (!Array.isArray(content)) return { images: [], skipped: 0, overflow: 0 }
   const images: ToolImage[] = []
   let skipped = 0
+  let overflow = 0
   for (const b of content as Array<Record<string, unknown>>) {
     if (b?.type !== 'image') continue
     if (images.length >= TOOL_IMAGE_MAX_PER_RESULT) {
-      skipped++
+      // Пятая картинка отклонена ЧИСЛОМ, а не форматом и не размером: назвать
+      // причиной чужой повод — соврать в мелочи там, где мелочь и есть весь
+      // ответ на вопрос «почему её нет».
+      overflow++
       continue
     }
     const src = b.source as Record<string, unknown> | undefined
@@ -330,22 +340,46 @@ function toolResultImages(content: unknown): { images: ToolImage[]; skipped: num
       skipped++
       continue
     }
-    // 24 знака base64 — 18 байт, вдвое больше, чем нужно самой длинной подписи
-    // (WEBP смотрит до двенадцатого байта).
+    /*
+     * Заголовка берём щедро — 4 килознака base64 (три килобайта).
+     *
+     * Подписи формата хватило бы двенадцати байт, но размеры лежат дальше: у
+     * JPEG кадр может оказаться за блоком EXIF. А размеры нужны обязательно —
+     * см. ниже.
+     */
     let head: Buffer
     try {
-      head = Buffer.from(data.slice(0, 24), 'base64')
+      head = Buffer.from(data.slice(0, 4096), 'base64')
     } catch {
       skipped++
       continue
     }
-    if (sniffImageMime(new Uint8Array(head)) !== said) {
+    const bytes4 = new Uint8Array(head)
+    if (sniffImageMime(bytes4) !== said) {
+      skipped++
+      continue
+    }
+    /*
+     * ПИКСЕЛИ, а не только байты.
+     *
+     * Однотонный PNG 30000×30000 весит несколько сот килобайт — проходит любой
+     * байтовый предел, — а в памяти окна разворачивается в гигабайты и убивает
+     * его. Байты защищают от большого файла, пиксели от маленького файла с
+     * большим содержимым.
+     *
+     * Размеров не нашли — отказываем. Обычно это значит, что заголовок дальше
+     * трёх килобайт, то есть картинка со странной структурой из недоверенного
+     * источника; пропустить её значило бы оставить ровно ту дыру, ради которой
+     * проверка и заводилась.
+     */
+    const size = imageSize(bytes4)
+    if (!size || size.width * size.height > TOOL_IMAGE_MAX_PIXELS) {
       skipped++
       continue
     }
     images.push({ mediaType: said as ToolImage['mediaType'], data, bytes })
   }
-  return { images, skipped }
+  return { images, skipped, overflow }
 }
 
 function toolResultText(content: unknown): string {
@@ -493,7 +527,7 @@ interface Session {
    * `index` — номер блока в ответе: у `input_json_delta` нет ни имени
    * инструмента, ни его id, и связать кусок с началом можно только по нему.
    */
-  typingTool?: { index: number; name: string; json: string }
+  typingTool?: { index: number; name: string; json: string; sent?: string }
   /** Таймер отдачи печатающихся аргументов. */
   typingTimer?: ReturnType<typeof setTimeout>
   /**
@@ -963,7 +997,19 @@ export class ClaudeCodeDriver implements AgentDriver {
       session.typingTimer = undefined
       const tt = session.typingTool
       if (!tt) return
-      this.emit(requestId, { type: 'tool_typing', name: tt.name, preview: partialArg(tt.json) })
+      const preview = partialArg(tt.json)
+      /*
+       * Одинаковое превью второй раз не шлём.
+       *
+       * Аргументы растут байтами, а показываем мы ОДНО поле: пока модель
+       * дописывает хвост JSON (второй, третий аргумент), строка на экране не
+       * меняется, а каждое сообщение пересобирает беседу в сторе и индекс
+       * результатов вместе с ней. Двадцать раз в секунду ради неизменной
+       * строки — это работа, которой человек не видит.
+       */
+      if (preview === tt.sent) return
+      tt.sent = preview
+      this.emit(requestId, { type: 'tool_typing', name: tt.name, preview })
     }, DELTA_MS)
   }
 
@@ -1041,7 +1087,12 @@ export class ClaudeCodeDriver implements AgentDriver {
              */
             if (ev?.type === 'content_block_start' && ev.content_block?.type === 'tool_use') {
               if (typeof ev.index === 'number') {
-                session.typingTool = { index: ev.index, name: String(ev.content_block.name ?? ''), json: '' }
+                session.typingTool = {
+                  index: ev.index,
+                  name: String(ev.content_block.name ?? ''),
+                  json: '',
+                  sent: ''
+                }
                 this.emit(requestId, { type: 'tool_typing', name: session.typingTool.name, preview: '' })
               }
               break
@@ -1420,7 +1471,13 @@ export class ClaudeCodeDriver implements AgentDriver {
                 const pics = toolResultImages(b.content)
                 const name = session.toolNames.get(id)
                 const facts = parsed !== undefined && name ? toolFacts(name, parsed) : []
-                session.toolNames.delete(id)
+                /*
+                 * Имя НЕ стираем здесь. По одному вызову результат может прийти
+                 * дважды — наблюдалось вживую: первое сообщение несёт строку,
+                 * второе разобранный объект. Стерев имя на первом, разобрать
+                 * второе уже нечем, и факты молча теряются именно там, где они
+                 * есть. Карта чистится концом хода, ниже, в `case 'result'`.
+                 */
                 this.emit(requestId, {
                   type: 'tool_result',
                   toolUseId: id,
@@ -1428,6 +1485,7 @@ export class ClaudeCodeDriver implements AgentDriver {
                   isError: !!b.is_error,
                   images: pics.images.length ? pics.images : undefined,
                   imagesSkipped: pics.skipped || undefined,
+                  imagesOverflow: pics.overflow || undefined,
                   facts: facts.length ? facts : undefined
                 })
               }
@@ -1439,6 +1497,10 @@ export class ClaudeCodeDriver implements AgentDriver {
             // The turn finished on its own, so the session is healthy again: a
             // later crash must be reported, not swallowed as «that Esc earlier».
             session.interrupted = false
+            // Имена инструментов нужны были только для разбора итогов этого
+            // хода: следующий назовёт свои. Держать их дальше — копить карту,
+            // которая растёт весь разговор и никогда не пригождается.
+            session.toolNames.clear()
             const modelUsage =
               (msg as { modelUsage?: Record<string, { contextWindow?: number }> }).modelUsage ?? {}
             this.emit(requestId, {
@@ -1548,6 +1610,19 @@ export class ClaudeCodeDriver implements AgentDriver {
       if (session.deltaTimer) clearTimeout(session.deltaTimer)
       session.deltaTimer = undefined
       session.deltaBuf = undefined
+      /*
+       * И печать аргументов вызова — по той же причине и в том же месте.
+       *
+       * Таймер живёт своей жизнью и стреляет через 50 мс после последнего
+       * куска. Сессия к этому моменту может быть уже мертва — и строка набора
+       * всплыла бы поверх законченной ленты, а на следующем ходу читалась бы
+       * как «агент печатает» команду, которую он не печатает.
+       */
+      if (session.typingTimer) clearTimeout(session.typingTimer)
+      session.typingTimer = undefined
+      session.typingTool = undefined
+      // Карта имён нужна только внутри хода (см. `case 'result'`).
+      session.toolNames.clear()
     }
   }
 
@@ -2330,6 +2405,12 @@ export class ClaudeCodeDriver implements AgentDriver {
     if (session.deltaTimer) clearTimeout(session.deltaTimer)
     session.deltaTimer = undefined
     session.deltaBuf = undefined
+    // То же и с печатью аргументов вызова: таймер, выстреливший уже после Esc,
+    // вернул бы на экран строку набора команды, которую человек только что
+    // отменил.
+    if (session.typingTimer) clearTimeout(session.typingTimer)
+    session.typingTimer = undefined
+    session.typingTool = undefined
     const q = session.query.interrupt?.()
     if (q) {
       q.catch(() => {
@@ -2362,6 +2443,14 @@ export class ClaudeCodeDriver implements AgentDriver {
     // Помечаем прерванной, чтобы закрытие не приехало на экран ошибкой: сессию
     // гасим мы, и это не сбой хода.
     session.interrupted = true
+    // Таймеры печати — до обрыва: выстрелив после него, они дописали бы в
+    // мёртвую ленту хвост ответа и строку набора команды.
+    if (session.deltaTimer) clearTimeout(session.deltaTimer)
+    session.deltaTimer = undefined
+    session.deltaBuf = undefined
+    if (session.typingTimer) clearTimeout(session.typingTimer)
+    session.typingTimer = undefined
+    session.typingTool = undefined
     session.abort.abort()
     session.input.close()
     this.sessions.delete(requestId)

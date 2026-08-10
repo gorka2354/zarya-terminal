@@ -83,16 +83,28 @@ export function toolFacts(toolName: string, result: unknown): ToolFact[] {
 function bashFacts(r: Record<string, unknown>): ToolFact[] {
   const out: ToolFact[] = []
   const ms = num(r.timedOutAfterMs)
-  if (ms !== undefined) {
-    out.push({ key: 'fact.bash.timeout', vars: { sec: Math.max(1, Math.round(ms / 1000)) }, level: 'warn' })
+  const sec = ms === undefined ? undefined : Math.max(1, Math.round(ms / 1000))
+  const background = !!str(r.backgroundTaskId)
+  /*
+   * Истекло время И команда ушла в фон — это ОДНА новость, а не две.
+   *
+   * Раньше карточка говорила «оборвано по времени» и следом «ушла в фон и
+   * работает дальше»: два взаимоисключающих утверждения подряд, из которых
+   * человек не мог понять, жива команда или нет. Движок ничего не путал — он
+   * назвал и срок, и то, что делать дальше; путала строка.
+   */
+  if (sec !== undefined && background) {
+    out.push({ key: 'fact.bash.timeoutBackground', vars: { sec }, level: 'warn' })
+    return out
+  }
+  if (sec !== undefined) {
+    out.push({ key: 'fact.bash.timeout', vars: { sec }, level: 'warn' })
   } else if (r.interrupted === true) {
     // Таймаут — тоже обрыв, но с названной причиной; повторять «прервано»
     // второй строкой было бы шумом.
     out.push({ key: 'fact.bash.interrupted', level: 'warn' })
   }
-  if (str(r.backgroundTaskId)) {
-    out.push({ key: 'fact.bash.background', level: 'warn' })
-  }
+  if (background) out.push({ key: 'fact.bash.background', level: 'warn' })
   return out
 }
 
@@ -152,17 +164,38 @@ function grepFacts(r: Record<string, unknown>): ToolFact[] {
 }
 
 /**
- * Правка файла. Карточка показывает дифф из ЗАПРОСА агента — то, что он
- * собирался сделать. Здесь — то, что вышло на диске.
+ * Правка файла: сколько строк она на самом деле тронула.
+ *
+ * Считаем по `structuredPatch` — это ИМЕННО ЭТА правка. Соседнее поле
+ * `gitDiff.additions/deletions` выглядит готовым ответом и им НЕ является: там
+ * дифф всего файла против гита (`status: 'modified' | 'added'`), то есть сумма
+ * всех правок за сессию, а у нового файла — весь файл целиком. Подписать это
+ * числом под одной карточкой значило бы приписать одной правке чужую работу.
  */
 function editFacts(r: Record<string, unknown>): ToolFact[] {
   const out: ToolFact[] = []
-  const g = obj(r.gitDiff)
-  const plus = num(g?.additions)
-  const minus = num(g?.deletions)
-  if (plus !== undefined && minus !== undefined) {
-    out.push({ key: 'fact.edit.diff', vars: { plus, minus }, level: 'info' })
+  const hunks = Array.isArray(r.structuredPatch) ? r.structuredPatch : null
+  if (hunks) {
+    let plus = 0
+    let minus = 0
+    for (const h of hunks as Array<Record<string, unknown>>) {
+      const lines = Array.isArray(h?.lines) ? h.lines : []
+      for (const raw of lines) {
+        if (typeof raw !== 'string') continue
+        if (raw.startsWith('+')) plus++
+        else if (raw.startsWith('-')) minus++
+      }
+    }
+    // Ноль на ноль — не новость: правка, ничего не изменившая, и так видна по
+    // отсутствию диффа.
+    if (plus || minus) out.push({ key: 'fact.edit.diff', vars: { plus, minus }, level: 'info' })
   }
-  if (r.userModified === true) out.push({ key: 'fact.edit.userModified', level: 'warn' })
+  /*
+   * `userModified` — «человек поправил ПРЕДЛОЖЕНИЕ агента», а не «файл изменился
+   * снаружи»: так это поле названо в типах SDK дословно. Прежняя формулировка
+   * читалась как предупреждение о гонке, которой не было, — и это ровно тот
+   * случай, когда интерфейс сочиняет чужую причину.
+   */
+  if (r.userModified === true) out.push({ key: 'fact.edit.userModified', level: 'info' })
   return out
 }

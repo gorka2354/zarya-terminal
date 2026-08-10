@@ -160,6 +160,19 @@ export const TOOL_IMAGE_MAX_BYTES = 2 * 1024 * 1024
 export const TOOL_IMAGE_MAX_PER_RESULT = 4
 /** Сколько всего держим в памяти открытой беседы. Дальше вытесняем старые. */
 export const TOOL_IMAGE_BUDGET_BYTES = 16 * 1024 * 1024
+/**
+ * Предел по ПИКСЕЛЯМ, а не по байтам.
+ *
+ * Сжатая картинка врёт о своём весе: однотонный PNG 30000×30000 занимает
+ * несколько сотен килобайт и укладывается в любой байтовый предел, а в памяти
+ * окна разворачивается в три с половиной гигабайта — окно просто умирает. Байты
+ * защищают от большого файла, пиксели — от маленького файла с большим
+ * содержимым, и нужны оба.
+ *
+ * 40 мегапикселей — вчетверо больше самого большого мыслимого скриншота
+ * (5120×2880 ≈ 15 Мп): предел, который не встретит честная картинка.
+ */
+export const TOOL_IMAGE_MAX_PIXELS = 40_000_000
 
 /**
  * Сколько байт в строке base64. Считаем по длине, а не декодированием: длина
@@ -171,6 +184,82 @@ export function base64Bytes(data: string): number {
   if (!len) return 0
   const pad = data.endsWith('==') ? 2 : data.endsWith('=') ? 1 : 0
   return Math.max(0, Math.floor((len * 3) / 4) - pad)
+}
+
+/**
+ * Размеры картинки по её ЗАГОЛОВКУ, без декодирования.
+ *
+ * Ровно то, чего не хватает байтовому пределу: сжатая картинка не говорит о
+ * своём размере в памяти ничего, а нам надо отказать ДО того, как браузер
+ * начнёт её разворачивать.
+ *
+ * `null` — размеров не нашли. Это не «плохая картинка»: у JPEG заголовок может
+ * лежать за пределами тех байтов, что нам дали. Решение по такому — на стороне
+ * вызывающего, и молчание тут честнее выдуманного числа.
+ */
+export function imageSize(head: Uint8Array): { width: number; height: number } | null {
+  const b = head
+  const be32 = (i: number): number => (b[i] << 24) | (b[i + 1] << 16) | (b[i + 2] << 8) | b[i + 3]
+  const le16 = (i: number): number => b[i] | (b[i + 1] << 8)
+  const be16 = (i: number): number => (b[i] << 8) | b[i + 1]
+
+  // PNG: IHDR идёт первым чанком, ширина и высота — байты 16..23.
+  if (b.length >= 24 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) {
+    return { width: be32(16) >>> 0, height: be32(20) >>> 0 }
+  }
+  // GIF: логический экран — два little-endian слова сразу за подписью.
+  if (b.length >= 10 && b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46) {
+    return { width: le16(6), height: le16(8) }
+  }
+  // WEBP: три вида блока, у каждого свои места под размеры.
+  if (
+    b.length >= 30 &&
+    b[0] === 0x52 &&
+    b[1] === 0x49 &&
+    b[2] === 0x46 &&
+    b[3] === 0x46 &&
+    b[8] === 0x57 &&
+    b[9] === 0x45 &&
+    b[10] === 0x42 &&
+    b[11] === 0x50
+  ) {
+    const kind = String.fromCharCode(b[12], b[13], b[14], b[15])
+    if (kind === 'VP8 ' && b.length >= 30) {
+      return { width: le16(26) & 0x3fff, height: le16(28) & 0x3fff }
+    }
+    if (kind === 'VP8L' && b.length >= 25) {
+      const bits = b[21] | (b[22] << 8) | (b[23] << 16) | (b[24] << 24)
+      return { width: (bits & 0x3fff) + 1, height: ((bits >> 14) & 0x3fff) + 1 }
+    }
+    if (kind === 'VP8X' && b.length >= 30) {
+      return {
+        width: (b[24] | (b[25] << 8) | (b[26] << 16)) + 1,
+        height: (b[27] | (b[28] << 8) | (b[29] << 16)) + 1
+      }
+    }
+    return null
+  }
+  // JPEG: идём по маркерам до кадра (SOFn). Заголовок бывает далеко, и если
+  // данных не хватило — честно возвращаем null.
+  if (b.length >= 4 && b[0] === 0xff && b[1] === 0xd8) {
+    let i = 2
+    while (i + 9 < b.length) {
+      if (b[i] !== 0xff) {
+        i++
+        continue
+      }
+      const marker = b[i + 1]
+      // SOF0..SOF15, кроме DHT (c4), JPGA (c8) и DAC (cc) — они не кадры.
+      if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+        return { height: be16(i + 5), width: be16(i + 7) }
+      }
+      const len = be16(i + 2)
+      if (len < 2) return null
+      i += 2 + len
+    }
+    return null
+  }
+  return null
 }
 
 /**

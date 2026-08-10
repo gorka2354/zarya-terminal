@@ -11,6 +11,8 @@ import {
   sniffImageMime,
   base64Bytes,
   fitToolImages,
+  imageSize,
+  TOOL_IMAGE_MAX_PIXELS,
   type ImageAttachment,
   type ToolImage
 } from '@shared/images'
@@ -181,5 +183,58 @@ describe('fitToolImages — бюджет памяти беседы', () => {
     m = fitToolImages(m, 'a', [img(5)], 100)
     expect(m.a).toHaveLength(1)
     expect(m.a[0].bytes).toBe(5)
+  })
+})
+
+/**
+ * Сжатая картинка врёт о своём весе: однотонный PNG 30000×30000 занимает
+ * сотни килобайт и проходит любой байтовый предел, а в памяти окна
+ * разворачивается в гигабайты. Байты защищают от большого файла, пиксели — от
+ * маленького файла с большим содержимым, и нужны оба.
+ */
+describe('imageSize — размеры по заголовку, без декодирования', () => {
+  const bytes = (...b: number[]): Uint8Array => Uint8Array.from(b)
+
+  it('PNG: ширина и высота из IHDR', () => {
+    const png = new Uint8Array(24)
+    png.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 0)
+    // 0x0000_0300 = 768, 0x0000_0200 = 512
+    png.set([0, 0, 3, 0], 16)
+    png.set([0, 0, 2, 0], 20)
+    expect(imageSize(png)).toEqual({ width: 768, height: 512 })
+  })
+
+  it('GIF: логический экран, little-endian', () => {
+    const gif = new Uint8Array(12)
+    gif.set([0x47, 0x49, 0x46, 0x38, 0x39, 0x61], 0)
+    gif.set([0x20, 0x00, 0x10, 0x00], 6) // 32 × 16
+    expect(imageSize(gif)).toEqual({ width: 32, height: 16 })
+  })
+
+  it('JPEG: идём по маркерам до кадра', () => {
+    // SOI, APP0 длиной 4, затем SOF0 с размерами 100 × 200.
+    const jpg = bytes(
+      0xff, 0xd8,
+      0xff, 0xe0, 0x00, 0x04, 0x00, 0x00,
+      0xff, 0xc0, 0x00, 0x11, 0x08, 0x00, 0xc8, 0x00, 0x64,
+      0, 0, 0, 0
+    )
+    expect(imageSize(jpg)).toEqual({ width: 100, height: 200 })
+  })
+
+  it('чужие байты — null, а не выдуманное число', () => {
+    expect(imageSize(bytes(1, 2, 3, 4, 5, 6, 7, 8))).toBeNull()
+    expect(imageSize(new Uint8Array(0))).toBeNull()
+  })
+
+  it('оборванный JPEG без кадра — тоже null', () => {
+    expect(imageSize(bytes(0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10))).toBeNull()
+  })
+
+  it('потолок пикселей встречает бомбу и пропускает скриншот', () => {
+    const bomb = 30_000 * 30_000
+    const screen = 5120 * 2880
+    expect(bomb).toBeGreaterThan(TOOL_IMAGE_MAX_PIXELS)
+    expect(screen).toBeLessThan(TOOL_IMAGE_MAX_PIXELS)
   })
 })

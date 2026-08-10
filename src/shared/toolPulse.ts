@@ -42,6 +42,15 @@ export const PULSE_QUIET_FLOOR_MS = 30_000
 /** Во сколько раз тишина должна превысить наблюдённый ритм, чтобы стать новостью. */
 const QUIET_FACTOR = 3
 
+/**
+ * Выше этого порог не поднимается, как бы редко ни шёл пульс.
+ *
+ * `gapMax` растёт и не убывает: одна пятиминутная заминка навсегда сделала бы
+ * порог четвертьчасовым, и предупреждение больше не сработало бы никогда. Через
+ * пять минут молчания вопрос «оно живо?» уже задан, чем бы ни объяснялся ритм.
+ */
+const PULSE_QUIET_CEIL_MS = 5 * 60_000
+
 /** Учесть пришедший пульс. `prev` — то, что знали про этот вызов до него. */
 export function notePulse(
   prev: ToolPulse | undefined,
@@ -75,11 +84,27 @@ export function notePulse(
 export function pulseSilence(pulse: ToolPulse | undefined, now: number): number | null {
   if (!pulse || pulse.beats < 2) return null
   const quiet = now - pulse.lastAt
-  const limit = Math.max(pulse.gapMax * QUIET_FACTOR, PULSE_QUIET_FLOOR_MS)
+  const limit = Math.min(
+    Math.max(pulse.gapMax * QUIET_FACTOR, PULSE_QUIET_FLOOR_MS),
+    PULSE_QUIET_CEIL_MS
+  )
   return quiet > limit ? quiet : null
 }
 
-/** Свежий ли пульс — то есть подтверждает ли движок прямо сейчас, что вызов жив. */
+/**
+ * Свежий ли пульс — то есть подтверждает ли движок прямо сейчас, что вызов жив.
+ *
+ * Порог здесь СВОЙ, и он мягче. «Пульса нет» — сильное утверждение о чужой
+ * смерти, и на него нужен измеренный ритм; «жив» — пересказ того, что движок
+ * только что сказал, и одного удара для него достаточно. Но и он протухает:
+ * иначе единственный давний удар горел бы зелёным часами, утверждая жизнь
+ * ровно там, где судить о ней нечем.
+ */
 export function pulseAlive(pulse: ToolPulse | undefined, now: number): boolean {
-  return !!pulse && pulseSilence(pulse, now) === null
+  if (!pulse) return false
+  const limit = Math.min(
+    Math.max(pulse.gapMax * QUIET_FACTOR, PULSE_QUIET_FLOOR_MS),
+    PULSE_QUIET_CEIL_MS
+  )
+  return now - pulse.lastAt <= limit
 }
