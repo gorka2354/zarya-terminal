@@ -17,6 +17,16 @@ import type { AgentDriver } from './agentDriver'
 import { irreversible } from '@shared/irreversible'
 
 /**
+ * Настоящий PNG 96×48, сплошной цвет — 157 байт.
+ *
+ * Именно байты, а не «какая-нибудь строка»: драйвер сверяет заявленный формат с
+ * первыми байтами (сервер вправе назвать разметку картинкой), и подделка прошла
+ * бы мимо той самой проверки, ради которой она там стоит.
+ */
+const FAKE_PNG =
+  'iVBORw0KGgoAAAANSUhEUgAAAGAAAAAwCAIAAABhdOiYAAAAZElEQVR4nO3QMQ0AIADAMHTiEkdIwQGc7GgyAUvHXlOXxveDeIAAAQIEKBwgQIAAAQoHCBAgQIDCAQIECBCgcIAAAQIEKBwgQIAAAQoHCBAgQIDCAQIECBCgcIAAAQIEKBygRwcEgYf/Bsq9BwAAAABJRU5ErkJggg=='
+
+/**
  * A scripted in-process AgentDriver for QA (Ф5). It emits the same
  * {@link AgentStreamEvent}s a real driver would, on a timer so turns "stream",
  * with a CONFIGURABLE {@link AgentCapabilities} profile. This lets the harness
@@ -493,6 +503,37 @@ export class FakeAgentDriver implements AgentDriver {
           ]
         })
         this.emit(requestId, { type: 'result', isError: false, costUsd: 0.001 })
+      })
+    } else if (/картинк|screenshot/i.test(opts.prompt)) {
+      /*
+       * Картинка из инструмента (inc-27). Так отвечает MCP-сервер браузера:
+       * текст плюс блок с байтами. Байты настоящие — 96×48 PNG, — потому что
+       * драйвер проверяет формат по первым байтам, и подделка «просто строкой»
+       * прошла бы мимо ровно той проверки, ради которой она стоит.
+       */
+      const iid = `${requestId}-i1`
+      this.schedule(requestId, 300, () => {
+        this.emit(requestId, {
+          type: 'assistant',
+          content: [
+            {
+              type: 'tool_use',
+              id: iid,
+              name: 'mcp__fake_browser__screenshot',
+              input: { url: 'https://example.test' }
+            }
+          ]
+        })
+        this.emit(requestId, {
+          type: 'tool_result',
+          toolUseId: iid,
+          content: 'fake: снимок сделан',
+          isError: false,
+          images: [{ mediaType: 'image/png', data: FAKE_PNG, bytes: 157 }],
+          // Одна картинка «не поехала» — карточка обязана сказать и об этом.
+          imagesSkipped: /отказ|reject/i.test(opts.prompt) ? 1 : undefined
+        })
+        this.emit(requestId, { type: 'result', isError: false, costUsd: 0.003 })
       })
     } else if (/пульс|pulse/i.test(opts.prompt)) {
       /*

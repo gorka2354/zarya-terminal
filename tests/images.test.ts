@@ -9,7 +9,10 @@ import {
   imagePlaceholder,
   needsResize,
   sniffImageMime,
-  type ImageAttachment
+  base64Bytes,
+  fitToolImages,
+  type ImageAttachment,
+  type ToolImage
 } from '@shared/images'
 import { setLangProvider } from '@shared/lang'
 
@@ -127,5 +130,56 @@ describe('плейсхолдер', () => {
     setLangProvider(() => 'ru')
     expect(imagePlaceholder(0)).toBe('[Изображение #1]')
     setLangProvider(() => 'en')
+  })
+})
+
+/**
+ * Картинка ОТ ИНСТРУМЕНТА приходит с другой стороны, чем вложение человека, и
+ * потому у неё свои пределы. Человек прикладывает четыре скриншота за ход и
+ * знает зачем; MCP-сервер браузера возвращает скриншот на каждый вызов, и за
+ * час их набегают сотни. Здесь проверяется, что «сотни» упираются в потолок, а
+ * не в память машины.
+ */
+describe('base64Bytes — размер по длине, без распаковки', () => {
+  it('считает без учёта заполнителя', () => {
+    // 3 байта → 4 знака без «=»; 1 байт → 4 знака с «==».
+    expect(base64Bytes('YWJj')).toBe(3)
+    expect(base64Bytes('YQ==')).toBe(1)
+    expect(base64Bytes('YWI=')).toBe(2)
+  })
+
+  it('пустая строка — ноль, а не NaN', () => {
+    expect(base64Bytes('')).toBe(0)
+  })
+})
+
+describe('fitToolImages — бюджет памяти беседы', () => {
+  const img = (bytes: number): ToolImage => ({ mediaType: 'image/png', data: 'x', bytes })
+
+  it('пока влезает — не трогаем ничего', () => {
+    let m = fitToolImages(undefined, 'a', [img(10)], 100)
+    m = fitToolImages(m, 'b', [img(10)], 100)
+    expect(Object.keys(m)).toEqual(['a', 'b'])
+  })
+
+  it('перебор вытесняет самые старые, а не случайные', () => {
+    let m = fitToolImages(undefined, 'a', [img(60)], 100)
+    m = fitToolImages(m, 'b', [img(30)], 100)
+    m = fitToolImages(m, 'c', [img(30)], 100)
+    // 60+30+30 = 120 > 100: уходит «a», как самый давний.
+    expect(Object.keys(m)).toEqual(['b', 'c'])
+  })
+
+  it('свежий вызов не вытесняется никогда — даже если один съедает бюджет', () => {
+    let m = fitToolImages(undefined, 'a', [img(50)], 100)
+    m = fitToolImages(m, 'big', [img(500)], 100)
+    expect(Object.keys(m)).toEqual(['big'])
+  })
+
+  it('повторный результат по тому же id заменяет прежние картинки, а не копит', () => {
+    let m = fitToolImages(undefined, 'a', [img(10), img(10)], 100)
+    m = fitToolImages(m, 'a', [img(5)], 100)
+    expect(m.a).toHaveLength(1)
+    expect(m.a[0].bytes).toBe(5)
   })
 })

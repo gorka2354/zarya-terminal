@@ -133,6 +133,73 @@ export function fitSize(width: number, height: number): { width: number; height:
   return { width: Math.max(1, Math.round(width * k)), height: Math.max(1, Math.round(height * k)) }
 }
 
+/*
+ * КАРТИНКА ОТ ИНСТРУМЕНТА — это другая история, чем вложение человека.
+ *
+ * Человек прикладывает четыре скриншота за ход и знает, зачем. MCP-сервер
+ * браузера возвращает скриншот на КАЖДЫЙ вызов, и за час работы их набегают
+ * сотни. Поэтому пределы здесь свои и жёстче, а живут такие картинки только в
+ * открытой ленте: в файл беседы они не попадают вовсе.
+ *
+ * Причина не в экономии места, а в честности механики. Беседа переписывается на
+ * диск целиком раз в несколько сот миллисекунд; сотня скриншотов превратила бы
+ * каждое сохранение в мегабайты, и Заря, обещающая не оставлять мусора,
+ * оставляла бы его больше всех.
+ */
+
+/** Одна картинка, вернувшаяся из инструмента. `data` — base64 без префикса. */
+export interface ToolImage {
+  mediaType: ImageMime
+  data: string
+  bytes: number
+}
+
+/** Больше этого одну картинку не берём: скриншот столько не весит, а бомба — да. */
+export const TOOL_IMAGE_MAX_BYTES = 2 * 1024 * 1024
+/** Сколько картинок принимаем от ОДНОГО вызова. */
+export const TOOL_IMAGE_MAX_PER_RESULT = 4
+/** Сколько всего держим в памяти открытой беседы. Дальше вытесняем старые. */
+export const TOOL_IMAGE_BUDGET_BYTES = 16 * 1024 * 1024
+
+/**
+ * Сколько байт в строке base64. Считаем по длине, а не декодированием: длина
+ * известна сразу, а декодировать ради размера — это и есть та самая распаковка,
+ * от которой предел и защищает.
+ */
+export function base64Bytes(data: string): number {
+  const len = data.length
+  if (!len) return 0
+  const pad = data.endsWith('==') ? 2 : data.endsWith('=') ? 1 : 0
+  return Math.max(0, Math.floor((len * 3) / 4) - pad)
+}
+
+/**
+ * Уложить картинки беседы в бюджет памяти, вытесняя самые старые.
+ *
+ * Порядок ключей в объекте — порядок вставки, то есть порядок вызовов: первым
+ * уходит то, что человек уже пролистал. Карточка вытесненного вызова скажет об
+ * этом словами, а не покажет пустоту.
+ */
+export function fitToolImages(
+  current: Record<string, ToolImage[]> | undefined,
+  id: string,
+  images: ToolImage[],
+  budget = TOOL_IMAGE_BUDGET_BYTES
+): Record<string, ToolImage[]> {
+  const next: Record<string, ToolImage[]> = { ...current, [id]: images }
+  let total = 0
+  for (const list of Object.values(next)) for (const img of list) total += img.bytes
+  // Свежий вызов не вытесняем никогда: показать надо именно его, даже если он
+  // один съедает весь бюджет.
+  for (const key of Object.keys(next)) {
+    if (total <= budget) break
+    if (key === id) continue
+    for (const img of next[key]) total -= img.bytes
+    delete next[key]
+  }
+  return next
+}
+
 /**
  * Плейсхолдер в тексте сообщения. Повторяет то, что делает CLI: модель видит
  * ссылку на картинку там, где человек её вставил, а сами блоки идут следом.

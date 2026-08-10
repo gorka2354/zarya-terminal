@@ -40,6 +40,14 @@ function numOr(msg: unknown, key: string): number | undefined {
   return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : undefined
 }
 import { irreversible } from '@shared/irreversible'
+import {
+  base64Bytes,
+  IMAGE_MIMES,
+  sniffImageMime,
+  TOOL_IMAGE_MAX_BYTES,
+  TOOL_IMAGE_MAX_PER_RESULT,
+  type ToolImage
+} from '@shared/images'
 import { taskDone, taskHidden, taskOutcome } from '@shared/agentTasks'
 import { foldContextParts } from '@shared/contextParts'
 import {
@@ -281,6 +289,63 @@ function sessionMsgToAiMessage(sm: Record<string, unknown>): AiMessage | null {
 }
 
 /** Flatten a tool_result content (string | array of blocks) to display text. */
+/**
+ * Картинки, вернувшиеся из инструмента.
+ *
+ * MCP-сервер, снявший скриншот, отдаёт его блоком `image` рядом с текстом —
+ * и `toolResultText` этот блок молча выбрасывал: карточка оставалась пустой,
+ * хотя картинка и была всем содержанием вызова.
+ *
+ * ФОРМАТ ПРОВЕРЯЕМ ПО ПЕРВЫМ БАЙТАМ, а не по тому, как его назвал сервер. Байты
+ * приходят из стороннего процесса, который вправе назвать что угодно чем
+ * угодно, а дальше они попадают в `data:`-ссылку в DOM. Расхождение с
+ * заявленным типом — повод отказать, а не гадать: `image/png` с разметкой
+ * внутри это не картинка, а чужой код в превью. Ту же проверку по той же
+ * причине проходят вложения человека (см. @shared/images).
+ *
+ * `url`-источник не берём вовсе: сходить за ним значило бы, что интерфейс сам
+ * лезет в сеть по адресу из чужих рук.
+ */
+function toolResultImages(content: unknown): { images: ToolImage[]; skipped: number } {
+  if (!Array.isArray(content)) return { images: [], skipped: 0 }
+  const images: ToolImage[] = []
+  let skipped = 0
+  for (const b of content as Array<Record<string, unknown>>) {
+    if (b?.type !== 'image') continue
+    if (images.length >= TOOL_IMAGE_MAX_PER_RESULT) {
+      skipped++
+      continue
+    }
+    const src = b.source as Record<string, unknown> | undefined
+    const data = src?.type === 'base64' && typeof src.data === 'string' ? src.data : ''
+    const said = typeof src?.media_type === 'string' ? src.media_type : ''
+    if (!data || !(IMAGE_MIMES as readonly string[]).includes(said)) {
+      skipped++
+      continue
+    }
+    const bytes = base64Bytes(data)
+    if (bytes > TOOL_IMAGE_MAX_BYTES) {
+      skipped++
+      continue
+    }
+    // 24 знака base64 — 18 байт, вдвое больше, чем нужно самой длинной подписи
+    // (WEBP смотрит до двенадцатого байта).
+    let head: Buffer
+    try {
+      head = Buffer.from(data.slice(0, 24), 'base64')
+    } catch {
+      skipped++
+      continue
+    }
+    if (sniffImageMime(new Uint8Array(head)) !== said) {
+      skipped++
+      continue
+    }
+    images.push({ mediaType: said as ToolImage['mediaType'], data, bytes })
+  }
+  return { images, skipped }
+}
+
 function toolResultText(content: unknown): string {
   if (typeof content === 'string') return content
   if (Array.isArray(content)) {
@@ -1238,11 +1303,14 @@ export class ClaudeCodeDriver implements AgentDriver {
             if (Array.isArray(content)) {
               for (const b of content as Array<Record<string, unknown>>) {
                 if (b.type === 'tool_result') {
+                  const pics = toolResultImages(b.content)
                   this.emit(requestId, {
                     type: 'tool_result',
                     toolUseId: String(b.tool_use_id ?? ''),
                     content: toolResultText(b.content),
-                    isError: !!b.is_error
+                    isError: !!b.is_error,
+                    images: pics.images.length ? pics.images : undefined,
+                    imagesSkipped: pics.skipped || undefined
                   })
                 }
               }

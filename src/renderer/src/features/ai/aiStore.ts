@@ -31,6 +31,7 @@ import { irreversible } from '@shared/irreversible'
 import { EMPTY_PLAN, planOnToolResult, planOnToolUse } from '@shared/agentPlan'
 import { matchesRule, ruleFor, withRule } from '@shared/allowRules'
 import { notePulse, type ToolPulse } from '@shared/toolPulse'
+import { fitToolImages, type ToolImage } from '@shared/images'
 
 /**
  * AI chat store: multiple conversations, streaming assistant text, and an
@@ -273,6 +274,18 @@ export interface Conversation {
    * выданный за сегодняшний, был бы прямой ложью о происходящем.
    */
   toolPulses?: Record<string, ToolPulse>
+  /**
+   * Картинки, вернувшиеся из инструментов, по id вызова.
+   *
+   * Отдельно от `messages` намеренно: история беседы уходит на диск целиком и
+   * часто, а скриншот от MCP-сервера прилетает на каждый вызов. В сообщении
+   * остаётся только ЧИСЛО картинок — этого хватает, чтобы восстановленная
+   * карточка сказала правду вместо пустоты.
+   *
+   * Объём ограничен бюджетом: старые вытесняются (см. `fitToolImages`). Память
+   * — такой же ресурс, как диск, и «пока не кончится» здесь не предел.
+   */
+  toolImages?: Record<string, ToolImage[]>
   pendingContext: AiContextChip[]
   /** Message typed while the agent is working — queued, editable (↑), sent when it finishes. */
   queued?: string
@@ -1072,6 +1085,11 @@ export const useAiStore = create<AiState>((set, get) => {
           ...c,
           pendingTools: c.pendingTools.filter((t) => t.id !== ev.toolUseId),
           toolPulses: withoutPulse(c.toolPulses, ev.toolUseId),
+          // Байты картинок — мимо истории: она уходит на диск целиком и часто.
+          // В сообщение попадает только их число (см. Conversation.toolImages).
+          toolImages: ev.images?.length
+            ? fitToolImages(c.toolImages, ev.toolUseId, ev.images)
+            : c.toolImages,
           messages: [
             ...c.messages,
             {
@@ -1081,7 +1099,9 @@ export const useAiStore = create<AiState>((set, get) => {
                   type: 'tool_result',
                   toolUseId: ev.toolUseId,
                   content: ev.content,
-                  isError: ev.isError
+                  isError: ev.isError,
+                  images: ev.images?.length || undefined,
+                  imagesSkipped: ev.imagesSkipped
                 }
               ]
             }

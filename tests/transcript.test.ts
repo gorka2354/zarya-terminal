@@ -55,6 +55,26 @@ describe('toMarkdown', () => {
     expect(md).toMatch(/<details>/)
   })
 
+
+  it('картинка от инструмента отмечена, но в файл не переносится', () => {
+    const md = toMarkdown([
+      msg('assistant', [{ type: 'tool_use', id: 't1', name: 'Screenshot', input: {} }]),
+      msg('user', [
+        { type: 'tool_result', toolUseId: 't1', content: 'снято', images: 2 }
+      ])
+    ])
+    expect(md).toMatch(/картинок от инструмента: 2/)
+    // Байтов в стенограмме быть не должно ни при каких обстоятельствах.
+    expect(md).not.toMatch(/base64|data:/)
+  })
+
+  it('обычный итог инструмента формат выгрузки не меняет', () => {
+    const md = toMarkdown([
+      msg('user', [{ type: 'tool_result', toolUseId: 't1', content: 'exit 0' }])
+    ])
+    expect(md).not.toMatch(/exit 0/)
+  })
+
   it('пустые сообщения не рождают пустых разделов', () => {
     const md = toMarkdown([msg('assistant', [{ type: 'text', text: '   ' }])])
     expect(md).not.toMatch(/## Агент/)

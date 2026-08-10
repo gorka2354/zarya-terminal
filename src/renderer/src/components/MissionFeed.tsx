@@ -38,6 +38,7 @@ import logoZarya from '@/assets/logo-zarya-64.png'
 import './missionfeed.css'
 import { ruleFor } from '@shared/allowRules'
 import { pulseSilence } from '@shared/toolPulse'
+import type { ToolImage } from '@shared/images'
 
 /**
  * The mission feed — Zarya's centre stage, a 1:1 port of the design's unified
@@ -1095,6 +1096,59 @@ const AgentMessage = memo(function AgentMessage({
  * стрелка обещала бы продолжение, которого нет. Пустое раскрытие — мелкая
  * ложь, но ложь; кнопка появляется, только когда за ней правда что-то есть.
  */
+/**
+ * Картинки, которые вернул инструмент.
+ *
+ * Показываются сразу, а не под шторкой: у вызова, чей смысл — скриншот,
+ * свёрнутая картинка это та же пустая карточка, от которой избавлялись.
+ *
+ * Байты живут только в открытой беседе и на диск не идут (см. `toolImages`).
+ * После перезапуска — и после вытеснения по бюджету — вместо картинки строка,
+ * которая честно говорит, что её тут больше нет, и почему. Пустое место на её
+ * месте выглядело бы как «инструмент ничего не вернул».
+ */
+function ToolImages({
+  images,
+  count,
+  skipped
+}: {
+  images?: ToolImage[]
+  /** Сколько картинок было по данным сообщения — переживает перезапуск. */
+  count?: number
+  skipped?: number
+}): React.JSX.Element | null {
+  useLang()
+  const gone = !images?.length && !!count
+  if (!images?.length && !count && !skipped) return null
+  return (
+    <div className="zy-mf-tool-imgs">
+      {images?.map((img, i) => (
+        <figure key={i} className="zy-mf-img">
+          <img
+            src={`data:${img.mediaType};base64,${img.data}`}
+            alt={t('feed.toolImage', { n: i + 1 })}
+            loading="lazy"
+          />
+          <figcaption>
+            #{i + 1} · {fmtBytes(img.bytes)}
+          </figcaption>
+        </figure>
+      ))}
+      {gone && <div className="zy-mf-tool-imgs-gone">{t('feed.toolImagesGone', { n: count })}</div>}
+      {!!skipped && (
+        <div className="zy-mf-tool-imgs-gone">{t('feed.toolImagesSkipped', { n: skipped })}</div>
+      )}
+    </div>
+  )
+}
+
+/** «128 КБ» — размер картинки в подписи, без ложной точности. */
+function fmtBytes(n: number): string {
+  return n >= 1024 * 1024
+    ? t('feed.mb', { n: (n / (1024 * 1024)).toFixed(1) })
+    : t('feed.kb', { n: Math.max(1, Math.round(n / 1024)) })
+}
+
 function ToolOutcome({
   content,
   isError
@@ -1458,7 +1512,16 @@ const ToolCard = memo(function ToolCard({
 
   let body: React.JSX.Element
   if (result) {
-    body = <ToolOutcome content={result.content} isError={!!result.isError} />
+    body = (
+      <>
+        <ToolOutcome content={result.content} isError={!!result.isError} />
+        <ToolImages
+          images={conv.toolImages?.[id]}
+          count={result.images}
+          skipped={result.imagesSkipped}
+        />
+      </>
+    )
   } else if (pending && !pending.settled && pending.kind === 'question') {
     // AskUserQuestion — the bottom bar morphs into the selector; just point down.
     body = (

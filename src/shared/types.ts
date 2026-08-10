@@ -381,7 +381,24 @@ export interface Settings {
 export type AiContentPart =
   | { type: 'text'; text: string }
   | { type: 'tool_use'; id: string; name: string; input: unknown }
-  | { type: 'tool_result'; toolUseId: string; content: string; isError?: boolean }
+  | {
+      type: 'tool_result'
+      toolUseId: string
+      content: string
+      isError?: boolean
+      /**
+       * СКОЛЬКО картинок вернул инструмент — а не сами картинки.
+       *
+       * Сами байты живут отдельно, в открытой беседе (`Conversation.toolImages`),
+       * и на диск не попадают: беседа переписывается целиком раз в несколько сот
+       * миллисекунд, и сотня скриншотов от MCP-сервера браузера превратила бы
+       * каждое сохранение в мегабайты. Число остаётся, чтобы восстановленная
+       * карточка могла сказать об этом словами, а не показать пустоту.
+       */
+      images?: number
+      /** Сколько картинок отклонено пределом или проверкой формата. */
+      imagesSkipped?: number
+    }
   /**
    * Вставленное изображение. `data` — base64 без префикса data:. Пределы и
    * допустимые типы живут в @shared/images: расползшийся предел это предел,
@@ -744,7 +761,20 @@ export type AgentStreamEvent =
    */
   | { type: 'reset'; sessionId?: string }
   | { type: 'assistant'; content: AiContentPart[] }
-  | { type: 'tool_result'; toolUseId: string; content: string; isError: boolean }
+  | {
+      type: 'tool_result'
+      toolUseId: string
+      content: string
+      isError: boolean
+      /**
+       * Картинки из результата: скриншот MCP-сервера и подобное. Раньше блок
+       * `image` молча выбрасывался, и карточка вызова, вся суть которого —
+       * картинка, оставалась пустой.
+       */
+      images?: import('./images').ToolImage[]
+      /** Сколько картинок отклонено пределом или проверкой формата. */
+      imagesSkipped?: number
+    }
   /**
    * Сердцебиение идущего вызова: движок подтверждает, что инструмент ещё жив.
    *

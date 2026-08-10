@@ -748,6 +748,11 @@ export const RU: Dict = {
   'feed.pulseLostHint':
     'Движок присылал признаки жизни этого вызова и перестал. Команда могла повиснуть — прервите ход, если ждать больше нечего',
   'feed.toolRetry': 'повтор {n} из {max}',
+  'feed.toolImage': 'картинка от инструмента №{n}',
+  'feed.toolImagesGone': 'картинок от инструмента: {n} — в беседе они не сохраняются',
+  'feed.toolImagesSkipped': 'не показано картинок: {n} — не тот формат или слишком велики',
+  'feed.kb': '{n} КБ',
+  'feed.mb': '{n} МБ',
   'feed.exportHint': 'Унести разговор: сохранить, скопировать, выгрузить вывод терминала',
   'feed.exportFile': 'Сохранить разговор в файл…',
   'feed.exportCopy': 'Скопировать разговор целиком',
@@ -2416,6 +2421,11 @@ export const EN: Dict = {
   'feed.pulseLostHint':
     'The engine was reporting this call alive and stopped. The command may have hung — interrupt the turn if there is nothing left to wait for',
   'feed.toolRetry': 'retry {n} of {max}',
+  'feed.toolImage': 'tool image #{n}',
+  'feed.toolImagesGone': 'images from the tool: {n} — they are not kept in the conversation',
+  'feed.toolImagesSkipped': 'images not shown: {n} — wrong format or too large',
+  'feed.kb': '{n} KB',
+  'feed.mb': '{n} MB',
   'feed.exportHint': 'Take the conversation with you: save, copy, export terminal output',
   'feed.exportFile': 'Save conversation to a file…',
   'feed.exportCopy': 'Copy the whole conversation',
