@@ -53,6 +53,7 @@
     "qa:pane-status": "npm run build && node scripts/pane-status-test.mjs",
     "qa:signals": "node scripts/pane-signals-test.mjs",
     "qa:plan": "node scripts/agent-plan-test.mjs",
+    "qa:pulse": "npm run build && node scripts/tool-pulse-test.mjs",
     "qa:report": "node scripts/agent-report-test.mjs",
     "qa:wave": "node scripts/agent-wave-test.mjs",
     "qa:plan-mode": "node scripts/plan-mode-test.mjs",

@@ -1125,6 +1125,44 @@ export class ClaudeCodeDriver implements AgentDriver {
             break
           }
 
+          /*
+           * ИНСТРУМЕНТ ЖИВ — сердцебиение движка.
+           *
+           * Секундомер карточки идёт сам по себе: он честно считает, сколько мы
+           * ждём, но ничего не знает о том, работает процесс или повис. Пульс
+           * знает — самим фактом своего прихода.
+           *
+           * Пульс СУБАГЕНТА пропускаем: его инструменты в ленте не карточками, а
+           * одной строкой волны, и подтверждать жизнь того, чего на экране нет,
+           * незачем. Повтор подзадачи при этом приходит на карточке самого
+           * `Task` (у неё `parent_tool_use_id` пуст) и до экрана доходит.
+           */
+          case 'tool_progress': {
+            const p = msg as unknown as {
+              tool_use_id?: string
+              parent_tool_use_id?: string | null
+              elapsed_time_seconds?: number
+              subagent_retry?: { attempt?: number; max_retries?: number }
+            }
+            if (p.parent_tool_use_id) break
+            const id = p.tool_use_id
+            if (!id) break
+            const attempt = p.subagent_retry?.attempt
+            const max = p.subagent_retry?.max_retries
+            this.emit(requestId, {
+              type: 'tool_pulse',
+              toolUseId: id,
+              elapsedSec: numOr(p, 'elapsed_time_seconds') ?? 0,
+              // Повтор показываем только когда движок назвал ОБА числа: «попытка
+              // 2 из неизвестно скольких» пугает, ничего не объясняя.
+              retry:
+                typeof attempt === 'number' && typeof max === 'number'
+                  ? { attempt, max }
+                  : undefined
+            })
+            break
+          }
+
           case 'rate_limit_event': {
             const info = (
               msg as {

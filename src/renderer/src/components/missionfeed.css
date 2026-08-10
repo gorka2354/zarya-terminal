@@ -1520,3 +1520,35 @@
   white-space: pre-wrap;
   font-size: 0.95em;
 }
+
+/* Пульс инструмента: движок подтверждает, что вызов ещё жив ------------- */
+/* Точка тихая и мелкая: она сообщает норму, а норма не должна привлекать
+   внимание. Замечают её только когда ищут ответ на «оно вообще движется». */
+.zy-mf-tool-beat {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: zy-mf-beat 2s ease-in-out infinite;
+}
+@keyframes zy-mf-beat {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+/* А вот пропавший пульс — уже новость, и выглядит как новость. */
+.zy-mf-tool-quiet {
+  font-family: var(--font-tech);
+  font-size: 12px;
+  color: var(--warn);
+}
+/* Повтор — новость, но не тревога: движок сам сказал, что справляется. */
+.zy-mf-tool-retry {
+  font-family: var(--font-tech);
+  font-size: 12px;
+  color: var(--fg-faint);
+}

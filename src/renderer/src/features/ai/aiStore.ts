@@ -30,6 +30,7 @@ import { nativeGateOpts } from './startOpts'
 import { irreversible } from '@shared/irreversible'
 import { EMPTY_PLAN, planOnToolResult, planOnToolUse } from '@shared/agentPlan'
 import { matchesRule, ruleFor, withRule } from '@shared/allowRules'
+import { notePulse, type ToolPulse } from '@shared/toolPulse'
 
 /**
  * AI chat store: multiple conversations, streaming assistant text, and an
@@ -261,6 +262,17 @@ export interface Conversation {
    * происходящем, и единственное, что отличает работу от зависания.
    */
   toolStartedAt: Record<string, number>
+  /**
+   * Сердцебиение идущих вызовов, по id инструмента.
+   *
+   * Отличает работающий инструмент от повисшего: секундомер идёт у обоих
+   * одинаково, а пульс приходит только от живого. Запись живёт ровно пока
+   * инструмент идёт — с приходом результата снимается.
+   *
+   * На диск не сохраняется: это наблюдение за живым ходом, и вчерашний пульс,
+   * выданный за сегодняшний, был бы прямой ложью о происходящем.
+   */
+  toolPulses?: Record<string, ToolPulse>
   pendingContext: AiContextChip[]
   /** Message typed while the agent is working — queued, editable (↑), sent when it finishes. */
   queued?: string
@@ -419,6 +431,23 @@ interface AiState {
 }
 
 // ----------------------------------------------------------------- helpers
+
+/**
+ * Снять пульс отработавшего инструмента.
+ *
+ * Пульс — про то, что происходит СЕЙЧАС. Оставить его после результата значит
+ * копить в беседе записи о вызовах, которых давно нет, и рано или поздно
+ * показать «пульса нет» рядом с законченной командой.
+ */
+function withoutPulse(
+  pulses: Record<string, ToolPulse> | undefined,
+  id: string
+): Record<string, ToolPulse> | undefined {
+  if (!pulses?.[id]) return pulses
+  const next = { ...pulses }
+  delete next[id]
+  return next
+}
 
 function truncateText(s: string, max: number): string {
   const t = s.trim().replace(/\s+/g, ' ')
@@ -1013,6 +1042,28 @@ export const useAiStore = create<AiState>((set, get) => {
         }))
         break
 
+      /*
+       * Инструмент подал признак жизни.
+       *
+       * Пульс приходит только пока вызов ИДЁТ, поэтому и запись живёт столько
+       * же: с результатом она снимается ниже. Ритм считает `notePulse` — он же
+       * решает, можно ли вообще судить о тишине (см. @shared/toolPulse).
+       */
+      case 'tool_pulse':
+        patchConversation(convId, (c) => ({
+          ...c,
+          toolPulses: {
+            ...c.toolPulses,
+            [ev.toolUseId]: notePulse(
+              c.toolPulses?.[ev.toolUseId],
+              Date.now(),
+              ev.elapsedSec,
+              ev.retry
+            )
+          }
+        }))
+        break
+
       case 'tool_result':
         // Номер созданной задачи движок называет только здесь, в тексте
         // результата: «Task #3 created successfully: …».
@@ -1020,6 +1071,7 @@ export const useAiStore = create<AiState>((set, get) => {
         patchConversation(convId, (c) => ({
           ...c,
           pendingTools: c.pendingTools.filter((t) => t.id !== ev.toolUseId),
+          toolPulses: withoutPulse(c.toolPulses, ev.toolUseId),
           messages: [
             ...c.messages,
             {
@@ -1196,6 +1248,7 @@ export const useAiStore = create<AiState>((set, get) => {
           typed: undefined,
           activeRequestId: undefined,
           pendingTools: [],
+          toolPulses: undefined,
           error: ev.message
         }))
         break
@@ -1378,6 +1431,7 @@ export const useAiStore = create<AiState>((set, get) => {
           typed: undefined,
           activeRequestId: undefined,
           pendingTools: [],
+          toolPulses: undefined,
           error: ev.message
         }))
         break
@@ -1602,6 +1656,7 @@ export const useAiStore = create<AiState>((set, get) => {
         typed: undefined,
         activeRequestId: undefined,
         pendingTools: [],
+        toolPulses: undefined,
         interrupted:
           lastUser >= 0 && !(c.interrupted ?? []).includes(lastUser)
             ? [...(c.interrupted ?? []), lastUser]
@@ -1642,6 +1697,7 @@ export const useAiStore = create<AiState>((set, get) => {
         typed: undefined,
         activeRequestId: undefined,
         pendingTools: [],
+        toolPulses: undefined,
         subagents: undefined,
         // Куда продолжать. 'fork' — веткой от последнего ответа агента;
         // 'fresh' — отматывать не к чему, и следующий ход начнёт сессию с нуля,

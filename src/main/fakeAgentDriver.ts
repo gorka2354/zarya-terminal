@@ -494,6 +494,37 @@ export class FakeAgentDriver implements AgentDriver {
         })
         this.emit(requestId, { type: 'result', isError: false, costUsd: 0.001 })
       })
+    } else if (/пульс|pulse/i.test(opts.prompt)) {
+      /*
+       * Пульс инструмента (inc-27). Карточка должна остаться ИДУЩЕЙ: результат
+       * закрыл бы ровно то, что проверяем. Гейта тоже нет — так ходит вызов под
+       * автопилотом, и именно там у карточки нет своего секундомера, а пульс
+       * оказывается единственным, что о ней вообще известно.
+       *
+       * Ритм частый, а потом тишина: сколько её нужно, чтобы стать новостью,
+       * решает `pulseSilence` по НАБЛЮДЁННОМУ ритму, и прогон ждёт по-настоящему
+       * — подделать здесь порог значило бы проверить не ту логику.
+       */
+      const pid = `${requestId}-p1`
+      const retry = /повтор|retry/i.test(opts.prompt)
+      this.schedule(requestId, 300, () =>
+        this.emit(requestId, {
+          type: 'assistant',
+          content: [
+            { type: 'tool_use', id: pid, name: 'Bash', input: { command: 'npm run build' } }
+          ]
+        })
+      )
+      for (let i = 1; i <= 3; i++) {
+        this.schedule(requestId, 400 + i * 600, () =>
+          this.emit(requestId, {
+            type: 'tool_pulse',
+            toolUseId: pid,
+            elapsedSec: i,
+            retry: retry ? { attempt: 2, max: 3 } : undefined
+          })
+        )
+      }
     } else if (/итог|outcome/i.test(opts.prompt)) {
       /*
        * Итог хода (inc-24): длинный ход, кончившийся не по-хорошему. Дожидаться

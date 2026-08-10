@@ -37,6 +37,7 @@ import { useContextMenu, type MenuItem } from './ContextMenu'
 import logoZarya from '@/assets/logo-zarya-64.png'
 import './missionfeed.css'
 import { ruleFor } from '@shared/allowRules'
+import { pulseSilence } from '@shared/toolPulse'
 
 /**
  * The mission feed — Zarya's centre stage, a 1:1 port of the design's unified
@@ -1408,9 +1409,16 @@ const ToolCard = memo(function ToolCard({
   const conv = feed?.conv
   const result0 = feed?.results.get(id)
   const startedAt = conv?.toolStartedAt?.[id]
-  // Пока идёт — перерисовываемся раз в секунду, чтобы время шло. Считать не от
-  // чего, кроме старта: вывод инструмента SDK отдаёт одним куском в конце.
-  const ticking = !!startedAt && !result0
+  const pulse = conv?.toolPulses?.[id]
+  /*
+   * Пока идёт — перерисовываемся раз в секунду, чтобы время шло. Считать не от
+   * чего, кроме старта: вывод инструмента SDK отдаёт одним куском в конце.
+   *
+   * Пульс тикает по своей причине: под автопилотом гейта не было, значит нет и
+   * `startedAt`, — а тишина после пульса всё равно должна становиться видимой
+   * сама, не дожидаясь следующего события в беседе.
+   */
+  const ticking = !result0 && (!!startedAt || !!pulse)
   const [, tickTool] = useState(0)
   useEffect(() => {
     if (!ticking) return
@@ -1536,6 +1544,16 @@ const ToolCard = memo(function ToolCard({
       </div>
     )
   } else {
+    /*
+     * ИДЁТ — и вопрос в том, идёт ли на самом деле.
+     *
+     * Секундомер отвечает только на «сколько мы ждём»: он крутится одинаково у
+     * работающей команды и у повисшей. Пульс движка отвечает на «а оно живо» —
+     * но лишь там, где движок его шлёт. Где не шлёт, карточка молчит об этом
+     * так же, как молчала раньше: судить о смерти по тишине, которой не с чем
+     * сравнить, — та же ложь, только с другой стороны (см. @shared/toolPulse).
+     */
+    const quiet = pulseSilence(pulse, Date.now())
     body = (
       <div className="zy-mf-tool-exec">
         <span className="zy-mf-spinner" />
@@ -1544,6 +1562,27 @@ const ToolCard = memo(function ToolCard({
             которую выполняет агент: её вывод придёт только в конце. */}
         {startedAt && (
           <span className="zy-mf-tool-elapsed">· {fmtElapsed(Date.now() - startedAt)}</span>
+        )}
+        {pulse && !quiet && (
+          <span className="zy-mf-tool-beat" title={t('feed.pulseAlive')} aria-label={t('feed.pulseAlive')} />
+        )}
+        {quiet != null && (
+          <span className="zy-mf-tool-quiet" title={t('feed.pulseLostHint')}>
+            · {t('feed.pulseLost', { time: fmtElapsed(quiet) })}
+          </span>
+        )}
+        {/*
+          Движок повторяет упавшую подзадачу. Без этой строки повтор выглядит
+          как «всё ещё идёт», и человек ждёт результата первой попытки.
+
+          Приглушённо, а не тревожно: движок сам сообщил, что справляется. Цвет
+          предупреждения тут значил бы «сделайте что-нибудь», а делать нечего —
+          и такое предупреждение учит не читать предупреждения.
+        */}
+        {pulse?.retry && (
+          <span className="zy-mf-tool-retry">
+            · {t('feed.toolRetry', { n: pulse.retry.attempt, max: pulse.retry.max })}
+          </span>
         )}
       </div>
     )
@@ -1575,10 +1614,18 @@ const ToolCard = memo(function ToolCard({
             {t('feed.lines', { n: view.lines })}
           </span>
         )}
-        {/* «хочет выполнить» — только пока решение не принято. После одобрения
-            команда УЖЕ идёт, и та же подпись сообщала бы о выборе, которого
-            больше нет; после результата — тем более. */}
-        {!view.mustShowFull && !result && (pending ? !pending.settled : true) && (
+        {/*
+          «хочет выполнить» — только пока РЕШЕНИЕ НЕ ПРИНЯТО. После одобрения
+          команда уже идёт, и та же подпись сообщала бы о выборе, которого
+          больше нет; после результата — тем более.
+
+          Гейта нет вовсе — значит, никто ничего и не хотел: под автопилотом
+          движок разрешил вызов сам, и он выполняется. Раньше здесь стояло
+          «спросить не у кого — считаем, что хочет», и карточка идущей минутами
+          команды всё это время утверждала, что агент только СОБИРАЕТСЯ её
+          запустить, — прямо над строкой «выполняется…».
+        */}
+        {!view.mustShowFull && !result && !!pending && !pending.settled && (
           <span className="zy-mf-tool-note">{verb.want}</span>
         )}
       </div>

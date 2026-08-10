@@ -745,6 +745,22 @@ export type AgentStreamEvent =
   | { type: 'reset'; sessionId?: string }
   | { type: 'assistant'; content: AiContentPart[] }
   | { type: 'tool_result'; toolUseId: string; content: string; isError: boolean }
+  /**
+   * Сердцебиение идущего вызова: движок подтверждает, что инструмент ещё жив.
+   *
+   * Наш секундомер идёт одинаково у работающей команды и у повисшей — «идёт 4
+   * минуты» и «висит 4 минуты» на экране неразличимы. Пульс различает их, но
+   * только там, где он есть: SDK не обещает слать его для каждого инструмента,
+   * и по молчанию с самого начала объявлять смерть нельзя (см. @shared/toolPulse).
+   */
+  | {
+      type: 'tool_pulse'
+      toolUseId: string
+      /** Сколько вызов идёт по часам движка, секунд. */
+      elapsedSec: number
+      /** Движок повторяет упавшую подзадачу — попытка из скольких. */
+      retry?: { attempt: number; max: number }
+    }
   | {
       type: 'permission'
       toolUseId: string

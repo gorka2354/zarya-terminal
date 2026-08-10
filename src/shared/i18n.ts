@@ -743,6 +743,11 @@ export const RU: Dict = {
   'bar.copyDone': 'Последний ответ скопирован',
   'bar.copyNothing': 'Копировать нечего — агент ещё не отвечал',
   'feed.thinking': 'рассуждение агента · строк: {n}',
+  'feed.pulseAlive': 'Движок подтверждает: инструмент работает',
+  'feed.pulseLost': 'пульса нет {time}',
+  'feed.pulseLostHint':
+    'Движок присылал признаки жизни этого вызова и перестал. Команда могла повиснуть — прервите ход, если ждать больше нечего',
+  'feed.toolRetry': 'повтор {n} из {max}',
   'feed.exportHint': 'Унести разговор: сохранить, скопировать, выгрузить вывод терминала',
   'feed.exportFile': 'Сохранить разговор в файл…',
   'feed.exportCopy': 'Скопировать разговор целиком',
@@ -2406,6 +2411,11 @@ export const EN: Dict = {
   'bar.copyDone': 'Last answer copied',
   'bar.copyNothing': 'Nothing to copy — the agent has not answered yet',
   'feed.thinking': 'agent reasoning · lines: {n}',
+  'feed.pulseAlive': 'The engine confirms this tool is still working',
+  'feed.pulseLost': 'no pulse for {time}',
+  'feed.pulseLostHint':
+    'The engine was reporting this call alive and stopped. The command may have hung — interrupt the turn if there is nothing left to wait for',
+  'feed.toolRetry': 'retry {n} of {max}',
   'feed.exportHint': 'Take the conversation with you: save, copy, export terminal output',
   'feed.exportFile': 'Save conversation to a file…',
   'feed.exportCopy': 'Copy the whole conversation',
