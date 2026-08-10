@@ -256,6 +256,8 @@ const api = {
     openExternal: (url: string) => ipcRenderer.send(CH.openExternal, url),
     showItemInFolder: (path: string) => ipcRenderer.send(CH.showItemInFolder, path),
     pickDirectory: () => ipcRenderer.invoke(CH.pickDirectory),
+    saveTextFile: (suggested: string, content: string): Promise<string | null> =>
+      ipcRenderer.invoke(CH.saveTextFile, suggested, content),
     /** Resolve an absolute path for a dropped File (drag-and-drop a folder). */
     getPathForFile: (file: File) => webUtils.getPathForFile(file),
     setOpacity: (value: number) => ipcRenderer.send(CH.setOpacity, value)

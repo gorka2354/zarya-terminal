@@ -2,6 +2,7 @@ import { BrowserWindow, Notification, app, dialog, ipcMain, shell } from 'electr
 import { tm } from './lang'
 import { APP_VERSION } from './appVersion'
 import { existsSync } from 'fs'
+import { writeFile } from 'fs/promises'
 import { CH } from '@shared/ipc'
 import type {
   AgentEngine,
@@ -662,6 +663,24 @@ export function registerIpc(ctx: IpcContext): void {
     const res = await dialog.showOpenDialog(win, { properties: ['openDirectory'] })
     return res.canceled ? null : res.filePaths[0]
   })
+  /*
+   * Сохранить текст в файл, выбранный человеком.
+   *
+   * Диалог показывает главный процесс: путь выбирает ОС, а не приложение —
+   * иначе Заря решала бы за человека, куда класть его же разговор. Возвращаем
+   * итоговый путь: интерфейсу нужно сказать, куда именно легло.
+   */
+  ipcMain.handle(
+    CH.saveTextFile,
+    async (_e, suggested: string, content: string): Promise<string | null> => {
+      const win = getWindow()
+      if (!win) return null
+      const res = await dialog.showSaveDialog(win, { defaultPath: suggested })
+      if (res.canceled || !res.filePath) return null
+      await writeFile(res.filePath, content, 'utf8')
+      return res.filePath
+    }
+  )
   ipcMain.on(CH.setOpacity, (_e, value: number) => {
     const win = getWindow()
     if (!win) return

@@ -310,6 +310,8 @@ export interface ZaryaApi {
     openExternal(url: string): void
     showItemInFolder(path: string): void
     pickDirectory(): Promise<string | null>
+    /** Спросить путь и записать текст. Возвращает путь или null, если отказались. */
+    saveTextFile(suggested: string, content: string): Promise<string | null>
     getPathForFile(file: File): string
     setOpacity(value: number): void
   }

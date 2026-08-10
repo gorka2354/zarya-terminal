@@ -3,6 +3,7 @@ import type { AiContentPart, BlockRecord } from '@shared/types'
 import { onBus } from '@/lib/bus'
 import { currentLang, t, useLang } from '@/lib/i18n'
 import { paneDraft } from '@/state/paneDrafts'
+import { toMarkdown, transcriptFileName } from '@shared/transcript'
 import { formatDuration, formatRelative, shortenPath } from '@/lib/ansi'
 import { editPreview, type EditPreview } from '@shared/editDiff'
 import { useBlocksStore } from '@/state/blocksStore'
@@ -143,8 +144,78 @@ export function PaneFeedButtons({ sessionId }: { sessionId: string }): React.JSX
     })
   }
 
+  /*
+   * Унести разговор: в файл или в буфер.
+   *
+   * Меню, а не две кнопки: в шапке панели место наперечёт, а оба действия — про
+   * одно и то же («забрать отсюда текст»). Путь выбирает ОС, потому что решать
+   * за человека, где лежит его разговор, — не наше дело.
+   */
+  const openExportMenu = (e: React.MouseEvent): void => {
+    const btn = e.currentTarget as HTMLElement
+    const r = btn.getBoundingClientRect()
+    const conv = convForSession(useAiStore.getState(), sessionId)
+    const messages = conv?.messages ?? []
+    const title = conv?.title
+    const md = (): string =>
+      toMarkdown(messages, {
+        title,
+        engine: conv?.engine,
+        cwd: useSessionsStore.getState().sessions[sessionId]?.cwd,
+        at: new Date().toLocaleString()
+      })
+    const empty = messages.length === 0
+    openMenu(
+      r.left,
+      r.bottom + 4,
+      [
+        {
+          label: t('feed.exportFile'),
+          disabled: empty,
+          onClick: () => {
+            const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')
+            void window.zarya.app
+              .saveTextFile(transcriptFileName(title, stamp), md())
+              .then((path) => {
+                // Отказ от диалога — не ошибка и не успех: молчим.
+                if (path) useUiStore.getState().toast(t('feed.exportSaved', { path }), 'success')
+              })
+              .catch(() => useUiStore.getState().toast(t('feed.exportFailed'), 'error'))
+          }
+        },
+        {
+          label: t('feed.exportCopy'),
+          disabled: empty,
+          onClick: () => {
+            void navigator.clipboard.writeText(md())
+            useUiStore.getState().toast(t('feed.exportCopied'), 'success')
+          }
+        },
+        { separator: true },
+        {
+          label: t('feed.exportScrollback'),
+          onClick: () => {
+            const text = getTerminal(sessionId)?.serialize(5000) ?? ''
+            const plain = text.replace(/\[[0-9;?]*[a-zA-Z]/g, '')
+            const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')
+            void window.zarya.app
+              .saveTextFile(`терминал — ${stamp}.txt`, plain)
+              .then((path) => {
+                if (path) useUiStore.getState().toast(t('feed.exportSaved', { path }), 'success')
+              })
+              .catch(() => useUiStore.getState().toast(t('feed.exportFailed'), 'error'))
+          }
+        }
+      ],
+      btn
+    )
+  }
+
   return (
     <>
+      <button className="zy-icon-btn" title={t('feed.exportHint')} onClick={openExportMenu}>
+        <Icon name="download" size={13} />
+      </button>
       <button className="zy-icon-btn" title={t('feed.resumeHint')} onClick={openSessionsMenu}>
         <Icon name="history" size={13} />
       </button>

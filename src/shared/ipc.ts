@@ -134,6 +134,7 @@ export const CH = {
   openExternal: 'app:open-external',
   showItemInFolder: 'app:show-item-in-folder',
   pickDirectory: 'app:pick-directory',
+  saveTextFile: 'app:save-text-file',
   setOpacity: 'app:set-opacity'
 } as const
 
