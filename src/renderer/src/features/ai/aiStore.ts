@@ -2365,7 +2365,21 @@ function seedPatch(convId: string, fn: (c: Conversation) => Conversation): void 
         // Ступени допуска — прогонам: «правки без спроса» и автопилот это разные
         // состояния, и проверять их надо порознь.
         bypass: !!c.bypass,
-        editsAuto: !!c.editsAuto
+        editsAuto: !!c.editsAuto,
+        /*
+         * Наблюдение за живым ходом (inc-27). В ленте это видно глазами, но
+         * прогону с НАСТОЯЩИМ движком надо знать не «нарисовалось ли», а
+         * «прислал ли движок»: разница между «мы не показываем» и «нам не
+         * присылают» — это разница между нашей ошибкой и чужим молчанием.
+         */
+        typedTool: c.typedTool,
+        toolPulses: c.toolPulses,
+        toolImages: Object.fromEntries(
+          Object.entries(c.toolImages ?? {}).map(([k, v]) => [
+            k,
+            v.map((i) => ({ mediaType: i.mediaType, bytes: i.bytes }))
+          ])
+        )
       }
     : null
 }
