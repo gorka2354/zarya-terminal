@@ -193,6 +193,41 @@ try {
   ok('и сказано, что цена в токенах теперь другая', /токен/i.test(memNote), memNote)
   if (shots) await page.screenshot({ path: join(shots, 'engine-memory.png') })
 
+  console.log('\n[7] Чужую правку не затираем: файл изменился на диске')
+  /*
+   * Пока редактор открыт, файл мог поправить сам агент (жест «#»), соседняя
+   * панель или человек сторонним редактором. Записать поверх — уничтожить
+   * чужую работу, просто с задержкой. Расхождение не решаем за человека:
+   * говорим и НЕ пишем.
+   */
+  await page.evaluate(() => {
+    const rows = Array.from(document.querySelectorAll('.zy-ctx-row--file'))
+    const row = rows.find((r) => /eng-work/i.test(r.querySelector('.zy-ctx-name')?.textContent ?? ''))
+    // Редактор ещё открыт с прошлого шага — закрываем и открываем заново, чтобы
+    // «снимок при открытии» был свежим.
+    row?.querySelector('.zy-mem-edit')?.click()
+  })
+  await page.waitForTimeout(400)
+  await page.evaluate(() => {
+    const rows = Array.from(document.querySelectorAll('.zy-ctx-row--file'))
+    const row = rows.find((r) => /eng-work/i.test(r.querySelector('.zy-ctx-name')?.textContent ?? ''))
+    row?.querySelector('.zy-mem-edit')?.click()
+  })
+  await page.waitForTimeout(700)
+  // Кто-то другой пишет в файл прямо сейчас.
+  writeFileSync(memFile, 'правка со стороны\n')
+  await page.locator('.zy-mem-area').fill('моя правка из окна')
+  await page.waitForTimeout(200)
+  await page.evaluate(() => document.querySelector('.zy-mem-save')?.click())
+  await page.waitForTimeout(800)
+  const clash = await page.evaluate(
+    () => document.querySelector('.zy-mem-note')?.textContent ?? ''
+  )
+  ok('сказано, что файл изменился снаружи', /изменился на диске/i.test(clash), clash)
+  const kept = readFileSync(memFile, 'utf8')
+  ok('чужая правка НЕ затёрта', /правка со стороны/.test(kept), kept)
+  ok('и наша не записана молча', !/моя правка из окна/.test(kept), kept)
+
   console.log(`\n[engine-tab] PASS ${pass} · FAIL ${fail}`)
 } catch (e) {
   // Ошибка внутри прогона обязана быть ВИДНА: без этого блока упавший прогон

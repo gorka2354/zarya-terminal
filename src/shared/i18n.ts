@@ -369,6 +369,10 @@ export const RU: Dict = {
   'mem.saved': 'Сохранено. Цену в токенах движок назовёт новую при следующем ответе',
   'mem.saveFailed': 'Не удалось записать — файл недоступен',
   'mem.unreadable': 'Файл не читается — возможно, он не текстовый или закрыт для чтения',
+  'mem.tooBig':
+    'Файл слишком велик, чтобы править его здесь: сохранение обрезало бы его хвост. Откройте его своим редактором',
+  'mem.changedOutside':
+    'Файл изменился на диске, пока он был открыт здесь. Ничего не записано — закройте и откройте заново, чтобы не затереть чужую правку',
   'mem.dirty': 'есть несохранённые правки',
   'ctx.deferred': 'Ещё ~{n} ждут наготове и в контексте НЕ лежат — подгрузятся, если понадобятся',
   'ctx.sum': 'Всего занято ~{n}',
@@ -1698,6 +1702,10 @@ export const EN: Dict = {
   'mem.saved': 'Saved. The engine will report the new token cost with its next answer',
   'mem.saveFailed': 'Could not write — the file is not writable',
   'mem.unreadable': 'The file cannot be read — it may be binary or locked',
+  'mem.tooBig':
+    'This file is too large to edit here: saving would cut off its tail. Open it in your own editor',
+  'mem.changedOutside':
+    'The file changed on disk while it was open here. Nothing was written — reopen it so you do not overwrite someone else’s edit',
   'mem.dirty': 'unsaved changes',
   'ctx.deferred': 'Another ~{n} wait on standby and are NOT in context — loaded only if needed',
   'ctx.sum': 'Used in total ~{n}',

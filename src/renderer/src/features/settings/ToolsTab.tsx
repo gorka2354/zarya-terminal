@@ -173,6 +173,10 @@ function MemoryRow({ file }: { file: NonNullable<McpSnapshot['memoryFiles']>[num
   const [note, setNote] = useState('')
   const managed = /^managed$/i.test(file.kind)
 
+  // Что лежало в файле, когда его открыли. По нему видно, не поменял ли его
+  // кто-то снаружи, пока редактор был открыт.
+  const [base, setBase] = useState<string | null>(null)
+
   const edit = async (): Promise<void> => {
     if (open) {
       setOpen(false)
@@ -186,7 +190,20 @@ function MemoryRow({ file }: { file: NonNullable<McpSnapshot['memoryFiles']>[num
       setNote(t('mem.unreadable'))
       return
     }
+    /*
+     * ОБРЕЗАННЫЙ ФАЙЛ НЕ ОТКРЫВАЕМ НА ПРАВКУ.
+     *
+     * Чтение отдаёт первые полтора мегабайта и честно помечает остаток
+     * отброшенным. Сохранить такое значит записать поверх файла его начало —
+     * то есть молча УНИЧТОЖИТЬ хвост чужой памяти. Отказ здесь единственно
+     * возможный ответ, и он должен быть назван причиной.
+     */
+    if (read.truncated) {
+      setNote(t('mem.tooBig'))
+      return
+    }
     setText(read.content)
+    setBase(read.content)
     setDirty(false)
     setOpen(true)
   }
@@ -194,7 +211,21 @@ function MemoryRow({ file }: { file: NonNullable<McpSnapshot['memoryFiles']>[num
   const save = async (): Promise<void> => {
     if (text === null) return
     try {
+      /*
+       * Перед записью перечитываем.
+       *
+       * Пока редактор был открыт, файл мог поправить сам агент (жест «#»),
+       * другая панель или человек в стороннем редакторе. Записать поверх — то
+       * же уничтожение чужой работы, только с задержкой. Расхождение не
+       * решаем за человека: говорим и не пишем.
+       */
+      const now = await window.zarya.fs.readFile(file.path).catch(() => null)
+      if (now && !now.binary && base !== null && now.content !== base) {
+        setNote(t('mem.changedOutside'))
+        return
+      }
       await window.zarya.fs.writeFile(file.path, text)
+      setBase(text)
       setDirty(false)
       // Цена в токенах ПОСЛЕ правки — уже другая, а цифра на экране прежняя.
       // Сказать об этом честнее, чем пересчитать своей арифметикой: считает её
