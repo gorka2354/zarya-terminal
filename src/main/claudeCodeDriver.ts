@@ -31,6 +31,13 @@ import { bundledPkgName, claudeExeName, resolveClaudeExe, type ExePick } from '.
 // package; the runtime value is loaded via a dynamic import below.
 import { cleanCommands } from '@shared/agentCommands'
 import { isNoticeSubtype, noticeFor } from './systemNotices'
+import { endReasonText } from './turnOutcome'
+
+/** Число из сообщения движка, если оно там есть и осмысленно. */
+function numOr(msg: unknown, key: string): number | undefined {
+  const v = (msg as Record<string, unknown>)?.[key]
+  return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : undefined
+}
 import { irreversible } from '@shared/irreversible'
 import { taskDone, taskHidden, taskOutcome } from '@shared/agentTasks'
 import { foldContextParts } from '@shared/contextParts'
@@ -1189,7 +1196,18 @@ export class ClaudeCodeDriver implements AgentDriver {
               // историю — вместе с отменённым сообщением. Что реально открыто,
               // знает init.
               sessionId: session.claudeSessionId ?? msg.session_id,
-              models: Object.keys(modelUsage)
+              models: Object.keys(modelUsage),
+              /*
+               * Числа хода и его исход. Движок считает их сам и присылал всегда
+               * — Заря брала только флаг ошибки, и «сколько это длилось» и «а
+               * почему оно вообще кончилось» человек узнать не мог.
+               */
+              durationMs: numOr(msg, 'duration_ms'),
+              ttftMs: numOr(msg, 'ttft_ms') ?? numOr(msg, 'ttft_stream_ms'),
+              endReason: endReasonText(msg) || undefined,
+              denials:
+                (msg as unknown as { permission_denials?: unknown[] }).permission_denials?.length ||
+                undefined
             })
             // Context-window fill: this turn's context tokens (fresh input + both
             // cache tiers) against the model's window, so the gauge reads how full

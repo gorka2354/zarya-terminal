@@ -1025,6 +1025,38 @@ export const useAiStore = create<AiState>((set, get) => {
         break
 
       case 'result': {
+        /*
+         * Итог хода строкой — но только когда есть что сказать.
+         *
+         * Молчим о ходе, который прошёл быстро и кончился нормально: строка под
+         * каждым ответом превратится в шум, который перестают читать. Говорим,
+         * если ход шёл дольше десяти секунд (тогда «сколько это заняло» —
+         * настоящий вопрос), если движок назвал причину конца или если что-то
+         * отклонили без вопроса.
+         */
+        const slow = (ev.durationMs ?? 0) >= 10_000
+        if (slow || ev.endReason || ev.denials) {
+          patchConversation(convId, (c) => ({
+            ...c,
+            messages: [
+              ...c.messages,
+              {
+                role: 'assistant',
+                content: [
+                  {
+                    type: 'turn',
+                    durationMs: ev.durationMs,
+                    ttftMs: ev.ttftMs,
+                    turns: ev.numTurns,
+                    denials: ev.denials,
+                    endReason: ev.endReason,
+                    isError: ev.isError
+                  }
+                ]
+              }
+            ]
+          }))
+        }
         patchConversation(convId, (c) => ({
           ...c,
           streaming: false,

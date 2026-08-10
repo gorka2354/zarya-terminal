@@ -2,6 +2,7 @@ import { appendFileSync } from 'fs'
 import { type BrowserWindow } from 'electron'
 import { CH } from '@shared/ipc'
 import { noticeFor } from './systemNotices'
+import { endReasonText } from './turnOutcome'
 import type {
   AgentCapabilities,
   AgentEngine,
@@ -479,6 +480,28 @@ export class FakeAgentDriver implements AgentDriver {
           text: 'ход прерван, ответ не дописан'
         })
         this.emit(requestId, { type: 'result', isError: false, costUsd: 0.002 })
+      })
+    } else if (/итог|outcome/i.test(opts.prompt)) {
+      /*
+       * Итог хода (inc-24): длинный ход, кончившийся не по-хорошему. Дожидаться
+       * настоящего исчерпания шагов в прогоне нельзя — а показать строку надо
+       * ровно такой, какой её увидит человек.
+       */
+      this.schedule(requestId, 300, () => {
+        this.emit(requestId, {
+          type: 'assistant',
+          content: [{ type: 'text', text: 'fake: сделал что успел' }]
+        })
+        this.emit(requestId, {
+          type: 'result',
+          isError: true,
+          costUsd: 0.21,
+          numTurns: 12,
+          durationMs: 74_300,
+          ttftMs: 2_600,
+          denials: 2,
+          endReason: endReasonText({ subtype: 'error_max_turns', terminal_reason: 'max_turns' })
+        })
       })
     } else if (/повтор|retry/i.test(opts.prompt)) {
       /*

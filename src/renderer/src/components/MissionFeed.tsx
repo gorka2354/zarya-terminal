@@ -1,7 +1,7 @@
 import { createContext, memo, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { AiContentPart, BlockRecord } from '@shared/types'
 import { onBus } from '@/lib/bus'
-import { t, useLang } from '@/lib/i18n'
+import { currentLang, t, useLang } from '@/lib/i18n'
 import { formatDuration, formatRelative, shortenPath } from '@/lib/ansi'
 import { editPreview, type EditPreview } from '@shared/editDiff'
 import { useBlocksStore } from '@/state/blocksStore'
@@ -968,6 +968,19 @@ const AgentMessage = memo(function AgentMessage({
         if (p.type === 'reset') {
           return <ResetMark key={i} />
         }
+        if (p.type === 'turn') {
+          return (
+            <TurnLine
+              key={i}
+              durationMs={p.durationMs}
+              ttftMs={p.ttftMs}
+              turns={p.turns}
+              denials={p.denials}
+              endReason={p.endReason}
+              isError={p.isError}
+            />
+          )
+        }
         if (p.type === 'tool_use') {
           // A subagent's «Agent» card would say only «субагент работает…» while
           // the wave line above already names the task, its runtime and its
@@ -1071,6 +1084,56 @@ function NoticeLine({
     <div className={`zy-mf-notice zy-mf-notice-${level}${calm ? ' zy-mf-notice--calm' : ''}`}>
       <span className="zy-mf-notice-mark">{level === 'error' ? '✗' : calm ? '·' : '!'}</span>
       <span className="zy-mf-notice-text">{text}</span>
+    </div>
+  )
+}
+
+/**
+ * Итог хода: сколько шёл, через сколько заговорил, чем кончился.
+ *
+ * Строка приходит не после каждого ответа — только когда есть что сказать (см.
+ * `aiStore`, ветка `result`). Причина стоит первой и своим цветом: «кончились
+ * шаги», «упёрлись в потолок трат» и «модель вернула ошибку» — три разных
+ * решения человека, а не одно слово «ошибка». Числа идут следом, приглушённо:
+ * они отвечают на «долго ли», а не на «что делать».
+ */
+function TurnLine({
+  durationMs,
+  ttftMs,
+  turns,
+  denials,
+  endReason,
+  isError
+}: {
+  durationMs?: number
+  ttftMs?: number
+  turns?: number
+  denials?: number
+  endReason?: string
+  isError?: boolean
+}): React.JSX.Element {
+  // Десятичный разделитель — по языку интерфейса: «2.6 с» посреди русской фразы
+  // читается как чужая вставка, а число здесь стоит рядом со словами.
+  const sec = (ms: number): string => {
+    if (ms >= 10_000) return String(Math.round(ms / 1000))
+    const one = (ms / 1000).toFixed(1)
+    return currentLang() === 'ru' ? one.replace('.', ',') : one
+  }
+  const bits: string[] = []
+  if (durationMs !== undefined) bits.push(t('feed.turnStats', { sec: sec(durationMs) }))
+  // Время до первого токена показываем, только когда ход был заметно долгим:
+  // на быстром ответе это цифра ради цифры.
+  if (ttftMs !== undefined && (durationMs ?? 0) >= 10_000)
+    bits.push(t('feed.turnTtft', { sec: sec(ttftMs) }))
+  if (turns !== undefined && turns > 1) bits.push(t('feed.turnTurns', { n: turns }))
+  if (denials) bits.push(t('feed.turnDenials', { n: denials }))
+  return (
+    <div className={`zy-mf-turn${endReason && isError ? ' zy-mf-turn--bad' : ''}`}>
+      {endReason && <span className="zy-mf-turn-reason">{endReason}</span>}
+      {/* Точка между причиной и числами — тем же знаком, что и внутри чисел:
+          без неё фраза и цифры слипались в одну строку без границы. */}
+      {endReason && bits.length > 0 && <span className="zy-mf-turn-dot">·</span>}
+      {bits.length > 0 && <span className="zy-mf-turn-stats">{bits.join(' · ')}</span>}
     </div>
   )
 }

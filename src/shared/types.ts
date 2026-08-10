@@ -416,6 +416,23 @@ export type AiContentPart =
    * чем показать границу.
    */
   | { type: 'reset' }
+  /**
+   * Итог хода: сколько он длился, через сколько заговорил, чем кончился.
+   *
+   * В консоли эта строка есть, в Заре не было ничего: «12 секунд думал» и
+   * «висел 12 секунд» выглядели одинаково, а лимит ходов, потолок трат и отказ
+   * модели сливались в одно слово «ошибка». Показывается не всегда — молчаливый
+   * успех в объяснении не нуждается (см. `endReasonText`).
+   */
+  | {
+      type: 'turn'
+      durationMs?: number
+      ttftMs?: number
+      turns?: number
+      denials?: number
+      endReason?: string
+      isError?: boolean
+    }
 
 export interface AiMessage {
   role: 'user' | 'assistant'
@@ -761,6 +778,18 @@ export type AgentStreamEvent =
       sessionId?: string
       /** Model ids actually used this turn (keys of modelUsage) — ground truth. */
       models?: string[]
+      /** Сколько ход шёл целиком, мс — движок считает сам. */
+      durationMs?: number
+      /** Через сколько пошёл первый токен, мс: «думает» отличимо от «висит». */
+      ttftMs?: number
+      /**
+       * Чем ход кончился, словами движка (`TerminalReason` + `subtype` итога).
+       * «Ошибка» одним словом на лимит ходов, потолок трат и отказ модели —
+       * три разные новости, слитые в одну.
+       */
+      endReason?: string
+      /** Сколько вызовов отклонено без вопроса за этот ход. */
+      denials?: number
     }
   | { type: 'error'; message: string }
 
