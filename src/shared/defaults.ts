@@ -76,6 +76,8 @@ export const DEFAULT_SETTINGS: Settings = {
     // Пусто — первый увиденный каталог запоминается молча (см. modelNews).
     seenModels: {},
     systemPromptExtra: '',
+    // Приписка к промпту чужого движка — пусто: своих правил агенту не навязываем.
+    enginePromptExtra: '',
     claudeModel: '',
     claudeEffort: ''
   },

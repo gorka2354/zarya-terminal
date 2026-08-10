@@ -26,7 +26,16 @@ import { readSettingsFile, readSkillOverrides, skillSettingsPaths } from './skil
 // тем более не то место, где допустим полуписаный файл после падения.
 import { writeJsonAtomic } from './jsonStore'
 import type { AgentDriver } from './agentDriver'
-import { bundledPkgName, claudeExeName, resolveClaudeExe, type ExePick } from './claudeExe'
+import {
+  bundledPkgName,
+  claudeExeName,
+  firstExisting,
+  probeVersion,
+  resolveClaudeExe,
+  systemClaudeCandidates,
+  type ExePick
+} from './claudeExe'
+import { buildBinaries, readAuth, runDoctor, type EngineHealth } from './engineHealth'
 // Types only (erased at runtime) — safe to import statically from the ESM-only
 // package; the runtime value is loaded via a dynamic import below.
 import { cleanCommands } from '@shared/agentCommands'
@@ -589,6 +598,8 @@ export class ClaudeCodeDriver implements AgentDriver {
     planMode: true,
     // additionalDirectories в опциях запуска: папку сверх рабочей можно выдать.
     directories: true,
+    // Путь и версия бинарника + `claude doctor` — движок умеет рассказать о себе.
+    health: true,
     vendorFlags: [{ key: 'ultracode', label: 'ULTRACODE', desc: tm('drv.ultracode') }]
   }
   private sessions = new Map<string, Session>()
@@ -890,6 +901,23 @@ export class ClaudeCodeDriver implements AgentDriver {
        * можно сделать.
        */
       ...(opts.extraDirs?.length ? { additionalDirectories: opts.extraDirs } : {}),
+      /*
+       * Приписка человека к системному промпту.
+       *
+       * `preset` обязателен: без него поле ЗАМЕНЯЕТ промпт движка целиком, и
+       * агент теряет всё, что знает о своих инструментах. Пустую строку не
+       * шлём вовсе — иначе Заря молча переводила бы сессию на «нестандартный
+       * промпт» там, где человек ничего не просил.
+       */
+      ...(opts.appendPrompt?.trim()
+        ? {
+            systemPrompt: {
+              type: 'preset' as const,
+              preset: 'claude_code' as const,
+              append: opts.appendPrompt.trim()
+            }
+          }
+        : {}),
       abortController: abort,
       canUseTool,
       // Always 'default' (or acceptEdits/plan) — never 'bypassPermissions'. Bypass
@@ -2433,6 +2461,51 @@ export class ClaudeCodeDriver implements AgentDriver {
       session.abort.abort()
       session.input.close()
     }
+  }
+
+  /**
+   * Здоровье движка: что запускается, откуда и что он сам о себе говорит.
+   *
+   * Когда Claude Code сломан, Заря выглядит сломанной: два разных `claude` в
+   * системе, битая запятая в чужом `settings.json`, протухший вход — снаружи
+   * всё это одинаково. Человек чинит Зарю, которая не виновата.
+   *
+   * Свой ответ даём только про то, что знаем достоверно: какие файлы нашлись,
+   * какой выбран и почему. Отчёт самого движка (`claude doctor`) запускается
+   * ТОЛЬКО по нажатию — это процесс на несколько секунд — и показывается
+   * дословно (см. @main/engineHealth).
+   */
+  async engineHealth(opts?: { cwd?: string; doctor?: boolean }): Promise<EngineHealth> {
+    const bundledPath = bundledClaudePath()
+    const envOverride = process.env.ZARYA_CLAUDE_BIN
+    const systemPath = firstExisting(
+      systemClaudeCandidates(process.platform, process.env, homedir())
+    )
+    const [bundledVersion, systemVersion] = await Promise.all([
+      bundledPath ? probeVersion(bundledPath) : Promise.resolve(undefined),
+      systemPath ? probeVersion(systemPath) : Promise.resolve(undefined)
+    ])
+    const pick = await claudeExe()
+    const binaries = buildBinaries(
+      pick,
+      {
+        bundled: bundledPath ? { path: bundledPath, version: bundledVersion } : undefined,
+        system: systemPath ? { path: systemPath, version: systemVersion } : undefined
+      },
+      envOverride
+    )
+    // Вход спрашиваем всегда: полсекунды, а ответ на «почему агент ведёт себя
+    // не так» он даёт чаще всех остальных строк этого экрана.
+    const auth = pick.path ? await readAuth(pick.path) : null
+    const health: EngineHealth = { binaries, reason: pick.reason, auth }
+    if (opts?.doctor) {
+      // Запускаем ТОТ ЖЕ файл, который работает на самом деле: спросить о
+      // здоровье один бинарник, а работать другим — получить отчёт не о том.
+      health.doctor = pick.path
+        ? await runDoctor(pick.path, opts.cwd)
+        : { ok: false, error: 'exe-unknown' }
+    }
+    return health
   }
 
   /**

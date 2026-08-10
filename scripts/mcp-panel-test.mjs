@@ -173,8 +173,16 @@ try {
   ok('сказано, что его в контексте НЕТ', /НЕ лежат/.test(brk?.later ?? ''), brk?.later)
   // Файлы памяти поимённо — самая частая неожиданность разбора: личный
   // CLAUDE.md молча стоит тысячи токенов в каждом запросе.
-  ok('файлы памяти названы', brk?.files.length === 2, brk?.files)
+  ok('файлы памяти названы', brk?.files.length === 3, brk?.files)
   ok('и у каждого своя цена', /9[.]4K/.test((brk?.files ?? []).join(' ')), brk?.files)
+  // Уровень файла — рядом с ценой (inc-29): два CLAUDE.md в списке иначе
+  // различались только по длинному обрезанному пути.
+  const levels = (brk?.files ?? []).join(' ')
+  ok('уровень каждого подписан', /User/.test(levels) && /Project/.test(levels), levels)
+  // Политику организации править нельзя: файла на диске у человека нет, и
+  // кнопка для неё была бы обещанием, которое не выполнится.
+  const managed = (brk?.files ?? []).find((f) => /Managed/.test(f))
+  ok('у политики организации кнопки правки нет', !!managed && !/править/.test(managed), managed)
   if (shots) await page.screenshot({ path: join(shots, 'tools-context.png') })
   await page.click('.zy-ctx-head')
   await page.waitForTimeout(200)

@@ -182,6 +182,16 @@ export interface ZaryaApi {
       engine: AgentEngine,
       requestId: string
     ): Promise<{ ok: boolean; reason?: 'busy' | 'no-session' | 'unsupported' }>
+    /**
+     * Здоровье движка: какой файл работает и что он сам о себе говорит.
+     * `doctor` — только с нажатия человека: запускает процесс на секунды.
+     * `null` — движок так не умеет.
+     */
+    health(
+      engine: AgentEngine,
+      cwd?: string,
+      doctor?: boolean
+    ): Promise<import('@shared/types').AgentEngineHealth | null>
     mcpReconnect(
       engine: AgentEngine,
       requestId: string,

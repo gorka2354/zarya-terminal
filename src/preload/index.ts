@@ -147,6 +147,9 @@ const api = {
     /** Принять новый состав рабочих папок беседы (папки едут со следующим ходом). */
     applyDirs: (engine: AgentEngine, requestId: string) =>
       ipcRenderer.invoke(CH.agentApplyDirs, engine, requestId),
+    /** Здоровье движка. `doctor` — только с нажатия: это запуск процесса. */
+    health: (engine: AgentEngine, cwd?: string, doctor?: boolean) =>
+      ipcRenderer.invoke(CH.agentHealth, engine, cwd, doctor),
     mcpReconnect: (engine: AgentEngine, requestId: string, name: string) =>
       ipcRenderer.invoke(CH.agentMcpReconnect, engine, requestId, name),
     mcpToggle: (engine: AgentEngine, requestId: string, name: string, enabled: boolean) =>

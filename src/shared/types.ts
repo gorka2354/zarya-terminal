@@ -238,6 +238,15 @@ export interface AiSettings {
   seenModels?: Record<string, string[]>
   /** Extra instructions appended to the system prompt. */
   systemPromptExtra: string
+  /**
+   * Приписка к системному промпту НАТИВНОГО движка (`--append-system-prompt`).
+   *
+   * Отдельно от `systemPromptExtra`: тот собирается для встроенного борта, у
+   * которого промпт наш целиком. Здесь — дополнение к чужому промпту, и одно
+   * поле на оба случая однажды унесло бы правило не туда, куда человек его
+   * писал.
+   */
+  enginePromptExtra: string
   /** Claude Code model override ('' = account default from ~/.claude). */
   claudeModel: string
   /** Claude Code effort override ('' = account default). */
@@ -606,6 +615,15 @@ export interface AgentStartOpts {
    * переживает перезапуск.
    */
   extraDirs?: string[]
+  /**
+   * Приписка к системному промпту движка (`--append-system-prompt`).
+   *
+   * Именно ПРИПИСКА: движку уходит `preset: 'claude_code'` плюс это, а не
+   * замена. Замена сняла бы с агента всё, что он о себе знает, — это была бы не
+   * настройка, а поломка, и человек, написавший одну строку, получил бы другой
+   * инструмент.
+   */
+  appendPrompt?: string
   /** Model id override; omit to use the driver's configured default. */
   model?: string
   /** Reasoning effort override (vendor vocabulary); omit for the account default. */
@@ -889,6 +907,47 @@ export type AgentStreamEvent =
     }
   | { type: 'error'; message: string }
 
+/**
+ * Здоровье движка: что запускается, откуда и что он сам о себе говорит.
+ *
+ * Когда Claude Code сломан, Заря выглядит сломанной. Этот снимок отвечает на
+ * два вопроса, ответа на которые нигде не было: КАКОЙ файл работает (их в
+ * системе бывает несколько) и что о себе думает сам движок.
+ */
+export interface AgentEngineBinary {
+  path: string
+  /** «2.1.226». Пусто — файл есть, а версию узнать не вышло. */
+  version?: string
+  /** `bundled` — приехал с Зарёй, `system` — свой у человека, `env` — задан переменной. */
+  origin: 'bundled' | 'system' | 'env'
+  chosen: boolean
+}
+
+export interface AgentEngineHealth {
+  binaries: AgentEngineBinary[]
+  /**
+   * Кто вошёл в движок. `null` — он не ответил.
+   *
+   * «Вошли не тем аккаунтом» — самая обидная из причин, по которым агент
+   * отвечает не то: снаружи она неотличима от плохой модели. Полей четыре из
+   * семи: идентификатор организации на этот вопрос не отвечает, а экран
+   * настроек попадает на скриншоты.
+   */
+  auth?: { loggedIn: boolean; method?: string; email?: string; plan?: string } | null
+  /**
+   * Почему выбран этот. КЛЮЧ словаря, а не фраза: причина решается в главном
+   * процессе, а говорит о ней окно — и на своём языке.
+   */
+  reason: string
+  /**
+   * Отчёт движка о себе, ДОСЛОВНО. Приходит только по нажатию: это запуск
+   * процесса на несколько секунд. Своего вердикта поверх не ставим — отчёт
+   * внутренне противоречив (печатает находку и следом «проблем нет»), и свести
+   * его в одно наше слово значило бы выбрать, какой из двух его фраз верить.
+   */
+  doctor?: { ok: true; text: string } | { ok: false; error: string }
+}
+
 /** SDK effort levels (mirrors the Agent SDK's EffortLevel — future-proof). */
 export type AgentEffortLevel = 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 
@@ -995,6 +1054,12 @@ export interface AgentCapabilities {
    * человек решит, что дал доступ, а агент по-прежнему получит отказ.
    */
   directories?: boolean
+  /**
+   * Движок может рассказать о себе: какой файл работает, какая версия, что у
+   * него сломано. Где false — раздела «Движок» нет вовсе: пустой экран
+   * диагностики сам выглядит как поломка.
+   */
+  health?: boolean
   /**
    * Движок понимает режим плана: сперва рассказать, что собирается сделать, и
    * ничего не трогать до согласия.

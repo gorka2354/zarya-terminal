@@ -113,6 +113,21 @@ export interface AgentDriver {
    * местах и рано или поздно разошёлся бы.
    */
   applyDirectories?(requestId: string): { ok: boolean; reason?: 'busy' | 'no-session' }
+  /**
+   * Здоровье движка (гейт: `capabilities.health`).
+   *
+   * Не про беседу, а про сам движок: какой исполняемый файл работает, какие ещё
+   * нашлись и что он говорит о себе сам. Живой сессии не требует — иначе
+   * диагноз был бы недоступен ровно тогда, когда он нужен: когда ничего не
+   * запускается.
+   *
+   * `doctor: true` разрешает СПРОСИТЬ движок о нём самом. По умолчанию нельзя:
+   * это чужой процесс на несколько секунд, и запускается он только с нажатия.
+   */
+  engineHealth?(opts?: {
+    cwd?: string
+    doctor?: boolean
+  }): Promise<import('@shared/types').AgentEngineHealth>
   /** Переподключить один сервер живой беседы. */
   mcpReconnect?(
     requestId: string,

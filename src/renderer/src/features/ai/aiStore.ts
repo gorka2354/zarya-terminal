@@ -903,6 +903,12 @@ export const useAiStore = create<AiState>((set, get) => {
       // состав живёт в беседе, а не в памяти драйвера, — так он не разойдётся
       // с тем, что показано в панели допуска.
       ...(conv.extraDirs?.length ? { extraDirs: conv.extraDirs } : {}),
+      // Приписка к системному промпту движка. Едет каждым ходом, но действует с
+      // ЗАПУСКА сессии — то есть в беседах, начатых после изменения. Так и
+      // написано в настройке: обещать немедленность значило бы соврать.
+      ...(settings.ai.enginePromptExtra.trim()
+        ? { appendPrompt: settings.ai.enginePromptExtra.trim() }
+        : {}),
       // SECURITY: permissionMode is always 'default' and gate-weakening comes only
       // from АВТОПИЛОТ — see nativeGateOpts, which owns that invariant and is
       // guarded by tests/startOpts.test.ts.

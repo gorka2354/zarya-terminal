@@ -152,6 +152,102 @@ function LoginHint({
  * токенов все полоски были бы одинаково пустыми, и сравнить статьи между собой
  * — то, ради чего сюда и смотрят, — стало бы нельзя.
  */
+/**
+ * Один файл памяти: чей он, во сколько обходится и можно ли его поправить.
+ *
+ * Цену Заря показывала и раньше — и на этом останавливалась. «У вас личный
+ * CLAUDE.md на девять тысяч токенов в каждом запросе» без возможности его
+ * открыть — это чек без кассы: человек узнаёт о трате и идёт искать файл руками.
+ *
+ * Правка здесь же, а не в редакторе Зари: тот живёт только в IDE-режиме, и
+ * кнопка «править» без него молча не делала бы ничего — худший вид кнопки.
+ *
+ * `Managed` не правится: это политика организации, её нет на диске у человека.
+ * Кнопки для него нет вовсе — показать её и получить отказ хуже, чем не
+ * показывать.
+ */
+function MemoryRow({ file }: { file: NonNullable<McpSnapshot['memoryFiles']>[number] }): React.JSX.Element {
+  const [open, setOpen] = useState(false)
+  const [text, setText] = useState<string | null>(null)
+  const [dirty, setDirty] = useState(false)
+  const [note, setNote] = useState('')
+  const managed = /^managed$/i.test(file.kind)
+
+  const edit = async (): Promise<void> => {
+    if (open) {
+      setOpen(false)
+      return
+    }
+    setNote('')
+    const read = await window.zarya.fs.readFile(file.path).catch(() => null)
+    if (!read || read.binary) {
+      // Файл может быть недоступен или оказаться не текстом. Молчать нельзя:
+      // человек нажал «править» и вправе узнать, почему ничего не открылось.
+      setNote(t('mem.unreadable'))
+      return
+    }
+    setText(read.content)
+    setDirty(false)
+    setOpen(true)
+  }
+
+  const save = async (): Promise<void> => {
+    if (text === null) return
+    try {
+      await window.zarya.fs.writeFile(file.path, text)
+      setDirty(false)
+      // Цена в токенах ПОСЛЕ правки — уже другая, а цифра на экране прежняя.
+      // Сказать об этом честнее, чем пересчитать своей арифметикой: считает её
+      // движок, и он назовёт новую при следующем ответе.
+      setNote(t('mem.saved'))
+    } catch {
+      setNote(t('mem.saveFailed'))
+    }
+  }
+
+  return (
+    <>
+      <div className="zy-ctx-row zy-ctx-row--file">
+        <span className="zy-ctx-name" title={file.path}>
+          {shortenPath(file.path, 40)}
+        </span>
+        {/* Чей это файл. Движок называет уровень словом («User», «Project»), и
+            без него два CLAUDE.md в списке различались только по пути. */}
+        {file.kind && <span className="zy-mem-kind">{file.kind}</span>}
+        <span className="zy-ctx-num">{fmtCtxTokens(file.tokens)}</span>
+        {!managed && (
+          <button className="zy-mem-edit" onClick={() => void edit()}>
+            {t(open ? 'mem.close' : 'mem.edit')}
+          </button>
+        )}
+      </div>
+      {note && <div className="zy-mem-note">{note}</div>}
+      {open && text !== null && (
+        <div className="zy-mem-editor">
+          <textarea
+            className="zy-input zy-textarea zy-mem-area"
+            rows={14}
+            value={text}
+            spellCheck={false}
+            onChange={(e) => {
+              setText(e.target.value)
+              setDirty(true)
+              if (note) setNote('')
+            }}
+          />
+          <div className="zy-mem-actions">
+            <button className="zy-mem-save" disabled={!dirty} onClick={() => void save()}>
+              {t('mem.save')}
+            </button>
+            {/* Несохранённое видно словом, а не только состоянием кнопки. */}
+            {dirty && <span className="zy-mem-dirty">{t('mem.dirty')}</span>}
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
+
 function ContextBreakdown({
   parts,
   files
@@ -198,12 +294,7 @@ function ContextBreakdown({
             <>
               <div className="zy-ctx-sub">{t('ctx.memoryFiles')}</div>
               {files.map((f) => (
-                <div key={f.path} className="zy-ctx-row zy-ctx-row--file">
-                  <span className="zy-ctx-name" title={f.path}>
-                    {shortenPath(f.path, 44)}
-                  </span>
-                  <span className="zy-ctx-num">{fmtCtxTokens(f.tokens)}</span>
-                </div>
+                <MemoryRow key={f.path} file={f} />
               ))}
             </>
           )}

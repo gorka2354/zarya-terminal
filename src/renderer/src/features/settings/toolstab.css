@@ -529,3 +529,77 @@
 .zy-skills-link:hover {
   color: var(--accent);
 }
+
+/* Файл памяти: уровень, правка, редактор (inc-29) --------------------- */
+/* Уровень словом движка («User», «Project»): без него два CLAUDE.md в списке
+   различались только по пути, а путь длинный и обрезан. */
+.zy-mem-kind {
+  flex-shrink: 0;
+  padding: 0 5px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-family: var(--font-tech);
+  font-size: 10px;
+  color: var(--fg-faint);
+}
+.zy-mem-edit {
+  flex-shrink: 0;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border: 1px solid var(--border-strong);
+  border-radius: 3px;
+  background: transparent;
+  font-family: var(--font-tech);
+  font-size: 10px;
+  color: var(--fg-dim);
+  cursor: pointer;
+}
+.zy-mem-edit:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.zy-mem-note {
+  padding: 2px 0 4px;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  color: var(--accent-2);
+}
+.zy-mem-editor {
+  margin: 4px 0 8px;
+}
+/* Память — текст, который человек пишет руками: моноширинный и высокий. */
+.zy-mem-area {
+  width: 100%;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.zy-mem-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+.zy-mem-save {
+  padding: 3px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 3px;
+  background: transparent;
+  font-family: var(--font-tech);
+  font-size: 11px;
+  color: var(--fg-dim);
+  cursor: pointer;
+}
+.zy-mem-save:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.zy-mem-save:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.zy-mem-dirty {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  color: var(--warn);
+}

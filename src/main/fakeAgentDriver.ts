@@ -1053,9 +1053,23 @@ export class FakeAgentDriver implements AgentDriver {
         { name: 'MCP tools', tokens: 22_000, deferred: true },
         { name: 'System tools', tokens: 8_000, deferred: true }
       ],
+      /*
+       * Три уровня: личный, проектный и политика организации. Последний
+       * важен именно тем, что его НЕЛЬЗЯ править — файла на диске у человека
+       * нет, и кнопка правки для него не должна появляться вовсе.
+       *
+       * `ZARYA_FAKE_MEMORY_FILE` подменяет путь проектного на настоящий: без
+       * него прогон проверил бы показ, но не запись, а обещание «правьте здесь»
+       * стоит ровно столько, сколько стоит запись.
+       */
       memoryFiles: [
         { path: 'C:/Users/qa/.claude/CLAUDE.md', kind: 'User', tokens: 9_400 },
-        { path: 'C:/proj/CLAUDE.md', kind: 'Project', tokens: 2_600 }
+        {
+          path: process.env.ZARYA_FAKE_MEMORY_FILE || 'C:/proj/CLAUDE.md',
+          kind: 'Project',
+          tokens: 2_600
+        },
+        { path: '(политика организации)', kind: 'Managed', tokens: 800 }
       ],
       // Разыгранные скиллы покрывают все случаи, из-за которых строка ведёт
       // себя по-разному: дорогой личный, встроенный, плагинный (его
@@ -1150,6 +1164,48 @@ export class FakeAgentDriver implements AgentDriver {
     // и проверка на его наличие объявляла бы занятой уже свободную беседу.
     if ((this.pendingGates.get(requestId)?.size ?? 0) > 0) return { ok: false, reason: 'busy' }
     return { ok: true }
+  }
+
+  /**
+   * Здоровье движка (inc-29) — правдоподобный, но выдуманный снимок.
+   *
+   * Настоящих бинарников у фейка нет, и врать про пути реального человека он не
+   * должен: пути здесь заведомо ненастоящие. Проверяется ПОКАЗ — что выбранный
+   * отличим от остальных, что причина названа, что отчёт движка выводится
+   * дословно, а отказ отчёта не выдаётся за отчёт.
+   */
+  async engineHealth(opts?: {
+    cwd?: string
+    doctor?: boolean
+  }): Promise<import('@shared/types').AgentEngineHealth> {
+    const health: import('@shared/types').AgentEngineHealth = {
+      binaries: [
+        { path: '/fake/system/claude', version: '9.9.9', origin: 'system', chosen: true },
+        { path: '/fake/bundled/claude', version: '9.9.8', origin: 'bundled', chosen: false }
+      ],
+      reason: 'system-newer',
+      auth: { loggedIn: true, method: 'claude.ai', email: 'qa@example.test', plan: 'max' }
+    }
+    if (opts?.doctor) {
+      // Отчёт нарочно ПРОТИВОРЕЧИВЫЙ — как у настоящего: находка и следом
+      // «проблем нет». Прогон обязан убедиться, что Заря не сводит это в свой
+      // вердикт, а показывает как есть.
+      health.doctor = {
+        ok: true,
+        text: [
+          'Claude Code doctor',
+          '',
+          'Running: fake (9.9.9)',
+          `Path: ${opts.cwd ?? '(нет папки)'}`,
+          '',
+          'Invalid settings',
+          '- .claude/settings.json: Invalid or malformed JSON',
+          '',
+          'No installation issues found.'
+        ].join(String.fromCharCode(10))
+      }
+    }
+    return health
   }
 
   async mcpReconnect(

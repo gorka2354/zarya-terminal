@@ -14,6 +14,7 @@ import { chordFromEvent, formatChord } from '@/features/palette/keybindings'
 import { getThemes } from '@/features/themes/themes'
 import { setIdeMode } from '@/features/ide/ideMode'
 import { ToolsTab } from './ToolsTab'
+import { EngineTab } from './EngineTab'
 import {
   isProtectionRisky,
   protectionHint,
@@ -42,6 +43,7 @@ type TabId =
   | 'blocks'
   | 'ai'
   | 'tools'
+  | 'engine'
   | 'voice'
   | 'sessions'
   | 'editor'
@@ -59,6 +61,10 @@ const TABS: Array<{ id: TabId; labelKey: string; sub: string; icon: IconName; gr
   // выключить целиком, но агент в строке панели работает и без неё — и его
   // MCP-серверы всё так же ломаются молча.
   { id: 'tools', labelKey: 'set.tab.tools', sub: 'MCP · TOOLS', icon: 'bolt', group: 'base' },
+  // Движок — тоже базовая группа, и по тому же доводу, что и «Инструменты»:
+  // когда Claude Code сломан, сломанной выглядит Заря, и спрятать диагноз за
+  // IDE-надстройку значит спрятать его ровно от того, кому он нужен.
+  { id: 'engine', labelKey: 'set.tab.engine', sub: 'ENGINE · HEALTH', icon: 'sputnik', group: 'base' },
   { id: 'keybindings', labelKey: 'set.tab.keys', sub: 'KEYBINDINGS', icon: 'gear', group: 'base' },
   // IDE superstructure — only shown when the IDE layer is enabled.
   { id: 'ai', labelKey: 'set.tab.ai', sub: 'IDE · AGENT', icon: 'sputnik', group: 'ide' },
@@ -200,6 +206,7 @@ export default function SettingsView(): React.JSX.Element | null {
             {tab === 'blocks' && <BlocksTab />}
             {tab === 'ai' && <AiTab />}
             {tab === 'tools' && <ToolsTab />}
+            {tab === 'engine' && <EngineTab />}
             {tab === 'voice' && <VoiceTab />}
             {tab === 'sessions' && <SessionsTab />}
             {tab === 'editor' && <EditorTab />}

@@ -107,6 +107,7 @@ export const CH = {
   agentMcpReconnect: 'agent:mcp-reconnect',
   agentStopTask: 'agent:stop-task',
   agentApplyDirs: 'agent:apply-dirs',
+  agentHealth: 'agent:health',
   /** Включить/выключить сервер живой беседы (пишет в конфиг движка). */
   agentMcpToggle: 'agent:mcp-toggle',
   /** Состояние скилла в настройках движка: в работе / только имя / «/» / выкл. */

@@ -1,0 +1,259 @@
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import type { AgentEngine, AgentEngineHealth } from '@shared/types'
+import { t, useLang } from '@/lib/i18n'
+import { useAiStore } from '@/features/ai/aiStore'
+import { useSessionsStore } from '@/state/sessionsStore'
+import { useSettingsStore } from '@/state/settingsStore'
+import { useUiStore } from '@/state/uiStore'
+import './enginetab.css'
+
+/**
+ * ДВИЖОК: что запускается, кем вошли и что с ним не так.
+ *
+ * Когда Claude Code сломан, сломанной выглядит Заря. Два разных `claude` в
+ * системе (один старый, другой свежий), вход не тем аккаунтом, битая запятая в
+ * чужом `settings.json` — снаружи всё это одинаково: агент не отвечает или
+ * отвечает не тем. Человек чинит Зарю, которая не виновата, и обычно не там.
+ *
+ * Экран отвечает на три вопроса, ответа на которые нигде не было: КАКОЙ файл
+ * работает, КТО вошёл и ЧТО о себе думает сам движок.
+ *
+ * ГРАНИЦА, которую здесь важно держать. Своё утверждение мы делаем только о
+ * том, что знаем достоверно: пути, версии, выбор и его причина — наши данные.
+ * Отчёт `claude doctor` показывается ДОСЛОВНО и без нашего вердикта поверх: он
+ * внутренне противоречив (печатает найденную проблему и следом «проблем нет»),
+ * и свести его в одно наше слово значило бы выбрать, какой из двух его фраз
+ * верить.
+ */
+export function EngineTab(): React.JSX.Element {
+  // Подписка на язык: без неё надписи сменились бы не в момент переключения, а
+  // при следующей перерисовке по другой причине.
+  useLang()
+
+  const conversations = useAiStore((s) => s.conversations)
+  const activeId = useAiStore((s) => s.activeId)
+  const agentCaps = useUiStore((s) => s.agentCaps)
+  const sessions = useSessionsStore((s) => s.sessions)
+
+  /*
+   * Движок выбираем по беседе — как во вкладке «Инструменты» и по той же
+   * причине: движков несколько, и «здоровье вообще» не существует. Папка тоже
+   * берётся у беседы: `claude doctor` читает настройки ТЕКУЩЕЙ папки, и без
+   * неё отчёт был бы о чужом проекте.
+   */
+  const panes = useMemo(
+    () => conversations.filter((c) => c.engine !== 'builtin'),
+    [conversations]
+  )
+  const [picked, setPicked] = useState<string | null>(null)
+  const chosen = useMemo(
+    () => panes.find((c) => c.id === (picked ?? activeId)) ?? panes[0],
+    [panes, picked, activeId]
+  )
+  const engine = chosen?.engine as AgentEngine | undefined
+  const caps = engine ? agentCaps?.[engine] : undefined
+  const unsupported = caps ? !caps.health : false
+  const cwd = chosen?.sessionId ? sessions[chosen.sessionId]?.cwd : chosen?.cwd
+
+  const [health, setHealth] = useState<AgentEngineHealth | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [asking, setAsking] = useState(false)
+
+  const load = useCallback(
+    async (doctor: boolean): Promise<void> => {
+      if (!engine || unsupported) return
+      if (doctor) setAsking(true)
+      else setBusy(true)
+      try {
+        const h = await window.zarya.agent.health(engine, cwd, doctor)
+        // Отчёт движка НЕ затираем дешёвым обновлением: человек его только что
+        // прочитал, а перерисовка списка не повод убирать текст с экрана.
+        setHealth((prev) => (doctor || !prev?.doctor ? h : h && { ...h, doctor: prev.doctor }))
+      } finally {
+        setBusy(false)
+        setAsking(false)
+      }
+    },
+    [engine, cwd, unsupported]
+  )
+
+  // Открыли вкладку — спрашиваем ДЕШЁВОЕ: пути, версии, вход. Это доли секунды
+  // и не запускает беседу. `doctor` — только с нажатия: он живёт секунды.
+  useEffect(() => {
+    setHealth(null)
+    void load(false)
+  }, [load])
+
+  const [copied, setCopied] = useState(false)
+  const copyUpdate = async (): Promise<void> => {
+    await navigator.clipboard.writeText(UPDATE_CMD)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  if (!panes.length) {
+    return (
+      <section className="zy-set-section">
+        <div className="zy-eng-empty">{t('eng.noPane')}</div>
+      </section>
+    )
+  }
+
+  const chosenBin = health?.binaries.find((b) => b.chosen)
+  const others = health?.binaries.filter((b) => !b.chosen) ?? []
+
+  return (
+    <section className="zy-set-section">
+      {panes.length > 1 && (
+        <div className="zy-eng-pick">
+          <span className="zy-eng-pick-label">{t('eng.pane')}</span>
+          <select
+            className="zy-input"
+            value={chosen?.id ?? ''}
+            onChange={(e) => setPicked(e.target.value)}
+          >
+            {panes.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.title || c.engine}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {unsupported ? (
+        <div className="zy-eng-empty">{t('eng.unsupported')}</div>
+      ) : (
+        <>
+          <div className="zy-section-label">{t('eng.whatRuns')}</div>
+          {!health && busy && <div className="zy-eng-empty">{t('eng.loading')}</div>}
+          {chosenBin && (
+            <div className="zy-eng-bin zy-eng-bin--chosen">
+              <div className="zy-eng-bin-head">
+                <span className="zy-eng-origin">{t(`eng.origin.${chosenBin.origin}`)}</span>
+                <span className="zy-eng-ver">{chosenBin.version ?? t('eng.verUnknown')}</span>
+              </div>
+              <code className="zy-eng-path">{chosenBin.path}</code>
+              {/* Почему именно он. Причина — ключ от главного процесса: политика
+                  выбора живёт там, и пересказывать её здесь значило бы завести
+                  вторую, которая однажды разойдётся с первой. */}
+              <div className="zy-eng-why">{t(`eng.reason.${health?.reason}`)}</div>
+            </div>
+          )}
+          {!!others.length && (
+            <>
+              {/*
+                Другие найденные. Ровно тот случай, ради которого экран и нужен:
+                «у меня же новая версия» — а работает не она.
+              */}
+              <div className="zy-eng-sub">{t('eng.others')}</div>
+              {others.map((b) => (
+                <div key={b.path} className="zy-eng-bin">
+                  <div className="zy-eng-bin-head">
+                    <span className="zy-eng-origin">{t(`eng.origin.${b.origin}`)}</span>
+                    <span className="zy-eng-ver">{b.version ?? t('eng.verUnknown')}</span>
+                  </div>
+                  <code className="zy-eng-path">{b.path}</code>
+                </div>
+              ))}
+            </>
+          )}
+
+          <div className="zy-section-label">{t('eng.account')}</div>
+          {health?.auth === undefined && <div className="zy-eng-empty">{t('eng.loading')}</div>}
+          {health?.auth === null && <div className="zy-eng-empty">{t('eng.authUnknown')}</div>}
+          {health?.auth && (
+            <div className="zy-eng-auth">
+              {health.auth.loggedIn ? (
+                <>
+                  <span className="zy-eng-ok">{t('eng.authIn')}</span>
+                  {health.auth.email && <code className="zy-eng-path">{health.auth.email}</code>}
+                  <span className="zy-eng-dim">
+                    {[health.auth.plan, health.auth.method].filter(Boolean).join(' · ')}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="zy-eng-bad">{t('eng.authOut')}</span>
+                  <span className="zy-eng-dim">{t('eng.authOutHow')}</span>
+                </>
+              )}
+            </div>
+          )}
+
+          <div className="zy-section-label">{t('eng.update')}</div>
+          {/*
+            Обновляем НЕ МЫ. Ставить чужой движок из-под себя — риск оставить
+            человека без рабочего терминала посреди дня, и у самой команды нет
+            даже проверки без установки. Показать версию и дать команду —
+            ровно та граница, где мы ничем не рискуем за него.
+          */}
+          <div className="zy-eng-update">
+            <code className="zy-eng-cmd">{UPDATE_CMD}</code>
+            <button className="zy-eng-btn" onClick={() => void copyUpdate()}>
+              {t(copied ? 'eng.copied' : 'eng.copy')}
+            </button>
+          </div>
+          <div className="zy-eng-note">{t('eng.updateWhy')}</div>
+
+          <div className="zy-section-label">{t('eng.doctor')}</div>
+          <div className="zy-eng-note">{t('eng.doctorWhat')}</div>
+          <button className="zy-eng-btn" disabled={asking} onClick={() => void load(true)}>
+            {t(asking ? 'eng.asking' : 'eng.ask')}
+          </button>
+          {health?.doctor?.ok === false && (
+            <div className="zy-eng-empty">{t('eng.doctorFail', { why: health.doctor.error })}</div>
+          )}
+          {health?.doctor?.ok && (
+            <>
+              {/* Слова движка — дословно и с указанием, что они его, а не наши. */}
+              <div className="zy-eng-sub">{t('eng.doctorSaid')}</div>
+              <pre className="zy-eng-report">{health.doctor.text}</pre>
+            </>
+          )}
+
+          <AppendPrompt />
+        </>
+      )}
+    </section>
+  )
+}
+
+/** Команда обновления движка. Одна на весь экран — чтобы не разошлась. */
+const UPDATE_CMD = 'claude update'
+
+/**
+ * Приписка к системному промпту движка.
+ *
+ * То же, что `--append-system-prompt` у консоли: правило «на сейчас», которое
+ * не хочется класть в `CLAUDE.md` проекта. Уходит движку как
+ * `systemPrompt: { preset: 'claude_code', append }` — то есть ДОПОЛНЯЕТ его
+ * собственный промпт, а не заменяет: замена сняла бы с агента всё, что он о
+ * себе знает, и это была бы не настройка, а поломка.
+ *
+ * Действует в беседах, начатых ПОСЛЕ изменения. Так честнее, чем обещать
+ * немедленность: состав промпта движку задаётся при запуске сессии, а сессия
+ * живёт весь разговор.
+ */
+function AppendPrompt(): React.JSX.Element {
+  const value = useSettingsStore((s) => s.settings.ai.enginePromptExtra)
+  const update = useSettingsStore((s) => s.update)
+  const [text, setText] = useState(value)
+  useEffect(() => setText(value), [value])
+  return (
+    <>
+      <div className="zy-section-label">{t('eng.append')}</div>
+      <div className="zy-eng-note">{t('eng.appendWhen')}</div>
+      <textarea
+        className="zy-input zy-textarea"
+        rows={3}
+        value={text}
+        placeholder={t('eng.appendPh')}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={() => {
+          if (text !== value) void update({ ai: { enginePromptExtra: text } as never })
+        }}
+      />
+    </>
+  )
+}

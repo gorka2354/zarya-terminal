@@ -1,0 +1,162 @@
+/* Вкладка «Движок»: что запускается, кто вошёл, что сломано.
+   Формы и цвета — те же, что у вкладки «Инструменты»: это соседние экраны про
+   одно и то же хозяйство, и разный вид говорил бы, будто они про разное. */
+
+.zy-eng-pick {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.zy-eng-pick-label {
+  font-family: var(--font-tech);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--fg-dim);
+}
+.zy-eng-empty {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: var(--fg-faint);
+  padding: 4px 0;
+}
+.zy-eng-note {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--fg-faint);
+  margin-bottom: 8px;
+}
+.zy-eng-sub {
+  margin: 10px 0 4px;
+  font-family: var(--font-tech);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--fg-dim);
+}
+
+/* Найденный бинарник. Выбранный обведён — он один отвечает на вопрос
+   «что на самом деле работает», остальные здесь только для сравнения. */
+.zy-eng-bin {
+  padding: 7px 9px;
+  margin-bottom: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elev1);
+}
+.zy-eng-bin--chosen {
+  border-color: var(--accent);
+}
+.zy-eng-bin-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 3px;
+}
+.zy-eng-origin {
+  font-family: var(--font-tech);
+  font-size: 12px;
+  color: var(--accent);
+}
+.zy-eng-ver {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg-dim);
+  font-variant-numeric: tabular-nums;
+}
+/* Путь — целиком и с переносом: обрезанный путь бесполезен ровно тогда, когда
+   нужен, — когда двух похожих файлов надо различить. */
+.zy-eng-path {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg-dim);
+  overflow-wrap: anywhere;
+}
+.zy-eng-why {
+  margin-top: 4px;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--fg-faint);
+}
+
+.zy-eng-auth {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.zy-eng-ok {
+  font-family: var(--font-tech);
+  font-size: 12px;
+  color: var(--success);
+}
+.zy-eng-bad {
+  font-family: var(--font-tech);
+  font-size: 12px;
+  color: var(--warn);
+}
+.zy-eng-dim {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  color: var(--fg-faint);
+}
+
+.zy-eng-update {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.zy-eng-cmd {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg-dim);
+  overflow-wrap: anywhere;
+}
+.zy-eng-btn {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 3px;
+  background: transparent;
+  font-family: var(--font-tech);
+  font-size: 11px;
+  color: var(--fg-dim);
+  cursor: pointer;
+}
+.zy-eng-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.zy-eng-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* Отчёт движка — его слова, а не наши: моноширинный, дословный, со своим
+   потолком по высоте, чтобы длинный ответ не растянул экран настроек. */
+.zy-eng-report {
+  margin: 4px 0 0;
+  padding: 8px;
+  max-height: 280px;
+  overflow: auto;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--fg-dim);
+  white-space: pre-wrap;
+  word-break: break-word;
+}

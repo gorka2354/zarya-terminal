@@ -536,6 +536,18 @@ export function registerIpc(ctx: IpcContext): void {
     if (!driver?.applyDirectories) return { ok: false, reason: 'unsupported' as const }
     return driver.applyDirectories(requestId)
   })
+  /*
+   * Здоровье движка. `doctor` — только по нажатию человека: это запуск чужого
+   * процесса на несколько секунд, и делать его фоном приложение не вправе.
+   */
+  ipcMain.handle(
+    CH.agentHealth,
+    async (_e, engine: AgentEngine, cwd?: string, doctor?: boolean) => {
+      const driver = driverFor(engine)
+      if (!driver?.engineHealth) return null
+      return driver.engineHealth({ cwd, doctor: !!doctor })
+    }
+  )
   ipcMain.handle(
     CH.agentMcpReconnect,
     async (_e, engine: AgentEngine, requestId: string, name: string) => {
