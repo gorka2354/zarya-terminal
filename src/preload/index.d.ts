@@ -328,6 +328,26 @@ export interface ZaryaApi {
     openExternal(url: string): void
     showItemInFolder(path: string): void
     pickDirectory(): Promise<string | null>
+    /**
+     * Папка, названная в командной строке (`zarya .`). Приходит и при первом
+     * запуске, и когда второй экземпляр отдал свою папку этому окну.
+     * `bad` — путь назвали, но открыть его нечем: окно обязано сказать это
+     * словами, а не молча открыть что-то другое.
+     */
+    onOpenFolderArg(cb: (msg: { dir?: string; bad?: string }) => void): Unsub
+    /**
+     * Папка ПЕРВОГО запуска. Окно забирает её само, когда готово открывать:
+     * подписка появляется позже загрузки страницы, и толкнутое сообщение
+     * ушло бы в пустоту. `null` — папку не называли.
+     */
+    takeFolderArg(): Promise<{ dir?: string; bad?: string } | null>
+    /**
+     * Папка, названная в командной строке (`zarya .`). Приходит и при первом
+     * запуске, и когда второй экземпляр отдал свою папку этому окну.
+     * `bad` — путь назвали, но открыть его нечем: окно обязано сказать это
+     * словами, а не молча открыть что-то другое.
+     */
+    onOpenFolderArg(cb: (msg: { dir?: string; bad?: string }) => void): Unsub
     /** Спросить путь и записать текст. Возвращает путь или null, если отказались. */
     saveTextFile(suggested: string, content: string): Promise<string | null>
     getPathForFile(file: File): string

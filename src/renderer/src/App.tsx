@@ -3,6 +3,7 @@ import { installWaitingCall } from '@/features/ai/waitingCall'
 import { t } from '@/lib/i18n'
 import { useEffect, useRef, useState } from 'react'
 import { registerCoreActions } from '@/actions/coreActions'
+import { openProject } from '@/actions/projects'
 import { registerDeskActions } from '@/actions/deskActions'
 import { ActivityBar } from '@/components/ActivityBar'
 import { BottomStrip } from '@/components/BottomStrip'
@@ -82,6 +83,27 @@ export default function App(): React.JSX.Element {
       // Restore persisted agent conversations (each bound to its terminal),
       // after sessions so the session ids they reference are back.
       await useAiStore.getState().hydrate()
+      /*
+       * Папка из командной строки (`zarya .`).
+       *
+       * Подписываемся ПОСЛЕ восстановления сессий: вкладка проекта должна
+       * встать поверх восстановленного стола, а не потеряться под ним. Главный
+       * процесс придерживает сообщение до конца загрузки окна, поэтому первый
+       * запуск с папкой сюда доходит.
+       *
+       * Путь назвали, а открыть нечем — говорим словами. Молча открыть вместо
+       * него домашнюю папку значило бы сделать не то, о чём попросили.
+       */
+      const useFolderArg = (msg: { dir?: string; bad?: string } | null): void => {
+        if (!msg) return
+        if (msg.dir) void openProject(msg.dir)
+        else if (msg.bad) useUiStore.getState().toast(t('cli.noFolder', { path: msg.bad }), 'error')
+      }
+      // Папку ПЕРВОГО запуска забираем сами: главный процесс не знает, когда мы
+      // готовы её открыть, и толкнутое сообщение ушло бы в пустоту.
+      useFolderArg(await window.zarya.app.takeFolderArg())
+      // Второй запуск отдаёт свою папку на лету — тут подписка уже стоит.
+      window.zarya.app.onOpenFolderArg(useFolderArg)
       setBooted(true)
     })()
   }, [])

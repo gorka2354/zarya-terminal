@@ -262,6 +262,11 @@ const api = {
     openExternal: (url: string) => ipcRenderer.send(CH.openExternal, url),
     showItemInFolder: (path: string) => ipcRenderer.send(CH.showItemInFolder, path),
     pickDirectory: () => ipcRenderer.invoke(CH.pickDirectory),
+    /** Папка из командной строки (`zarya .`) — от ВТОРОГО запуска, на лету. */
+    onOpenFolderArg: (cb: (msg: { dir?: string; bad?: string }) => void) =>
+      on(CH.openFolderArg, cb),
+    /** Папка ПЕРВОГО запуска: окно забирает её, когда готово её открыть. */
+    takeFolderArg: () => ipcRenderer.invoke(CH.takeFolderArg),
     saveTextFile: (suggested: string, content: string): Promise<string | null> =>
       ipcRenderer.invoke(CH.saveTextFile, suggested, content),
     /** Resolve an absolute path for a dropped File (drag-and-drop a folder). */

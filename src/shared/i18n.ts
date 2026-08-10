@@ -780,6 +780,9 @@ export const RU: Dict = {
   'fact.edit.diff': '+{plus} −{minus}',
   'fact.edit.userModified': 'предложенную правку поправил человек',
 
+  // --- запуск из папки (inc-30)
+  'cli.noFolder': 'Папку «{path}» открыть нечем — её нет или к ней нет доступа',
+
   // --- вкладка «Движок» (inc-29)
   'set.tab.engine': 'Движок',
   'eng.pane': 'Панель',
@@ -2542,6 +2545,9 @@ export const EN: Dict = {
   'fact.grep.limited': 'at most {n} shown — the rest was cut',
   'fact.edit.diff': '+{plus} −{minus}',
   'fact.edit.userModified': 'the proposed edit was changed by a human',
+
+  // --- launched with a folder (inc-30)
+  'cli.noFolder': 'Cannot open «{path}» — it does not exist or is not reachable',
 
   // --- Engine tab (inc-29)
   'set.tab.engine': 'Engine',

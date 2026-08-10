@@ -53,6 +53,7 @@
     "qa:pane-status": "npm run build && node scripts/pane-status-test.mjs",
     "qa:signals": "node scripts/pane-signals-test.mjs",
     "qa:plan": "node scripts/agent-plan-test.mjs",
+    "qa:cli": "npm run build && node scripts/cli-open-test.mjs",
     "qa:engine": "npm run build && node scripts/engine-tab-test.mjs",
     "qa:engine-live": "npm run build && node scripts/engine-live.mjs",
     "qa:perms": "npm run build && node scripts/permissions-test.mjs",

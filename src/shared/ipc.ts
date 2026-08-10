@@ -108,6 +108,10 @@ export const CH = {
   agentStopTask: 'agent:stop-task',
   agentApplyDirs: 'agent:apply-dirs',
   agentHealth: 'agent:health',
+  /** main -> renderer: открыть папку, названную в командной строке. */
+  openFolderArg: 'app:open-folder-arg',
+  /** renderer -> main: забрать папку, накопленную первым запуском. */
+  takeFolderArg: 'app:take-folder-arg',
   /** Включить/выключить сервер живой беседы (пишет в конфиг движка). */
   agentMcpToggle: 'agent:mcp-toggle',
   /** Состояние скилла в настройках движка: в работе / только имя / «/» / выкл. */

@@ -1,6 +1,8 @@
 import { BrowserWindow, app, shell, session } from 'electron'
-import { join } from 'path'
+import { dirname, join, resolve } from 'path'
 import { pathToFileURL } from 'url'
+import { statSync } from 'fs'
+import { cleanArgPath, folderArg } from '@shared/cliArgs'
 import { CH } from '@shared/ipc'
 import type { AgentEngine } from '@shared/types'
 import type { AgentDriver } from './agentDriver'
@@ -33,6 +35,65 @@ let quitConfirmed = false
 /** Пользователь подтвердил установку обновления: после штатного выхода — установщик. */
 let installAfterQuit = false
 let quitTimer: NodeJS.Timeout | null = null
+
+/**
+ * Папка из командной строки: `zarya .`, «Открыть в Заре» из проводника, запуск
+ * из скрипта.
+ *
+ * Разбор формы — в @shared/cliArgs (чистый, там же проверен). Здесь только то,
+ * что без диска не решить: во что превращается «.» и существует ли путь.
+ *
+ * ФАЙЛ вместо папки принимаем: проводник передаёт именно файл, когда «открыть с
+ * помощью» вызывают на нём. Открываем его папку — это то, чего человек и хотел,
+ * и это честнее отказа.
+ *
+ * Путь назвали, а открыть нечем — возвращаем его как `bad`. Молча открыть
+ * вместо него домашнюю папку значило бы сделать НЕ ТО, о чём попросили, и не
+ * сказать об этом.
+ */
+function folderFromArgv(argv: readonly string[], cwd: string): { dir?: string; bad?: string } {
+  const raw = folderArg(argv, app.isPackaged)
+  if (!raw) return {}
+  const cleaned = cleanArgPath(raw)
+  if (!cleaned) return {}
+  const full = resolve(cwd, cleaned)
+  try {
+    const st = statSync(full)
+    return { dir: st.isDirectory() ? full : dirname(full) }
+  } catch {
+    return { bad: cleaned }
+  }
+}
+
+/**
+ * Папка первого запуска ждёт, пока окно за ней придёт.
+ *
+ * Толкать её самим нельзя: окно подписывается на события ПОСЛЕ восстановления
+ * сессий, то есть заметно позже `did-finish-load`, и сообщение уходило бы в
+ * пустоту — команда «не срабатывала» без единого следа. Поэтому копим, а окно
+ * забирает, когда готово (`app:take-folder-arg`).
+ */
+let pendingFolderArg: { dir?: string; bad?: string } | null = null
+
+/** Забрать и забыть: папка открывается один раз, а не на каждой перезагрузке окна. */
+export function takeFolderArg(): { dir?: string; bad?: string } | null {
+  const msg = pendingFolderArg
+  pendingFolderArg = null
+  return msg
+}
+
+/** Отдать папку окну. Окно решит, открывать вкладкой или сказать об отказе. */
+function sendFolderArg(msg: { dir?: string; bad?: string }): void {
+  if (!msg.dir && !msg.bad) return
+  const win = mainWindow
+  // Окна ещё нет или оно грузится — придёт само. Толкать сейчас значит
+  // говорить в пустоту.
+  if (!win || win.webContents.isLoading()) {
+    pendingFolderArg = msg
+    return
+  }
+  win.webContents.send(CH.openFolderArg, msg)
+}
 
 const settingsStore = new SettingsStore()
 const sessionStore = new SessionStore()
@@ -324,15 +385,34 @@ function createWindow(): void {
   }
 }
 
-const gotLock = isolatedInstance || app.requestSingleInstanceLock()
+/*
+ * Замок единственного экземпляра.
+ *
+ * Изолированный запуск (`ZARYA_USER_DATA`) его не берёт: прогоны идут по
+ * несколько сразу и не должны мешать ни друг другу, ни настоящему приложению.
+ *
+ * `ZARYA_SINGLE_INSTANCE` возвращает замок изолированному запуску — рубильник
+ * для прогона второго экземпляра, самого частого пути `zarya .`: Заря уже
+ * открыта, и папка должна приехать В НЕЁ. Проверить это иначе нечем.
+ */
+const wantsLock = !isolatedInstance || !!process.env.ZARYA_SINGLE_INSTANCE
+const gotLock = wantsLock ? app.requestSingleInstanceLock() : true
 if (!gotLock) {
   app.quit()
 } else {
-  app.on('second-instance', () => {
+  /*
+   * Второй запуск не поднимает второе окно — он передаёт папку этому.
+   *
+   * `zarya .` из другого терминала должен открыть проект ЗДЕСЬ, а не разбудить
+   * окно и молча забыть, зачем его звали. Рабочая папка берётся у того
+   * процесса, а не у нашего: «.» у него своя.
+   */
+  app.on('second-instance', (_e, argv, workingDirectory) => {
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore()
       mainWindow.focus()
     }
+    sendFolderArg(folderFromArgv(argv, workingDirectory || process.cwd()))
   })
 
   app.whenReady().then(async () => {
@@ -351,6 +431,7 @@ if (!gotLock) {
       agentRegistry,
       stt: sttService,
       updates: updateService,
+      takeFolderArg,
       requestQuitConfirmed: () => {
         if (quitTimer) clearTimeout(quitTimer)
         quitConfirmed = true
@@ -430,6 +511,10 @@ if (!gotLock) {
     })
 
     createWindow()
+
+    // Папка из командной строки первого запуска. Отдаём сразу: `sendFolderArg`
+    // сам дождётся, пока окно догрузится.
+    sendFolderArg(folderFromArgv(process.argv, process.cwd()))
 
     // Keep the fuel gauge honest from boot: poll /usage in the background (a
     // throwaway idle session when no chat is live) instead of only after the
