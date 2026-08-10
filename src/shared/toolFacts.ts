@@ -59,6 +59,18 @@ export function toolFacts(toolName: string, result: unknown): ToolFact[] {
   if (name.includes('__')) return []
   switch (name) {
     case 'bash':
+    /*
+     * PowerShell — ТОТ ЖЕ инструмент по форме ответа.
+     *
+     * На Windows движок подключает его рядом с Bash, и выход у него буквально
+     * тот же: `interrupted`, `timedOutAfterMs`, `backgroundTaskId`. Без этой
+     * ветки на машине владельца самый ходовой шелл показывал «✓ готово» там,
+     * где команда оборвана по времени или до сих пор работает в фоне, — то есть
+     * ровно та ложь, ради которой всё это писалось, и ровно на той платформе,
+     * где её увидят.
+     */
+    // eslint-disable-next-line no-fallthrough
+    case 'powershell':
       return bashFacts(r)
     case 'read':
       return readFacts(r)

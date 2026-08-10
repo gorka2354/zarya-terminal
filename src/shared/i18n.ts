@@ -743,6 +743,7 @@ export const RU: Dict = {
   'bar.copyDone': 'Последний ответ скопирован',
   'bar.copyNothing': 'Копировать нечего — агент ещё не отвечал',
   'feed.thinking': 'рассуждение агента · строк: {n}',
+  'feed.noResult': 'результата не будет — ход прерван',
   'feed.pulseAlive': 'Движок подтверждает: инструмент работает',
   'feed.pulseLost': 'пульса нет {time}',
   'feed.pulseLostHint':
@@ -792,7 +793,7 @@ export const RU: Dict = {
   'perm.noCwd': 'папка не выбрана',
   'perm.dirAdd': 'Считать своей ещё одну папку…',
   'perm.dirRemoveHint':
-    'Снова спрашивать про эту папку. Идущий ход её сохранит — движку состав задан при запуске',
+    'Снова спрашивать про эту папку. Идущий ход её доработает: движку состав задан при запуске — отвяжется, как только ход закончится',
   'perm.dirAdded': 'Папка своя — со следующего хода про чтение в ней не спросят',
   'perm.dirBusy': 'Пока агент работает, папку не добавить: это оборвало бы ход',
   'perm.dirAlready': 'Эта папка уже в списке',
@@ -2460,6 +2461,7 @@ export const EN: Dict = {
   'bar.copyDone': 'Last answer copied',
   'bar.copyNothing': 'Nothing to copy — the agent has not answered yet',
   'feed.thinking': 'agent reasoning · lines: {n}',
+  'feed.noResult': 'no result is coming — the turn was cut short',
   'feed.pulseAlive': 'The engine confirms this tool is still working',
   'feed.pulseLost': 'no pulse for {time}',
   'feed.pulseLostHint':
@@ -2509,7 +2511,7 @@ export const EN: Dict = {
   'perm.noCwd': 'no folder chosen',
   'perm.dirAdd': 'Count one more folder as its own…',
   'perm.dirRemoveHint':
-    'Ask about this folder again. A turn already running keeps it — the engine got the list at launch',
+    'Ask about this folder again. A turn already running finishes with it — the engine got the list at launch; it detaches as soon as the turn ends',
   'perm.dirAdded': 'Folder counts as its own — from the next turn reads inside it are not asked about',
   'perm.dirBusy': 'While the agent works a folder cannot be added: it would cut the turn short',
   'perm.dirAlready': 'That folder is already on the list',

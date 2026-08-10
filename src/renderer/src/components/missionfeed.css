@@ -1625,3 +1625,8 @@
   white-space: nowrap;
   min-width: 0;
 }
+/* Вызов, которого уже не будет: без крутилки — крутить нечего. */
+.zy-mf-tool-exec--dead {
+  color: var(--fg-faint);
+  font-style: italic;
+}

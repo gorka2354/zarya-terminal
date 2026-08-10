@@ -218,6 +218,70 @@ try {
   )
   ok('а правила у него по-прежнему видны', geminiRules === true)
 
+  console.log('\n[7] Отзыв папки посреди хода НЕ убивает ход')
+  /*
+   * Самая дорогая находка ревью, и она обязана быть закрыта прогоном.
+   *
+   * Отзыв звал драйвер безусловно, а тот закрывает живую сессию, чтобы следующий
+   * ход поднял её с новым составом папок. То есть щелчок по «отозвать» посреди
+   * работы убивал ход — молча, и лента навсегда оставалась крутить «агент
+   * отвечает». Теперь пока ход идёт, драйвера не трогаем.
+   */
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(200)
+  const cid2 = await page.evaluate(() => window.__zaryaStartAgent?.('codex', 'просто ответь'))
+  await page.waitForTimeout(1400)
+  await openPanel(page)
+  await page.click('.zy-perm-add')
+  await page.waitForTimeout(800)
+  const before = await page.evaluate(
+    (id) => (window.__zaryaConvById?.(id)?.extraDirs ?? []).length,
+    cid2
+  )
+  ok('папка выдана, пока беседа свободна', before === 1, before)
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(200)
+
+  // Долгий ход: у фейка «slow» держит его восемь секунд.
+  await page.evaluate((id) => window.__zaryaSendIn?.(id, 'slow: долгий ход'), cid2)
+  await page.waitForTimeout(1200)
+  const running = await page.evaluate(
+    (id) => window.__zaryaConvById?.(id)?.streaming === true,
+    cid2
+  )
+  ok('ход идёт', running === true)
+
+  await openPanel(page)
+  await page.locator('.zy-perm-item:has(.zy-perm-dir) .zy-perm-revoke').last().click()
+  await page.waitForTimeout(1200)
+  const alive = await page.evaluate(
+    (id) => ({
+      dirs: (window.__zaryaConvById?.(id)?.extraDirs ?? []).length,
+      streaming: window.__zaryaConvById?.(id)?.streaming === true,
+      error: window.__zaryaConvById?.(id)?.error ?? null
+    }),
+    cid2
+  )
+  ok('папка из списка ушла', alive.dirs === 0, alive)
+  ok('а ход при этом ЖИВ', alive.streaming === true, alive)
+  ok('и ошибки не случилось', alive.error === null, alive)
+
+  // И ход честно доходит до конца, а не виснет навсегда.
+  let ended = null
+  for (let i = 0; i < 20; i++) {
+    await page.waitForTimeout(1000)
+    ended = await page.evaluate(
+      (id) => ({
+        streaming: window.__zaryaConvById?.(id)?.streaming === true,
+        error: window.__zaryaConvById?.(id)?.error ?? null
+      }),
+      cid2
+    )
+    if (!ended.streaming) break
+  }
+  ok('ход дошёл до конца сам', ended?.streaming === false, ended)
+  ok('без ошибки', ended?.error === null, ended)
+
   console.log(`\n[permissions] PASS ${pass} · FAIL ${fail}`)
 } catch (e) {
   // Ошибка внутри прогона обязана быть ВИДНА: без этого блока упавший прогон

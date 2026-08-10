@@ -856,6 +856,9 @@ export class FakeAgentDriver implements AgentDriver {
   }
 
   interrupt(requestId: string): void {
+    // Нерешённые гейты сняты вместе с ходом: иначе фейк до конца жизни беседы
+    // отвечал бы «занято» там, где ничего не идёт.
+    this.pendingGates.delete(requestId)
     this.emit(requestId, { type: 'result', isError: false })
   }
 

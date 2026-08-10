@@ -496,6 +496,14 @@ interface Session {
   ultracode?: boolean
   /** The user pressed Esc: a subsequent process exit is expected, not a failure. */
   interrupted?: boolean
+  /**
+   * Ход ИДЁТ прямо сейчас.
+   *
+   * Нужен там, где нельзя трогать сессию: закрыть её посреди работы значит
+   * убить ход. Считать занятостью нерешённые гейты (`perms.size`) недостаточно —
+   * ход без единого вопроса выглядел бы свободным, и его убивали бы молча.
+   */
+  running?: boolean
   /** Task ids that are plain shell commands, not subagents — filtered from the count. */
   shellTasks: Set<string>
   /**
@@ -739,6 +747,7 @@ export class ClaudeCodeDriver implements AgentDriver {
       // interrupted» flag, or one Esc would silence every later failure for the
       // rest of this conversation and the UI would wait forever.
       existing.interrupted = false
+      existing.running = true
       // Last line of defence: if the queue closed between the check above and
       // here, don't pretend the turn started.
       if (!existing.input.push(userMessage(opts.prompt, opts.images))) {
@@ -944,6 +953,8 @@ export class ClaudeCodeDriver implements AgentDriver {
       shellTasks: new Set<string>(),
       taskKinds: new Map<string, string>(),
       toolNames: new Map<string, string>(),
+      // Сессия рождается ходом: до `result` её трогать нельзя.
+      running: true,
       resumed: !!opts.resume,
       // Ветка запомнила, откуда началась: если человек нажмёт Esc и здесь, до
       // первого слова агента, отматывать будем к той же точке.
@@ -1497,6 +1508,7 @@ export class ClaudeCodeDriver implements AgentDriver {
             // The turn finished on its own, so the session is healthy again: a
             // later crash must be reported, not swallowed as «that Esc earlier».
             session.interrupted = false
+            session.running = false
             // Имена инструментов нужны были только для разбора итогов этого
             // хода: следующий назовёт свои. Держать их дальше — копить карту,
             // которая растёт весь разговор и никогда не пригождается.
@@ -2439,7 +2451,9 @@ export class ClaudeCodeDriver implements AgentDriver {
   applyDirectories(requestId: string): { ok: boolean; reason?: 'busy' | 'no-session' } {
     const session = this.sessions.get(requestId)
     if (!session) return { ok: true, reason: 'no-session' }
-    if (session.perms.size > 0) return { ok: false, reason: 'busy' }
+    // Ход в работе ИЛИ висит невыясненный вопрос — не трогаем: первое убило бы
+    // работу, второе выбросило бы вопрос, на который человек ещё не ответил.
+    if (session.running || session.perms.size > 0) return { ok: false, reason: 'busy' }
     // Помечаем прерванной, чтобы закрытие не приехало на экран ошибкой: сессию
     // гасим мы, и это не сбой хода.
     session.interrupted = true
