@@ -30,6 +30,7 @@ import { bundledPkgName, claudeExeName, resolveClaudeExe, type ExePick } from '.
 // Types only (erased at runtime) — safe to import statically from the ESM-only
 // package; the runtime value is loaded via a dynamic import below.
 import { cleanCommands } from '@shared/agentCommands'
+import { isNoticeSubtype, noticeFor } from './systemNotices'
 import { irreversible } from '@shared/irreversible'
 import { taskDone, taskHidden, taskOutcome } from '@shared/agentTasks'
 import { foldContextParts } from '@shared/contextParts'
@@ -436,6 +437,12 @@ export class ClaudeCodeDriver implements AgentDriver {
   }
   private sessions = new Map<string, Session>()
   /**
+   * Отложенное «гашу рабочий процесс»: показывается, только если после него не
+   * пришло ничего. Возобновлённая беседа приносит такое сообщение из прошлой
+   * жизни сессии, и дословный показ объявлял бы обрыв там, где его нет.
+   */
+  private workerDownTimer: ReturnType<typeof setTimeout> | undefined
+  /**
    * Последний состав инструментов каждой беседы.
    *
    * Нужен, чтобы после закрытия панели окно показало прошлый снимок с честной
@@ -822,6 +829,18 @@ export class ClaudeCodeDriver implements AgentDriver {
         // значило бы снять сессию с учёта в finally, и убить процесс при
         // следующем ходе стало бы некому.
         if (session.rewound) continue
+        /*
+         * Любое сообщение после «гашу рабочий процесс» означает, что гашения не
+         * было: предупреждение оказалось историческим (возобновлённая беседа
+         * тащит его посреди потока) и до экрана дойти не должно.
+         */
+        if (
+          this.workerDownTimer &&
+          (msg as unknown as { subtype?: string }).subtype !== 'worker_shutting_down'
+        ) {
+          clearTimeout(this.workerDownTimer)
+          this.workerDownTimer = undefined
+        }
         switch (msg.type) {
           /*
            * ОТВЕТ, КОТОРЫЙ ПЕЧАТАЕТСЯ НА ГЛАЗАХ.
@@ -935,6 +954,40 @@ export class ClaudeCodeDriver implements AgentDriver {
                   text
                 })
               }
+              break
+            }
+            /*
+             * ТО, О ЧЁМ ДВИЖОК ГОВОРИЛ В ПУСТОТУ.
+             *
+             * Повтор запроса после ошибки API, отказ инструменту по правилу, ответ
+             * локальной слэш-команды, упавший хук, гашение рабочего процесса — всё
+             * это приходило сюда и проваливалось в пустой `break`. Разбор — в
+             * `systemNotices.ts`: там он проверяется построчно, здесь достаточно
+             * одного вопроса «есть ли что сказать».
+             */
+            if (isNoticeSubtype(msg.subtype)) {
+              const notice = noticeFor(msg)
+              if (!notice) break
+              /*
+               * «Гашу рабочий процесс» — сигнал живого хвоста, а не факт сессии.
+               * Типы SDK предупреждают прямо: возобновлённая беседа тащит с
+               * собой ИСТОРИЧЕСКИЕ такие сообщения посреди потока. Показать их
+               * дословно значит объявить обрыв связи там, где следом спокойно
+               * приходит ответ, — а предупреждение, за которым ничего не
+               * следует, учит не читать предупреждения.
+               *
+               * Поэтому придерживаем на полторы секунды: пришло что угодно
+               * следующее — сообщение снимается само.
+               */
+              if (msg.subtype === 'worker_shutting_down') {
+                clearTimeout(this.workerDownTimer)
+                this.workerDownTimer = setTimeout(() => {
+                  this.workerDownTimer = undefined
+                  this.emit(requestId, { type: 'notice', ...notice })
+                }, 1500)
+                break
+              }
+              this.emit(requestId, { type: 'notice', ...notice })
               break
             }
             /*

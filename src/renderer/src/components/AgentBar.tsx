@@ -6,6 +6,7 @@ import { useSettingsStore } from '@/state/settingsStore'
 import { paneDraft, setPaneDraft } from '@/state/paneDrafts'
 import { paneHistory, pushPaneHistory } from '@/state/paneHistory'
 import { currentLang, t } from '@/lib/i18n'
+import { onBus } from '@/lib/bus'
 import { formatCost } from '@shared/cost'
 import {
   agentStatusOf,
@@ -17,6 +18,8 @@ import {
 } from '@/state/uiStore'
 import { getTerminal } from '@/terminal/terminalRegistry'
 import { convForSession, useAiStore } from '@/features/ai/aiStore'
+import { interruptPane, paneIsRunning } from '@/terminal/paneSignal'
+import { quotePath } from '@/terminal/panePaths'
 import { nextGate } from '@/features/ai/gates'
 import { registerPaneKeys } from '@/features/ai/keyRouter'
 import { fileToAttachment, imageFilesFrom } from '@/features/ai/imageAttach'
@@ -1201,6 +1204,20 @@ ${prev}`
     setPaneDraft(activeSessionId, text)
   }, [activeSessionId, text])
 
+  /*
+   * Текст, пришедший снаружи: путь перетащенного файла и всё, что появится
+   * после него. Дописываем к набранному через пробел, а не заменяем — человек
+   * тащит файл В ФРАЗУ («посмотри ») куда чаще, чем в пустую строку.
+   */
+  useEffect(() => {
+    return onBus('input:insert', ({ sessionId: sid, text: add }) => {
+      if (sid !== paneSessionId || !add) return
+      setHistIdx(-1)
+      setText((prev) => (prev.trim() ? `${prev.replace(/\s+$/, '')} ${add}` : add))
+      focusInputEnd()
+    })
+  }, [paneSessionId])
+
   // Grow the field with its content instead of scrolling a one-line box —
   // capped so a pasted wall of text can't eat the window.
   useEffect(() => {
@@ -1486,10 +1503,12 @@ ${prev}`
           // мегабайт, который может не понадобиться.
           const others = all.filter((f) => !f.type.startsWith('image/'))
           if (others.length) {
+            // Кавычки ставит общий модуль: путь, брошенный в строку и в тело
+            // панели, обязан выглядеть одинаково — и одинаково безопасно.
             const paths = others
               .map((f) => window.zarya.app.getPathForFile(f))
               .filter(Boolean)
-              .map((x) => `"${x}"`)
+              .map((x) => quotePath(x))
             if (paths.length) {
               setText((prev) => (prev.trim() ? `${prev} ${paths.join(' ')}` : paths.join(' ')))
               useUiStore.getState().toast(t('bar.fileAsPath'), 'success')
@@ -1688,6 +1707,43 @@ ${prev}`
               return
             }
             if (onNavKey(e)) return
+            /*
+             * Ctrl+C — то же, что в терминале: «остановись».
+             *
+             * Раньше клавиша не значила здесь ничего, и прервать команду,
+             * запущенную из этой же строки, было нечем — приходилось щёлкать в
+             * терминал. Порядок разбора: выделенный текст всё так же копируется
+             * (жест старше нас), в режиме агента прерывается ход, в остальных
+             * случаях сигнал уходит в оболочку.
+             */
+            if (e.ctrlKey && !e.shiftKey && !e.altKey && /^[cсC]$/i.test(e.key)) {
+              const el = e.currentTarget as HTMLTextAreaElement
+              const hasSelection = (el.selectionEnd ?? 0) > (el.selectionStart ?? 0)
+              if (hasSelection) return
+              if (!activeSessionId) return
+              const conv = convForSession(useAiStore.getState(), activeSessionId)
+              const running = paneIsRunning(activeSessionId)
+              const agentBusy = !!conv?.streaming && !isShell && !running
+              e.preventDefault()
+              if (agentBusy) {
+                useAiStore.getState().abort(conv.id)
+                return
+              }
+              interruptPane(activeSessionId)
+              /*
+               * Прерывать нечего — тогда Ctrl+C делает то же, что в любом
+               * терминале у пустого приглашения: отбрасывает набранное.
+               *
+               * Иначе клавиша не давала НИКАКОГО признака работы: `^C` рисует
+               * оболочка, а в блочном режиме терминал накрыт лентой, и человек
+               * видел ровно то же, что и до нажатия, — то есть «не работает».
+               */
+              if (!running && text) {
+                setHistIdx(-1)
+                setText('')
+              }
+              return
+            }
             if (e.key === 'Enter') {
               e.preventDefault()
               doAction()

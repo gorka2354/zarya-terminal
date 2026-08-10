@@ -90,6 +90,25 @@ export class BlockEngine {
   }
 
   /**
+   * В панели прямо сейчас выполняется команда — между `OSC 133;C` и `133;D`.
+   *
+   * Отвечает на два вопроса, на которые Заря раньше не умела ответить: кому
+   * адресован Ctrl+C из строки ввода и стоит ли спрашивать перед закрытием
+   * панели. Признак опирается на shell-интеграцию: без неё оболочка о начале
+   * команды не сообщает, и честный ответ — «не знаю», то есть `false`. Врать
+   * «идёт» там, где мы не знаем, нельзя: вопрос перед каждым закрытием обесценит
+   * сам вопрос.
+   */
+  get running(): boolean {
+    return this.phase === 'running'
+  }
+
+  /** Команда, которая идёт сейчас, — для вопроса «что именно прервётся». */
+  get runningCommand(): string {
+    return this.phase === 'running' ? this.currentCommand : ''
+  }
+
+  /**
    * Live snapshot of the currently-running block's output, read straight from
    * the (offscreen) xterm buffer. The DOM mission-feed polls this while a block
    * is running so long commands stream their tail instead of showing a bare
@@ -299,6 +318,16 @@ export class BlockEngine {
     }
     emitBus('block:finished', { sessionId: this.sessionId, blockId, exitCode })
     this.currentMarker = null
+    /*
+     * Команда закончилась — значит она больше не идёт.
+     *
+     * Фаза снималась только следующим приглашением (`OSC 133;A`), и между «блок
+     * завершён» и «нарисовано новое приглашение» панель считалась занятой. Пока
+     * от фазы зависели одни подсказки, это ничего не стоило; теперь на ней стоят
+     * вопрос при закрытии и адресат Ctrl+C — и лишний вопрос о команде, которая
+     * уже отработала, обесценивает сам вопрос.
+     */
+    this.setPhase('prompt')
   }
 
   private extractOutput(): { output: string; truncated: boolean } {

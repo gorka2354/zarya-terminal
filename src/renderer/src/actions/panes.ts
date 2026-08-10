@@ -2,6 +2,8 @@ import { useAiStore } from '@/features/ai/aiStore'
 import { nextGate } from '@/features/ai/gates'
 import { listLeaves, useSessionsStore } from '@/state/sessionsStore'
 import { paneDraft } from '@/state/paneDrafts'
+import { paneIsRunning, paneRunningCommand } from '@/terminal/paneSignal'
+import { getSettings } from '@/state/settingsStore'
 import { t } from '@/lib/i18n'
 import { maximizedIn, setMaximized, useUiStore } from '@/state/uiStore'
 
@@ -20,6 +22,19 @@ function quote(text: string): string {
  */
 function lossesOf(sessionId: string): string[] {
   const out: string[] = []
+  /*
+   * Работающая команда — первая в списке потерь, потому что она единственная
+   * здесь принадлежит не Заре, а операционной системе: сборку, миграцию или
+   * `rsync` перезапустить дороже, чем дописать оборванную фразу.
+   *
+   * Настройка «Подтверждать закрытие при работающем процессе» до этого дня
+   * существовала только на экране: тумблер стоял в настройках, а читать его было
+   * некому. Здесь он наконец получает смысл.
+   */
+  if (getSettings().terminal.confirmCloseRunning && paneIsRunning(sessionId)) {
+    const cmd = paneRunningCommand(sessionId).trim()
+    out.push(cmd ? t('close.running', { text: quote(cmd) }) : t('close.runningPlain'))
+  }
   const draft = paneDraft(sessionId).trim()
   if (draft) out.push(t('close.draft', { text: quote(draft) }))
   const ai = useAiStore.getState()
@@ -155,3 +170,9 @@ export function isMaximized(sessionId: string): boolean {
   const tab = store.tabs.find((t) => listLeaves(t.layout).includes(sessionId))
   return !!tab && maximizedIn(useUiStore.getState(), tab.id) === sessionId
 }
+
+// Прогонам: закрытие ИМЕННО тем путём, которым закрывает человек — с вопросом о
+// потерях. Соседний `__zaryaCloseSession` закрывает молча и для проверки самого
+// вопроса не годится.
+;(window as unknown as { __zaryaClosePaneAsking?: (sid: string) => Promise<void> }).__zaryaClosePaneAsking =
+  (sid) => closePaneAsking(sid)

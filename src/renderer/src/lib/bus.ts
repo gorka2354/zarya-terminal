@@ -4,6 +4,8 @@ export interface BusEvents {
   'block:finished': { sessionId: string; blockId: string; exitCode?: number }
   'terminal:cwd-changed': { sessionId: string; cwd: string }
   'terminal:focus': { sessionId: string }
+  /** Дописать текст в строку ввода панели (перетащенный путь, вставка снаружи). */
+  'input:insert': { sessionId: string; text: string }
   'editor:file-saved': { path: string }
   'session:restored': { sessionId: string }
 }

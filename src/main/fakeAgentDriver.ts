@@ -1,6 +1,7 @@
 import { appendFileSync } from 'fs'
 import { type BrowserWindow } from 'electron'
 import { CH } from '@shared/ipc'
+import { noticeFor } from './systemNotices'
 import type {
   AgentCapabilities,
   AgentEngine,
@@ -478,6 +479,34 @@ export class FakeAgentDriver implements AgentDriver {
           text: 'ход прерван, ответ не дописан'
         })
         this.emit(requestId, { type: 'result', isError: false, costUsd: 0.002 })
+      })
+    } else if (/повтор|retry/i.test(opts.prompt)) {
+      /*
+       * То, о чём движок раньше говорил в пустоту (inc-23): повтор запроса после
+       * ошибки API, отказ инструменту по правилу, упавший хук. Прогону нужен
+       * весь набор разом — чтобы увидеть, что три разные новости читаются как
+       * три разные строки, а не сливаются в одну «ошибку».
+       */
+      this.schedule(requestId, 300, () => {
+        for (const m of [
+          { subtype: 'api_retry', attempt: 2, max_retries: 5, retry_delay_ms: 4000, error_status: 503 },
+          { subtype: 'permission_denied', tool_name: 'Bash', decision_reason_type: 'rule' },
+          {
+            subtype: 'hook_response',
+            hook_name: 'lint',
+            outcome: 'error',
+            exit_code: 1,
+            stderr: 'error: не найден конфиг'
+          }
+        ]) {
+          const n = noticeFor(m)
+          if (n) this.emit(requestId, { type: 'notice', ...n })
+        }
+        this.emit(requestId, {
+          type: 'assistant',
+          content: [{ type: 'text', text: 'fake: запрос прошёл со второй попытки' }]
+        })
+        this.emit(requestId, { type: 'result', isError: false, costUsd: 0.003 })
       })
     } else if (/skill/i.test(opts.prompt)) {
       // Скилл, взятый агентом. Настоящий движок объявляет это обычным `tool_use`

@@ -203,19 +203,53 @@ export const XtermView = memo(function XtermView({
       }
     })
 
+    /**
+     * Единственная дверь для вставки — вместе с вопросом о многострочном тексте.
+     *
+     * Вопрос жил только здесь, а сюда приходил один путь из четырёх: Ctrl+Shift+V.
+     * Ctrl+V, «Вставить» из меню и средняя кнопка мыши — это браузерное событие
+     * `paste`, и оно шло мимо, прямо в оболочку. Настройка обещала защиту, а
+     * текст с переносами выполнялся сразу — из тех обещаний, после которых
+     * настройкам перестают верить.
+     */
+    const pasteChecked = (text: string): void => {
+      if (!text) return
+      const st = useSettingsStore.getState().settings
+      if (st.terminal.pasteWarnMultiline && text.includes('\n') && !window.confirm(t('term.pasteAsk')))
+        return
+      term.paste(text)
+    }
+
     const pasteText = async (): Promise<void> => {
       try {
-        const text = await navigator.clipboard.readText()
-        if (!text) return
-        const st = useSettingsStore.getState().settings
-        if (st.terminal.pasteWarnMultiline && text.includes('\n')) {
-          if (!window.confirm(t('term.pasteAsk'))) return
-        }
-        term.paste(text)
+        pasteChecked(await navigator.clipboard.readText())
       } catch {
         // clipboard denied
       }
     }
+
+    // Перехват в фазе погружения: xterm получит текст только после ответа
+    // человека. Однострочную вставку не трогаем вовсе — она уходит своим путём,
+    // без лишнего посредника.
+    const onPasteCapture = (e: ClipboardEvent): void => {
+      const text = e.clipboardData?.getData('text') ?? ''
+      if (!text.includes('\n')) return
+      if (!useSettingsStore.getState().settings.terminal.pasteWarnMultiline) return
+      e.preventDefault()
+      e.stopPropagation()
+      if (window.confirm(t('term.pasteAsk'))) term.paste(text)
+    }
+    container.addEventListener('paste', onPasteCapture, true)
+
+    /*
+     * Перетащенный файл ловит ПАНЕЛЬ, а не этот узел (см. TerminalPane).
+     *
+     * Здесь обработчик стоял первым и был мёртв: в блочном режиме — то есть по
+     * умолчанию — лента лежит абсолютным непрозрачным слоем поверх терминала
+     * (`.zy-mf`, z-index 2), и мышь до `.zy-term` не доходит вовсе. Событие
+     * всплывало до корня окна, где значит «открой вкладку в этой папке», —
+     * ровно то, от чего уходили.
+     */
 
     term.attachCustomKeyEventHandler((e) => {
       if (e.type !== 'keydown') return true
@@ -378,6 +412,7 @@ export const XtermView = memo(function XtermView({
       ro.disconnect()
       cancelAnimationFrame(fitRaf)
       clearTimeout(gateTimer)
+      container.removeEventListener('paste', onPasteCapture, true)
       dataDisp.dispose()
       selDisp.dispose()
       bellDisp.dispose()

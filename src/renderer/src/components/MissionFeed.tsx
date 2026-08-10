@@ -1057,9 +1057,19 @@ function NoticeLine({
   level: 'info' | 'warn' | 'error'
   text: string
 }): React.JSX.Element {
+  /*
+   * Спокойная новость выглядит спокойно.
+   *
+   * Восклицательный знак и схлопнутые переносы достались всем уровням поровну, а
+   * через эту же строку идёт вывод локальных команд движка (`/usage` и подобные)
+   * — выровненный текст, который в один абзац превращается в кашу, да ещё и
+   * помеченную тревожным знаком. Предупреждение остаётся предупреждением, а
+   * сообщение — сообщением.
+   */
+  const calm = level === 'info'
   return (
-    <div className={`zy-mf-notice zy-mf-notice-${level}`}>
-      <span className="zy-mf-notice-mark">{level === 'error' ? '✗' : '!'}</span>
+    <div className={`zy-mf-notice zy-mf-notice-${level}${calm ? ' zy-mf-notice--calm' : ''}`}>
+      <span className="zy-mf-notice-mark">{level === 'error' ? '✗' : calm ? '·' : '!'}</span>
       <span className="zy-mf-notice-text">{text}</span>
     </div>
   )

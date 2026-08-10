@@ -8,6 +8,7 @@ import { AgentBar } from './AgentBar'
 import { getTerminal } from '@/terminal/terminalRegistry'
 import { closePaneAsking, toggleMaximizePane } from '@/actions/panes'
 import { focusPane } from '@/terminal/paneFocus'
+import { insertPathsIntoPane, pathsFromDrop } from '@/terminal/panePaths'
 import { t, useLang } from '@/lib/i18n'
 import { listLeaves, useSessionsStore } from '@/state/sessionsStore'
 import { useSettingsStore } from '@/state/settingsStore'
@@ -198,6 +199,22 @@ export const TerminalPane = memo(function TerminalPane({
       // до отпускания — иначе выбор виден только по результату.
       onDragOver={(e) => {
         const kinds = e.dataTransfer.types
+        /*
+         * Файл, брошенный в тело панели, — это путь, а не новый рабочий стол.
+         * Без этой ветки событие всплывало до корня окна, где значит «открой
+         * вкладку в этой папке»: привычный жест «не хочу набирать длинный путь»
+         * уносил человека из панели, в которой он работал.
+         *
+         * Ловим здесь, а не в терминале: в блочном режиме терминал накрыт лентой
+         * и мышь до него не доходит. Панель — единственный узел, который есть в
+         * обоих режимах.
+         */
+        if (kinds.includes('Files')) {
+          e.preventDefault()
+          e.stopPropagation()
+          e.dataTransfer.dropEffect = 'copy'
+          return
+        }
         if (!kinds.includes(PANE_DRAG_CWD) && !kinds.includes(PANE_DRAG_SESSION)) return
         e.preventDefault()
         e.stopPropagation()
@@ -208,6 +225,16 @@ export const TerminalPane = memo(function TerminalPane({
         if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) setDropSide(null)
       }}
       onDrop={(e) => {
+        // Файлы — раньше всего: строка ввода и оболочка ждут путь, а не вкладку.
+        const paths = pathsFromDrop(e.dataTransfer)
+        if (paths.length) {
+          e.preventDefault()
+          e.stopPropagation()
+          setDropSide(null)
+          if (insertPathsIntoPane(sessionId, paths))
+            useUiStore.getState().toast(t('bar.fileAsPath'), 'success')
+          return
+        }
         const moved = e.dataTransfer.getData(PANE_DRAG_SESSION)
         const cwd = e.dataTransfer.getData(PANE_DRAG_CWD)
         if (!moved && !cwd) return

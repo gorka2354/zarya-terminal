@@ -348,6 +348,16 @@
   line-height: 1.5;
   color: var(--fg-dim);
 }
+/* Слова движка (вывод «/usage» и подобных) — как он их составил: переносы и
+   выравнивание в них несут смысл, а 560px рвут таблицу посередине. */
+.zy-mf-notice--calm {
+  max-width: none;
+  font-family: var(--font-mono);
+}
+.zy-mf-notice--calm .zy-mf-notice-text {
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
 .zy-mf-notice-mark {
   flex: none;
   font-weight: 700;
