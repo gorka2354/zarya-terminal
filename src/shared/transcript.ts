@@ -49,6 +49,14 @@ export function toMarkdown(messages: AiMessage[], meta: TranscriptMeta = {}): st
     for (const p of m.content) {
       if (p.type === 'text' && p.text.trim()) parts.push(p.text.trim())
       else if (p.type === 'tool_use') parts.push(`→ ${toolLine(p.name, p.input)}`)
+      else if (p.type === 'thinking')
+        // Рассуждение — в свёрнутом виде: в стенограмме оно тоже не должно
+        // вытеснять ответ, но и терять его нельзя.
+        parts.push(`<details><summary>рассуждение агента</summary>
+
+${p.text.trim()}
+
+</details>`)
       else if (p.type === 'notice') parts.push(`> ${p.text.trim()}`)
       else if (p.type === 'reset') parts.push('> _агент забыл разговор выше_')
       else if (p.type === 'compact') parts.push('> _контекст сжат_')

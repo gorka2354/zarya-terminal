@@ -230,7 +230,22 @@ function mapAssistantContent(content: unknown): AiContentPart[] {
         input: block.input ?? {}
       })
     }
-    // thinking / other blocks are intentionally not surfaced (yet)
+    else if (
+      (block.type === 'thinking' || block.type === 'redacted_thinking') &&
+      typeof block.thinking === 'string' &&
+      block.thinking.trim()
+    ) {
+      /*
+       * Рассуждение модели. Раньше блок молча выбрасывался, и человек видел
+       * только вывод: почему агент выбрал этот путь, узнать было негде — а
+       * именно это чаще всего и надо, когда он выбрал НЕ ТОТ путь.
+       *
+       * Зашифрованное рассуждение (`redacted_thinking`) приходит без текста и
+       * сюда не попадает: показывать нечего, а пустая шторка «рассуждение»
+       * обещала бы содержимое, которого нет.
+       */
+      out.push({ type: 'thinking', text: block.thinking })
+    }
   }
   return out
 }

@@ -1037,6 +1037,9 @@ const AgentMessage = memo(function AgentMessage({
         if (p.type === 'compact') {
           return <CompactMark key={i} before={p.before} after={p.after} auto={p.auto} />
         }
+        if (p.type === 'thinking') {
+          return <ThinkingBlock key={i} text={p.text} />
+        }
         if (p.type === 'reset') {
           return <ResetMark key={i} />
         }
@@ -1156,6 +1159,27 @@ function NoticeLine({
     <div className={`zy-mf-notice zy-mf-notice-${level}${calm ? ' zy-mf-notice--calm' : ''}`}>
       <span className="zy-mf-notice-mark">{level === 'error' ? '✗' : calm ? '·' : '!'}</span>
       <span className="zy-mf-notice-text">{text}</span>
+    </div>
+  )
+}
+
+/**
+ * Рассуждение агента — свёрнутое по умолчанию.
+ *
+ * В консоли его разворачивают по Ctrl+O, и это правильный порядок: рассуждение
+ * нужно, когда агент выбрал не тот путь, а не в каждом ответе. Развёрнутым по
+ * умолчанию оно вытеснило бы с экрана сам ответ — ради черновика мысли.
+ */
+function ThinkingBlock({ text }: { text: string }): React.JSX.Element {
+  const [open, setOpen] = useState(false)
+  const lines = text.trim().split('\n').length
+  return (
+    <div className={`zy-mf-think${open ? ' zy-mf-think--open' : ''}`}>
+      <button className="zy-mf-think-head" onClick={() => setOpen((v) => !v)}>
+        <span className="zy-mf-think-caret">{open ? '▾' : '▸'}</span>
+        <span className="zy-mf-think-label">{t('feed.thinking', { n: lines })}</span>
+      </button>
+      {open && <div className="zy-mf-think-body">{text.trim()}</div>}
     </div>
   )
 }

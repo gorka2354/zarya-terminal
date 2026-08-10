@@ -44,6 +44,17 @@ describe('toMarkdown', () => {
     expect(md).toMatch(/шаги кончились/)
   })
 
+  it('рассуждение сохраняется, но свёрнутым — ответ важнее', () => {
+    const md = toMarkdown([
+      msg('assistant', [
+        { type: 'thinking', text: 'сначала проверю сборку' },
+        { type: 'text', text: 'Готово.' }
+      ])
+    ])
+    expect(md).toMatch(/сначала проверю сборку/)
+    expect(md).toMatch(/<details>/)
+  })
+
   it('пустые сообщения не рождают пустых разделов', () => {
     const md = toMarkdown([msg('assistant', [{ type: 'text', text: '   ' }])])
     expect(md).not.toMatch(/## Агент/)

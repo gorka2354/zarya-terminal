@@ -481,6 +481,19 @@ export class FakeAgentDriver implements AgentDriver {
         })
         this.emit(requestId, { type: 'result', isError: false, costUsd: 0.002 })
       })
+    } else if (/рассужд|thinking/i.test(opts.prompt)) {
+      // Рассуждение агента (inc-27): фейк отдаёт его тем же видом части, что и
+      // настоящий движок, — проверять надо показ, а не форму блока SDK.
+      this.schedule(requestId, 300, () => {
+        this.emit(requestId, {
+          type: 'assistant',
+          content: [
+            { type: 'thinking', text: 'Сначала проверю сборку.\nПотом посмотрю тесты.' },
+            { type: 'text', text: 'fake: сборка падает на типах' }
+          ]
+        })
+        this.emit(requestId, { type: 'result', isError: false, costUsd: 0.001 })
+      })
     } else if (/итог|outcome/i.test(opts.prompt)) {
       /*
        * Итог хода (inc-24): длинный ход, кончившийся не по-хорошему. Дожидаться
