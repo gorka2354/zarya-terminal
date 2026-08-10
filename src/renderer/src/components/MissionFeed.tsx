@@ -39,6 +39,7 @@ import './missionfeed.css'
 import { ruleFor } from '@shared/allowRules'
 import { pulseSilence } from '@shared/toolPulse'
 import type { ToolImage } from '@shared/images'
+import type { ToolFact } from '@shared/toolFacts'
 
 /**
  * The mission feed — Zarya's centre stage, a 1:1 port of the design's unified
@@ -1097,6 +1098,35 @@ const AgentMessage = memo(function AgentMessage({
  * ложь, но ложь; кнопка появляется, только когда за ней правда что-то есть.
  */
 /**
+ * Что инструмент сделал на самом деле — строкой под итогом.
+ *
+ * Разбор живёт в @shared/toolFacts и присылает КЛЮЧИ словаря, а не готовые
+ * фразы: иначе сохранённая беседа осталась бы на языке, который был включён в
+ * день её записи. Незнакомый ключ пропускаем молча — новая версия движка не
+ * должна выводить в ленту служебное имя факта.
+ */
+function ToolFacts({ facts }: { facts?: ToolFact[] }): React.JSX.Element | null {
+  useLang()
+  if (!facts?.length) return null
+  // Словарь отдаёт сам ключ, когда фразы для него нет. Так дыру видно глазами —
+  // но в ленте это выглядело бы как «fact.bash.timeout» на месте объяснения.
+  const known = facts.filter((f) => t(f.key, f.vars) !== f.key)
+  if (!known.length) return null
+  return (
+    <div className="zy-mf-tool-facts">
+      {known.map((f, i) => (
+        <span
+          key={i}
+          className={`zy-mf-tool-fact${f.level === 'warn' ? ' zy-mf-tool-fact--warn' : ''}`}
+        >
+          {t(f.key, f.vars)}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+/**
  * Картинки, которые вернул инструмент.
  *
  * Показываются сразу, а не под шторкой: у вызова, чей смысл — скриншот,
@@ -1151,10 +1181,18 @@ function fmtBytes(n: number): string {
 
 function ToolOutcome({
   content,
-  isError
+  isError,
+  incomplete
 }: {
   content: string
   isError: boolean
+  /**
+   * Итог НЕ такой, каким выглядит: команду оборвало, файл прочитан частью,
+   * поиск обрезан. Ошибкой движок это не считает — и правильно, — но зелёная
+   * галочка с подписью «готово» над строкой «оборвано по времени» врёт этажом
+   * выше, чем строка успевает исправить.
+   */
+  incomplete?: boolean
 }): React.JSX.Element {
   useLang()
   const [open, setOpen] = useState(false)
@@ -1164,10 +1202,17 @@ function ToolOutcome({
   // Есть ли что раскрывать: вторая непустая строка или хвост длинной первой.
   const more = lines.slice(1).some((l) => l.trim().length > 0) || first.length > 96
   const head = first.length > 96 ? `${first.slice(0, 96)}…` : first
-  const cls = isError ? 'zy-mf-tool-denied' : 'zy-mf-tool-done'
+  const cls = isError
+    ? 'zy-mf-tool-denied'
+    : incomplete
+      ? 'zy-mf-tool-partial'
+      : 'zy-mf-tool-done'
   const label = isError
     ? `✗ ${head || t('feed.denied')}`
-    : `✓ ${head || 'exit 0'} — ${t('feed.done')}`
+    : incomplete
+      ? // Не «✗»: это не ошибка. И не «готово»: готово оно не целиком.
+        `! ${head || 'exit 0'}`
+      : `✓ ${head || 'exit 0'} — ${t('feed.done')}`
 
   if (!more) return <div className={cls}>{label}</div>
   return (
@@ -1514,7 +1559,12 @@ const ToolCard = memo(function ToolCard({
   if (result) {
     body = (
       <>
-        <ToolOutcome content={result.content} isError={!!result.isError} />
+        <ToolOutcome
+          content={result.content}
+          isError={!!result.isError}
+          incomplete={result.facts?.some((f) => f.level === 'warn')}
+        />
+        <ToolFacts facts={result.facts} />
         <ToolImages
           images={conv.toolImages?.[id]}
           count={result.images}

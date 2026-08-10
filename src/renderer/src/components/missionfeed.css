@@ -621,6 +621,17 @@
   border-radius: 2px;
   padding: 6px 8px;
 }
+/* Итог не такой, каким выглядит: сделано, но не целиком. Не зелёный, потому что
+   «готово» неправда; не красный, потому что ошибки не было. */
+.zy-mf-tool-partial {
+  margin-top: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--warn);
+  background: var(--bg);
+  border-radius: 2px;
+  padding: 6px 8px;
+}
 .zy-mf-tool-denied {
   margin-top: 8px;
   font-family: var(--font-tech);
@@ -1569,4 +1580,24 @@
   font-family: var(--font-tech);
   font-size: 11px;
   color: var(--fg-faint);
+}
+
+/* Что инструмент сделал на самом деле ----------------------------------- */
+/* Строка фактов идёт под итогом и читается за один взгляд: цифры приглушены,
+   неполнота — цветом внимания. Разница между «нашлось 12» и «показаны не все»
+   должна быть видна раньше, чем прочитан текст. */
+.zy-mf-tool-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: 6px;
+  font-family: var(--font-tech);
+  font-size: 12px;
+}
+.zy-mf-tool-fact {
+  color: var(--fg-faint);
+  font-variant-numeric: tabular-nums;
+}
+.zy-mf-tool-fact--warn {
+  color: var(--warn);
 }

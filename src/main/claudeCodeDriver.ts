@@ -48,6 +48,7 @@ import {
   TOOL_IMAGE_MAX_PER_RESULT,
   type ToolImage
 } from '@shared/images'
+import { toolFacts } from '@shared/toolFacts'
 import { taskDone, taskHidden, taskOutcome } from '@shared/agentTasks'
 import { foldContextParts } from '@shared/contextParts'
 import {
@@ -470,6 +471,17 @@ interface Session {
    * последующих событиях выглядел бы безымянной задачей.
    */
   taskKinds: Map<string, string>
+  /**
+   * toolUseId → имя инструмента.
+   *
+   * Разобранный результат (`tool_use_result`) приходит БЕЗ имени: его форма
+   * зависит от того, какой инструмент отвечал, а знает это только блок
+   * `tool_use` в ответе модели. Без этой памяти прочитать результат нечем.
+   *
+   * Чистится вместе с приходом результата: карта живёт ровно столько, сколько
+   * идут вызовы хода.
+   */
+  toolNames: Map<string, string>
   /** Накопленные куски ответа, ещё не отданные на экран. */
   deltaBuf?: string
   /** Таймер отдачи накопленного. */
@@ -875,6 +887,7 @@ export class ClaudeCodeDriver implements AgentDriver {
       ultracode: !!opts.ultracode,
       shellTasks: new Set<string>(),
       taskKinds: new Map<string, string>(),
+      toolNames: new Map<string, string>(),
       resumed: !!opts.resume,
       // Ветка запомнила, откуда началась: если человек нажмёт Esc и здесь, до
       // первого слова агента, отматывать будем к той же точке.
@@ -1275,6 +1288,11 @@ export class ClaudeCodeDriver implements AgentDriver {
             // хвост печати мигнул бы поверх уже пришедшего ответа.
             this.flushDelta(requestId, session)
             const content = mapAssistantContent((msg.message as { content?: unknown }).content)
+            // Имя инструмента запоминаем здесь: разобранный результат придёт без
+            // него, а прочитать его форму без имени нечем (см. Session.toolNames).
+            for (const p of content) {
+              if (p.type === 'tool_use' && p.id) session.toolNames.set(p.id, p.name)
+            }
             if (content.length) this.emit(requestId, { type: 'assistant', content })
             /*
              * ХОД ОБОРВАЛСЯ. `aborted` движок ставит, когда поток кончился до
@@ -1301,18 +1319,33 @@ export class ClaudeCodeDriver implements AgentDriver {
             // shown by the renderer (it initiated the turn).
             const content = (msg.message as { content?: unknown }).content
             if (Array.isArray(content)) {
-              for (const b of content as Array<Record<string, unknown>>) {
-                if (b.type === 'tool_result') {
-                  const pics = toolResultImages(b.content)
-                  this.emit(requestId, {
-                    type: 'tool_result',
-                    toolUseId: String(b.tool_use_id ?? ''),
-                    content: toolResultText(b.content),
-                    isError: !!b.is_error,
-                    images: pics.images.length ? pics.images : undefined,
-                    imagesSkipped: pics.skipped || undefined
-                  })
-                }
+              const blocks = (content as Array<Record<string, unknown>>).filter(
+                (b) => b.type === 'tool_result'
+              )
+              /*
+               * РАЗОБРАННЫЙ РЕЗУЛЬТАТ приходит один на всё сообщение, а блоков
+               * итога в нём может быть несколько. К какому он относится — из
+               * типов не следует, и привязать его наугад значило бы приписать
+               * одному вызову цифры другого. Читаем только когда итог в
+               * сообщении ровно один: тогда сомнений нет.
+               */
+              const parsed =
+                blocks.length === 1 ? (msg as unknown as { tool_use_result?: unknown }).tool_use_result : undefined
+              for (const b of blocks) {
+                const id = String(b.tool_use_id ?? '')
+                const pics = toolResultImages(b.content)
+                const name = session.toolNames.get(id)
+                const facts = parsed !== undefined && name ? toolFacts(name, parsed) : []
+                session.toolNames.delete(id)
+                this.emit(requestId, {
+                  type: 'tool_result',
+                  toolUseId: id,
+                  content: toolResultText(b.content),
+                  isError: !!b.is_error,
+                  images: pics.images.length ? pics.images : undefined,
+                  imagesSkipped: pics.skipped || undefined,
+                  facts: facts.length ? facts : undefined
+                })
               }
             }
             break

@@ -15,6 +15,7 @@ import type {
 import { rewindPoint } from '@shared/rewind'
 import type { AgentDriver } from './agentDriver'
 import { irreversible } from '@shared/irreversible'
+import type { ToolFact } from '@shared/toolFacts'
 
 /**
  * Настоящий PNG 96×48, сплошной цвет — 157 байт.
@@ -503,6 +504,50 @@ export class FakeAgentDriver implements AgentDriver {
           ]
         })
         this.emit(requestId, { type: 'result', isError: false, costUsd: 0.001 })
+      })
+    } else if (/факт|facts/i.test(opts.prompt)) {
+      /*
+       * Что инструмент сделал на самом деле (inc-27). Три вызова, у которых
+       * текстовый итог выглядит успешным, а разобранный говорит другое:
+       * команду оборвало по времени, файл прочитан частично, поиск обрезан.
+       * Дождаться настоящего таймаута в прогоне нечем, а показать строку надо
+       * ровно такой, какой её увидит человек.
+       */
+      const mk = (
+        n: string,
+        name: string,
+        input: unknown,
+        content: string,
+        facts: ToolFact[]
+      ): void => {
+        this.emit(requestId, {
+          type: 'assistant',
+          content: [{ type: 'tool_use', id: `${requestId}-${n}`, name, input }]
+        })
+        this.emit(requestId, {
+          type: 'tool_result',
+          toolUseId: `${requestId}-${n}`,
+          content,
+          isError: false,
+          facts
+        })
+      }
+      this.schedule(requestId, 300, () => {
+        mk('f1', 'Bash', { command: 'npm test' }, 'fake: tests running…', [
+          { key: 'fact.bash.timeout', vars: { sec: 120 }, level: 'warn' }
+        ])
+        mk('f2', 'Read', { file_path: 'src/big.ts' }, 'fake: первые строки файла', [
+          { key: 'fact.read.part', vars: { n: 200, total: 4000 }, level: 'warn' }
+        ])
+        mk('f3', 'Grep', { pattern: 'TODO' }, 'fake: src/a.ts\nfake: src/b.ts', [
+          { key: 'fact.grep.found', vars: { n: 12, files: 4 }, level: 'info' }
+        ])
+        // Незнакомый ключ: новая версия движка не должна выводить в ленту
+        // служебное имя факта вместо фразы.
+        mk('f4', 'Bash', { command: 'echo hi' }, 'hi', [
+          { key: 'fact.someNewThing', level: 'info' }
+        ])
+        this.emit(requestId, { type: 'result', isError: false, costUsd: 0.004 })
       })
     } else if (/картинк|screenshot/i.test(opts.prompt)) {
       /*

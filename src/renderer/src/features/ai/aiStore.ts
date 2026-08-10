@@ -1101,7 +1101,8 @@ export const useAiStore = create<AiState>((set, get) => {
                   content: ev.content,
                   isError: ev.isError,
                   images: ev.images?.length || undefined,
-                  imagesSkipped: ev.imagesSkipped
+                  imagesSkipped: ev.imagesSkipped,
+                  facts: ev.facts
                 }
               ]
             }
