@@ -206,6 +206,12 @@ try {
   ok('после краха новый ход отработал', /gemini mock: снова живой/.test(nc?.text || ''), { err: nc?.error, text: nc?.text })
 
   console.log(`\n[qa-acp-driver] PASS ${pass} · FAIL ${fail}`)
+} catch (e) {
+  // Ошибка внутри прогона обязана быть ВИДНА: `process.exit` в finally гасит
+  // вывод необработанного отказа, и упавший прогон печатал «провалено 0» с
+  // нулевым кодом выхода — то есть выглядел прошедшим.
+  fail++
+  console.log('  ✗ прогон упал:', e?.stack || e?.message || String(e))
 } finally {
   await app.close()
   await new Promise((r) => setTimeout(r, 700))

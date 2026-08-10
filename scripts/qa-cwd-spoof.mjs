@@ -139,6 +139,12 @@ try {
   await page.evaluate(({ s, d }) => window.__zaryaRunShell?.(`cd "${d}"`, s), { s: sid, d: work })
   const backHome = await waitCwd(sid, (c) => norm(c) === norm(work))
   ok('cd обратно отслежен', norm(backHome) === norm(work), { ожидали: work, получили: backHome })
+} catch (e) {
+  // Ошибка внутри прогона обязана быть ВИДНА: `process.exit` в finally гасит
+  // вывод необработанного отказа, и упавший прогон печатал «провалено 0» с
+  // нулевым кодом выхода — то есть выглядел прошедшим.
+  fail++
+  console.log('  ✗ прогон упал:', e?.stack || e?.message || String(e))
 } finally {
   await app.close().catch(() => {})
   rmSync(userData, { recursive: true, force: true })

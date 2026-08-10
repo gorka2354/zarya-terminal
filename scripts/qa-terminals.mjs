@@ -126,6 +126,12 @@ try {
   console.log(`\n[qa-terminals] PASS ${pass} · FAIL ${fail}`)
   if (fail) process.exitCode = 1
   await app.close()
+} catch (e) {
+  // Ошибка внутри прогона обязана быть ВИДНА: `process.exit` в finally гасит
+  // вывод необработанного отказа, и упавший прогон печатал «провалено 0» с
+  // нулевым кодом выхода — то есть выглядел прошедшим.
+  fail++
+  console.log('  ✗ прогон упал:', e?.stack || e?.message || String(e))
 } finally {
   try { rmSync(userData, { recursive: true, force: true }) } catch {}
 }

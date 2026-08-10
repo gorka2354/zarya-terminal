@@ -109,6 +109,12 @@ try {
   await page.keyboard.press('Escape')
 
   ok('консоль чистая', errors.length === 0, errors.slice(0, 3))
+} catch (e) {
+  // Ошибка внутри прогона обязана быть ВИДНА: `process.exit` в finally гасит
+  // вывод необработанного отказа, и упавший прогон печатал «провалено 0» с
+  // нулевым кодом выхода — то есть выглядел прошедшим.
+  fail++
+  console.log('  ✗ прогон упал:', e?.stack || e?.message || String(e))
 } finally {
   await app.close()
   try {

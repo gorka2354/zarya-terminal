@@ -103,6 +103,12 @@ try {
   ok('вложение снято после отправки', (conv?.text ?? '').includes('[Изображение #1]'), (conv?.text ?? '').slice(0, 120))
 
   console.log(`\n[image-live] PASS ${pass} · FAIL ${fail}`)
+} catch (e) {
+  // Ошибка внутри прогона обязана быть ВИДНА: `process.exit` в finally гасит
+  // вывод необработанного отказа, и упавший прогон печатал «провалено 0» с
+  // нулевым кодом выхода — то есть выглядел прошедшим.
+  fail++
+  console.log('  ✗ прогон упал:', e?.stack || e?.message || String(e))
 } finally {
   await app.close()
 }

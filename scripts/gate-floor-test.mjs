@@ -241,6 +241,12 @@ try {
   ok('вопроса не было — автопилот', silent.gates === 0, silent.gates)
   ok('но масштаб правки на экране', /−\d/.test(silent.head) && /\+\d/.test(silent.head), silent.head)
   ok('сам дифф свёрнут и открывается по нажатию', silent.body === false && silent.caret === true, silent)
+} catch (e) {
+  // Ошибка внутри прогона обязана быть ВИДНА: `process.exit` в finally гасит
+  // вывод необработанного отказа, и упавший прогон печатал «провалено 0» с
+  // нулевым кодом выхода — то есть выглядел прошедшим.
+  fail++
+  console.log('  ✗ прогон упал:', e?.stack || e?.message || String(e))
 } finally {
   await app.close()
   try {

@@ -45,6 +45,7 @@ import { launchClaudeNative } from './AiCliLauncher'
 import './agentbar.css'
 import { applyCommand, cleanCommands, commandQuery, matchCommands, type AgentCommand } from '@shared/agentCommands'
 import { applyMention, mentionQuery } from '@shared/mentions'
+import { localVerb, memoryNote } from '@shared/inputVerbs'
 import { fuzzyFilter } from '@/lib/fuzzy'
 import { scanFiles, type ScannedFile } from '@/features/palette/fileScan'
 import { CommandList } from './CommandList'
@@ -627,9 +628,80 @@ ${prev}`
     activeConv?.engine === modeEngine &&
     (activeConv.streaming || activeConv.pendingTools.some((t) => t.settled))
 
+  /**
+   * Записать строку в память проекта (`CLAUDE.md` рядом с папкой панели).
+   *
+   * Это жест консоли: строка с решётки — правило, которое агент прочтёт в
+   * следующий раз. Дописываем в конец, а не переписываем файл: там уже могут
+   * лежать чужие правила, и потерять их ради одной строки нельзя.
+   */
+  const rememberNote = async (note: string): Promise<void> => {
+    const cwd = activeSessionId
+      ? useSessionsStore.getState().sessions[activeSessionId]?.cwd
+      : undefined
+    if (!cwd) {
+      useUiStore.getState().toast(t('bar.memoryNoCwd'), 'error')
+      return
+    }
+    const path = `${cwd}/CLAUDE.md`
+    try {
+      // Файла может не быть вовсе — это норма для новой папки, а не ошибка.
+      const read = await window.zarya.fs.readFile(path).catch(() => null)
+      const prev = read?.content ?? ''
+      const body = prev.trim() ? `${prev.replace(/\s+$/, '')}\n${note}\n` : `${note}\n`
+      await window.zarya.fs.writeFile(path, body)
+      useUiStore.getState().toast(t('bar.memorySaved'), 'success')
+    } catch {
+      // Файл может быть недоступен на запись — молчать здесь нельзя: человек
+      // считает, что правило записано, а его нет.
+      useUiStore.getState().toast(t('bar.memoryFailed'), 'error')
+    }
+  }
+
+  /** Скопировать последний ответ агента целиком. */
+  const copyLastAnswer = (): void => {
+    const conv = activeConv
+    const last = conv?.messages
+      .filter((m) => m.role === 'assistant')
+      .map((m) =>
+        m.content
+          .filter((p) => p.type === 'text')
+          .map((p) => (p as { text: string }).text)
+          .join('\n')
+          .trim()
+      )
+      .filter(Boolean)
+      .pop()
+    if (!last) {
+      useUiStore.getState().toast(t('bar.copyNothing'), 'error')
+      return
+    }
+    void navigator.clipboard.writeText(last)
+    useUiStore.getState().toast(t('bar.copyDone'), 'success')
+  }
+
   const doAction = (): void => {
     if (mode === 'shell') {
       runShell()
+      return
+    }
+    /*
+     * Строки, которые исполняет сама Заря, а не агент: запись в память с
+     * решётки и «/copy». Разбор — общим правилом (`inputVerbs`), чтобы
+     * «это не сообщение» решалось в одном месте, а не россыпью проверок.
+     */
+    const note = memoryNote(text)
+    if (note) {
+      pushPaneHistory(activeSessionId, text.trim())
+      setHistIdx(-1)
+      setText('')
+      void rememberNote(note)
+      return
+    }
+    if (localVerb(text) === 'copy') {
+      setHistIdx(-1)
+      setText('')
+      copyLastAnswer()
       return
     }
     const engine: 'builtin' | AgentEngine = activeEngine ?? 'builtin'

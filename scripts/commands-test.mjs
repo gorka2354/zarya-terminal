@@ -131,6 +131,12 @@ try {
   await page.waitForTimeout(300)
   ok('список закрыт', (await list(page).count()) === 0)
   ok('набранное осталось', (await page.inputValue('.zy-agentbar-input')) === '/pl')
+} catch (e) {
+  // Ошибка внутри прогона обязана быть ВИДНА: `process.exit` в finally гасит
+  // вывод необработанного отказа, и упавший прогон печатал «провалено 0» с
+  // нулевым кодом выхода — то есть выглядел прошедшим.
+  fail++
+  console.log('  ✗ прогон упал:', e?.stack || e?.message || String(e))
 } finally {
   await app.close()
   try {

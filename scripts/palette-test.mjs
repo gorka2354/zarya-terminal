@@ -133,6 +133,12 @@ try {
   ok('настройки открылись на «Инструментах»', /Инструменты/.test(openTab), openTab)
 
   console.log(`\n[palette] PASS ${pass} · FAIL ${fail}`)
+} catch (e) {
+  // Ошибка внутри прогона обязана быть ВИДНА: `process.exit` в finally гасит
+  // вывод необработанного отказа, и упавший прогон печатал «провалено 0» с
+  // нулевым кодом выхода — то есть выглядел прошедшим.
+  fail++
+  console.log('  ✗ прогон упал:', e?.stack || e?.message || String(e))
 } finally {
   await app.close()
 }
