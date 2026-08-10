@@ -1,7 +1,7 @@
 import { BrowserWindow, app, shell, session } from 'electron'
 import { dirname, join, resolve } from 'path'
 import { pathToFileURL } from 'url'
-import { statSync } from 'fs'
+import { stat } from 'fs/promises'
 import { cleanArgPath, folderArg } from '@shared/cliArgs'
 import { CH } from '@shared/ipc'
 import type { AgentEngine } from '@shared/types'
@@ -51,14 +51,30 @@ let quitTimer: NodeJS.Timeout | null = null
  * вместо него домашнюю папку значило бы сделать НЕ ТО, о чём попросили, и не
  * сказать об этом.
  */
-function folderFromArgv(argv: readonly string[], cwd: string): { dir?: string; bad?: string } {
+async function folderFromArgv(
+  argv: readonly string[],
+  cwd: string
+): Promise<{ dir?: string; bad?: string }> {
   const raw = folderArg(argv, app.isPackaged)
   if (!raw) return {}
   const cleaned = cleanArgPath(raw)
   if (!cleaned) return {}
   const full = resolve(cwd, cleaned)
   try {
-    const st = statSync(full)
+    /*
+     * Проверка существования — АСИНХРОННАЯ и с потолком по времени.
+     *
+     * Путь приходит из чужой командной строки, и указывать он может куда
+     * угодно — например на отвалившуюся сетевую шару. Синхронный `statSync`
+     * по такой висит десятками секунд, и всё это время главный процесс не
+     * отвечает: замирает всё окно, а не только открытие папки. Не дождались —
+     * считаем, что открыть нечем, и говорим об этом.
+     */
+    const st = await Promise.race([
+      stat(full),
+      new Promise<null>((r) => setTimeout(() => r(null), STAT_TIMEOUT_MS))
+    ])
+    if (!st) return { bad: cleaned }
     return { dir: st.isDirectory() ? full : dirname(full) }
   } catch {
     return { bad: cleaned }
@@ -66,30 +82,46 @@ function folderFromArgv(argv: readonly string[], cwd: string): { dir?: string; b
 }
 
 /**
- * Папка первого запуска ждёт, пока окно за ней придёт.
+ * Сколько ждём ответа файловой системы о пути из командной строки.
  *
- * Толкать её самим нельзя: окно подписывается на события ПОСЛЕ восстановления
- * сессий, то есть заметно позже `did-finish-load`, и сообщение уходило бы в
- * пустоту — команда «не срабатывала» без единого следа. Поэтому копим, а окно
- * забирает, когда готово (`app:take-folder-arg`).
+ * Три секунды — заметно дольше любого локального диска и заметно меньше того,
+ * что человек сочтёт зависанием приложения.
  */
-let pendingFolderArg: { dir?: string; bad?: string } | null = null
+const STAT_TIMEOUT_MS = 3000
 
-/** Забрать и забыть: папка открывается один раз, а не на каждой перезагрузке окна. */
-export function takeFolderArg(): { dir?: string; bad?: string } | null {
-  const msg = pendingFolderArg
-  pendingFolderArg = null
-  return msg
+/**
+ * Папки ждут, пока окно за ними придёт.
+ *
+ * Толкать их самим нельзя, пока окно не готово: подписка появляется ПОСЛЕ
+ * восстановления сессий, то есть заметно позже `did-finish-load`, и сообщение
+ * уходило бы в пустоту — команда «не срабатывала» без единого следа.
+ *
+ * ОЧЕРЕДЬ, а не одна ячейка: пока окно поднимается, второй запуск может прийти
+ * не один раз, и вторая папка затирала бы первую. Потерять папку молча — то же
+ * самое «не сработало», только реже воспроизводимое.
+ */
+const pendingFolderArgs: { dir?: string; bad?: string }[] = []
+
+/**
+ * Окно сказало, что готово принимать. До этого мига всё копится.
+ *
+ * Сбрасывается при создании окна: после перезагрузки страницы подписки нет
+ * снова, и толкать в неё бессмысленно.
+ */
+let rendererReady = false
+
+/** Забрать накопленное. Забираем ВСЁ и разом: очередь не должна расти. */
+export function takeFolderArgs(): { dir?: string; bad?: string }[] {
+  rendererReady = true
+  return pendingFolderArgs.splice(0, pendingFolderArgs.length)
 }
 
 /** Отдать папку окну. Окно решит, открывать вкладкой или сказать об отказе. */
 function sendFolderArg(msg: { dir?: string; bad?: string }): void {
   if (!msg.dir && !msg.bad) return
   const win = mainWindow
-  // Окна ещё нет или оно грузится — придёт само. Толкать сейчас значит
-  // говорить в пустоту.
-  if (!win || win.webContents.isLoading()) {
-    pendingFolderArg = msg
+  if (!win || !rendererReady || win.webContents.isLoading()) {
+    pendingFolderArgs.push(msg)
     return
   }
   win.webContents.send(CH.openFolderArg, msg)
@@ -223,6 +255,8 @@ if (process.env.ZARYA_FAKE_AGENT) {
 const killAllAgents = (): void => agentRegistry.forEach((d) => d.killAll())
 
 function createWindow(): void {
+  // Новое окно (или перезагрузка страницы) — подписки в нём ещё нет.
+  rendererReady = false
   const settings = settingsStore.get()
   const useAcrylic = process.platform === 'win32' && settings.appearance.acrylic
 
@@ -412,7 +446,7 @@ if (!gotLock) {
       if (mainWindow.isMinimized()) mainWindow.restore()
       mainWindow.focus()
     }
-    sendFolderArg(folderFromArgv(argv, workingDirectory || process.cwd()))
+    void folderFromArgv(argv, workingDirectory || process.cwd()).then(sendFolderArg)
   })
 
   app.whenReady().then(async () => {
@@ -431,7 +465,7 @@ if (!gotLock) {
       agentRegistry,
       stt: sttService,
       updates: updateService,
-      takeFolderArg,
+      takeFolderArgs,
       requestQuitConfirmed: () => {
         if (quitTimer) clearTimeout(quitTimer)
         quitConfirmed = true
@@ -514,7 +548,7 @@ if (!gotLock) {
 
     // Папка из командной строки первого запуска. Отдаём сразу: `sendFolderArg`
     // сам дождётся, пока окно догрузится.
-    sendFolderArg(folderFromArgv(process.argv, process.cwd()))
+    void folderFromArgv(process.argv, process.cwd()).then(sendFolderArg)
 
     // Keep the fuel gauge honest from boot: poll /usage in the background (a
     // throwaway idle session when no chat is live) instead of only after the

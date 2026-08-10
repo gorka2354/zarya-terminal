@@ -58,8 +58,11 @@ export interface IpcContext {
   /** Local speech-to-text (dictation into the bar). */
   stt: SttService
   updates: UpdateService
-  /** Папка, названная в командной строке запуска. Забирается один раз. */
-  takeFolderArg: () => { dir?: string; bad?: string } | null
+  /**
+   * Папки, названные в командной строке. Очередь, а не одна: пока окно
+   * поднимается, второй запуск может прийти не однажды.
+   */
+  takeFolderArgs: () => { dir?: string; bad?: string }[]
   requestQuitConfirmed: () => void
 }
 
@@ -690,7 +693,7 @@ export function registerIpc(ctx: IpcContext): void {
   })
   ipcMain.on(CH.showItemInFolder, (_e, path: string) => shell.showItemInFolder(path))
   // Папка из командной строки первого запуска — забирается один раз.
-  ipcMain.handle(CH.takeFolderArg, () => ctx.takeFolderArg())
+  ipcMain.handle(CH.takeFolderArg, () => ctx.takeFolderArgs())
   ipcMain.handle(CH.pickDirectory, async () => {
     /*
      * ZARYA_PICK_DIR — рубильник для прогонов, как и `ZARYA_STT_PICK_DIR` выше:

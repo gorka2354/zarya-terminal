@@ -344,7 +344,7 @@ export interface ZaryaApi {
      * подписка появляется позже загрузки страницы, и толкнутое сообщение
      * ушло бы в пустоту. `null` — папку не называли.
      */
-    takeFolderArg(): Promise<{ dir?: string; bad?: string } | null>
+    takeFolderArg(): Promise<{ dir?: string; bad?: string }[]>
     /**
      * Папка, названная в командной строке (`zarya .`). Приходит и при первом
      * запуске, и когда второй экземпляр отдал свою папку этому окну.

@@ -104,7 +104,7 @@ export default function App(): React.JSX.Element {
       }
       // Папку ПЕРВОГО запуска забираем сами: главный процесс не знает, когда мы
       // готовы её открыть, и толкнутое сообщение ушло бы в пустоту.
-      useFolderArg(await window.zarya.app.takeFolderArg())
+      for (const msg of (await window.zarya.app.takeFolderArg()) ?? []) useFolderArg(msg)
       // Второй запуск отдаёт свою папку на лету — тут подписка уже стоит.
       window.zarya.app.onOpenFolderArg(useFolderArg)
       setBooted(true)

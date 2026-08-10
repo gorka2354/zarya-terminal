@@ -179,7 +179,17 @@ function MemoryRow({ file }: { file: NonNullable<McpSnapshot['memoryFiles']>[num
 
   const edit = async (): Promise<void> => {
     if (open) {
+      /*
+       * Закрытие с несохранёнными правками — спрашиваем.
+       *
+       * Раньше щелчок по «закрыть» стирал набранное без единого слова: человек
+       * писал правило в память проекта, случайно попадал по кнопке — и текста
+       * не было нигде. Молчаливая потеря того, что человек напечатал руками,
+       * — худший из возможных исходов этого экрана.
+       */
+      if (dirty && !window.confirm(t('mem.dropAsk'))) return
       setOpen(false)
+      setDirty(false)
       return
     }
     setNote('')
@@ -224,8 +234,22 @@ function MemoryRow({ file }: { file: NonNullable<McpSnapshot['memoryFiles']>[num
         setNote(t('mem.changedOutside'))
         return
       }
-      await window.zarya.fs.writeFile(file.path, text)
-      setBase(text)
+      /*
+       * Концы строк оставляем ТЕ ЖЕ.
+       *
+       * Поле ввода браузера отдаёт только LF. Записав его как есть, Заря
+       * молча перевела бы весь файл с CRLF на LF — а это чужой файл, он лежит
+       * в гите, и «перевод всего файла» вылез бы в дифф правкой КАЖДОЙ строки.
+       * Человек менял одну.
+       */
+      const CR = String.fromCharCode(13)
+      const LF = String.fromCharCode(10)
+      const crlf = base !== null && base.includes(CR + LF)
+      const body = crlf
+        ? text.split(CR + LF).join(LF).split(LF).join(CR + LF)
+        : text
+      await window.zarya.fs.writeFile(file.path, body)
+      setBase(body)
       setDirty(false)
       // Цена в токенах ПОСЛЕ правки — уже другая, а цифра на экране прежняя.
       // Сказать об этом честнее, чем пересчитать своей арифметикой: считает её

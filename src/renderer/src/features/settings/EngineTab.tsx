@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { AgentEngine, AgentEngineHealth } from '@shared/types'
 import { t, useLang } from '@/lib/i18n'
 import { useAiStore } from '@/features/ai/aiStore'
@@ -52,26 +52,61 @@ export function EngineTab(): React.JSX.Element {
   )
   const engine = chosen?.engine as AgentEngine | undefined
   const caps = engine ? agentCaps?.[engine] : undefined
+  /*
+   * `caps === undefined` — «ещё не приехали», а не «не умеет»: карта
+   * возможностей приходит одним асинхронным вызовом. Спрашиваем движок и верим
+   * его ответу; `null` от него и означает «так не умею» (см. ниже).
+   */
   const unsupported = caps ? !caps.health : false
-  const cwd = chosen?.sessionId ? sessions[chosen.sessionId]?.cwd : chosen?.cwd
+  /*
+   * Папка панели. Живая сессия знает свою (в неё могли `cd`), а если панель уже
+   * закрыта — берём ту, в которой беседа открывалась.
+   *
+   * Раньше при закрытой панели выходило `undefined`, и `claude doctor`
+   * запускался в папке САМОЙ ЗАРИ: подпись обещала «в папке этой панели», а
+   * отчёт приходил о чужом каталоге.
+   */
+  const cwd = (chosen?.sessionId ? sessions[chosen.sessionId]?.cwd : undefined) ?? chosen?.cwd
 
   const [health, setHealth] = useState<AgentEngineHealth | null>(null)
   const [busy, setBusy] = useState(false)
   const [asking, setAsking] = useState(false)
+  // Номер последнего запроса: ответ старого не должен рисоваться поверх нового.
+  const reqRef = useRef(0)
+  // Движок ответил «так не умею» — это ответ, а не отсутствие ответа.
+  const [denied, setDenied] = useState(false)
 
   const load = useCallback(
     async (doctor: boolean): Promise<void> => {
       if (!engine || unsupported) return
       if (doctor) setAsking(true)
       else setBusy(true)
+      /*
+       * Ответ, пришедший после смены панели, — ответ О ДРУГОЙ ПАПКЕ.
+       *
+       * `claude doctor` живёт секунды, и за это время человек успевает
+       * переключить панель. Дорисовать его отчёт на новом экране значило бы
+       * выдать разбор чужого проекта за разбор этого.
+       */
+      const mine = ++reqRef.current
       try {
         const h = await window.zarya.agent.health(engine, cwd, doctor)
+        if (mine !== reqRef.current) return
+        // `null` — движок так не умеет. Без этого экран навсегда оставался бы в
+        // «Спрашиваю…»: карта возможностей могла не успеть приехать.
+        if (!h) {
+          setDenied(true)
+          return
+        }
+        setDenied(false)
         // Отчёт движка НЕ затираем дешёвым обновлением: человек его только что
         // прочитал, а перерисовка списка не повод убирать текст с экрана.
         setHealth((prev) => (doctor || !prev?.doctor ? h : h && { ...h, doctor: prev.doctor }))
       } finally {
-        setBusy(false)
-        setAsking(false)
+        if (mine === reqRef.current) {
+          setBusy(false)
+          setAsking(false)
+        }
       }
     },
     [engine, cwd, unsupported]
@@ -80,15 +115,31 @@ export function EngineTab(): React.JSX.Element {
   // Открыли вкладку — спрашиваем ДЕШЁВОЕ: пути, версии, вход. Это доли секунды
   // и не запускает беседу. `doctor` — только с нажатия: он живёт секунды.
   useEffect(() => {
-    setHealth(null)
+    /*
+     * Health НЕ обнуляем: `cwd` меняется от обычного `cd` в панели, и обнуление
+     * стирало бы уже прочитанный отчёт движка без единого слова. Ответ заменит
+     * прежний сам, когда придёт.
+     */
     void load(false)
   }, [load])
 
-  const [copied, setCopied] = useState(false)
+  // Сменили ПАНЕЛЬ — вот тогда прежний ответ и правда чужой.
+  useEffect(() => {
+    setHealth(null)
+    setDenied(false)
+  }, [chosen?.id])
+
+  const [copied, setCopied] = useState<'yes' | 'no' | null>(null)
   const copyUpdate = async (): Promise<void> => {
-    await navigator.clipboard.writeText(UPDATE_CMD)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    // Буфер обмена бывает занят другим приложением. Сказать «скопировано» и не
+    // скопировать — отправить человека вставлять пустоту.
+    try {
+      await navigator.clipboard.writeText(UPDATE_CMD)
+      setCopied('yes')
+    } catch {
+      setCopied('no')
+    }
+    setTimeout(() => setCopied(null), 2500)
   }
 
   if (!panes.length) {
@@ -121,12 +172,25 @@ export function EngineTab(): React.JSX.Element {
         </div>
       )}
 
-      {unsupported ? (
+      {unsupported || denied ? (
         <div className="zy-eng-empty">{t('eng.unsupported')}</div>
       ) : (
         <>
           <div className="zy-section-label">{t('eng.whatRuns')}</div>
-          {!health && busy && <div className="zy-eng-empty">{t('eng.loading')}</div>}
+          {!health && <div className="zy-eng-empty">{t(busy ? 'eng.loading' : 'eng.noAnswer')}</div>}
+          {/*
+            Ничего не выбрано — САМЫЙ ВАЖНЫЙ случай этого экрана, и раньше он был
+            единственным, где экран показывал пустоту: блок рисовался только для
+            выбранного, а «Ещё нашлись» без него читалось как заголовок ни к
+            чему. Молчать про сломанный движок на экране про сломанный движок —
+            худшее, что тут можно сделать.
+          */}
+          {health && !chosenBin && (
+            <div className="zy-eng-bin zy-eng-bin--none">
+              <div className="zy-eng-origin">{t('eng.noneChosen')}</div>
+              <div className="zy-eng-why">{t(`eng.reason.${health.reason}`)}</div>
+            </div>
+          )}
           {chosenBin && (
             <div className="zy-eng-bin zy-eng-bin--chosen">
               <div className="zy-eng-bin-head">
@@ -146,7 +210,7 @@ export function EngineTab(): React.JSX.Element {
                 Другие найденные. Ровно тот случай, ради которого экран и нужен:
                 «у меня же новая версия» — а работает не она.
               */}
-              <div className="zy-eng-sub">{t('eng.others')}</div>
+              <div className="zy-eng-sub">{t(chosenBin ? 'eng.others' : 'eng.found')}</div>
               {others.map((b) => (
                 <div key={b.path} className="zy-eng-bin">
                   <div className="zy-eng-bin-head">
@@ -161,7 +225,14 @@ export function EngineTab(): React.JSX.Element {
 
           <div className="zy-section-label">{t('eng.account')}</div>
           {health?.auth === undefined && <div className="zy-eng-empty">{t('eng.loading')}</div>}
-          {health?.auth === null && <div className="zy-eng-empty">{t('eng.authUnknown')}</div>}
+          {health?.auth === null && (
+            // Файла нет — значит спрашивать было НЕЧЕМ. Сказать «движок не
+            // ответил» о вопросе, который не задавали, — второе враньё подряд
+            // на экране, который для того и сделан, чтобы не врать.
+            <div className="zy-eng-empty">
+              {t(chosenBin ? 'eng.authUnknown' : 'eng.authNotAsked')}
+            </div>
+          )}
           {health?.auth && (
             <div className="zy-eng-auth">
               {health.auth.loggedIn ? (
@@ -191,18 +262,32 @@ export function EngineTab(): React.JSX.Element {
           <div className="zy-eng-update">
             <code className="zy-eng-cmd">{UPDATE_CMD}</code>
             <button className="zy-eng-btn" onClick={() => void copyUpdate()}>
-              {t(copied ? 'eng.copied' : 'eng.copy')}
+              {t(copied === 'yes' ? 'eng.copied' : copied === 'no' ? 'eng.copyFail' : 'eng.copy')}
             </button>
           </div>
           <div className="zy-eng-note">{t('eng.updateWhy')}</div>
 
           <div className="zy-section-label">{t('eng.doctor')}</div>
-          <div className="zy-eng-note">{t('eng.doctorWhat')}</div>
-          <button className="zy-eng-btn" disabled={asking} onClick={() => void load(true)}>
+          {/* Папку называем прямо здесь: подпись обещает «в папке этой панели»,
+              и человек должен видеть, о какой именно идёт речь. */}
+          <div className="zy-eng-note">
+            {cwd ? t('eng.doctorWhatIn', { dir: cwd }) : t('eng.doctorNoCwd')}
+          </div>
+          <button
+            className="zy-eng-btn"
+            disabled={asking || !cwd}
+            onClick={() => void load(true)}
+          >
             {t(asking ? 'eng.asking' : 'eng.ask')}
           </button>
           {health?.doctor?.ok === false && (
-            <div className="zy-eng-empty">{t('eng.doctorFail', { why: health.doctor.error })}</div>
+            <div className="zy-eng-empty">
+              {/* Внутренний код отказа человеку не показываем: «exe-unknown» на
+                  экране — это не объяснение, а утечка нашей кухни. */}
+              {health.doctor.error === 'exe-unknown'
+                ? t('eng.doctorNoExe')
+                : t('eng.doctorFail', { why: health.doctor.error })}
+            </div>
           )}
           {health?.doctor?.ok && (
             <>
