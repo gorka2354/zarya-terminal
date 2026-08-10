@@ -571,6 +571,12 @@ export interface AgentStartOpts {
   permissionMode?: AgentPermissionMode
   /** Auto-approve tool calls in canUseTool without prompting (AskUserQuestion still surfaces). */
   bypass?: boolean
+  /**
+   * «Правки без спроса»: ступень между вопросом на каждый вызов и автопилотом.
+   * Молча пропускаются ТОЛЬКО инструменты правки файлов (см. `isEditTool`);
+   * команды оболочки, сеть и незнакомое по-прежнему спрашивают.
+   */
+  editsAuto?: boolean
   /** Ultracode: xhigh effort + standing dynamic-workflow orchestration (Claude-only, session-scoped). */
   ultracode?: boolean
   /** Resume a prior session id (multi-turn continuity). */

@@ -187,6 +187,11 @@ export interface Conversation {
    */
   bypass?: boolean
   /**
+   * «Правки без спроса» — ступень между вопросом на каждый вызов и автопилотом.
+   * Принадлежит БЕСЕДЕ, как и автопилот: панели рядом решают за себя.
+   */
+  editsAuto?: boolean
+  /**
    * Режим плана этой беседы: агент ничего не выполняет, а сперва рассказывает,
    * что собирается сделать.
    *
@@ -310,6 +315,7 @@ interface AiState {
    * возвращает спрашивание.
    */
   bypassBySession: Record<string, boolean>
+  editsAutoBySession: Record<string, boolean>
   planBySession: Record<string, boolean>
   /**
    * Вложенные картинки, ждущие отправки, — по ПАНЕЛИ, а не по беседе. В момент
@@ -346,11 +352,13 @@ interface AiState {
    * драйвера. Соседние панели это не касается.
    */
   setBypass: (conversationId: string, on: boolean) => void
+  setEditsAuto: (conversationId: string, on: boolean) => void
   /**
    * То же для панели, в которой беседы ещё нет: выбор запоминается и достаётся
    * первой же беседе этой панели.
    */
   setPaneBypass: (sessionId: string, on: boolean) => void
+  setPaneEditsAuto: (sessionId: string, on: boolean) => void
   setPlanMode: (conversationId: string, on: boolean) => void
   setPanePlanMode: (sessionId: string, on: boolean) => void
   /** Приложить картинку к панели. Отказ (пределы) — на стороне вызывающего. */
@@ -802,7 +810,7 @@ export const useAiStore = create<AiState>((set, get) => {
       // SECURITY: permissionMode is always 'default' and gate-weakening comes only
       // from АВТОПИЛОТ — see nativeGateOpts, which owns that invariant and is
       // guarded by tests/startOpts.test.ts.
-      ...nativeGateOpts(settings.ai, conv.bypass, conv.planMode),
+      ...nativeGateOpts(settings.ai, conv.bypass, conv.planMode, conv.editsAuto),
       ultracode: useUiStore.getState().ultracode,
       model: settings.ai.claudeModel || undefined,
       // Ultracode forces xhigh; otherwise use the user's effort override.
@@ -1380,6 +1388,7 @@ export const useAiStore = create<AiState>((set, get) => {
     activeBySession: {},
     commandBarSessionId: null,
   bypassBySession: {},
+  editsAutoBySession: {},
   planBySession: {},
   pendingImages: {},
 
@@ -1441,6 +1450,7 @@ export const useAiStore = create<AiState>((set, get) => {
         agentMode: (opts?.engine ?? 'builtin') !== 'builtin',
         // Автопилот — из намерения ЭТОЙ панели, а не из настроек и не от соседа.
         bypass: opts?.sessionId ? get().bypassBySession[opts.sessionId] : undefined,
+        editsAuto: opts?.sessionId ? get().editsAutoBySession[opts.sessionId] : undefined,
         // Режим плана — оттуда же и по той же причине. Без этого чип горел бы,
         // а первый же ход уходил бы обычным: человек видел бы обещание
         // осторожности, которого никто не давал драйверу.
@@ -1698,6 +1708,13 @@ export const useAiStore = create<AiState>((set, get) => {
       })
     },
 
+    /** «Правки без спроса» панели — по той же схеме, что автопилот и план. */
+    setPaneEditsAuto: (sessionId, on) => {
+      set((s) => ({ editsAutoBySession: { ...s.editsAutoBySession, [sessionId]: on } }))
+      const conv = convForSession(get(), sessionId)
+      if (conv) get().setEditsAuto(conv.id, on)
+    },
+
     setPaneBypass: (sessionId, on) => {
       set((s) => ({ bypassBySession: { ...s.bypassBySession, [sessionId]: on } }))
       // Если беседа в этой панели уже есть — применить и к ней.
@@ -1733,6 +1750,20 @@ export const useAiStore = create<AiState>((set, get) => {
       // следующего хода незачем.
       if (conv.engine !== 'builtin')
         void window.zarya.agent.setPermissionMode(conv.engine, conv.id, on ? 'plan' : 'default')
+    },
+
+    setEditsAuto: (conversationId, on) => {
+      const conv = get().conversations.find((c) => c.id === conversationId)
+      if (!conv) return
+      patchConversation(conv.id, (c) => ({ ...c, editsAuto: on }))
+      if (conv.sessionId)
+        set((s) => ({
+          editsAutoBySession: { ...s.editsAutoBySession, [conv.sessionId as string]: on }
+        }))
+      // Живой сессии — сразу: карточки правок сыплются ВНУТРИ хода, и ждать
+      // следующего сообщения незачем.
+      if (conv.engine !== 'builtin')
+        window.zarya.agent.setVendorFlag(conv.engine, conv.id, 'editsAuto', on)
     },
 
     setBypass: (conversationId, on) => {
@@ -2221,7 +2252,11 @@ function seedPatch(convId: string, fn: (c: Conversation) => Conversation): void 
         error: c.error,
         messages: c.messages,
         pendingTools: c.pendingTools,
-        queued: c.queued
+        queued: c.queued,
+        // Ступени допуска — прогонам: «правки без спроса» и автопилот это разные
+        // состояния, и проверять их надо порознь.
+        bypass: !!c.bypass,
+        editsAuto: !!c.editsAuto
       }
     : null
 }
@@ -2240,6 +2275,11 @@ function seedPatch(convId: string, fn: (c: Conversation) => Conversation): void 
   const c = useAiStore.getState().activeConversation()
   if (c) useAiStore.getState().queueMessage(c.id, t)
 }
+// Прогонам: ступень «правки без спроса» ДО первой беседы — решение принадлежит
+// панели, и живой прогон обязан ставить его тем же путём, что и человек чипом.
+;(
+  window as unknown as { __zaryaSetPaneEditsAuto?: (sid: string, on: boolean) => void }
+).__zaryaSetPaneEditsAuto = (sid, on) => useAiStore.getState().setPaneEditsAuto(sid, on)
 ;(window as unknown as { __zaryaBypassLive?: (on: boolean) => void }).__zaryaBypassLive = (on) => {
   const c = useAiStore.getState().activeConversation()
   if (c) {

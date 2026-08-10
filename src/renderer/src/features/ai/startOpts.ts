@@ -17,10 +17,12 @@ import type { AgentPermissionMode, AiSettings } from '@shared/types'
 export function nativeGateOpts(
   ai: AiSettings,
   convBypass: boolean | undefined,
-  convPlan?: boolean
+  convPlan?: boolean,
+  convEditsAuto?: boolean
 ): {
   permissionMode: AgentPermissionMode
   bypass: boolean
+  editsAuto: boolean
 } {
   // `ai` остаётся в сигнатуре намеренно: инвариант «autoApprove НИКОГДА не
   // доезжает до драйвера» проверяется тестом именно на этой функции.
@@ -36,7 +38,19 @@ export function nativeGateOpts(
    * Приоритет у строгого: ошибка в эту сторону стоит лишнего вопроса, в
    * обратную — сделанной работы, которую не просили.
    */
-  if (convPlan === true) return { permissionMode: 'plan', bypass: false }
+  if (convPlan === true) return { permissionMode: 'plan', bypass: false, editsAuto: false }
+  /*
+   * «Правки без спроса» — ступень между вопросом и автопилотом, и она НЕ
+   * превращается в `permissionMode: 'acceptEdits'`: тот режим уводит правки
+   * ниже `canUseTool`, то есть мимо карточек Зари и мимо «поля необратимого» —
+   * ровно та подмена, из-за которой acceptEdits однажды уже выкинули отсюда.
+   * Ступень считается на нашей стороне, в canUseTool драйвера.
+   *
+   * Под автопилотом она бессмысленна: тот и так пропускает всё, кроме
+   * необратимого. Отдаём обе величины честно, чтобы чип показывал одно
+   * состояние, а не два наложенных.
+   */
+  const bypass = convBypass === true
   // Не решено — значит спрашивать. Умолчание всегда в сторону вопроса.
-  return { permissionMode: 'default', bypass: convBypass === true }
+  return { permissionMode: 'default', bypass, editsAuto: !bypass && convEditsAuto === true }
 }

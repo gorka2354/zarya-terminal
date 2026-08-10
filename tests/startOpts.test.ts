@@ -50,7 +50,8 @@ describe('nativeGateOpts', () => {
     for (const autoApprove of [true, false])
       expect(nativeGateOpts(ai({ autoApprove }), undefined)).toEqual({
         permissionMode: 'default',
-        bypass: false
+        bypass: false,
+        editsAuto: false
       })
   })
 
@@ -68,14 +69,23 @@ describe('nativeGateOpts', () => {
       // на один вопрос. Отправить их вместе значит отправить непонятно что;
       // приоритет у строгого, потому что ошибка в эту сторону стоит лишнего
       // вопроса, а в обратную — сделанной работы, которую не просили.
-      expect(nativeGateOpts(ai(), true, true)).toEqual({ permissionMode: 'plan', bypass: false })
+      expect(nativeGateOpts(ai(), true, true)).toEqual({
+        permissionMode: 'plan',
+        bypass: false,
+        editsAuto: false
+      })
     })
 
     it('выключённый план ничего не меняет', () => {
-      expect(nativeGateOpts(ai(), true, false)).toEqual({ permissionMode: 'default', bypass: true })
+      expect(nativeGateOpts(ai(), true, false)).toEqual({
+        permissionMode: 'default',
+        bypass: true,
+        editsAuto: false
+      })
       expect(nativeGateOpts(ai(), true, undefined)).toEqual({
         permissionMode: 'default',
-        bypass: true
+        bypass: true,
+        editsAuto: false
       })
     })
 
@@ -96,7 +106,38 @@ describe('nativeGateOpts', () => {
   it('is closed by default', () => {
     expect(nativeGateOpts(DEFAULT_SETTINGS.ai, undefined)).toEqual({
       permissionMode: 'default',
-      bypass: false
+      bypass: false,
+      editsAuto: false
     })
+  })
+
+  /*
+   * Ступень «правки без спроса» (inc-25). Инвариант тот же и здесь: она НЕ
+   * превращается в `permissionMode: 'acceptEdits'` — иначе правки снова ушли бы
+   * ниже canUseTool, мимо карточек и мимо «поля необратимого». Ступень считается
+   * на нашей стороне и отдаётся драйверу отдельным флагом.
+   */
+  it('«правки без спроса» не подменяют режим движка', () => {
+    const o = nativeGateOpts(ai(), false, false, true)
+    expect(o.permissionMode).toBe('default')
+    expect(o.editsAuto).toBe(true)
+    expect(o.bypass).toBe(false)
+  })
+
+  it('под автопилотом ступень гасится — иначе чип показывал бы два состояния', () => {
+    const o = nativeGateOpts(ai(), true, false, true)
+    expect(o.bypass).toBe(true)
+    expect(o.editsAuto).toBe(false)
+  })
+
+  it('в режиме плана не действует ничто: ни автопилот, ни ступень', () => {
+    const o = nativeGateOpts(ai(), true, true, true)
+    expect(o.permissionMode).toBe('plan')
+    expect(o.bypass).toBe(false)
+    expect(o.editsAuto).toBe(false)
+  })
+
+  it('нерешённая ступень — это «спрашивать»', () => {
+    expect(nativeGateOpts(ai(), false, false, undefined).editsAuto).toBe(false)
   })
 })

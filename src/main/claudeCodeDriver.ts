@@ -32,6 +32,7 @@ import { bundledPkgName, claudeExeName, resolveClaudeExe, type ExePick } from '.
 import { cleanCommands } from '@shared/agentCommands'
 import { isNoticeSubtype, noticeFor } from './systemNotices'
 import { endReasonText } from './turnOutcome'
+import { isEditTool } from '@shared/editTools'
 
 /** Число из сообщения движка, если оно там есть и осмысленно. */
 function numOr(msg: unknown, key: string): number | undefined {
@@ -369,6 +370,8 @@ interface Session {
   pendingQuestions: Map<string, ClaudeCliQuestion[]>
   /** Bypass ('без спроса'): auto-approve ordinary tools in canUseTool (live-toggleable). */
   bypass: boolean
+  /** «Правки без спроса»: авто-допуск ТОЛЬКО для правок файлов (live-toggleable). */
+  editsAuto: boolean
   /** Effort override for this session, so init reports the effective value. */
   effort?: string
   /** Model + ultracode this session is currently running, so a follow-up turn
@@ -573,6 +576,7 @@ export class ClaudeCodeDriver implements AgentDriver {
       // passes the live setting every turn) so a background session can't keep a
       // stale bypass flag that contradicts what the chip shows.
       existing.bypass = !!opts.bypass
+      existing.editsAuto = !!opts.editsAuto
       // The renderer sends the committed model/effort/ultracode with EVERY
       // turn. Applying the ones that actually changed is what lets a pick made
       // while another tab was focused reach this session — the launch console's
@@ -663,7 +667,21 @@ export class ClaudeCodeDriver implements AgentDriver {
          * раньше: обещать то, чего ещё не знаем, нельзя.
          */
         const mark = this.mcpMarks.get(requestId)?.[toolName]
-        if (!isQuestion && !stop && !mark?.destructive && this.sessions.get(requestId)?.bypass) {
+        /*
+         * Ступень между «спрашивай всё» и автопилотом: правки файлов идут
+         * молча, команды оболочки и сеть — по-прежнему с вопросом. Это рабочий
+         * режим рефакторинга, где иначе человек двадцать раз подряд отвечает
+         * «да» на правку одного и того же файла и перестаёт читать карточки.
+         *
+         * Держим ЗДЕСЬ, а не в `permissionMode: 'acceptEdits'` движка. Тот
+         * пропускает правки ниже `canUseTool` — то есть мимо Зари: карточка не
+         * появляется, «поле необратимого» не работает, и на экране не остаётся
+         * следа. Наш вариант проходит тот же путь, что и все прочие вызовы, и
+         * потому подчиняется тем же правилам.
+         */
+        const sess = this.sessions.get(requestId)
+        const autoEdit = !!sess?.editsAuto && isEditTool(toolName) && !mark?.destructive
+        if (!isQuestion && !stop && !mark?.destructive && (sess?.bypass || autoEdit)) {
           resolve({ behavior: 'allow' })
           return
         }
@@ -771,6 +789,7 @@ export class ClaudeCodeDriver implements AgentDriver {
       // приложение.
       cwd: opts.cwd,
       bypass: !!opts.bypass,
+      editsAuto: !!opts.editsAuto,
       effort: effortOverride,
       model: opts.model,
       ultracode: !!opts.ultracode,
@@ -1943,6 +1962,20 @@ export class ClaudeCodeDriver implements AgentDriver {
   /** Generic vendor-flag setter (AgentDriver). Claude's only vendor flag is 'ultracode'. */
   setVendorFlag(requestId: string, key: string, value: unknown): void {
     if (key === 'ultracode') this.setUltracode(requestId, !!value)
+    /*
+     * «Правки без спроса» переключается ПОСРЕДИ хода — именно тогда в нём и
+     * возникает нужда: карточки правок сыплются одна за другой, и человек
+     * решает больше их не читать. Ждать следующего сообщения здесь бессмысленно,
+     * гейты живут внутри хода.
+     *
+     * Своего вызова к SDK нет: допуск считается на нашей стороне, в canUseTool,
+     * — флаг и ЕСТЬ применённое состояние (как у автопилота).
+     */
+    if (key === 'editsAuto') {
+      const s = this.sessions.get(requestId)
+      if (s) s.editsAuto = !!value
+      this.recordFlag(requestId, { editsAuto: !!value })
+    }
   }
 
   /**

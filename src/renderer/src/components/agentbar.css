@@ -328,6 +328,19 @@
   box-shadow: 0 0 6px color-mix(in srgb, var(--danger) 80%, transparent);
 }
 
+/* Средняя ступень допуска: правки молча, команды со спросом. Своим цветом —
+   между спокойным «спрашиваю всё» и тревожным автопилотом; иначе две разные
+   договорённости выглядели бы одинаково. */
+.zy-agentbar-bypass--edits {
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 40%, transparent);
+  background: color-mix(in srgb, var(--warn) 10%, var(--bg));
+}
+.zy-agentbar-bypass--edits .zy-agentbar-bypass-dot {
+  background: var(--warn);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--warn) 80%, transparent);
+}
+
 /* Model chip — the model id is data, so its name keeps the Handjet readout voice. */
 .zy-agentbar-model {
   padding: 0 9px;

@@ -421,6 +421,11 @@ export const AgentBar = memo(function AgentBar({
     activeSessionId ? !!s.bypassBySession[activeSessionId] : false
   )
   const bypass = activeConv ? !!activeConv.bypass : paneBypass
+  // «Правки без спроса» — та же схема хранения, что у автопилота и плана.
+  const paneEditsAuto = useAiStore((s) =>
+    activeSessionId ? !!s.editsAutoBySession[activeSessionId] : false
+  )
+  const editsAuto = activeConv ? !!activeConv.editsAuto : paneEditsAuto
   // Режим плана — по той же схеме, что и автопилот: решение принадлежит панели
   // и живёт до первой беседы, иначе чип был бы мёртвым до отправки.
   const panePlan = useAiStore((s) =>
@@ -833,6 +838,47 @@ ${prev}`
     useUiStore
       .getState()
       .toast(next ? t('bar.planToastOn') : t('bar.planToastOff'), 'success')
+  }
+
+  /**
+   * Замок по кругу: спрашивать → правки без спроса → автопилот → спрашивать.
+   *
+   * Это жест Claude Code (там Shift+Tab), и он же делает Зарю СТРОЖЕ прежнего:
+   * раньше один щелчок по замку сразу включал автопилот, теперь между ними
+   * стоит ступень, на которой молча проходят только правки файлов, а команды
+   * оболочки по-прежнему спрашивают.
+   *
+   * В режиме плана цикла нет: там выполнять нечего, и предлагать ослабление
+   * закрытого наглухо гейта — обещание без предмета.
+   */
+  const cycleGate = (): void => {
+    if (!canToggleGate) return
+    if (isBuiltinMode) {
+      toggleAutoApprove()
+      return
+    }
+    const store = useAiStore.getState()
+    const apply = (edits: boolean, auto: boolean): void => {
+      if (activeConv) {
+        store.setEditsAuto(activeConv.id, edits)
+        store.setBypass(activeConv.id, auto)
+      } else if (activeSessionId) {
+        store.setPaneEditsAuto(activeSessionId, edits)
+        store.setPaneBypass(activeSessionId, auto)
+      }
+    }
+    if (bypass) {
+      apply(false, false)
+      useUiStore.getState().toast(t('bar.gateToastAsk'), 'success')
+      return
+    }
+    if (editsAuto) {
+      apply(false, true)
+      useUiStore.getState().toast(t('bar.autopilotToastOn'), 'error')
+      return
+    }
+    apply(true, false)
+    useUiStore.getState().toast(t('bar.gateToastEdits'), 'success')
   }
 
   const toggleBypass = (): void => {
@@ -1324,6 +1370,9 @@ ${prev}`
   // ослабить гейт, который сейчас и так закрыт наглухо.
   const canToggleGate = !planMode && (isBuiltinMode || caps?.bypass !== false)
   const gateOff = !planMode && (isBuiltinMode ? autoApprove : bypass && caps?.bypass !== false)
+  // Средняя ступень видна отдельно: «правки молча, команды со спросом» — не то
+  // же самое, что «спрашивать всё», и уж точно не автопилот.
+  const gateEdits = !planMode && !isBuiltinMode && editsAuto && !gateOff
   const gateTitle = isBuiltinMode
     ? gateOff
       ? t('bar.gateBuiltinOn')
@@ -1332,7 +1381,9 @@ ${prev}`
       ? t('bar.gateLocked', { engine: modeLabel(mode) })
       : gateOff
         ? t('bar.gateOn')
-        : t('bar.gateOff')
+        : gateEdits
+          ? t('bar.gateEdits')
+          : t('bar.gateOff')
 
   if (question) {
     return (
@@ -1557,11 +1608,13 @@ ${prev}`
           <button
             className={`zy-agentbar-bypass zy-agentbar-bypass--icon${
               gateOff ? ' zy-agentbar-bypass--on' : ''
-            }${canToggleGate ? '' : ' zy-agentbar-bypass--locked'}`}
+            }${gateEdits ? ' zy-agentbar-bypass--edits' : ''}${
+              canToggleGate ? '' : ' zy-agentbar-bypass--locked'
+            }`}
             title={gateTitle}
-            aria-label={t(gateOff ? 'bar.autopilotAria' : 'bar.manualAria')}
+            aria-label={t(gateOff ? 'bar.autopilotAria' : gateEdits ? 'bar.editsAria' : 'bar.manualAria')}
             disabled={!canToggleGate}
-            onClick={canToggleGate ? (isBuiltinMode ? toggleAutoApprove : toggleBypass) : undefined}
+            onClick={canToggleGate ? cycleGate : undefined}
           >
             {gateOff ? <Icon name="bolt" size={13} /> : <PixelIcon name="lock" />}
           </button>
@@ -1742,6 +1795,18 @@ ${prev}`
                 setHistIdx(-1)
                 setText('')
               }
+              return
+            }
+            /*
+             * Shift+Tab — цикл режимов допуска, тот же жест, что в консоли.
+             *
+             * Самая частая клавиша Claude Code: рефакторинг начинают с вопросов
+             * на каждую правку и на третьей карточке переключаются. Голый Tab
+             * оставлен списку команд — он выбирает подсказку.
+             */
+            if (e.key === 'Tab' && e.shiftKey && !isShell && !isBuiltinMode) {
+              e.preventDefault()
+              cycleGate()
               return
             }
             if (e.key === 'Enter') {
