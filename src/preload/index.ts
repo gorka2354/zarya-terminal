@@ -262,6 +262,7 @@ const api = {
     onMaximized: (cb: (maximized: boolean) => void) => on(CH.windowMaximized, cb),
     openExternal: (url: string) => ipcRenderer.send(CH.openExternal, url),
     showItemInFolder: (path: string) => ipcRenderer.send(CH.showItemInFolder, path),
+    checkpointUsage: () => ipcRenderer.invoke(CH.checkpointUsage),
     pickDirectory: () => ipcRenderer.invoke(CH.pickDirectory),
     /** Папка из командной строки (`zarya .`) — от ВТОРОГО запуска, на лету. */
     onOpenFolderArg: (cb: (msg: { dir?: string; bad?: string }) => void) =>

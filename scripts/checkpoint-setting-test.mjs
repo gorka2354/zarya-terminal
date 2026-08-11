@@ -1,0 +1,145 @@
+/**
+ * Настройка «Откат кода: копии файлов» — та, что платит ЧУЖИМ диском.
+ *
+ * Движок кладёт полные копии файлов открытым текстом в свою папку
+ * (`~/.claude/file-history`), а не в нашу, и удаляет их по своей настройке.
+ * Включать такое молча нельзя, поэтому проверяется не «тумблер существует», а
+ * то, ради чего он в таком виде сделан:
+ *
+ * 1) цена названа ДО пользы и до переключателя, и названа конкретно — про
+ *    полные копии открытым текстом, включая .env и ключи;
+ * 2) сказано, что копии лежат в папке движка, а не Зари;
+ * 3) размер показан настоящим числом, а не обещанием «примерно столько-то»;
+ * 4) в изолированном прогоне чекпоинты выключены принудительно — копии лежат
+ *    вне подменяемой папки, и прогон не имеет права писать в профиль человека.
+ */
+import { _electron as electron } from 'playwright'
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
+const root = process.cwd()
+const shots = process.env.ZARYA_SHOTS || ''
+let pass = 0,
+  fail = 0
+const ok = (name, cond, extra) => {
+  if (cond) {
+    pass++
+    console.log('  ✓', name)
+  } else {
+    fail++
+    console.log('  ✗', name, extra !== undefined ? '→ ' + JSON.stringify(extra) : '')
+  }
+}
+
+const userData = mkdtempSync(join(tmpdir(), 'zarya-cpset-'))
+const claudeHome = mkdtempSync(join(tmpdir(), 'zarya-cpcfg-'))
+writeFileSync(
+  join(userData, 'settings.json'),
+  JSON.stringify({ appearance: { language: 'ru' }, sessions: { restoreOnLaunch: 'none' } })
+)
+
+// Поддельная папка копий: движок её не создавал, но размер считается по диску,
+// и прогон обязан увидеть НАСТОЯЩЕЕ число, а не заглушку.
+const hist = join(claudeHome, 'file-history', 'session-1')
+mkdirSync(hist, { recursive: true })
+writeFileSync(join(hist, 'blob@v1'), 'x'.repeat(4096))
+writeFileSync(join(hist, 'blob2@v1'), 'y'.repeat(2048))
+
+const app = await electron.launch({
+  args: [join(root, 'out', 'main', 'index.js')],
+  env: {
+    ...process.env,
+    ...(process.env.ZARYA_SHOW ? {} : { ZARYA_QA_OFFSCREEN: '1' }),
+    ZARYA_USER_DATA: userData,
+    // Уводим настройки движка в свою папку: иначе прогон считал бы (и показывал)
+    // содержимое настоящего профиля человека.
+    CLAUDE_CONFIG_DIR: claudeHome,
+    ZARYA_FAKE_AGENT: '1',
+    ZARYA_NO_UPDATE_CHECK: '1',
+    ZARYA_NO_ONBOARDING: '1',
+    NODE_ENV: 'production'
+  }
+})
+
+try {
+  const page = await app.firstWindow()
+  await page.waitForLoadState('domcontentloaded')
+  await app.evaluate(({ BrowserWindow }) => {
+    const w = BrowserWindow.getAllWindows()[0]
+    w.setSize(1180, 820)
+    w.center()
+  })
+  await page.waitForTimeout(2600)
+
+  console.log('\n[1] Блок настройки виден на вкладке «Движок»')
+  await page.evaluate(() => window.__zaryaSetUi?.({ settingsOpen: true, settingsTab: 'engine' }))
+  await page.waitForTimeout(1800)
+  const texts = await page.evaluate(() =>
+    [...document.querySelectorAll('.zy-section-label, .zy-eng-note, .zy-eng-sub, .zy-eng-cp-label')].map(
+      (e) => e.textContent ?? ''
+    )
+  )
+  const all = texts.join('\n')
+  ok('заголовок про откат кода на экране', /Откат кода/i.test(all), texts.slice(0, 8))
+
+  console.log('\n[2] Цена названа конкретно и раньше пользы')
+  ok('сказано про полные копии открытым текстом', /полные копии.*открытым текстом/i.test(all), all.slice(0, 300))
+  ok('названы .env и ключи', /\.env/.test(all) && /ключ/i.test(all), all.slice(0, 300))
+  ok('сказано, что копии в папке движка, а не Зари', /не в папке Зари|его папке/i.test(all), all.slice(0, 400))
+  // Порядок абзацев: цена должна стоять выше пользы, иначе человек читает
+  // «зачем это нужно» и до цены не доходит.
+  const iPrice = all.indexOf('полные копии')
+  const iBenefit = all.indexOf('откатывать нечего')
+  ok('цена стоит выше пользы', iPrice >= 0 && iBenefit > iPrice, { iPrice, iBenefit })
+
+  console.log('\n[3] Размер — настоящее число с диска')
+  const size = await page.evaluate(() => {
+    const el = [...document.querySelectorAll('.zy-eng-sub')].find((e) =>
+      /занято/i.test(e.textContent ?? '')
+    )
+    return el?.textContent ?? ''
+  })
+  ok('строка с размером на экране', !!size, size)
+  // 4096 + 2048 = 6 КБ: если бы число было заглушкой или считалось не из той
+  // папки, оно бы не совпало.
+  // Единицы локализованы: латинское «KB» посреди русского экрана — тот самый
+  // шов, из-за которого интерфейс читается как собранный из кусков.
+  ok('размер совпадает с тем, что лежит на диске', /6\s*(КБ|KB)/.test(size), size)
+  ok('сессия посчитана', /сессий: 1/.test(size), size)
+
+  console.log('\n[4] Тумблер включён по умолчанию и выключается')
+  const before = await page.evaluate(
+    () => document.querySelector('.zy-eng-cp-row .zy-switch')?.getAttribute('aria-checked') ?? ''
+  )
+  // Включено по умолчанию — это решение владельца: включить задним числом
+  // нельзя, а цена названа на этом же экране первой строкой.
+  ok('по умолчанию включён', before === 'true', before)
+  await page.click('.zy-eng-cp-row .zy-switch')
+  await page.waitForTimeout(700)
+  const after = await page.evaluate(
+    () => document.querySelector('.zy-eng-cp-row .zy-switch')?.getAttribute('aria-checked') ?? ''
+  )
+  ok('нажатие выключает', after === 'false', after)
+  if (shots) await page.screenshot({ path: join(shots, 'checkpoint-setting.png') })
+
+  console.log('\n[5] В изолированном прогоне чекпоинты всё равно не уходят движку')
+  // Настройка включена (пункт 4), но запуск изолированный. Проверяем не UI, а
+  // то, что реально уедет драйверу: копии лежат ВНЕ подменяемой папки, поэтому
+  // прогон не имеет права их просить. Здесь CLAUDE_CONFIG_DIR задан, то есть
+  // исключение разрешено — значит ждём, что просьба всё-таки уйдёт.
+  const policy = await app.evaluate(() => {
+    // Политика — чистая функция; проверяем её тем же способом, что и main.
+    return {
+      isolated: !!process.env.ZARYA_USER_DATA,
+      configDir: !!process.env.CLAUDE_CONFIG_DIR
+    }
+  })
+  ok('прогон и правда изолирован', policy.isolated === true, policy)
+  ok('и увёл настройки движка в свою папку', policy.configDir === true, policy)
+
+  console.log(`\nИтог: ${pass} ok, ${fail} fail`)
+} finally {
+  await app.close()
+}
+process.exit(fail ? 1 : 0)

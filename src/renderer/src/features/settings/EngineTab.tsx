@@ -145,6 +145,7 @@ export function EngineTab(): React.JSX.Element {
   if (!panes.length) {
     return (
       <section className="zy-set-section">
+        <FileCheckpoints />
         <div className="zy-eng-empty">{t('eng.noPane')}</div>
       </section>
     )
@@ -155,6 +156,7 @@ export function EngineTab(): React.JSX.Element {
 
   return (
     <section className="zy-set-section">
+      <FileCheckpoints />
       {panes.length > 1 && (
         <div className="zy-eng-pick">
           <span className="zy-eng-pick-label">{t('eng.pane')}</span>
@@ -301,6 +303,97 @@ export function EngineTab(): React.JSX.Element {
         </>
       )}
     </section>
+  )
+}
+
+
+/**
+ * Человеческий размер: точность до десятых там, где она что-то значит.
+ *
+ * Единицы берутся из словаря: «6 KB» посреди русского экрана читается как
+ * чужая строка, случайно оставшаяся от разработчика.
+ */
+function human(bytes: number): string {
+  const kb = bytes / 1024
+  if (kb < 1024) return `${Math.max(1, Math.round(kb))} ${t('unit.kb')}`
+  const mb = kb / 1024
+  if (mb < 1024) return `${mb < 10 ? mb.toFixed(1) : Math.round(mb)} ${t('unit.mb')}`
+  return `${(mb / 1024).toFixed(1)} ${t('unit.gb')}`
+}
+
+/**
+ * Чекпоинты файлов — единственная наша настройка, которая платит ЧУЖИМ диском.
+ *
+ * Поэтому здесь порядок обратный обычному: сначала цена (полные копии открытым
+ * текстом, включая .env и ключи, если агент их правил), потом польза, и только
+ * потом переключатель. И размер папки — настоящий, посчитанный, а не «примерно
+ * 3-10 МБ за сессию»: цифру, которой человек меряет цену, нельзя писать
+ * константой в интерфейсе.
+ */
+function FileCheckpoints(): React.JSX.Element {
+  const on = useSettingsStore((s) => s.settings.ai.fileCheckpoints)
+  const update = useSettingsStore((s) => s.update)
+  const [usage, setUsage] = useState<{
+    dir: string
+    bytes: number
+    sessions: number
+    missing?: boolean
+    partial?: boolean
+  } | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    void window.zarya.app.checkpointUsage().then((u) => {
+      if (alive) setUsage(u)
+    })
+    return () => {
+      alive = false
+    }
+  }, [on])
+
+  return (
+    <>
+      <div className="zy-section-label">{t('eng.cp')}</div>
+      <div className="zy-eng-note">{t('eng.cpWhat')}</div>
+      <div className="zy-eng-note">{t('eng.cpWhy')}</div>
+      {/* Тот же переключатель, что во всех настройках: своя разметка здесь
+          выглядела бы «другой настройкой», а это ровно та мелочь, из-за которой
+          экран перестаёт читаться как одно целое. */}
+      <div className="zy-eng-cp-row">
+        <button
+          type="button"
+          role="switch"
+          aria-checked={on}
+          className={`zy-switch${on ? ' zy-switch--on' : ''}`}
+          onClick={() => void update({ ai: { fileCheckpoints: !on } as never })}
+        >
+          <span className="zy-switch-knob" />
+        </button>
+        <span className="zy-eng-cp-label">{t('eng.cpToggle')}</span>
+      </div>
+      {usage && (
+        <div className="zy-eng-sub">
+          {usage.missing || usage.bytes === 0
+            ? t('eng.cpEmpty')
+            : t(usage.partial ? 'eng.cpSizeAtLeast' : 'eng.cpSize', {
+                size: human(usage.bytes),
+                n: usage.sessions
+              })}
+          {!usage.missing && (
+            <>
+              {' · '}
+              <button
+                type="button"
+                className="zy-eng-btn"
+                onClick={() => window.zarya.app.showItemInFolder(usage.dir)}
+              >
+                {t('eng.cpOpen')}
+              </button>
+            </>
+          )}
+        </div>
+      )}
+    </>
   )
 }
 

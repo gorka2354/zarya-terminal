@@ -331,6 +331,13 @@ export interface ZaryaApi {
     onMaximized(cb: (maximized: boolean) => void): Unsub
     openExternal(url: string): void
     showItemInFolder(path: string): void
+    checkpointUsage(): Promise<{
+      dir: string
+      bytes: number
+      sessions: number
+      missing?: boolean
+      partial?: boolean
+    }>
     pickDirectory(): Promise<string | null>
     /**
      * Папка, названная в командной строке (`zarya .`). Приходит и при первом

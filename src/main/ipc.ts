@@ -32,6 +32,8 @@ import * as gitService from './gitService'
 import type { HistoryStore } from './historyStore'
 import type { PtyManager } from './ptyManager'
 import type { SessionStore } from './sessionStore'
+import { checkpointPolicy } from '@shared/checkpointPolicy'
+import { checkpointUsage, fileHistoryDir } from './checkpointStore'
 import type { SettingsStore } from './settingsStore'
 import type { SttService } from './sttService'
 import type { UpdateService } from './updateService'
@@ -428,9 +430,15 @@ export function registerIpc(ctx: IpcContext): void {
     // Чекпоинты файлов — решение приложения, а не окна: это запись копий на
     // диск (и в ЧУЖУЮ папку движка), поэтому значение берётся из настроек
     // здесь, а не приходит из рендерера вместе с остальными параметрами хода.
+    // Плюс граница QA: копии лежат вне userData, и подмена профиля их НЕ
+    // накрывает — прогон не должен писать в настоящий профиль человека.
     void driverFor(engine)?.start(requestId, {
       ...opts,
-      fileCheckpoints: settingsStore.get().ai.fileCheckpoints === true
+      fileCheckpoints: checkpointPolicy({
+        wanted: settingsStore.get().ai.fileCheckpoints === true,
+        isolated: !!process.env.ZARYA_USER_DATA,
+        configDirOverridden: !!process.env.CLAUDE_CONFIG_DIR
+      }).on
     })
   })
   ipcMain.on(CH.agentInput, (_e, engine: AgentEngine, requestId: string, text: string) => {
@@ -698,6 +706,12 @@ export function registerIpc(ctx: IpcContext): void {
     if (/^https?:\/\//i.test(url)) void shell.openExternal(url)
   })
   ipcMain.on(CH.showItemInFolder, (_e, path: string) => shell.showItemInFolder(path))
+  // Настоящий размер чужой папки, а не наша оценка: цифру, которой человек
+  // меряет цену настройки, нельзя писать константой.
+  ipcMain.handle(CH.checkpointUsage, async () => ({
+    dir: fileHistoryDir(),
+    ...(await checkpointUsage())
+  }))
   // Папка из командной строки первого запуска — забирается один раз.
   ipcMain.handle(CH.takeFolderArg, () => ctx.takeFolderArgs())
   ipcMain.handle(CH.pickDirectory, async () => {

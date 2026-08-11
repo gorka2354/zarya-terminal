@@ -316,6 +316,21 @@ export const RU: Dict = {
   'feed.diffChunks': '{n} куска',
   'feed.diffTruncated': 'дальше не показано — правка слишком велика',
   'feed.diffPinned': 'Пока решение не принято, правка не сворачивается',
+  'eng.cp': 'Откат кода: копии файлов',
+  /*
+   * Первой строкой — то, что человек платит, а не то, что получает. Здесь это
+   * особенно важно: копии полные и открытым текстом, и попадают в них ровно те
+   * файлы, которые правил агент, — включая .env и ключи, если он их правил.
+   */
+  'eng.cpWhat':
+    'Claude Code хранит полные копии файлов открытым текстом перед каждой своей правкой — включая .env и ключи, если агент их правил. Копии лежат в его папке, не в папке Зари, и удаляются вместе с сессией по его же настройке (обычно через 30 дней).',
+  'eng.cpWhy': 'Без этих копий откатывать нечего: включить задним числом нельзя.',
+  'eng.cpToggle': 'Просить движок хранить копии',
+  'eng.cpSize': 'Сейчас занято: {size} · сессий: {n}',
+  'eng.cpSizeAtLeast': 'Сейчас занято: не меньше {size} · сессий: {n}',
+  'eng.cpEmpty': 'Копий пока нет',
+  'eng.cpOpen': 'Открыть папку',
+  'eng.cpQa': 'В изолированном прогоне выключено принудительно: копии лежат вне подменяемой папки.',
   'drv.ccNoRewindFlag':
     'Этот Claude Code не понимает флаг для отката кода — ход повторён без него. Чекпоинты файлов недоступны на этой версии CLI.',
   'feed.changes': 'что изменилось',
@@ -1311,6 +1326,7 @@ export const RU: Dict = {
   'set.cmdHistory': 'История команд',
   'unit.mb': 'МБ',
   'unit.kb': 'КБ',
+  'unit.gb': 'ГБ',
   'set.keepHistory': 'Вести историю команд',
   'set.keepHistoryDesc': 'Выключено — команды не записываются и не попадают в поиск по Ctrl+R. Уже накопленное остаётся на диске, пока не сотрёте.',
   'set.histCap': 'Хранить не больше',
@@ -1701,6 +1717,16 @@ export const EN: Dict = {
   'feed.diffChunks': '{n} chunks',
   'feed.diffTruncated': 'the rest is not shown — the edit is too large',
   'feed.diffPinned': 'While the decision is pending, the edit stays open',
+  'eng.cp': 'Code rewind: file copies',
+  'eng.cpWhat':
+    'Claude Code keeps full plaintext copies of files before each of its edits — including .env and keys if the agent edited them. The copies live in its own folder, not Zarya’s, and are removed together with the session by its own setting (usually after 30 days).',
+  'eng.cpWhy': 'Without these copies there is nothing to rewind: they cannot be created retroactively.',
+  'eng.cpToggle': 'Ask the engine to keep copies',
+  'eng.cpSize': 'Currently used: {size} · sessions: {n}',
+  'eng.cpSizeAtLeast': 'Currently used: at least {size} · sessions: {n}',
+  'eng.cpEmpty': 'No copies yet',
+  'eng.cpOpen': 'Open the folder',
+  'eng.cpQa': 'Force-disabled in an isolated run: the copies live outside the overridden folder.',
   'drv.ccNoRewindFlag':
     'This Claude Code does not understand the code-rewind flag — the turn was retried without it. File checkpoints are unavailable on this CLI version.',
   'feed.changes': 'what changed',
@@ -2082,6 +2108,7 @@ export const EN: Dict = {
   'set.cmdHistory': 'Command history',
   'unit.mb': 'MB',
   'unit.kb': 'KB',
+  'unit.gb': 'GB',
   'set.keepHistory': 'Keep command history',
   'set.keepHistoryDesc': 'Off — commands are not recorded and do not show up in Ctrl+R search. What is already saved stays on disk until you erase it.',
   'set.histCap': 'Keep at most',

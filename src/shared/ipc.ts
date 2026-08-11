@@ -139,6 +139,8 @@ export const CH = {
   windowMaximized: 'window:maximized', // main -> renderer
   openExternal: 'app:open-external',
   showItemInFolder: 'app:show-item-in-folder',
+  /** Сколько места занимают копии файлов движка (для честной строки в настройках). */
+  checkpointUsage: 'checkpoints:usage',
   pickDirectory: 'app:pick-directory',
   saveTextFile: 'app:save-text-file',
   setOpacity: 'app:set-opacity'
