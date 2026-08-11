@@ -1796,3 +1796,143 @@
   flex: none;
   color: var(--fg-faint);
 }
+
+/* ── Карточка отката ────────────────────────────────────────────────────────
+   Кнопка «Откатить файлы» не откатывает — она открывает это. Тон карточки
+   строгий, но не красный: это не ошибка, а необратимое действие, и пугать
+   человека там, где всё спокойно, значит обесценить настоящее предупреждение.
+   Опасные значки красят себя сами. */
+.zy-rw {
+  margin: 0 0 8px 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elev1);
+  overflow: hidden;
+}
+.zy-rw-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.zy-rw-title {
+  font-family: var(--font-tech);
+  font-size: 11.5px;
+  letter-spacing: 0.06em;
+  color: var(--fg);
+}
+.zy-rw-x {
+  margin-left: auto;
+  border: none;
+  background: transparent;
+  color: var(--fg-faint);
+  cursor: pointer;
+  display: inline-flex;
+}
+.zy-rw-x:hover {
+  color: var(--fg);
+}
+.zy-rw-note,
+.zy-rw-refuse,
+.zy-rw-count {
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--fg-dim);
+}
+.zy-rw-refuse {
+  color: var(--warn, var(--fg));
+}
+.zy-rw-count {
+  font-family: var(--font-tech);
+  font-size: 11px;
+  color: var(--fg-faint);
+  padding-bottom: 2px;
+}
+.zy-rw-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 4px;
+  max-height: 240px;
+  overflow: auto;
+}
+.zy-rw-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+.zy-rw-path {
+  font-family: var(--font-mono);
+  color: var(--fg-dim);
+  overflow-wrap: anywhere;
+}
+.zy-rw-mark {
+  flex: none;
+  font-family: var(--font-tech);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  color: var(--fg-faint);
+  background: var(--bg-elev2);
+}
+/* Удаление и потеря правки — единственные, что кричат: остальное человек
+   должен прочитать, но не испугаться. */
+.zy-rw-mark--will-delete,
+.zy-rw-mark--edited-after,
+.zy-rw-mark--dirty-editor {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+.zy-rw-mark--neighbor,
+.zy-rw-mark--unobserved {
+  color: var(--accent-2);
+  background: color-mix(in srgb, var(--accent-2) 12%, transparent);
+}
+/* Строки, которые стоят всегда: про то, чего откат не умеет вовсе, и про его
+   собственную необратимость. */
+.zy-rw-always {
+  padding: 8px 10px;
+  border-top: 1px solid var(--border);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--fg-faint);
+}
+.zy-rw-done {
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--fg-dim);
+  line-height: 1.5;
+}
+.zy-rw-stayed {
+  color: var(--warn, var(--fg-faint));
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+.zy-rw-actions {
+  display: flex;
+  gap: 8px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--border);
+}
+.zy-rw-go,
+.zy-rw-cancel {
+  padding: 4px 12px;
+  border-radius: 3px;
+  font-family: var(--font-tech);
+  font-size: 11px;
+  cursor: pointer;
+}
+.zy-rw-go {
+  border: 1px solid var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
+}
+.zy-rw-cancel {
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--fg-dim);
+}

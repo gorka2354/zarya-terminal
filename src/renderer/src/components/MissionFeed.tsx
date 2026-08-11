@@ -8,6 +8,8 @@ import { formatDuration, formatRelative, shortenPath } from '@/lib/ansi'
 import { editPreview, lineDiff, type EditPreview } from '@shared/editDiff'
 import { listChanges, type ChangedFile } from '@shared/changes'
 import { matchTouched, touchedSince } from '@shared/touched'
+import { rewindPlan, type FileFacts, type RewindMark } from '@shared/rewindPlan'
+import { canRewindTurn } from '@shared/rewindGate'
 import { useBlocksStore } from '@/state/blocksStore'
 import { useSessionsStore } from '@/state/sessionsStore'
 import { setBarModeOf, setRaw, useUiStore } from '@/state/uiStore'
@@ -1549,6 +1551,20 @@ function UserTurn({
   interrupted?: boolean
 }): React.JSX.Element {
   const [open, setOpen] = useState(false)
+  const [rewind, setRewind] = useState(false)
+  const feed = useContext(FeedConvContext)
+  const conv = feed?.conv
+  const caps = useUiStore((s) => s.agentCaps)
+  // Кнопку показываем только по правилу (см. rewindGate): нет точки, нет копий
+  // у этой сессии, движок так не умеет или ход выше черты /clear — кнопки нет.
+  const canRewind = !!conv &&
+    canRewindTurn({
+      messages: conv.messages,
+      index,
+      checkpointing: conv.checkpointing,
+      engineCan: conv.engine !== 'builtin' && caps?.[conv.engine]?.rewindFiles === true
+    })
+  const turnId = conv?.messages[index]?.turnId
   return (
     <div className="zy-mf-userturn">
       <div className="zy-mf-user">
@@ -1575,6 +1591,17 @@ function UserTurn({
           <Icon name="branch" size={11} />
           <span>{t('feed.changes')}</span>
         </button>
+        {canRewind && (
+          <button
+            type="button"
+            className={`zy-mf-changes-btn${rewind ? ' zy-mf-changes-btn--on' : ''}`}
+            onClick={() => setRewind((v) => !v)}
+            title={t('rw.btnHint')}
+          >
+            <Icon name="history" size={11} />
+            <span>{t('rw.btn')}</span>
+          </button>
+        )}
         {images.length > 0 && (
           <div className="zy-mf-user-imgs">
             {images.map((img, i) => (
@@ -1594,6 +1621,214 @@ function UserTurn({
         )}
       </div>
       {open && <ChangesPanel cwd={cwdFull} from={index} />}
+      {rewind && conv && turnId && (
+        <RewindCard
+          conv={conv}
+          turnId={turnId}
+          cwd={cwdFull}
+          from={index}
+          onClose={() => setRewind(false)}
+        />
+      )}
+    </div>
+  )
+}
+
+
+const MARK_LABEL: Record<RewindMark, string> = {
+  'will-delete': 'rw.mark.willDelete',
+  'will-create': 'rw.mark.willCreate',
+  'edited-after': 'rw.mark.editedAfter',
+  'dirty-editor': 'rw.mark.dirtyEditor',
+  unobserved: 'rw.mark.unobserved',
+  outside: 'rw.mark.outside',
+  neighbor: 'rw.mark.neighbor',
+  'skip-link': 'rw.mark.skipLink',
+  restore: 'rw.mark.restore'
+}
+
+/**
+ * Карточка отката: что произойдёт с файлами, ДО того как это станет
+ * необратимым.
+ *
+ * Кнопка «Откатить файлы» сама ничего не откатывает — она открывает вот это.
+ * Причина в том, что родной механизм движка молчит о трёх вещах, и все три
+ * воспроизведены живыми прогонами: он затирает ручные правки в файлах, которых
+ * касался агент, ходит за пределы папки панели и УДАЛЯЕТ файлы, созданные
+ * после выбранного хода. Список со значками — единственное место, где человек
+ * об этом узнаёт вовремя.
+ *
+ * Две строки стоят здесь всегда, а не появляются после промаха: про то, чего
+ * откат не умеет вовсе (оболочка, субагенты, пакеты), и про то, что сам он
+ * необратим — у движка есть «до агента», но нет «до отката».
+ */
+function RewindCard({
+  conv,
+  turnId,
+  cwd,
+  from,
+  onClose
+}: {
+  conv: Conversation
+  turnId: string
+  cwd: string
+  from: number
+  onClose: () => void
+}): React.JSX.Element {
+  useLang()
+  const [state, setState] = useState<
+    | { kind: 'checking' }
+    | { kind: 'refused'; text: string }
+    | { kind: 'plan'; rows: ReturnType<typeof rewindPlan>['rows']; noList: boolean }
+    | { kind: 'running' }
+    | { kind: 'done'; ok: number; same: number; unknown: number; skipped: number; stayed: string[] }
+  >({ kind: 'checking' })
+
+  const touched = useMemo(() => touchedSince(conv.messages, from), [conv.messages, from])
+
+  useEffect(() => {
+    let alive = true
+    void window.zarya.agent
+      .rewindFiles(conv.engine as never, conv.id, turnId, {
+        dryRun: true,
+        cwd,
+        resume: conv.claudeSessionId
+      })
+      .then((r) => {
+        if (!alive) return
+        if (r.refused) {
+          const key =
+            r.refused === 'busy'
+              ? 'rw.refuse.busy'
+              : r.refused === 'unsupported'
+                ? 'rw.refuse.unsupported'
+                : r.refused === 'no-turn-id'
+                  ? 'rw.refuse.noTurnId'
+                  : 'rw.refuse.noSession'
+          return setState({ kind: 'refused', text: t(key) })
+        }
+        // Причину отказа НЕ придумываем: у движка она своя, и он её называет.
+        if (!r.canRewind) {
+          return setState({ kind: 'refused', text: r.error || t('rw.refuse.noSession') })
+        }
+        const paths = r.filesChanged ?? []
+        // «Откатить можно, но файлов не назову» — это не пустой список: пустой
+        // читается как «ничего не изменится», то есть как знание, которого нет.
+        if (!paths.length) return setState({ kind: 'plan', rows: [], noList: true })
+        const byPath = new Map((r.facts ?? []).map((f) => [f.path, f]))
+        const touchedSet = new Set(touched.map((x) => x.replace(/\\/g, '/').toLowerCase()))
+        const facts: FileFacts[] = paths.map((path) => {
+          const d = byPath.get(path)
+          return {
+            path,
+            existsNow: d?.existsNow ?? true,
+            ...(d?.linkSkipped ? { linkSkipped: true } : {}),
+            ...(d?.outsideCwd ? { outsideCwd: true } : {}),
+            // «Наблюдали» — это про наш собственный учёт: если пути в нём нет,
+            // сказать о файле нечего, и молчаливое «вернётся» было бы обещанием
+            // за чужой счёт.
+            observed: touchedSet.has(path.replace(/\\/g, '/').toLowerCase())
+          }
+        })
+        setState({ kind: 'plan', rows: rewindPlan(facts).rows, noList: false })
+      })
+    return () => {
+      alive = false
+    }
+  }, [conv.id, conv.engine, conv.claudeSessionId, turnId, cwd, touched])
+
+  const run = async (): Promise<void> => {
+    setState({ kind: 'running' })
+    const r = await window.zarya.agent.rewindFiles(conv.engine as never, conv.id, turnId, {
+      dryRun: false,
+      cwd,
+      resume: conv.claudeSessionId
+    })
+    if (r.refused || (!r.canRewind && r.error)) {
+      return setState({ kind: 'refused', text: r.error || t('rw.refuse.busy') })
+    }
+    // Числа — НАШЕЙ сверки, а не движка: он не считает часть своих промахов.
+    setState({
+      kind: 'done',
+      ok: r.verdict?.restored ?? 0,
+      same: r.verdict?.untouched ?? 0,
+      unknown: r.verdict?.unknown ?? 0,
+      skipped: r.skippedLinks ?? 0,
+      stayed: r.verdict?.untouchedPaths ?? []
+    })
+  }
+
+  return (
+    <div className="zy-rw">
+      <div className="zy-rw-head">
+        <span className="zy-rw-title">{t('rw.head')}</span>
+        <button type="button" className="zy-rw-x" onClick={onClose} title={t('rw.cancel')}>
+          <Icon name="close" size={11} />
+        </button>
+      </div>
+
+      {state.kind === 'checking' && <div className="zy-rw-note">{t('rw.checking')}</div>}
+      {state.kind === 'running' && <div className="zy-rw-note">{t('rw.checking')}</div>}
+      {state.kind === 'refused' && <div className="zy-rw-refuse">{state.text}</div>}
+
+      {state.kind === 'plan' && (
+        <>
+          {state.noList ? (
+            <div className="zy-rw-refuse">{t('rw.noFiles')}</div>
+          ) : (
+            <>
+              <div className="zy-rw-count">{t('rw.files', { n: state.rows.length })}</div>
+              <ul className="zy-rw-list">
+                {state.rows.map((r) => (
+                  <li key={r.path} className="zy-rw-row">
+                    <span className="zy-rw-path">{shortenPath(r.path, 70)}</span>
+                    {r.marks.map((m) => (
+                      <span key={m} className={`zy-rw-mark zy-rw-mark--${m}`}>
+                        {t(MARK_LABEL[m])}
+                        {m === 'neighbor' && r.pane ? ` · ${r.pane}` : ''}
+                      </span>
+                    ))}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </>
+      )}
+
+      {(state.kind === 'plan' || state.kind === 'checking') && (
+        <div className="zy-rw-always">
+          <div>{t('rw.always')}</div>
+          <div>{t('rw.noUndo')}</div>
+          <div>{t('rw.convStays')}</div>
+        </div>
+      )}
+
+      {state.kind === 'done' && (
+        <div className="zy-rw-done">
+          <div>
+            {t('rw.doneCounts', { ok: state.ok, same: state.same, unknown: state.unknown })}
+          </div>
+          {state.skipped > 0 && <div>{t('rw.doneSkipped', { n: state.skipped })}</div>}
+          {state.stayed.length > 0 && (
+            <div className="zy-rw-stayed">
+              {t('rw.stayed')}{' '}
+              {state.stayed.map((x) => shortenPath(x, 48)).join(', ')}
+            </div>
+          )}
+        </div>
+      )}
+
+      {state.kind === 'plan' && !state.noList && (
+        <div className="zy-rw-actions">
+          <button type="button" className="zy-rw-go" onClick={() => void run()}>
+            {t('rw.go')}
+          </button>
+          <button type="button" className="zy-rw-cancel" onClick={onClose}>
+            {t('rw.cancel')}
+          </button>
+        </div>
+      )}
     </div>
   )
 }
