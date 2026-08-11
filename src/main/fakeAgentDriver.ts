@@ -1,4 +1,5 @@
-import { appendFileSync } from 'fs'
+import { appendFileSync, mkdirSync, writeFileSync } from 'fs'
+import { dirname, isAbsolute, join } from 'path'
 import { type BrowserWindow } from 'electron'
 import { CH } from '@shared/ipc'
 import { noticeFor } from './systemNotices'
@@ -36,6 +37,29 @@ const FAKE_PNG =
  * engines OTHER than Claude — catching any claude-specific assumption the
  * real-driver paritet tests can't. Registered only when ZARYA_FAKE_AGENT is set.
  */
+
+/**
+ * Фейковая правка, которая ДОХОДИТ ДО ДИСКА.
+ *
+ * Панель «что изменилось» читает рабочее дерево, а не отчёт агента. Значит
+ * прогон, где фейк лишь ОБЪЯВЛЯЕТ правку, не проверяет ничего: список файлов
+ * останется пустым, и зелёный тест будет означать «разметка не упала». Поэтому
+ * фейк действительно пишет файл — как это делает настоящий движок.
+ *
+ * Пишем только внутрь рабочей папки прогона либо во временную папку, которую
+ * назвал сам сценарий: фейк живёт в тестах, но чужие файлы портить не должен.
+ */
+function fakeWrite(cwd: string, path: string, text: string): void {
+  try {
+    const abs = isAbsolute(path) ? path : join(cwd, path)
+    mkdirSync(dirname(abs), { recursive: true })
+    writeFileSync(abs, text, 'utf8')
+  } catch {
+    // Прогон не должен падать из-за файловой системы: панель на этот случай
+    // покажет «ничего не изменилось», и тест честно провалится по существу.
+  }
+}
+
 export class FakeAgentDriver implements AgentDriver {
   readonly engine: AgentEngine
   readonly capabilities: AgentCapabilities
@@ -761,6 +785,9 @@ export class FakeAgentDriver implements AgentDriver {
       // проверить — фейковый драйвер спрашивал бы всегда и «прошёл» бы тест,
       // ничего не доказав.
       const viaEdit = /edit/i.test(opts.prompt)
+      // Сценарий «агент пишет за пределы папки панели» задаётся окружением:
+      // так прогон проверяет радиус шире репозитория, не выдумывая путь.
+      const editPath = process.env.ZARYA_FAKE_OUTSIDE || 'src/shared/fake.ts'
       this.schedule(requestId, 400, () => {
         if (opts.bypass && !stop && !viaMcp) {
           /*
@@ -779,7 +806,7 @@ export class FakeAgentDriver implements AgentDriver {
                 name: viaEdit ? 'Edit' : 'Bash',
                 input: viaEdit
                   ? {
-                      file_path: 'src/shared/fake.ts',
+                      file_path: editPath,
                       old_string: 'const a = 1\nconst b = 2\nkeep me',
                       new_string: 'const a = 42\nkeep me\nconst c = 3'
                     }
@@ -787,6 +814,17 @@ export class FakeAgentDriver implements AgentDriver {
               }
             ]
           })
+          // Правка объявлена в ленте — значит она должна и произойти: панель
+          // «что изменилось» читает диск, а не наши слова о нём. Без рабочей
+          // папки не пишем вовсе: писать «куда-нибудь» — это засорить каталог
+          // приложения, а фейк живёт в тестах и чужого трогать не должен.
+          if (viaEdit && opts.cwd) {
+            fakeWrite(
+              opts.cwd,
+              process.env.ZARYA_FAKE_OUTSIDE || 'src/shared/fake.ts',
+              ['const a = 42', 'keep me', 'const c = 3', ''].join('\n')
+            )
+          }
           this.emit(requestId, {
             type: 'tool_result',
             toolUseId: `${requestId}-t1`,
@@ -801,7 +839,7 @@ export class FakeAgentDriver implements AgentDriver {
           toolName: viaEdit ? 'Edit' : viaMcp ? 'mcp__fake_server__wipe' : 'Bash',
           input: viaEdit
             ? {
-                file_path: 'src/shared/fake.ts',
+                file_path: editPath,
                 old_string: 'const a = 1\nconst b = 2\nkeep me',
                 new_string: 'const a = 42\nkeep me\nconst c = 3'
               }

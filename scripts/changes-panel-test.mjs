@@ -168,7 +168,44 @@ try {
   ok('показана убранная строка', diff.del.some((s) => /line two$/.test(s.trim())), diff.del)
   if (shots) await page.screenshot({ path: join(shots, 'changes-panel.png') })
 
-  console.log('\n[5] Вне репозитория панель говорит это словами')
+  console.log('\n[5] Файл, который правил АГЕНТ, помечен — и отличим от чужой правки')
+  // Фейк здесь пишет файл ПО-НАСТОЯЩЕМУ (fakeWrite в fakeAgentDriver): панель
+  // читает диск, и прогон, где правка только объявлена в ленте, не проверял бы
+  // ничего. Слово edit в запросе включает именно этот сценарий.
+  // Автопилот — свойство беседы: без него фейк остановится на карточке
+  // одобрения и до диска не дойдёт, а нам нужна настоящая запись файла.
+  const convId = await page.evaluate(() => window.__zaryaStartAgent?.('codex', 'привет'))
+  await page.waitForTimeout(900)
+  await page.evaluate((c) => window.__zaryaSetBypassFor?.(c, true), convId)
+  await page.waitForTimeout(400)
+  await page.evaluate(() => window.__zaryaFollowUp?.('tool edit: поправь файл'))
+  await page.waitForTimeout(2400)
+  await page.evaluate(() => {
+    const vis = (el) => (el.checkVisibility ? el.checkVisibility() : !!el.offsetParent)
+    const btns = [...document.querySelectorAll('.zy-mf-changes-btn')].filter(vis)
+    btns[btns.length - 1]?.click()
+  })
+  await page.waitForTimeout(1500)
+  const tagged = await page.evaluate(() => {
+    const vis = (el) => (el.checkVisibility ? el.checkVisibility() : !!el.offsetParent)
+    return [...document.querySelectorAll('.zy-mf-change')].filter(vis).map((el) => ({
+      path: el.querySelector('.zy-mf-change-path')?.textContent ?? '',
+      agent: !!el.querySelector('.zy-mf-change-agent')
+    }))
+  })
+  // Агент создал src/shared/fake.ts — но git схлопывает НОВУЮ папку в одну
+  // строку `src/` и не перечисляет файлы внутри. Панель обязана пометить
+  // именно её: иначе работа агента выглядела бы как чья-то чужая.
+  const fake = tagged.find((r) => /^src\/$/.test(r.path))
+  ok('запись агента появилась в списке', !!fake, tagged)
+  ok('она помечена как правленная агентом', fake?.agent === true, fake)
+  // В том же списке лежат файлы, которых агент не касался. Если пометка стоит
+  // на всех подряд — она не несёт смысла и врёт про авторство.
+  const human = tagged.find((r) => /edited\.ts$/.test(r.path))
+  ok('чужая правка человека НЕ помечена агентом', human?.agent === false, human)
+  if (shots) await page.screenshot({ path: join(shots, 'changes-agent-mark.png') })
+
+  console.log('\n[6] Вне репозитория панель говорит это словами')
   await page.evaluate((d) => window.__zaryaNewTerminal?.(d), plain)
   await page.waitForTimeout(1600)
   await page.evaluate(() => window.__zaryaAskAgent?.('посмотри проект', 'codex'))
@@ -183,8 +220,82 @@ try {
   ok('сказано, что репозитория нет', /репозитор/i.test(empty), empty)
   if (shots) await page.screenshot({ path: join(shots, 'changes-nogit.png') })
 
-  console.log(`\nИтог: ${pass} ok, ${fail} fail`)
+  console.log(`\nПромежуточно: ${pass} ok, ${fail} fail`)
 } finally {
   await app.close()
+}
+
+/*
+ * [7] Самый неприятный случай — агент пишет ЗА ПРЕДЕЛЫ папки панели.
+ *
+ * В прогонах разведки настоящий Claude Code при cwd=w4 записал файл в чужой
+ * проект на рабочем столе, и родной откат потом удалил его там же. Про такие
+ * файлы git этой панели не скажет НИКОГДА: они вне репозитория. Промолчать —
+ * значит оставить человека с уверенностью, что он видит всё изменённое.
+ *
+ * Путь фейку задаётся окружением, а оно фиксируется при запуске процесса, —
+ * поэтому проверка идёт вторым запуском приложения, а не в первом.
+ */
+const outsideDir = mkdtempSync(join(tmpdir(), 'zarya-changes-out-'))
+const outsideFile = join(outsideDir, 'stranger.ts')
+const app2 = await electron.launch({
+  args: [join(root, 'out', 'main', 'index.js')],
+  env: {
+    ...process.env,
+    ...(process.env.ZARYA_SHOW ? {} : { ZARYA_QA_OFFSCREEN: '1' }),
+    ZARYA_USER_DATA: userData,
+    ZARYA_FAKE_AGENT: '1',
+    ZARYA_NO_UPDATE_CHECK: '1',
+    ZARYA_NO_ONBOARDING: '1',
+    ZARYA_FAKE_OUTSIDE: outsideFile,
+    NODE_ENV: 'production'
+  }
+})
+
+try {
+  console.log('\n[7] Про файл, записанный ВНЕ репозитория, панель говорит отдельно')
+  const page2 = await app2.firstWindow()
+  await page2.waitForLoadState('domcontentloaded')
+  await app2.evaluate(({ BrowserWindow }) => {
+    const w = BrowserWindow.getAllWindows()[0]
+    w.setSize(1180, 760)
+    w.center()
+  })
+  await page2.waitForTimeout(2600)
+  await page2.evaluate((d) => window.__zaryaNewTerminal?.(d), work)
+  await page2.waitForTimeout(1600)
+  await page2.evaluate(() => window.__zaryaSetUi?.({ sidebarView: null }))
+  const cid = await page2.evaluate(() => window.__zaryaStartAgent?.('codex', 'привет'))
+  await page2.waitForTimeout(900)
+  await page2.evaluate((c) => window.__zaryaSetBypassFor?.(c, true), cid)
+  await page2.waitForTimeout(400)
+  await page2.evaluate(() => window.__zaryaFollowUp?.('tool edit: поправь файл'))
+  await page2.waitForTimeout(2400)
+  await page2.evaluate(() => {
+    const vis = (el) => (el.checkVisibility ? el.checkVisibility() : !!el.offsetParent)
+    const btns = [...document.querySelectorAll('.zy-mf-changes-btn')].filter(vis)
+    btns[btns.length - 1]?.click()
+  })
+  await page2.waitForTimeout(1500)
+  const outside = await page2.evaluate(() => {
+    const vis = (el) => (el.checkVisibility ? el.checkVisibility() : !!el.offsetParent)
+    const box = [...document.querySelectorAll('.zy-mf-changes-outside')].filter(vis)[0]
+    return box
+      ? {
+          top: box.querySelector('.zy-mf-changes-outside-top')?.textContent ?? '',
+          rows: [...box.querySelectorAll('.zy-mf-changes-outside-row')].map(
+            (r) => r.textContent ?? ''
+          )
+        }
+      : null
+  })
+  ok('блок про файлы вне репозитория на экране', !!outside, outside)
+  ok('сказано, что это вне этого репозитория', /вне этого репозитория/i.test(outside?.top ?? ''), outside?.top)
+  ok('назван сам файл', outside?.rows.some((r) => /stranger\.ts/.test(r)) === true, outside?.rows)
+  if (shots) await page2.screenshot({ path: join(shots, 'changes-outside.png') })
+
+  console.log(`\nИтог: ${pass} ok, ${fail} fail`)
+} finally {
+  await app2.close()
 }
 process.exit(fail ? 1 : 0)

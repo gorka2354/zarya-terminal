@@ -7,6 +7,7 @@ import { toMarkdown, transcriptFileName } from '@shared/transcript'
 import { formatDuration, formatRelative, shortenPath } from '@/lib/ansi'
 import { editPreview, lineDiff, type EditPreview } from '@shared/editDiff'
 import { listChanges, type ChangedFile } from '@shared/changes'
+import { matchTouched, touchedSince } from '@shared/touched'
 import { useBlocksStore } from '@/state/blocksStore'
 import { useSessionsStore } from '@/state/sessionsStore'
 import { setBarModeOf, setRaw, useUiStore } from '@/state/uiStore'
@@ -693,6 +694,7 @@ function AgentSection({
         <AgentMessage
           key={i}
           msg={m}
+          index={i}
           cwd={cwd}
           cwdFull={cwdFull}
           covered={covered}
@@ -989,6 +991,7 @@ function PlanPanel({ plan }: { plan?: import('@shared/agentPlan').AgentPlan }): 
 
 const AgentMessage = memo(function AgentMessage({
   msg,
+  index,
   cwd,
   cwdFull,
   covered,
@@ -996,6 +999,8 @@ const AgentMessage = memo(function AgentMessage({
   interrupted
 }: {
   msg: Conversation['messages'][number]
+  /** Место сообщения в беседе: от него считается «что тронуто с этого хода». */
+  index: number
   cwd: string
   /** Настоящая папка панели — для git. `cwd` обрезан и годится только для показа. */
   cwdFull: string
@@ -1026,6 +1031,7 @@ const AgentMessage = memo(function AgentMessage({
       <UserTurn
         text={text}
         images={images}
+        index={index}
         cwd={cwd}
         cwdFull={cwdFull}
         ts={msg.ts}
@@ -1525,6 +1531,7 @@ function EditDiff({
 function UserTurn({
   text,
   images,
+  index,
   cwd,
   cwdFull,
   ts,
@@ -1532,6 +1539,8 @@ function UserTurn({
 }: {
   text: string
   images: Array<Extract<AiContentPart, { type: 'image' }>>
+  /** Индекс этого хода в беседе. */
+  index: number
   /** Обрезанный путь — только для показа в строке хода. */
   cwd: string
   /** Настоящая папка — только она годится для git. */
@@ -1584,7 +1593,7 @@ function UserTurn({
           </div>
         )}
       </div>
-      {open && <ChangesPanel cwd={cwdFull} />}
+      {open && <ChangesPanel cwd={cwdFull} from={index} />}
     </div>
   )
 }
@@ -1613,14 +1622,23 @@ const CHANGE_LABEL = {
  * read-only и укреплены против чужого `.git/config` (см. gitService.ts). Ни
  * одной записывающей команды здесь нет и быть не должно.
  */
-function ChangesPanel({ cwd }: { cwd: string }): React.JSX.Element {
+function ChangesPanel({ cwd, from }: { cwd: string; from: number }): React.JSX.Element {
   useLang()
-  const [state, setState] = useState<{ busy: boolean; files: ChangedFile[]; noGit: boolean }>({
-    busy: true,
-    files: [],
-    noGit: false
-  })
+  const feed = useContext(FeedConvContext)
+  const [state, setState] = useState<{
+    busy: boolean
+    files: ChangedFile[]
+    noGit: boolean
+    root: string
+  }>({ busy: true, files: [], noGit: false, root: '' })
   const [nonce, setNonce] = useState(0)
+
+  // Пути, которых агент касался начиная с этого хода. Считаются из уже
+  // разобранной беседы — своего учёта в драйвере для этого заводить не нужно.
+  const touched = useMemo(
+    () => touchedSince(feed?.conv.messages ?? [], from),
+    [feed?.conv.messages, from]
+  )
 
   useEffect(() => {
     let alive = true
@@ -1630,12 +1648,18 @@ function ChangesPanel({ cwd }: { cwd: string }): React.JSX.Element {
       // null от gitStatus значит ровно одно: спросить git не удалось (нет git,
       // не репозиторий, таймаут). Пустой список файлов — это другое: репозиторий
       // есть и он чист. Разные ответы человеку, поэтому и разные ветки.
-      setState({ busy: false, files: listChanges(st), noGit: !st })
+      setState({ busy: false, files: listChanges(st), noGit: !st, root: st?.root ?? '' })
     })
     return () => {
       alive = false
     }
   }, [cwd, nonce])
+
+  // Сопоставление «путь агента → строка git» и список того, о чём git молчит.
+  const marks = useMemo(
+    () => matchTouched(touched, state.root || cwd, cwd, state.files.map((f) => f.path)),
+    [touched, state.root, cwd, state.files]
+  )
 
   return (
     <div className="zy-mf-changes">
@@ -1664,9 +1688,21 @@ function ChangesPanel({ cwd }: { cwd: string }): React.JSX.Element {
       ) : (
         <ul className="zy-mf-changes-list">
           {state.files.map((f) => (
-            <ChangedFileRow key={f.path} file={f} cwd={cwd} />
+            <ChangedFileRow key={f.path} file={f} cwd={cwd} byAgent={marks.inRepo.has(f.path)} />
           ))}
         </ul>
+      )}
+      {marks.outside.length > 0 && (
+        <div className="zy-mf-changes-outside">
+          <div className="zy-mf-changes-outside-top">
+            {t('feed.changesOutside', { n: marks.outside.length })}
+          </div>
+          {marks.outside.map((p) => (
+            <div key={p} className="zy-mf-changes-outside-row" title={p}>
+              {shortenPath(p, 72)}
+            </div>
+          ))}
+        </div>
       )}
       {/* Без репозитория пояснять нечего: строка про сравнение с коммитом там,
           где коммитов нет вовсе, только сбивает с толку. */}
@@ -1676,7 +1712,16 @@ function ChangesPanel({ cwd }: { cwd: string }): React.JSX.Element {
 }
 
 /** Строка файла: вид, путь и дифф по требованию — содержимое тянем только при раскрытии. */
-function ChangedFileRow({ file, cwd }: { file: ChangedFile; cwd: string }): React.JSX.Element {
+function ChangedFileRow({
+  file,
+  cwd,
+  byAgent
+}: {
+  file: ChangedFile
+  cwd: string
+  /** Агент правил этот файл на этом ходе или позже. */
+  byAgent: boolean
+}): React.JSX.Element {
   const [open, setOpen] = useState(false)
   const [diff, setDiff] = useState<{ rows: DiffRow[]; more: number; problem?: string } | null>(null)
 
@@ -1713,6 +1758,7 @@ function ChangedFileRow({ file, cwd }: { file: ChangedFile; cwd: string }): Reac
           {t(file.dir && file.kind === 'untracked' ? 'feed.changeUntrackedDir' : CHANGE_LABEL[file.kind])}
         </span>
         <span className="zy-mf-change-path">{shortenPath(file.path, 64)}</span>
+        {byAgent && <span className="zy-mf-change-agent">{t('feed.changeByAgent')}</span>}
         {!file.dir && (
           <span className="zy-mf-change-caret">
             <Icon name={open ? 'chevron-up' : 'chevron-down'} size={11} />

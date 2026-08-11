@@ -337,6 +337,14 @@ export const RU: Dict = {
   'feed.changeAdded': 'добавлен',
   'feed.changeUntracked': 'новый, вне git',
   'feed.changeUntrackedDir': 'новая папка, вне git',
+  'feed.changeByAgent': 'правил агент',
+  /*
+   * Радиус работы агента шире одного репозитория: в прогонах он писал по
+   * абсолютному пути в чужой проект. Такие файлы git этой панели не покажет
+   * никогда, и промолчать о них — оставить человека с уверенностью, что всё
+   * изменённое он видит.
+   */
+  'feed.changesOutside': 'Агент трогал файлы вне этого репозитория ({n}):',
   'feed.changeNoDiff': 'Содержимое показать не удалось',
   'feed.changeBinary': 'Двоичный файл — разницу не показать',
   'bar.costHintPlan': 'Во столько обошёлся этот разговор по тарифам API. На подписке эти деньги НЕ списываются — цифру считает сам движок, и она здесь как мера расхода, а не счёт.',
@@ -1707,6 +1715,8 @@ export const EN: Dict = {
   'feed.changeAdded': 'added',
   'feed.changeUntracked': 'new, outside git',
   'feed.changeUntrackedDir': 'new folder, outside git',
+  'feed.changeByAgent': 'edited by the agent',
+  'feed.changesOutside': 'The agent touched files outside this repository ({n}):',
   'feed.changeNoDiff': 'Could not show the contents',
   'feed.changeBinary': 'Binary file — no diff to show',
   'bar.costHintPlan': 'What this conversation would cost at API rates. On a plan this money is NOT charged — the engine computes the figure, and here it is a measure of usage, not a bill.',
