@@ -6,6 +6,7 @@ import { noticeFor } from './systemNotices'
 import { endReasonText } from './turnOutcome'
 import type {
   AgentCapabilities,
+  RewindFilesOutcome,
   AgentEngine,
   AgentPermissionDecision,
   AgentQuestionAnswer,
@@ -1221,6 +1222,56 @@ export class FakeAgentDriver implements AgentDriver {
    * отличим от остальных, что причина названа, что отчёт движка выводится
    * дословно, а отказ отчёта не выдаётся за отчёт.
    */
+
+  /**
+   * Откат файлов — все исходы, которые умеет настоящий движок.
+   *
+   * Живой e2e с Claude Code в CI не гоняется, а карточка отката обязана
+   * пережить каждый из этих ответов: за ошибку здесь платит человек своими
+   * файлами. Сценарий выбирается ПУТЁМ хода (`ZARYA_FAKE_REWIND`), чтобы один
+   * прогон мог пройти их подряд.
+   */
+  async rewindFiles(
+    requestId: string,
+    userMessageId: string,
+    opts?: { dryRun?: boolean }
+  ): Promise<RewindFilesOutcome> {
+    // Свою неспособность фейк обязан признавать сам: соседний движок (gemini)
+    // использует этот же класс, и без проверки он «умел» бы откат.
+    if (this.capabilities.rewindFiles !== true) {
+      return { canRewind: false, refused: 'unsupported' }
+    }
+    if (!userMessageId) return { canRewind: false, refused: 'no-turn-id' }
+    if (!this.started.has(requestId)) return { canRewind: false, refused: 'no-session' }
+    // Тот же гейт, что у настоящего драйвера: пока висит невыясненный вопрос
+    // или идёт ход, файлы трогать нельзя. Без него прогон проходил бы по
+    // короткому пути и ничего не проверял.
+    if ((this.pendingGates.get(requestId)?.size ?? 0) > 0) {
+      return { canRewind: false, refused: 'busy' }
+    }
+    const mode = process.env.ZARYA_FAKE_REWIND || 'ok'
+    if (mode === 'off') {
+      // Движок с выключенными чекпоинтами: сухой прогон отвечает флагом, а
+      // настоящий откат БРОСАЕТ — оба пути должны быть покрыты.
+      if (opts?.dryRun) return { canRewind: false, error: 'File rewinding is not enabled.' }
+      throw new Error('File rewinding is not enabled.')
+    }
+    if (mode === 'nofiles') return { canRewind: true }
+    if (mode === 'links') {
+      return opts?.dryRun
+        ? { canRewind: true, filesChanged: [`${this.cwds.get(requestId) ?? ''}/linked.ts`] }
+        : { canRewind: true, skippedLinks: 1 }
+    }
+    const cwd = this.cwds.get(requestId) ?? ''
+    return {
+      canRewind: true,
+      filesChanged: [`${cwd}/src/shared/fake.ts`],
+      insertions: 2,
+      deletions: 1,
+      ...(opts?.dryRun ? {} : { skippedLinks: 0 })
+    }
+  }
+
   async engineHealth(opts?: {
     cwd?: string
     doctor?: boolean

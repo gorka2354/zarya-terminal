@@ -1,5 +1,6 @@
 import type { UpdateState } from '../shared/updates'
 import type {
+  RewindFilesOutcome,
   AgentCapabilities,
   AgentEngine,
   AgentModelInfo,
@@ -169,6 +170,12 @@ export interface ZaryaApi {
       requestId: string | undefined,
       probe?: boolean
     ): Promise<import('@shared/types').McpSnapshot>
+    rewindFiles(
+      engine: AgentEngine,
+      requestId: string,
+      userMessageId: string,
+      opts?: { dryRun?: boolean }
+    ): Promise<RewindFilesOutcome>
     stopTask(
       engine: AgentEngine,
       requestId: string,

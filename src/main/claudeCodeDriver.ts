@@ -16,6 +16,7 @@ import type {
   ClaudeSessionInfo,
   ClaudeStartOpts,
   ClaudeStreamEvent,
+  RewindFilesOutcome,
   SkillLayer,
   SkillState
 } from '@shared/types'
@@ -599,6 +600,8 @@ export class ClaudeCodeDriver implements AgentDriver {
     structuredQuestions: true,
     // resumeSessionAt + forkSession — см. rewindAfterInterrupt.
     rewind: true,
+    // Откат ФАЙЛОВ — другое умение и другой флаг: см. AgentCapabilities.
+    rewindFiles: true,
     // Родной формат SDK: изображение уходит блоком в том же сообщении.
     images: true,
     // mcpServerStatus / reconnectMcpServer / toggleMcpServer + getContextUsage.
@@ -2539,6 +2542,55 @@ export class ClaudeCodeDriver implements AgentDriver {
     } else {
       session.abort.abort()
       session.input.close()
+    }
+  }
+
+  /**
+   * Вернуть файлы к состоянию на выбранном ходе.
+   *
+   * Три правила, каждое оплачено находкой ревью:
+   *
+   * 1. ПОКА ИДЁТ ХОД — НЕЛЬЗЯ. Откат посреди работы вытаскивает файлы из-под
+   *    работающего инструмента: следующий Edit падает «file has been modified
+   *    since read», а Write просто перезаписывает восстановленное, то есть
+   *    откат молча отменяется. Тот же гейт и по той же причине стоит у
+   *    applyDirectories. Висящий вопрос разрешения — тоже «занято»: человек
+   *    одобрит правку, которая ляжет уже на другой файл.
+   * 2. ОТКАЗ — ЗНАЧЕНИЕМ, А НЕ ИСКЛЮЧЕНИЕМ. «Идёт ход» и «нет живой сессии» —
+   *    нормальные состояния, и интерфейс обязан сказать о них словами.
+   * 3. ПРИЧИНУ НЕ ВЫДУМЫВАЕМ. `canRewind:false` приходит с текстом движка;
+   *    настоящий откат при выключенных чекпоинтах БРОСАЕТ с тем же текстом —
+   *    ловим оба пути и отдаём слова движка как есть.
+   */
+  async rewindFiles(
+    requestId: string,
+    userMessageId: string,
+    opts?: { dryRun?: boolean }
+  ): Promise<RewindFilesOutcome> {
+    if (!userMessageId) return { canRewind: false, refused: 'no-turn-id' }
+    const session = this.sessions.get(requestId)
+    if (!session) return { canRewind: false, refused: 'no-session' }
+    if (session.running || session.perms.size > 0) {
+      return { canRewind: false, refused: 'busy' }
+    }
+    const q = session.query as unknown as {
+      rewindFiles?: (id: string, o?: { dryRun?: boolean }) => Promise<RewindFilesOutcome>
+    }
+    if (!q.rewindFiles) return { canRewind: false, refused: 'unsupported' }
+    try {
+      const r = await q.rewindFiles(userMessageId, { dryRun: opts?.dryRun === true })
+      return {
+        canRewind: r?.canRewind === true,
+        ...(r?.error ? { error: r.error } : {}),
+        ...(Array.isArray(r?.filesChanged) ? { filesChanged: r.filesChanged } : {}),
+        ...(typeof r?.insertions === 'number' ? { insertions: r.insertions } : {}),
+        ...(typeof r?.deletions === 'number' ? { deletions: r.deletions } : {}),
+        ...(typeof r?.skippedLinks === 'number' ? { skippedLinks: r.skippedLinks } : {})
+      }
+    } catch (e) {
+      // Настоящий откат при выключенных чекпоинтах бросает — для человека это
+      // тот же случай, что и canRewind:false, и объяснение у него то же.
+      return { canRewind: false, error: e instanceof Error ? e.message : String(e) }
     }
   }
 

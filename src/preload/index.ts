@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { CH } from '../shared/ipc'
 import type { UpdateState } from '../shared/updates'
 import type {
+  RewindFilesOutcome,
   AgentEngine,
   AgentPermissionDecision,
   AgentQuestionAnswer,
@@ -93,6 +94,20 @@ const api = {
       ipcRenderer.send(CH.agentInput, engine, requestId, text),
     rewind: (engine: AgentEngine, requestId: string) =>
       ipcRenderer.invoke(CH.agentRewind, engine, requestId) as Promise<AgentRewind | null>,
+    /** Откат ФАЙЛОВ (не разговора): `rewind` выше — про сообщение. */
+    rewindFiles: (
+      engine: AgentEngine,
+      requestId: string,
+      userMessageId: string,
+      opts?: { dryRun?: boolean }
+    ) =>
+      ipcRenderer.invoke(
+        CH.agentRewindFiles,
+        engine,
+        requestId,
+        userMessageId,
+        opts
+      ) as Promise<RewindFilesOutcome>,
     interrupt: (engine: AgentEngine, requestId: string) =>
       ipcRenderer.send(CH.agentInterrupt, engine, requestId),
     permission: (

@@ -708,6 +708,40 @@ export function registerIpc(ctx: IpcContext): void {
   ipcMain.on(CH.showItemInFolder, (_e, path: string) => shell.showItemInFolder(path))
   // Настоящий размер чужой папки, а не наша оценка: цифру, которой человек
   // меряет цену настройки, нельзя писать константой.
+  ipcMain.handle(
+    CH.agentRewindFiles,
+    async (
+      _e,
+      engine: AgentEngine,
+      requestId: string,
+      userMessageId: string,
+      opts?: { dryRun?: boolean }
+    ) => {
+      const drv = driverFor(engine)
+      // Движок так не умеет — это ответ, а не ошибка: интерфейс обязан сказать
+      // словами, а не показать кнопку, за которой ничего нет.
+      //
+      // Спрашиваем СПОСОБНОСТЬ, а не наличие метода: драйверы делят реализацию
+      // (фейки — один класс), и «метод существует» не значит «движок умеет».
+      if (!drv?.rewindFiles || drv.capabilities?.rewindFiles !== true) {
+        return { canRewind: false, refused: 'unsupported' }
+      }
+      try {
+        return await drv.rewindFiles(requestId, userMessageId, opts)
+      } catch (e) {
+        /*
+         * Граница процессов ловит ВСЁ.
+         *
+         * Настоящий откат при выключенных чекпоинтах бросает — драйвер это
+         * ловит сам, но полагаться на дисциплину каждого драйвера здесь нельзя:
+         * непойманное исключение доедет до окна как «Error invoking remote
+         * method», то есть как «не получилось» вместо объяснения, и человек
+         * пойдёт искать причину сам. Слова движка сохраняем дословно.
+         */
+        return { canRewind: false, error: e instanceof Error ? e.message : String(e) }
+      }
+    }
+  )
   ipcMain.handle(CH.checkpointUsage, async () => ({
     dir: fileHistoryDir(),
     ...(await checkpointUsage())

@@ -1,4 +1,5 @@
 import type {
+  RewindFilesOutcome,
   AgentCapabilities,
   AgentEngine,
   AgentExtrasReload,
@@ -113,6 +114,22 @@ export interface AgentDriver {
    * местах и рано или поздно разошёлся бы.
    */
   applyDirectories?(requestId: string): { ok: boolean; reason?: 'busy' | 'no-session' }
+  /**
+   * Вернуть ФАЙЛЫ к состоянию на ходе `userMessageId` (гейт:
+   * `capabilities.rewindFiles`).
+   *
+   * `dryRun` обязателен к использованию перед настоящим откатом: он даёт список
+   * путей, из которого строится карточка. Настоящий откат необратим — у движка
+   * нет «до отката», только «до агента».
+   *
+   * Отказ возвращается значением, а не исключением: «идёт ход» и «нет сессии» —
+   * нормальные состояния, о которых интерфейс обязан сказать словами.
+   */
+  rewindFiles?(
+    requestId: string,
+    userMessageId: string,
+    opts?: { dryRun?: boolean }
+  ): Promise<RewindFilesOutcome>
   /**
    * Здоровье движка (гейт: `capabilities.health`).
    *
