@@ -316,6 +316,8 @@ export const RU: Dict = {
   'feed.diffChunks': '{n} куска',
   'feed.diffTruncated': 'дальше не показано — правка слишком велика',
   'feed.diffPinned': 'Пока решение не принято, правка не сворачивается',
+  'drv.ccNoRewindFlag':
+    'Этот Claude Code не понимает флаг для отката кода — ход повторён без него. Чекпоинты файлов недоступны на этой версии CLI.',
   'feed.changes': 'что изменилось',
   'feed.changesTitle': 'Что изменилось в проекте',
   'feed.changesOpen': 'Показать изменения в файлах проекта',
@@ -1699,6 +1701,8 @@ export const EN: Dict = {
   'feed.diffChunks': '{n} chunks',
   'feed.diffTruncated': 'the rest is not shown — the edit is too large',
   'feed.diffPinned': 'While the decision is pending, the edit stays open',
+  'drv.ccNoRewindFlag':
+    'This Claude Code does not understand the code-rewind flag — the turn was retried without it. File checkpoints are unavailable on this CLI version.',
   'feed.changes': 'what changed',
   'feed.changesTitle': 'What changed in the project',
   'feed.changesOpen': 'Show changes to the project files',

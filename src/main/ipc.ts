@@ -425,7 +425,13 @@ export function registerIpc(ctx: IpcContext): void {
     return Object.fromEntries(entries.filter(([, c]) => c != null))
   })
   ipcMain.on(CH.agentStart, (_e, engine: AgentEngine, requestId: string, opts: AgentStartOpts) => {
-    void driverFor(engine)?.start(requestId, opts)
+    // Чекпоинты файлов — решение приложения, а не окна: это запись копий на
+    // диск (и в ЧУЖУЮ папку движка), поэтому значение берётся из настроек
+    // здесь, а не приходит из рендерера вместе с остальными параметрами хода.
+    void driverFor(engine)?.start(requestId, {
+      ...opts,
+      fileCheckpoints: settingsStore.get().ai.fileCheckpoints === true
+    })
   })
   ipcMain.on(CH.agentInput, (_e, engine: AgentEngine, requestId: string, text: string) => {
     driverFor(engine)?.input(requestId, text)

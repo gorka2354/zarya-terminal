@@ -156,6 +156,147 @@ export function probeVersion(exe: string, timeoutMs = 5000): Promise<number[] | 
   })
 }
 
+/**
+ * Понимает ли этот бинарник наш дополнительный флаг.
+ *
+ * ЗАЧЕМ ЭТО ВООБЩЕ ЕСТЬ. Часть возможностей движка включается флагом командной
+ * строки, которого нет в типизированном контракте SDK (`--replay-user-messages`
+ * для отката кода). SDK передаёт такие флаги как есть — сырой строкой в конец
+ * командной строки, — а CLI на неизвестный КОРНЕВОЙ флаг падает сразу:
+ * `error: unknown option`, код выхода 1, ход не начинается вовсе.
+ *
+ * Опасность не в потере функции, а в её цене: Заря перевыбирает бинарник каждые
+ * полчаса без перезапуска, и человек с самообновившимся `claude` получил бы не
+ * «откат недоступен», а «агент не отвечает» — на каждый ход, без единой
+ * подсказки о причине. Поэтому флаг не ставится вслепую: сначала спрашиваем сам
+ * бинарник.
+ *
+ * ПОЧЕМУ ИМЕННО `mcp` БЕЗ ПОДКОМАНДЫ. Проверено на 2.1.227:
+ * - `--version` и `--help` разбирают флаги НЕ полностью: неизвестный флаг там
+ *   проходит молча (exit 0), то есть проба всегда отвечала бы «поддерживается»;
+ * - `mcp list` отвечает правильно, но 10 секунд: он реально опрашивает
+ *   MCP-серверы человека, то есть запускает чужие процессы;
+ * - `mcp` без подкоманды печатает свою справку и выходит за ~0.5 с, ничего не
+ *   запуская, но флаги разбирает по-настоящему.
+ */
+export function flagUnsupported(stderr: string, flag: string): boolean {
+  const s = String(stderr || '')
+  if (!/unknown option/i.test(s)) return false
+  // Имя флага в сообщении обязательно: `unknown option` про ЧУЖОЙ аргумент
+  // (например, опечатку в подкоманде) не должен выключать нашу возможность.
+  return s.includes(flag)
+}
+
+/**
+ * Спросить бинарник про флаг. `true` — флаг понят.
+ *
+ * Неудачная проба (таймаут, бинарник не запустился) — это НЕ «поддерживается»:
+ * молчание трактуем в пользу безопасности, потому что цена ошибки здесь —
+ * неработающий агент, а цена лишней осторожности — отсутствие одной кнопки.
+ */
+export function probeFlag(exe: string, flag: string, timeoutMs = 8000): Promise<boolean> {
+  return new Promise((resolve) => {
+    let done = false
+    const finish = (v: boolean): void => {
+      if (!done) {
+        done = true
+        resolve(v)
+      }
+    }
+    try {
+      const child = execFile(
+        exe,
+        [flag, 'mcp'],
+        { timeout: timeoutMs, windowsHide: true },
+        (_err, _stdout, stderr) => finish(!flagUnsupported(String(stderr ?? ''), flag))
+      )
+      child.on('error', () => finish(false))
+    } catch {
+      finish(false)
+    }
+  })
+}
+
+/** Ответ пробы на один бинарник: что решили и когда. */
+interface FlagCacheEntry {
+  ok: boolean
+  at: number
+}
+
+const flagCache = new Map<string, FlagCacheEntry>()
+
+/**
+ * Проба с памятью: один вопрос на бинарник, а не на каждый ход.
+ *
+ * Срок жизни ответа совпадает со сроком, через который Заря заново выбирает
+ * бинарник: обновился `claude` — заново спросим и про флаг. `now` передаётся
+ * снаружи, чтобы у теста не было зависимости от часов.
+ */
+export async function supportsFlag(
+  exe: string,
+  flag: string,
+  ttlMs: number,
+  now = Date.now(),
+  probe: (exe: string, flag: string) => Promise<boolean> = probeFlag
+): Promise<boolean> {
+  const key = `${exe} ${flag}`
+  const hit = flagCache.get(key)
+  if (hit && now - hit.at < ttlMs) return hit.ok
+  const ok = await probe(exe, flag)
+  flagCache.set(key, { ok, at: now })
+  return ok
+}
+
+/**
+ * Запомнить отказ, увиденный НЕ пробой, а живым запуском.
+ *
+ * Проба отвечает на вопрос заранее, но бинарник мог смениться между пробой и
+ * запуском. Когда движок сам сказал «unknown option», это знание точнее любой
+ * пробы — и оно должно пережить следующий ход, иначе человек будет получать
+ * упавший запуск снова и снова.
+ */
+export function markFlagUnsupported(exe: string, flag: string, now = Date.now()): void {
+  flagCache.set(`${exe} ${flag}`, { ok: false, at: now })
+}
+
+/** Забыть ответы пробы — для тестов и для смены бинарника. */
+export function resetFlagCache(): void {
+  flagCache.clear()
+}
+
+/** Флаг, которым движок отдаёт нам id хода человека (нужен откату файлов). */
+export const REPLAY_FLAG = '--replay-user-messages'
+
+export interface CheckpointDecision {
+  /** Просить движок снимать копии файлов перед правками. */
+  enable: boolean
+  /** Сырые флаги для командной строки CLI (SDK передаёт их как есть). */
+  extraArgs?: Record<string, null>
+  /** Почему выключено — для честного ответа интерфейсу, а не для лога. */
+  off?: 'setting' | 'unknown-exe' | 'flag-unsupported'
+}
+
+/**
+ * Ставить ли чекпоинты этому ходу — и с какими флагами.
+ *
+ * Чистая функция от трёх фактов, потому что цена ошибки несимметрична:
+ * лишний флаг убивает ЗАПУСК агента, отсутствующий — всего лишь прячет кнопку
+ * отката. Поэтому «не знаем» здесь всегда значит «не ставим».
+ *
+ * `exeKnown: false` — это случай, когда бинарник выбирает сам SDK: спросить
+ * нам не у кого, а угадывать нельзя.
+ */
+export function checkpointDecision(o: {
+  wanted: boolean
+  exeKnown: boolean
+  flagSupported: boolean
+}): CheckpointDecision {
+  if (!o.wanted) return { enable: false, off: 'setting' }
+  if (!o.exeKnown) return { enable: false, off: 'unknown-exe' }
+  if (!o.flagSupported) return { enable: false, off: 'flag-unsupported' }
+  return { enable: true, extraArgs: { 'replay-user-messages': null } }
+}
+
 /** First candidate path that exists on disk. */
 export function firstExisting(paths: string[]): string | undefined {
   return paths.find((p) => {

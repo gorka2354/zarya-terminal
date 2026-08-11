@@ -73,6 +73,8 @@ export const DEFAULT_SETTINGS: Settings = {
     maxTokens: 4096,
     autoApprove: false,
     contextBlocks: 3,
+    // Выключено до появления честной строки в настройках: см. AiSettings.
+    fileCheckpoints: false,
     // Пусто — первый увиденный каталог запоминается молча (см. modelNews).
     seenModels: {},
     systemPromptExtra: '',

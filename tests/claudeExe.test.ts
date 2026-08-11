@@ -1,11 +1,18 @@
+import { homedir } from 'os'
 import { describe, expect, it } from 'vitest'
 import {
   bundledPkgName,
   claudeExeName,
   compareVersions,
   parseCliVersion,
+  checkpointDecision,
+  firstExisting,
+  flagUnsupported,
   pickClaudeExe,
+  probeFlag,
+  resetFlagCache,
   resolveClaudeExe,
+  supportsFlag,
   systemClaudeCandidates
 } from '../src/main/claudeExe'
 
@@ -161,5 +168,137 @@ describe('resolveClaudeExe', () => {
     })
     expect(pick.reason).toBe('sdk-default')
     expect(pick.path).toBeUndefined()
+  })
+})
+
+/**
+ * Проба флага перед его использованием.
+ *
+ * Часть возможностей движка включается флагом, которого нет в контракте SDK
+ * (`--replay-user-messages`). SDK передаёт такой флаг сырым, а CLI на
+ * неизвестный корневой флаг падает ДО начала хода. Заря перевыбирает бинарник
+ * каждые полчаса без перезапуска — значит после самообновления `claude`
+ * человек получил бы не «нет кнопки отката», а «агент не отвечает» на каждый
+ * ход. Поэтому решение «ставить ли флаг» проверяется здесь.
+ */
+describe('flagUnsupported', () => {
+  const FLAG = '--replay-user-messages'
+
+  it('узнаёт отказ CLI по сообщению и имени флага', () => {
+    expect(flagUnsupported("error: unknown option '--replay-user-messages'", FLAG)).toBe(true)
+  })
+
+  it('чужой неизвестный аргумент не выключает нашу возможность', () => {
+    // Сообщение про ДРУГОЙ флаг (опечатка в подкоманде, чужая обёртка) не
+    // говорит ничего о нашем — гасить функцию по нему значит гасить наугад.
+    expect(flagUnsupported("error: unknown option '--typo'", FLAG)).toBe(false)
+  })
+
+  it('обычная справка и пустой вывод — это не отказ', () => {
+    // `claude mcp` без подкоманды печатает Usage и выходит с кодом 1: код
+    // выхода здесь ничего не значит, значение имеет только текст.
+    expect(flagUnsupported('Usage: claude mcp [options] [command]', FLAG)).toBe(false)
+    expect(flagUnsupported('', FLAG)).toBe(false)
+  })
+})
+
+describe('supportsFlag', () => {
+  const FLAG = '--replay-user-messages'
+
+  it('спрашивает бинарник один раз и помнит ответ', async () => {
+    resetFlagCache()
+    let calls = 0
+    const probe = async (): Promise<boolean> => {
+      calls++
+      return true
+    }
+    expect(await supportsFlag('C:/claude.exe', FLAG, 1000, 0, probe)).toBe(true)
+    expect(await supportsFlag('C:/claude.exe', FLAG, 1000, 500, probe)).toBe(true)
+    expect(calls).toBe(1)
+  })
+
+  it('через срок жизни спрашивает заново: CLI мог обновиться', async () => {
+    resetFlagCache()
+    let calls = 0
+    const probe = async (): Promise<boolean> => {
+      calls++
+      return calls === 1
+    }
+    expect(await supportsFlag('C:/claude.exe', FLAG, 1000, 0, probe)).toBe(true)
+    expect(await supportsFlag('C:/claude.exe', FLAG, 1000, 1500, probe)).toBe(false)
+    expect(calls).toBe(2)
+  })
+
+  it('разные бинарники отвечают за себя, а не друг за друга', async () => {
+    resetFlagCache()
+    const probe = async (exe: string): Promise<boolean> => exe.includes('new')
+    expect(await supportsFlag('C:/new/claude.exe', FLAG, 1000, 0, probe)).toBe(true)
+    expect(await supportsFlag('C:/old/claude.exe', FLAG, 1000, 0, probe)).toBe(false)
+  })
+})
+
+/**
+ * ЖИВАЯ проба — на настоящем бинарнике.
+ *
+ * Всё, что выше, проверяет наш разбор ответа. А вопрос, ради которого проба
+ * существует, лежит в поведении чужой программы: как именно CLI реагирует на
+ * неизвестный корневой флаг и не стоит ли эта проверка секунд. Ответ на него
+ * нельзя получить моком, поэтому здесь запускается настоящий `claude`. Там, где
+ * его нет (CI), тест честно пропускается, а не проходит «зелёным».
+ */
+describe('probeFlag на настоящем CLI', () => {
+  const exe = firstExisting(
+    systemClaudeCandidates(process.platform, process.env, homedir())
+  )
+
+  it.skipIf(!exe)('известный флаг признаётся поддержанным', async () => {
+    const started = Date.now()
+    expect(await probeFlag(exe as string, '--replay-user-messages')).toBe(true)
+    // Проба идёт перед запуском агента: секунды здесь человек ждёт молча.
+    expect(Date.now() - started).toBeLessThan(8000)
+  }, 20000)
+
+  it.skipIf(!exe)('выдуманный флаг признаётся неподдержанным', async () => {
+    // Главная проверка: CLI и правда отвечает «unknown option», а не глотает
+    // чужой флаг молча — иначе вся защита была бы бумажной.
+    expect(await probeFlag(exe as string, '--zzz-not-a-real-flag')).toBe(false)
+  }, 20000)
+})
+
+/**
+ * Решение «ставить ли флаг» — самое несимметричное место инкремента: лишний
+ * флаг убивает ЗАПУСК агента (CLI падает на неизвестном корневом аргументе до
+ * начала хода), а отсутствующий всего лишь прячет кнопку отката. Поэтому здесь
+ * проверяется, что любое «не знаем» трактуется в пользу работающего агента.
+ */
+describe('checkpointDecision', () => {
+  it('настройка выключена — ни флага, ни чекпоинтов', () => {
+    expect(checkpointDecision({ wanted: false, exeKnown: true, flagSupported: true })).toEqual({
+      enable: false,
+      off: 'setting'
+    })
+  })
+
+  it('бинарник выбирает SDK — спросить не у кого, значит не ставим', () => {
+    // Здесь мы не знаем, ЧТО именно запустится: ставить сырой флаг вслепую
+    // значит рискнуть запуском агента ради кнопки.
+    expect(checkpointDecision({ wanted: true, exeKnown: false, flagSupported: true })).toEqual({
+      enable: false,
+      off: 'unknown-exe'
+    })
+  })
+
+  it('бинарник флага не знает — молчим о чекпоинтах, агент работает', () => {
+    expect(checkpointDecision({ wanted: true, exeKnown: true, flagSupported: false })).toEqual({
+      enable: false,
+      off: 'flag-unsupported'
+    })
+  })
+
+  it('всё сошлось — включаем чекпоинты и просим id хода', () => {
+    expect(checkpointDecision({ wanted: true, exeKnown: true, flagSupported: true })).toEqual({
+      enable: true,
+      extraArgs: { 'replay-user-messages': null }
+    })
   })
 })

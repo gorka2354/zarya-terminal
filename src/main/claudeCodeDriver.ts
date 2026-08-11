@@ -31,7 +31,12 @@ import {
   claudeExeName,
   firstExisting,
   probeVersion,
+  REPLAY_FLAG,
+  checkpointDecision,
+  flagUnsupported,
+  markFlagUnsupported,
   resolveClaudeExe,
+  supportsFlag,
   systemClaudeCandidates,
   type ExePick
 } from './claudeExe'
@@ -505,6 +510,12 @@ interface Session {
   ultracode?: boolean
   /** The user pressed Esc: a subsequent process exit is expected, not a failure. */
   interrupted?: boolean
+  /** Ход ушёл с флагом чекпоинтов — значит падение на нём можно и нужно пережить. */
+  checkpointFlag?: boolean
+  /** Какой бинарник запущен: если он флага не знает, запомним это именно про него. */
+  exePath?: string
+  /** С чем ход был начат — чтобы повторить его без флага, ничего не потеряв. */
+  startOpts?: ClaudeStartOpts
   /**
    * Ход ИДЁТ прямо сейчас.
    *
@@ -889,6 +900,13 @@ export class ClaudeCodeDriver implements AgentDriver {
       : opts.resumeAt
         ? { resume: opts.resume, resumeSessionAt: opts.resumeAt, forkSession: true }
         : { resume: opts.resume }
+    const checkpoints = checkpointDecision({
+      wanted: opts.fileCheckpoints === true,
+      exeKnown: !!exePath,
+      flagSupported: exePath
+        ? await supportsFlag(exePath, REPLAY_FLAG, EXE_RECHECK_MS)
+        : false
+    })
     const options: Options = {
       cwd: opts.cwd,
       /*
@@ -939,6 +957,18 @@ export class ClaudeCodeDriver implements AgentDriver {
         if (process.env.ZARYA_DEBUG) console.error('[claude-code]', data.trim())
       },
       ...(exePath ? { pathToClaudeCodeExecutable: exePath } : {}),
+      /*
+       * Чекпоинты файлов и флаг, которым движок отдаёт id хода.
+       *
+       * Флаг — сырой аргумент командной строки, а не часть контракта SDK:
+       * бинарник, который его не знает, падает ДО начала хода («unknown
+       * option»), и человек теряет не кнопку отката, а агента. Поэтому сначала
+       * спрашиваем сам бинарник (ответ кешируется на тот же срок, через который
+       * Заря заново выбирает CLI), и «не знаем» всегда значит «не ставим».
+       */
+      ...(checkpoints.enable
+        ? { enableFileCheckpointing: true, extraArgs: checkpoints.extraArgs }
+        : {}),
       ...(opts.model ? { model: opts.model } : {}),
       ...(opts.effort ? { effort: opts.effort as Options['effort'] } : {}),
       // Ultracode is a flag-settings toggle (xhigh + workflow orchestration).
@@ -975,6 +1005,11 @@ export class ClaudeCodeDriver implements AgentDriver {
       cwd: opts.cwd,
       bypass: !!opts.bypass,
       editsAuto: !!opts.editsAuto,
+      // Что нужно страховке, если движок откажется от нашего флага уже на
+      // запуске: с чем ход начинался, какой бинарник и был ли флаг вообще.
+      checkpointFlag: checkpoints.enable,
+      exePath,
+      startOpts: opts,
       effort: effortOverride,
       model: opts.model,
       ultracode: !!opts.ultracode,
@@ -1632,10 +1667,28 @@ export class ClaudeCodeDriver implements AgentDriver {
       // A process that exits because the user pressed Esc is not an error to
       // report — it is the thing they just asked for.
       if (!session.abort.signal.aborted && !session.interrupted && !session.rewound) {
-        this.emit(requestId, {
-          type: 'error',
-          message: e instanceof Error ? e.message : String(e)
-        })
+        const msg = e instanceof Error ? e.message : String(e)
+        /*
+         * Последняя страховка вокруг чекпоинтов.
+         *
+         * Флаг ставится только после пробы бинарника, но бинарник мог смениться
+         * между пробой и запуском (Заря перевыбирает CLI на ходу), а проба —
+         * ответить не о том. Цена ошибки несимметрична: без страховки человек
+         * получает не «нет отката», а «агент не отвечает» на КАЖДЫЙ ход.
+         *
+         * Поэтому: запомнить, что этот бинарник флага не знает, и повторить ход
+         * ОДИН раз без него. Повтор безопасен — до сюда мы доходим, только если
+         * ход не начался вовсе.
+         */
+        const retryOpts = session.startOpts
+        if (session.checkpointFlag && retryOpts && flagUnsupported(msg, REPLAY_FLAG)) {
+          session.checkpointFlag = false
+          if (session.exePath) markFlagUnsupported(session.exePath, REPLAY_FLAG)
+          this.emit(requestId, { type: 'notice', level: 'warn', text: tm('drv.ccNoRewindFlag') })
+          void this.start(requestId, { ...retryOpts, fileCheckpoints: false })
+          return
+        }
+        this.emit(requestId, { type: 'error', message: msg })
       }
     } finally {
       // Только СВОЮ запись: сессия, которую отменили и заменили, доживает
