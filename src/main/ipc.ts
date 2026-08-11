@@ -35,6 +35,7 @@ import type { SessionStore } from './sessionStore'
 import { checkpointPolicy } from '@shared/checkpointPolicy'
 import { checkpointUsage, fileHistoryDir } from './checkpointStore'
 import { diskFacts, verifyRewind } from './rewindFacts'
+import { agentFiles, compareNote } from './agentFileMap'
 import type { SettingsStore } from './settingsStore'
 import type { SttService } from './sttService'
 import type { UpdateService } from './updateService'
@@ -739,7 +740,21 @@ export function registerIpc(ctx: IpcContext): void {
             cwd: opts.cwd
           })
           const paths = dry.filesChanged ?? []
-          return paths.length ? { ...dry, facts: await diskFacts(paths, opts.cwd ?? '') } : dry
+          if (!paths.length) return dry
+          const facts = await diskFacts(paths, opts.cwd ?? '')
+          /*
+           * К фактам с диска добавляем то, что знаем только мы: что именно
+           * записал сюда агент. Без этого карточка не может отличить «файл
+           * вернётся к прежнему виду» от «ты потеряешь свою правку» — а движок
+           * такую разницу не показывает вовсе и затирает правку молча.
+           */
+          return {
+            ...dry,
+            facts: facts.map((f) => ({
+              ...f,
+              ...compareNote(agentFiles.note(requestId, f.path), f.hash)
+            }))
+          }
         }
         /*
          * Настоящий откат идёт вместе с пост-сверкой — иначе её однажды забудут.

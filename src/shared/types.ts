@@ -543,6 +543,10 @@ export interface RewindFilesOutcome {
     outsideCwd?: boolean
     size?: number
     hash?: string
+    /** Мы знаем, что записал в этот файл агент. */
+    observed?: boolean
+    /** На диске уже НЕ то, что записал агент: правку потеряют. */
+    changedAfterAgent?: boolean
   }>
   /** Наша собственная сверка ПОСЛЕ отката: числам движка верить нельзя. */
   verdict?: {

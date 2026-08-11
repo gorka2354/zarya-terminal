@@ -1684,8 +1684,6 @@ function RewindCard({
     | { kind: 'done'; ok: number; same: number; unknown: number; skipped: number; stayed: string[] }
   >({ kind: 'checking' })
 
-  const touched = useMemo(() => touchedSince(conv.messages, from), [conv.messages, from])
-
   useEffect(() => {
     let alive = true
     void window.zarya.agent
@@ -1716,7 +1714,6 @@ function RewindCard({
         // читается как «ничего не изменится», то есть как знание, которого нет.
         if (!paths.length) return setState({ kind: 'plan', rows: [], noList: true })
         const byPath = new Map((r.facts ?? []).map((f) => [f.path, f]))
-        const touchedSet = new Set(touched.map((x) => x.replace(/\\/g, '/').toLowerCase()))
         const facts: FileFacts[] = paths.map((path) => {
           const d = byPath.get(path)
           return {
@@ -1724,10 +1721,11 @@ function RewindCard({
             existsNow: d?.existsNow ?? true,
             ...(d?.linkSkipped ? { linkSkipped: true } : {}),
             ...(d?.outsideCwd ? { outsideCwd: true } : {}),
-            // «Наблюдали» — это про наш собственный учёт: если пути в нём нет,
-            // сказать о файле нечего, и молчаливое «вернётся» было бы обещанием
-            // за чужой счёт.
-            observed: touchedSet.has(path.replace(/\\/g, '/').toLowerCase())
+            // «Наблюдали» и «правку потеряют» приходят из главного процесса:
+            // там лежит отпечаток того, что записал агент, и там же читается
+            // диск. Считать это в окне значило бы гадать по путям.
+            observed: d?.observed === true,
+            ...(d?.changedAfterAgent ? { changedAfterAgent: true } : {})
           }
         })
         setState({ kind: 'plan', rows: rewindPlan(facts).rows, noList: false })
@@ -1735,7 +1733,7 @@ function RewindCard({
     return () => {
       alive = false
     }
-  }, [conv.id, conv.engine, conv.claudeSessionId, turnId, cwd, touched])
+  }, [conv.id, conv.engine, conv.claudeSessionId, turnId, cwd])
 
   const run = async (): Promise<void> => {
     setState({ kind: 'running' })

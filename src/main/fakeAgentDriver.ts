@@ -17,6 +17,7 @@ import type {
 import { rewindPoint } from '@shared/rewind'
 import type { AgentDriver } from './agentDriver'
 import { irreversible } from '@shared/irreversible'
+import { agentFiles } from './agentFileMap'
 import type { ToolFact } from '@shared/toolFacts'
 
 /**
@@ -829,11 +830,14 @@ export class FakeAgentDriver implements AgentDriver {
           // папки не пишем вовсе: писать «куда-нибудь» — это засорить каталог
           // приложения, а фейк живёт в тестах и чужого трогать не должен.
           if (viaEdit && opts.cwd) {
-            fakeWrite(
-              opts.cwd,
-              process.env.ZARYA_FAKE_OUTSIDE || 'src/shared/fake.ts',
-              ['const a = 42', 'keep me', 'const c = 3', ''].join('\n')
-            )
+            const abs = isAbsolute(editPath) ? editPath : join(opts.cwd, editPath)
+            fakeWrite(opts.cwd, editPath, ['const a = 42', 'keep me', 'const c = 3', ''].join('\n'))
+            // Карта «что записал агент» — общая инфраструктура, а не деталь
+            // claude-драйвера: без неё карточка отката не отличит правку
+            // человека от правки агента и там, где прогон идёт на фейке.
+            // Отпечаток берётся ПОСЛЕ записи: до неё файла может не быть вовсе,
+            // и карта запомнила бы пустоту.
+            void agentFiles.noteAfter(requestId, abs)
           }
           this.emit(requestId, {
             type: 'tool_result',

@@ -161,5 +161,29 @@ await withApp('off', async (page) => {
   if (shots) await page.screenshot({ path: join(shots, 'rewind-refused.png') })
 })
 
+console.log('\n[6] Правку человека поверх агента карточка называет ДО отката')
+await withApp('ok', async (page, work) => {
+  // Ровно тот случай, ради которого весь инкремент: агент записал файл,
+  // человек дописал в него руками, и родной откат снёс бы дописанное молча —
+  // сухой прогон движка об этом не предупреждает вовсе.
+  const cid = await page.evaluate(() => window.__zaryaStartAgent?.('codex', 'привет'))
+  await page.waitForTimeout(1200)
+  await page.evaluate((c) => window.__zaryaSetBypassFor?.(c, true), cid)
+  await page.waitForTimeout(400)
+  await page.evaluate(() => window.__zaryaFollowUp?.('tool edit: поправь файл'))
+  await page.waitForTimeout(2400)
+
+  // Человек правит тот же файл руками — как в терминале рядом.
+  writeFileSync(join(work, 'src', 'shared', 'fake.ts'), 'const a = 42\nMY OWN LINE\n')
+  await page.waitForTimeout(300)
+
+  await clickRewind(page)
+  await page.waitForTimeout(1800)
+  const card = await text(page, '.zy-rw')
+  ok('карточка предупреждает о потере правки', /правка пропадёт|правили после хода/.test(card), card.slice(0, 500))
+  ok('и не называет файл спокойным «вернётся»', !/вернётся к прежнему виду/.test(card), card.slice(0, 500))
+  if (shots) await page.screenshot({ path: join(shots, 'rewind-human-edit.png') })
+})
+
 console.log(`\nИтог: ${pass} ok, ${fail} fail`)
 process.exit(fail ? 1 : 0)

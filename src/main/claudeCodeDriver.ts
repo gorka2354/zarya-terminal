@@ -21,6 +21,8 @@ import type {
   SkillState
 } from '@shared/types'
 import { rewindPoint } from '@shared/rewind'
+import { agentFiles } from './agentFileMap'
+import { toolPath } from '@shared/touched'
 import { asSkillState, withSkillOverride } from '@shared/skills'
 import { readSettingsFile, readSkillOverrides, skillSettingsPaths } from './skillSettings'
 // Та же атомарная запись, что у собственных настроек: правка чужого конфига —
@@ -499,6 +501,13 @@ interface Session {
   perms: Map<string, (r: PermissionResult | null) => void>
   /** toolUseID -> the AskUserQuestion questions, so resolveQuestion rebuilds the answer envelope. */
   pendingQuestions: Map<string, ClaudeCliQuestion[]>
+  /**
+   * toolUseID -> путь, который правит этот вызов.
+   *
+   * Нужен, чтобы снять отпечаток ПОСЛЕ исполнения: результат приходит отдельным
+   * сообщением и пути в себе не несёт.
+   */
+  pendingEdits: Map<string, string>
   /** Bypass ('без спроса'): auto-approve ordinary tools in canUseTool (live-toggleable). */
   bypass: boolean
   /** «Правки без спроса»: авто-допуск ТОЛЬКО для правок файлов (live-toggleable). */
@@ -1008,6 +1017,7 @@ export class ClaudeCodeDriver implements AgentDriver {
       abort,
       perms,
       pendingQuestions,
+      pendingEdits: new Map<string, string>(),
       // В какой папке эта беседа. Нужно не самой сессии, а наблюдателю за
       // скиллами и MCP: `.mcp.json` и `.claude/skills` лежат в проекте, и
       // следить надо за папками ПАНЕЛЕЙ, а не за папкой, из которой запустили
@@ -1515,6 +1525,21 @@ export class ClaudeCodeDriver implements AgentDriver {
             // него, а прочитать его форму без имени нечем (см. Session.toolNames).
             for (const p of content) {
               if (p.type === 'tool_use' && p.id) session.toolNames.set(p.id, p.name)
+              if (p.type === 'tool_use') {
+                /*
+                 * Момент объявления правки — единственный, когда файл ещё в том
+                 * виде, в каком его застал агент. Если он уже НЕ такой, каким мы
+                 * его запомнили в прошлый раз, значит между правками агента файл
+                 * трогал человек: такой файл остаётся спорным до конца беседы,
+                 * иначе следующая правка агента затрёт наше знание, и откат
+                 * снесёт дописанное молча.
+                 */
+                const path = toolPath(p.name, p.input)
+                if (path) {
+                  session.pendingEdits.set(p.id, path)
+                  void agentFiles.noteBefore(requestId, path)
+                }
+              }
             }
             if (content.length) this.emit(requestId, { type: 'assistant', content })
             /*
@@ -1588,6 +1613,19 @@ export class ClaudeCodeDriver implements AgentDriver {
                  * второе уже нечем, и факты молча теряются именно там, где они
                  * есть. Карта чистится концом хода, ниже, в `case 'result'`.
                  */
+                /*
+                 * Правка исполнена — запоминаем, ЧТО именно агент оставил в
+                 * файле. Ровно с этим отпечатком карточка отката потом сравнит
+                 * диск и отличит «файл вернётся к прежнему виду» от «ты
+                 * потеряешь свою правку». Хуки (prettier, eslint --fix) к этому
+                 * моменту уже отработали — снимок берётся после них, иначе
+                 * тревога срабатывала бы на каждом файле без участия человека.
+                 */
+                const editedPath = session.pendingEdits.get(id)
+                if (editedPath && !b.is_error) {
+                  session.pendingEdits.delete(id)
+                  void agentFiles.noteAfter(requestId, editedPath)
+                }
                 this.emit(requestId, {
                   type: 'tool_result',
                   toolUseId: id,
@@ -2619,6 +2657,7 @@ export class ClaudeCodeDriver implements AgentDriver {
       cwd: o.cwd,
       perms: new Map(),
       pendingQuestions: new Map(),
+      pendingEdits: new Map(),
       bypass: false,
       editsAuto: false,
       shellTasks: new Set<string>(),
