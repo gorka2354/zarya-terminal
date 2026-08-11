@@ -34,6 +34,7 @@ const ok = (name, cond, extra) => {
 
 const userData = mkdtempSync(join(tmpdir(), 'zarya-cpset-'))
 const claudeHome = mkdtempSync(join(tmpdir(), 'zarya-cpcfg-'))
+const work = mkdtempSync(join(tmpdir(), 'zarya-cpwork-'))
 writeFileSync(
   join(userData, 'settings.json'),
   JSON.stringify({ appearance: { language: 'ru' }, sessions: { restoreOnLaunch: 'none' } })
@@ -137,6 +138,41 @@ try {
   })
   ok('прогон и правда изолирован', policy.isolated === true, policy)
   ok('и увёл настройки движка в свою папку', policy.configDir === true, policy)
+
+  console.log('\n[6] Точка отката садится на ход человека, а не на ответ агента')
+  // Возвращаем тумблер (пункт 4 его выключил) и делаем ход: фейковый движок
+  // называет id хода тем же событием, что и настоящий, — так проверяется весь
+  // путь точки до ленты, без живого Claude и без токенов.
+  await page.click('.zy-eng-cp-row .zy-switch')
+  await page.waitForTimeout(600)
+  await page.evaluate(() => window.__zaryaSetUi?.({ settingsOpen: false }))
+  await page.waitForTimeout(600)
+  await page.evaluate((d) => window.__zaryaNewTerminal?.(d), work)
+  await page.waitForTimeout(1600)
+  const cid = await page.evaluate(() => window.__zaryaStartAgent?.('codex', 'привет'))
+  await page.waitForTimeout(2200)
+  const conv = await page.evaluate((id) => {
+    const c = window.__zaryaConvById?.(id)
+    return c
+      ? {
+          checkpointing: c.checkpointing === true,
+          marks: c.turnMarks ?? []
+        }
+      : null
+  }, cid)
+  ok('беседа знает, что у сессии есть копии', conv?.checkpointing === true, conv)
+  ok(
+    'ход человека получил точку отката',
+    (conv?.marks ?? []).some((m) => m.role === 'user' && !!m.turnId),
+    conv?.marks
+  )
+  // Откат работает по сообщению ЧЕЛОВЕКА: точка на ответе агента означала бы
+  // кнопку, которая показывает на один ход, а откатывает к другому.
+  ok(
+    'ответ агента точку НЕ получил',
+    (conv?.marks ?? []).filter((m) => m.role === 'assistant').every((m) => !m.turnId),
+    conv?.marks
+  )
 
   console.log(`\nИтог: ${pass} ok, ${fail} fail`)
 } finally {

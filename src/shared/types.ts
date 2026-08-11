@@ -498,6 +498,13 @@ export type AiContentPart =
 export interface AiMessage {
   role: 'user' | 'assistant'
   content: AiContentPart[]
+  /**
+   * Точка отката файлов для ЭТОГО хода (uuid сообщения в движке).
+   *
+   * Живёт в беседе и уезжает на диск вместе с ней: откат переживает перезапуск
+   * приложения, а без сохранённого id вернуться было бы некуда.
+   */
+  turnId?: string
   /** When the message was created (ms epoch) — shown as a right-aligned time in
    *  the feed for user turns. Optional: older/persisted messages may lack it. */
   ts?: number
@@ -547,6 +554,14 @@ export interface PersistedConversation {
   sessionId?: string
   /** Claude Code session id — resumed on the next turn to keep full context. */
   claudeSessionId?: string
+  /**
+   * У живой сессии этой беседы есть копии файлов — значит откат возможен.
+   *
+   * Приходит с `init` и живёт рядом с id сессии: тумблер настроек мог быть
+   * тронут уже после старта, и решать по нему значило бы показать кнопку,
+   * за которой ничего нет.
+   */
+  checkpointing?: boolean
   /**
    * Точка ветки после отмены отправленного сообщения (см. {@link AgentRewind}).
    * Переживает перезапуск намеренно: без неё возобновление подтянуло бы
@@ -723,7 +738,24 @@ export type AgentStreamEvent =
       tools: string[]
       /** Reasoning effort from the account config (~/.claude/settings.json). */
       effort?: string
+      /**
+       * Эта сессия стартовала с копиями файлов — значит откат к её ходам
+       * возможен.
+       *
+       * Правда про КОНКРЕТНУЮ сессию, а не про настройку: человек мог включить
+       * тумблер посреди беседы (сессия всё равно без копий) или выключить его,
+       * пока сессия живёт (копии всё равно снимаются). Настройка отвечает на
+       * «чего мы хотим», это поле — на «что есть на самом деле».
+       */
+      checkpointing?: boolean
     }
+  /**
+   * Движок назвал id хода человека — точку, к которой можно вернуть файлы.
+   *
+   * Приходит отдельным событием, потому что сам ход давно нарисован: пузырь
+   * создаётся отправкой, а id прилетает уже из потока движка.
+   */
+  | { type: 'turn-id'; uuid: string }
   | { type: 'usage'; usage: AgentUsage }
   | { type: 'models'; models: AgentModelInfo[] }
   /**

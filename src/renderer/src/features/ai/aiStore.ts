@@ -12,6 +12,7 @@ import type {
 } from '@shared/types'
 import type { AiConversationsState } from '@shared/types'
 import { imagePlaceholder, type ImageAttachment } from '@shared/images'
+import { attachTurnId } from '@shared/turnId'
 import { EFFORT_TUNING } from '@shared/defaults'
 import { onBus } from '@/lib/bus'
 import { t } from '@/lib/i18n'
@@ -158,6 +159,14 @@ export interface Conversation {
   engine: 'builtin' | AgentEngine
   /** Claude Code session id (from init/result) for resume / continuity. */
   claudeSessionId?: string
+  /**
+   * У живой сессии этой беседы есть копии файлов — значит откат возможен.
+   *
+   * Приходит с `init` и живёт рядом с id сессии: тумблер настроек мог быть
+   * тронут уже после старта, и решать по нему значило бы показать кнопку,
+   * за которой ничего нет.
+   */
+  checkpointing?: boolean
   /**
    * Точка ветки после отмены отправленного сообщения: следующий ход возьмёт
    * историю ДО этого ответа агента. Живёт до init новой сессии.
@@ -988,6 +997,17 @@ export const useAiStore = create<AiState>((set, get) => {
     if (!get().conversations.some((c) => c.id === convId)) return
 
     switch (ev.type) {
+      /*
+       * Движок назвал точку, к которой можно вернуть файлы этого хода.
+       *
+       * Вешаем её на ПОСЛЕДНИЙ ход человека без своей точки (см. turnId.ts):
+       * пузырь давно нарисован отправкой, а id приходит из потока. Не нашли
+       * куда — не вешаем: кнопка отката, показывающая на чужой ход, врёт
+       * дороже, чем её отсутствие.
+       */
+      case 'turn-id':
+        patchConversation(convId, (c) => ({ ...c, messages: attachTurnId(c.messages, ev.uuid) }))
+        break
       case 'init':
         // Точку отмотки снимает только НОВАЯ сессия: ветка стартовала, дальше
         // отматывать нечего. Тот же id означает, что init прилетел от прежней
@@ -997,6 +1017,9 @@ export const useAiStore = create<AiState>((set, get) => {
         patchConversation(convId, (c) => ({
           ...c,
           claudeSessionId: ev.sessionId,
+          // Есть ли у ЭТОЙ сессии копии файлов. Настройка отвечает на «чего мы
+          // хотим», а кнопка отката должна знать, что есть на самом деле.
+          checkpointing: ev.checkpointing === true,
           resumeAt: ev.sessionId === c.claudeSessionId ? c.resumeAt : undefined
         }))
         /*
@@ -2443,6 +2466,16 @@ function seedPatch(convId: string, fn: (c: Conversation) => Conversation): void 
          * доступ даёт то, что уедет драйверу. Прогон обязан видеть второе.
          */
         extraDirs: c.extraDirs ?? [],
+        /*
+         * Копии файлов у ЖИВОЙ сессии и точки отката по ходам.
+         *
+         * Это наблюдаемое состояние, потому что от него зависит, покажем ли мы
+         * кнопку отката и куда она поведёт. Проверять по экрану нельзя: кнопка
+         * появится позже и по другим причинам, а спор идёт о том, к какому
+         * ходу привязалась точка.
+         */
+        checkpointing: c.checkpointing === true,
+        turnMarks: c.messages.map((m) => ({ role: m.role, turnId: m.turnId ?? null })),
         userTexts: c.messages
           .filter((m) => m.role === 'user')
           .map((m) =>

@@ -1394,7 +1394,11 @@ export class ClaudeCodeDriver implements AgentDriver {
                 cwd: msg.cwd,
                 permissionMode: msg.permissionMode,
                 tools: msg.tools,
-                effort: session.effort ?? readClaudeEffort()
+                effort: session.effort ?? readClaudeEffort(),
+                // Правда про эту сессию, а не про настройку: тумблер могли
+                // тронуть уже после её запуска, и кнопка отката должна знать,
+                // есть ли копии НА САМОМ ДЕЛЕ.
+                checkpointing: session.checkpointFlag === true
               })
               // Pull the usage gauge right away so it's visible while working,
               // and keep it refreshed on a light poll (account-wide value).
@@ -1522,6 +1526,28 @@ export class ClaudeCodeDriver implements AgentDriver {
           }
 
           case 'user': {
+            /*
+             * Повтор нашего же сообщения — это НЕ ход, а способ движка назвать
+             * его id (флаг `--replay-user-messages`). Единственное, что нам от
+             * него нужно, — точка, к которой можно вернуть файлы.
+             *
+             * Синтетические сообщения (пометки о прерывании, служебные вставки
+             * движка) отбрасываем: у них нет хода человека, а значит и точки
+             * отката. Дальше по ветке реплей всё равно не пройдёт — его
+             * содержимое строка, а не массив блоков, — но полагаться на это
+             * молча нельзя: изменится форма, и мы начнём рисовать чужое.
+             */
+            const meta = msg as unknown as {
+              isReplay?: boolean
+              isSynthetic?: boolean
+              uuid?: string
+            }
+            if (meta.isReplay) {
+              if (meta.uuid && !meta.isSynthetic) {
+                this.emit(requestId, { type: 'turn-id', uuid: meta.uuid })
+              }
+              break
+            }
             // Same for a subagent's tool results — its card was never rendered.
             if (msg.parent_tool_use_id) break
             // Only surface tool_result blocks — the user's own prompt is already

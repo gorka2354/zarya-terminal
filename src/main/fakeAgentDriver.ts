@@ -175,8 +175,17 @@ export class FakeAgentDriver implements AgentDriver {
       cwd: opts.cwd ?? '',
       permissionMode: opts.permissionMode ?? 'default',
       tools: [],
-      effort: opts.effort
+      effort: opts.effort,
+      // Фейк «умеет» чекпоинты ровно настолько, насколько его попросили: этого
+      // хватает, чтобы прогон проверил ПУТЬ точки отката до ленты, не поднимая
+      // настоящий движок и не тратя токены.
+      checkpointing: opts.fileCheckpoints === true
     })
+    if (opts.fileCheckpoints) {
+      // Настоящий движок присылает id хода отдельным повторным сообщением;
+      // фейк называет его сразу — форма события та же.
+      this.emit(requestId, { type: 'turn-id', uuid: `fake-turn-${this.seq}` })
+    }
     if (this.capabilities.usage)
       this.emit(requestId, { type: 'usage', usage: { subscriptionType: 'fake', fiveHourPct: 10 } })
     if (this.capabilities.models)
