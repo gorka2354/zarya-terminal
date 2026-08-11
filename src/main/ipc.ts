@@ -34,6 +34,7 @@ import type { PtyManager } from './ptyManager'
 import type { SessionStore } from './sessionStore'
 import { checkpointPolicy } from '@shared/checkpointPolicy'
 import { checkpointUsage, fileHistoryDir } from './checkpointStore'
+import { diskFacts, verifyRewind } from './rewindFacts'
 import type { SettingsStore } from './settingsStore'
 import type { SttService } from './sttService'
 import type { UpdateService } from './updateService'
@@ -715,7 +716,7 @@ export function registerIpc(ctx: IpcContext): void {
       engine: AgentEngine,
       requestId: string,
       userMessageId: string,
-      opts?: { dryRun?: boolean }
+      opts?: { dryRun?: boolean; cwd?: string }
     ) => {
       const drv = driverFor(engine)
       // Движок так не умеет — это ответ, а не ошибка: интерфейс обязан сказать
@@ -727,7 +728,31 @@ export function registerIpc(ctx: IpcContext): void {
         return { canRewind: false, refused: 'unsupported' }
       }
       try {
-        return await drv.rewindFiles(requestId, userMessageId, opts)
+        if (opts?.dryRun) {
+          // Сухой прогон отдаём как есть, но дополняем тем, чего движок не
+          // знает: какие пути он пропустит (ссылки), какие лежат вне папки
+          // агента и что вообще есть на диске. Об этом надо сказать ДО, а не
+          // числом после.
+          const dry = await drv.rewindFiles(requestId, userMessageId, { dryRun: true })
+          const paths = dry.filesChanged ?? []
+          return paths.length ? { ...dry, facts: await diskFacts(paths, opts.cwd ?? '') } : dry
+        }
+        /*
+         * Настоящий откат идёт вместе с пост-сверкой — иначе её однажды забудут.
+         *
+         * Числам движка нельзя верить как отчёту: часть его промахов не
+         * попадает никуда (пропала резервная копия — `skippedLinks` не
+         * выставлен, исключения нет, `canRewind:true`). Рапорт «откатили пять
+         * файлов» после того, как один остался прежним, — враньё уже ПОСЛЕ
+         * необратимого действия. Поэтому снимаем состояние до, откатываем и
+         * сверяем сами.
+         */
+        const plan = await drv.rewindFiles(requestId, userMessageId, { dryRun: true })
+        const paths = plan.filesChanged ?? []
+        const before = paths.length ? await diskFacts(paths, opts?.cwd ?? '') : []
+        const done = await drv.rewindFiles(requestId, userMessageId, { dryRun: false })
+        if (!before.length) return done
+        return { ...done, verdict: await verifyRewind(before, opts?.cwd ?? '') }
       } catch (e) {
         /*
          * Граница процессов ловит ВСЁ.

@@ -99,7 +99,7 @@ const api = {
       engine: AgentEngine,
       requestId: string,
       userMessageId: string,
-      opts?: { dryRun?: boolean }
+      opts?: { dryRun?: boolean; cwd?: string }
     ) =>
       ipcRenderer.invoke(
         CH.agentRewindFiles,

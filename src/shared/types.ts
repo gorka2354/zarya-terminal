@@ -530,6 +530,27 @@ export interface RewindFilesOutcome {
   skippedLinks?: number
   /** Отказ НАШЕЙ стороны, до движка. */
   refused?: 'busy' | 'no-session' | 'unsupported' | 'no-turn-id'
+  /**
+   * Что лежит на диске по этим путям (сухой прогон).
+   *
+   * Движок про ссылки и про выход за папку молчит до самого конца — а решение
+   * человек принимает ДО.
+   */
+  facts?: Array<{
+    path: string
+    existsNow: boolean
+    linkSkipped?: boolean
+    outsideCwd?: boolean
+    size?: number
+    hash?: string
+  }>
+  /** Наша собственная сверка ПОСЛЕ отката: числам движка верить нельзя. */
+  verdict?: {
+    restored: number
+    untouched: number
+    unknown: number
+    untouchedPaths: string[]
+  }
 }
 
 export interface AiToolDef {

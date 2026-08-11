@@ -165,5 +165,37 @@ await withApp('ok', async (page) => {
   ok('ответ «движок так не умеет»', out?.refused === 'unsupported', out)
 })
 
+console.log('\n[8] Сухой прогон дополняется тем, чего движок не знает')
+await withApp('ok', async (page, work) => {
+  const { cid, turnId } = await turnWithId(page)
+  const dry = await call(page, cid, turnId, true, work)
+  // Движок называет только пути. Есть ли файл на диске, не ссылка ли это и не
+  // лежит ли он вне папки агента — он молчит до самого конца, а человек
+  // принимает решение ДО.
+  ok('к путям приложены факты с диска', Array.isArray(dry?.facts), dry)
+  ok(
+    'факт есть на каждый путь',
+    (dry?.facts ?? []).length === (dry?.filesChanged ?? []).length,
+    dry?.facts
+  )
+  ok(
+    'сказано, существует ли файл сейчас',
+    (dry?.facts ?? []).every((f) => typeof f.existsNow === 'boolean'),
+    dry?.facts
+  )
+})
+
+console.log('\n[9] После настоящего отката считаем сами, а не верим числам движка')
+await withApp('ok', async (page, work) => {
+  const { cid, turnId } = await turnWithId(page)
+  const real = await call(page, cid, turnId, false, work)
+  ok('пост-сверка приложена к результату', !!real?.verdict, real)
+  // Фейк на диске ничего не менял: значит файл остался прежним, и это НЕ
+  // успех. Промолчать здесь — соврать уже после необратимого действия.
+  ok('файл, до которого откат не дошёл, посчитан', real?.verdict?.untouched === 1, real?.verdict)
+  ok('и назван поимённо', (real?.verdict?.untouchedPaths ?? []).length === 1, real?.verdict)
+  ok('успехов не приписано', real?.verdict?.restored === 0, real?.verdict)
+})
+
 console.log(`\nИтог: ${pass} ok, ${fail} fail`)
 process.exit(fail ? 1 : 0)
