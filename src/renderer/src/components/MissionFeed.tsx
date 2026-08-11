@@ -5,7 +5,8 @@ import { currentLang, t, useLang } from '@/lib/i18n'
 import { paneDraft } from '@/state/paneDrafts'
 import { toMarkdown, transcriptFileName } from '@shared/transcript'
 import { formatDuration, formatRelative, shortenPath } from '@/lib/ansi'
-import { editPreview, type EditPreview } from '@shared/editDiff'
+import { editPreview, lineDiff, type EditPreview } from '@shared/editDiff'
+import { listChanges, type ChangedFile } from '@shared/changes'
 import { useBlocksStore } from '@/state/blocksStore'
 import { useSessionsStore } from '@/state/sessionsStore'
 import { setBarModeOf, setRaw, useUiStore } from '@/state/uiStore'
@@ -456,7 +457,12 @@ export const MissionFeed = memo(function MissionFeed({
               />
             ))}
             {hasConv && conv && (
-              <AgentSection conv={conv} cwd={cwdShort} afterBlocks={blocks.length > 0} />
+              <AgentSection
+                conv={conv}
+                cwd={cwdShort}
+                cwdFull={cwd}
+                afterBlocks={blocks.length > 0}
+              />
             )}
             {conv?.queued && (
               <div className="zy-mf-queued">
@@ -633,10 +639,19 @@ function buildResultIndex(conv: Conversation): FeedConv['results'] {
 function AgentSection({
   conv,
   cwd,
+  cwdFull,
   afterBlocks
 }: {
   conv: Conversation
   cwd: string
+  /*
+   * Полный путь папки — отдельным пропом, потому что `cwd` выше по ленте уже
+   * ОБРЕЗАН для показа (shortenPath). Показывать обрезанный правильно, а вот
+   * спрашивать по нему git нельзя: такой папки не существует, и панель
+   * «что изменилось» молча показала бы пустой список — то есть соврала бы,
+   * что ничего не менялось.
+   */
+  cwdFull: string
   /** Выше в ленте есть команды терминала — тогда границу видно и она нужна. */
   afterBlocks: boolean
 }): React.JSX.Element {
@@ -679,6 +694,7 @@ function AgentSection({
           key={i}
           msg={m}
           cwd={cwd}
+          cwdFull={cwdFull}
           covered={covered}
           gateId={gateId}
           interrupted={(interrupted ?? []).includes(i)}
@@ -974,12 +990,15 @@ function PlanPanel({ plan }: { plan?: import('@shared/agentPlan').AgentPlan }): 
 const AgentMessage = memo(function AgentMessage({
   msg,
   cwd,
+  cwdFull,
   covered,
   gateId,
   interrupted
 }: {
   msg: Conversation['messages'][number]
   cwd: string
+  /** Настоящая папка панели — для git. `cwd` обрезан и годится только для показа. */
+  cwdFull: string
   /** Инструменты, о которых уже рассказала строка субагента выше. */
   covered: Set<string>
   /** Гейт, который одобрит голый Enter, — по нему карточка подсвечивается. */
@@ -1004,42 +1023,14 @@ const AgentMessage = memo(function AgentMessage({
     // Ход из одних картинок — законный: «что тут не так?» со скриншотом.
     if (!text && !images.length) return null
     return (
-      <div className="zy-mf-user">
-        <span className="zy-mf-spark">
-          <PixelIcon name="star" />
-        </span>
-        <span className="zy-mf-cwd">{cwd}</span>
-        <span className="zy-mf-chev">
-          <PixelIcon name="chevron-right" />
-        </span>
-        <span className="zy-mf-user-text">{text}</span>
-        {interrupted && (
-          <span
-            className="zy-mf-user-cut"
-            title={t('feed.interruptedHint')}
-          >
-            {t('feed.interrupted')}
-          </span>
-        )}
-        {msg.ts != null && <span className="zy-mf-user-time">{fmtClock(msg.ts)}</span>}
-        {images.length > 0 && (
-          <div className="zy-mf-user-imgs">
-            {images.map((img, i) => (
-              <figure key={i} className="zy-mf-img">
-                <img
-                  src={`data:${img.mediaType};base64,${img.data}`}
-                  alt={img.name ?? t('feed.image', { n: i + 1 })}
-                  loading="lazy"
-                />
-                <figcaption>
-                  #{i + 1} · {img.width}×{img.height}
-                  {img.name ? ` · ${img.name}` : ''}
-                </figcaption>
-              </figure>
-            ))}
-          </div>
-        )}
-      </div>
+      <UserTurn
+        text={text}
+        images={images}
+        cwd={cwd}
+        cwdFull={cwdFull}
+        ts={msg.ts}
+        interrupted={interrupted}
+      />
     )
   }
   return (
@@ -1519,6 +1510,241 @@ function EditDiff({
     </div>
   )
 }
+
+/**
+ * Ход человека: сам пузырь и кнопка «что изменилось» под ним.
+ *
+ * Кнопка живёт здесь, а не в общей шапке ленты, потому что вопрос человека
+ * всегда звучит про КОНКРЕТНОЕ место разговора: «что он натворил, пока делал
+ * вот это». Панель под своим ходом отвечает ровно на него, а панель где-то
+ * сбоку заставляла бы вспоминать, к чему она относится.
+ *
+ * Кнопка приглушена и проявляется на наведении: на длинной ленте она стоит у
+ * каждого хода, и в полную силу это был бы частокол.
+ */
+function UserTurn({
+  text,
+  images,
+  cwd,
+  cwdFull,
+  ts,
+  interrupted
+}: {
+  text: string
+  images: Array<Extract<AiContentPart, { type: 'image' }>>
+  /** Обрезанный путь — только для показа в строке хода. */
+  cwd: string
+  /** Настоящая папка — только она годится для git. */
+  cwdFull: string
+  ts?: number
+  interrupted?: boolean
+}): React.JSX.Element {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="zy-mf-userturn">
+      <div className="zy-mf-user">
+        <span className="zy-mf-spark">
+          <PixelIcon name="star" />
+        </span>
+        <span className="zy-mf-cwd">{cwd}</span>
+        <span className="zy-mf-chev">
+          <PixelIcon name="chevron-right" />
+        </span>
+        <span className="zy-mf-user-text">{text}</span>
+        {interrupted && (
+          <span className="zy-mf-user-cut" title={t('feed.interruptedHint')}>
+            {t('feed.interrupted')}
+          </span>
+        )}
+        {ts != null && <span className="zy-mf-user-time">{fmtClock(ts)}</span>}
+        <button
+          type="button"
+          className={`zy-mf-changes-btn${open ? ' zy-mf-changes-btn--on' : ''}`}
+          onClick={() => setOpen((v) => !v)}
+          title={t('feed.changesOpen')}
+        >
+          <Icon name="branch" size={11} />
+          <span>{t('feed.changes')}</span>
+        </button>
+        {images.length > 0 && (
+          <div className="zy-mf-user-imgs">
+            {images.map((img, i) => (
+              <figure key={i} className="zy-mf-img">
+                <img
+                  src={`data:${img.mediaType};base64,${img.data}`}
+                  alt={img.name ?? t('feed.image', { n: i + 1 })}
+                  loading="lazy"
+                />
+                <figcaption>
+                  #{i + 1} · {img.width}×{img.height}
+                  {img.name ? ` · ${img.name}` : ''}
+                </figcaption>
+              </figure>
+            ))}
+          </div>
+        )}
+      </div>
+      {open && <ChangesPanel cwd={cwdFull} />}
+    </div>
+  )
+}
+
+/** Больше этого не рисуем: панель — обзор, а не редактор. */
+const CHANGE_MAX_ROWS = 300
+
+const CHANGE_LABEL = {
+  deleted: 'feed.changeDeleted',
+  renamed: 'feed.changeRenamed',
+  modified: 'feed.changeModified',
+  added: 'feed.changeAdded',
+  untracked: 'feed.changeUntracked'
+} as const
+
+/**
+ * «Что изменилось в проекте» — единственное место, которое видит ВСЕ изменения.
+ *
+ * Родной откат движка знает только про правки своих инструментов: работу
+ * оболочки (`npm install`, `rm`, сборка), субагентов, соседней панели и самого
+ * человека он не трекает вовсе. Поэтому панель построена не на том, что нам
+ * рассказал агент, а на состоянии рабочего дерева — git видит всё, кем бы оно
+ * ни было сделано, и работает одинаково на любом движке.
+ *
+ * Читаем и только читаем: `gitStatus` и `gitDiffFile` в главном процессе
+ * read-only и укреплены против чужого `.git/config` (см. gitService.ts). Ни
+ * одной записывающей команды здесь нет и быть не должно.
+ */
+function ChangesPanel({ cwd }: { cwd: string }): React.JSX.Element {
+  useLang()
+  const [state, setState] = useState<{ busy: boolean; files: ChangedFile[]; noGit: boolean }>({
+    busy: true,
+    files: [],
+    noGit: false
+  })
+  const [nonce, setNonce] = useState(0)
+
+  useEffect(() => {
+    let alive = true
+    setState((s) => ({ ...s, busy: true }))
+    void window.zarya.git.status(cwd).then((st) => {
+      if (!alive) return
+      // null от gitStatus значит ровно одно: спросить git не удалось (нет git,
+      // не репозиторий, таймаут). Пустой список файлов — это другое: репозиторий
+      // есть и он чист. Разные ответы человеку, поэтому и разные ветки.
+      setState({ busy: false, files: listChanges(st), noGit: !st })
+    })
+    return () => {
+      alive = false
+    }
+  }, [cwd, nonce])
+
+  return (
+    <div className="zy-mf-changes">
+      <div className="zy-mf-changes-top">
+        <span className="zy-mf-changes-title">{t('feed.changesTitle')}</span>
+        {!state.busy && state.files.length > 0 && (
+          <span className="zy-mf-changes-count">
+            {t('feed.changesSummary', { n: state.files.length })}
+          </span>
+        )}
+        <button
+          type="button"
+          className="zy-mf-changes-reload"
+          onClick={() => setNonce((n) => n + 1)}
+          title={t('feed.changesReload')}
+        >
+          <Icon name="refresh" size={11} />
+        </button>
+      </div>
+      {state.busy ? (
+        <div className="zy-mf-changes-empty">{t('feed.changesBusy')}</div>
+      ) : state.noGit ? (
+        <div className="zy-mf-changes-empty">{t('feed.changesNoGit')}</div>
+      ) : state.files.length === 0 ? (
+        <div className="zy-mf-changes-empty">{t('feed.changesNone')}</div>
+      ) : (
+        <ul className="zy-mf-changes-list">
+          {state.files.map((f) => (
+            <ChangedFileRow key={f.path} file={f} cwd={cwd} />
+          ))}
+        </ul>
+      )}
+      {/* Без репозитория пояснять нечего: строка про сравнение с коммитом там,
+          где коммитов нет вовсе, только сбивает с толку. */}
+      {!state.noGit && <div className="zy-mf-changes-hint">{t('feed.changesHint')}</div>}
+    </div>
+  )
+}
+
+/** Строка файла: вид, путь и дифф по требованию — содержимое тянем только при раскрытии. */
+function ChangedFileRow({ file, cwd }: { file: ChangedFile; cwd: string }): React.JSX.Element {
+  const [open, setOpen] = useState(false)
+  const [diff, setDiff] = useState<{ rows: DiffRow[]; more: number; problem?: string } | null>(null)
+
+  useEffect(() => {
+    if (!open || diff) return
+    let alive = true
+    void window.zarya.git.diffFile(cwd, file.path).then((d) => {
+      if (!alive) return
+      if (!d) return setDiff({ rows: [], more: 0, problem: t('feed.changeNoDiff') })
+      // Двоичное содержимое, прочитанное как utf8, — это столбец кракозябр.
+      // Честнее сказать «двоичный файл», чем показать мусор и промолчать.
+      if (d.original.includes('\u0000') || d.modified.includes('\u0000')) {
+        return setDiff({ rows: [], more: 0, problem: t('feed.changeBinary') })
+      }
+      const all = lineDiff(d.original, d.modified)
+      setDiff({ rows: all.slice(0, CHANGE_MAX_ROWS), more: Math.max(0, all.length - CHANGE_MAX_ROWS) })
+    })
+    return () => {
+      alive = false
+    }
+  }, [open, diff, cwd, file.path])
+
+  return (
+    <li className={`zy-mf-change zy-mf-change--${file.kind}`}>
+      <button
+        type="button"
+        className="zy-mf-change-head"
+        // У каталога нет содержимого, которое можно показать построчно.
+        // Мёртвая каретка обещала бы его — поэтому у папки её просто нет.
+        onClick={file.dir ? undefined : () => setOpen((v) => !v)}
+        title={file.path}
+      >
+        <span className="zy-mf-change-kind">
+          {t(file.dir && file.kind === 'untracked' ? 'feed.changeUntrackedDir' : CHANGE_LABEL[file.kind])}
+        </span>
+        <span className="zy-mf-change-path">{shortenPath(file.path, 64)}</span>
+        {!file.dir && (
+          <span className="zy-mf-change-caret">
+            <Icon name={open ? 'chevron-up' : 'chevron-down'} size={11} />
+          </span>
+        )}
+      </button>
+      {open && (
+        <div className="zy-mf-diff-body">
+          {!diff ? (
+            <div className="zy-mf-diff-more">{t('feed.changesBusy')}</div>
+          ) : diff.problem ? (
+            <div className="zy-mf-diff-more">{diff.problem}</div>
+          ) : (
+            <>
+              {diff.rows.map((l, i) => (
+                <div key={i} className={`zy-mf-diff-row zy-mf-diff-row--${l.kind}`}>
+                  <span className="zy-mf-diff-sign">
+                    {l.kind === 'add' ? '+' : l.kind === 'del' ? '−' : ' '}
+                  </span>
+                  <span className="zy-mf-diff-text">{l.text || ' '}</span>
+                </div>
+              ))}
+              {diff.more > 0 && <div className="zy-mf-diff-more">{t('feed.diffTruncated')}</div>}
+            </>
+          )}
+        </div>
+      )}
+    </li>
+  )
+}
+
+type DiffRow = ReturnType<typeof lineDiff>[number]
 
 const ToolCard = memo(function ToolCard({
   id,

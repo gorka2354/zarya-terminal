@@ -1630,3 +1630,140 @@
   color: var(--fg-faint);
   font-style: italic;
 }
+
+/* ── «Что изменилось в проекте» ─────────────────────────────────────────────
+   Панель под ходом человека: состояние рабочего дерева по git. Единственное
+   место в ленте, которое видит и работу оболочки, и правки соседней панели, и
+   свои собственные — поэтому её тон нейтральный, а не «наш агент молодец».
+   Кнопка приглушена и проявляется по наведению: она стоит у КАЖДОГО хода, и в
+   полную силу это был бы частокол на всю ленту. */
+.zy-mf-userturn {
+  display: block;
+}
+.zy-mf-changes-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: 2px 6px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg-faint);
+  font-family: var(--font-tech);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  opacity: 0.35;
+  transition: opacity 0.12s ease, color 0.12s ease, background 0.12s ease;
+}
+.zy-mf-userturn:hover .zy-mf-changes-btn,
+.zy-mf-changes-btn:focus-visible {
+  opacity: 1;
+}
+.zy-mf-changes-btn:hover {
+  color: var(--fg);
+  background: var(--bg-elev2);
+}
+.zy-mf-changes-btn--on {
+  opacity: 1;
+  color: var(--accent-2);
+}
+.zy-mf-changes {
+  margin: 0 0 8px 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elev1);
+  overflow: hidden;
+}
+.zy-mf-changes-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.zy-mf-changes-title {
+  font-family: var(--font-tech);
+  font-size: 11.5px;
+  letter-spacing: 0.06em;
+  color: var(--fg-dim);
+}
+.zy-mf-changes-count {
+  font-family: var(--font-tech);
+  font-size: 11px;
+  color: var(--fg-faint);
+}
+.zy-mf-changes-reload {
+  margin-left: auto;
+  display: inline-flex;
+  padding: 2px;
+  border: none;
+  background: transparent;
+  color: var(--fg-faint);
+  cursor: pointer;
+}
+.zy-mf-changes-reload:hover {
+  color: var(--fg);
+}
+.zy-mf-changes-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.zy-mf-changes-empty,
+.zy-mf-changes-hint {
+  padding: 8px 10px;
+  font-size: 11.5px;
+  color: var(--fg-faint);
+  line-height: 1.45;
+}
+/* Граница инструмента стоит всегда, а не всплывает после промаха: человек
+   должен знать её ДО того, как сделает вывод «агент ничего не трогал». */
+.zy-mf-changes-hint {
+  border-top: 1px solid var(--border);
+}
+.zy-mf-change + .zy-mf-change {
+  border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+}
+.zy-mf-change-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 10px;
+  border: none;
+  background: transparent;
+  color: var(--fg-dim);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.zy-mf-change-head:hover {
+  background: var(--bg-elev2);
+}
+.zy-mf-change-kind {
+  flex: none;
+  min-width: 92px;
+  font-family: var(--font-tech);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  color: var(--fg-faint);
+}
+.zy-mf-change--deleted .zy-mf-change-kind {
+  color: var(--danger);
+}
+.zy-mf-change--added .zy-mf-change-kind,
+.zy-mf-change--untracked .zy-mf-change-kind {
+  color: var(--success);
+}
+.zy-mf-change-path {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+}
+.zy-mf-change-caret {
+  flex: none;
+  color: var(--fg-faint);
+}
