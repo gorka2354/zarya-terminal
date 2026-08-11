@@ -716,7 +716,7 @@ export function registerIpc(ctx: IpcContext): void {
       engine: AgentEngine,
       requestId: string,
       userMessageId: string,
-      opts?: { dryRun?: boolean; cwd?: string }
+      opts?: { dryRun?: boolean; cwd?: string; resume?: string }
     ) => {
       const drv = driverFor(engine)
       // Движок так не умеет — это ответ, а не ошибка: интерфейс обязан сказать
@@ -733,7 +733,11 @@ export function registerIpc(ctx: IpcContext): void {
           // знает: какие пути он пропустит (ссылки), какие лежат вне папки
           // агента и что вообще есть на диске. Об этом надо сказать ДО, а не
           // числом после.
-          const dry = await drv.rewindFiles(requestId, userMessageId, { dryRun: true })
+          const dry = await drv.rewindFiles(requestId, userMessageId, {
+            dryRun: true,
+            resume: opts.resume,
+            cwd: opts.cwd
+          })
           const paths = dry.filesChanged ?? []
           return paths.length ? { ...dry, facts: await diskFacts(paths, opts.cwd ?? '') } : dry
         }
@@ -747,10 +751,18 @@ export function registerIpc(ctx: IpcContext): void {
          * необратимого действия. Поэтому снимаем состояние до, откатываем и
          * сверяем сами.
          */
-        const plan = await drv.rewindFiles(requestId, userMessageId, { dryRun: true })
+        const plan = await drv.rewindFiles(requestId, userMessageId, {
+          dryRun: true,
+          resume: opts?.resume,
+          cwd: opts?.cwd
+        })
         const paths = plan.filesChanged ?? []
         const before = paths.length ? await diskFacts(paths, opts?.cwd ?? '') : []
-        const done = await drv.rewindFiles(requestId, userMessageId, { dryRun: false })
+        const done = await drv.rewindFiles(requestId, userMessageId, {
+          dryRun: false,
+          resume: opts?.resume,
+          cwd: opts?.cwd
+        })
         if (!before.length) return done
         return { ...done, verdict: await verifyRewind(before, opts?.cwd ?? '') }
       } catch (e) {

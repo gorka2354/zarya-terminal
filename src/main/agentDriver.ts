@@ -128,7 +128,7 @@ export interface AgentDriver {
   rewindFiles?(
     requestId: string,
     userMessageId: string,
-    opts?: { dryRun?: boolean }
+    opts?: { dryRun?: boolean; resume?: string; cwd?: string }
   ): Promise<RewindFilesOutcome>
   /**
    * Здоровье движка (гейт: `capabilities.health`).

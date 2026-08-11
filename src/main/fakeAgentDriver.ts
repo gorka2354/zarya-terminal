@@ -1234,7 +1234,7 @@ export class FakeAgentDriver implements AgentDriver {
   async rewindFiles(
     requestId: string,
     userMessageId: string,
-    opts?: { dryRun?: boolean }
+    opts?: { dryRun?: boolean; resume?: string; cwd?: string }
   ): Promise<RewindFilesOutcome> {
     // Свою неспособность фейк обязан признавать сам: соседний движок (gemini)
     // использует этот же класс, и без проверки он «умел» бы откат.
@@ -1242,7 +1242,13 @@ export class FakeAgentDriver implements AgentDriver {
       return { canRewind: false, refused: 'unsupported' }
     }
     if (!userMessageId) return { canRewind: false, refused: 'no-turn-id' }
-    if (!this.started.has(requestId)) return { canRewind: false, refused: 'no-session' }
+    if (!this.started.has(requestId)) {
+      // Живой сессии нет. Настоящий драйвер в этом месте поднимает сессию по
+      // `resume` (откат ходом не является и токенов не стоит); фейк процессов
+      // не заводит, но обязан различать те же два случая — иначе прогон не
+      // проверит, доехал ли `resume` до драйвера вообще.
+      if (!opts?.resume) return { canRewind: false, refused: 'no-session' }
+    }
     // Тот же гейт, что у настоящего драйвера: пока висит невыясненный вопрос
     // или идёт ход, файлы трогать нельзя. Без него прогон проходил бы по
     // короткому пути и ничего не проверял.

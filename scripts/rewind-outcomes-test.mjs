@@ -197,5 +197,27 @@ await withApp('ok', async (page, work) => {
   ok('успехов не приписано', real?.verdict?.restored === 0, real?.verdict)
 })
 
+console.log('\n[10] Беседа без живой сессии: откат не требует «сначала напишите агенту»')
+await withApp('ok', async (page, work) => {
+  // В этой беседе хода не было — живого процесса нет. Настоящий драйвер
+  // поднимает сессию по resume ради самого отката (он не стоит ни одного
+  // обращения к модели). Проверяем, что resume доезжает до драйвера и что без
+  // него ответ честный, а не выдуманный.
+  const out = await page.evaluate(
+    ([c]) =>
+      window.zarya.agent.rewindFiles('codex', 'conv-not-live', 'uuid-x', {
+        dryRun: true,
+        cwd: c,
+        resume: 'session-from-disk'
+      }),
+    [work]
+  )
+  ok('с resume откат берётся за дело', out?.refused !== 'no-session', out)
+  const without = await page.evaluate(() =>
+    window.zarya.agent.rewindFiles('codex', 'conv-not-live', 'uuid-x', { dryRun: true })
+  )
+  ok('без resume — честное «нет сессии»', without?.refused === 'no-session', without)
+})
+
 console.log(`\nИтог: ${pass} ok, ${fail} fail`)
 process.exit(fail ? 1 : 0)

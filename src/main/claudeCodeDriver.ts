@@ -513,6 +513,13 @@ interface Session {
   interrupted?: boolean
   /** Ход ушёл с флагом чекпоинтов — значит падение на нём можно и нужно пережить. */
   checkpointFlag?: boolean
+  /**
+   * Сессия поднята ТОЛЬКО ради служебного запроса и снимается сразу после него.
+   *
+   * Нужен, чтобы её не приняли за живую беседу: у аренды нет хода, нет ленты и
+   * нет права пережить запрос, ради которого её подняли.
+   */
+  lease?: boolean
   /** Какой бинарник запущен: если он флага не знает, запомним это именно про него. */
   exePath?: string
   /** С чем ход был начат — чтобы повторить его без флага, ничего не потеряв. */
@@ -2545,6 +2552,109 @@ export class ClaudeCodeDriver implements AgentDriver {
     }
   }
 
+
+  /**
+   * Поднять сессию ТОЛЬКО ради служебного запроса — без хода.
+   *
+   * Беседа, восстановленная с диска, живого процесса не имеет: движок поднимут
+   * лишь следующим ходом. А откат файлов ходом не является — он не стоит ни
+   * одного обращения к модели и работает в поднятой заново сессии (проверено
+   * прогоном: новый процесс, resume, ни одного отправленного сообщения — откат
+   * сработал). Требовать «сначала напишите что-нибудь агенту» ради возврата
+   * файлов значило бы выдумать ограничение на пустом месте.
+   *
+   * Аренда — обычная сессия под тем же requestId, просто без первого сообщения,
+   * и снимается сразу после ответа. Отдельной карты для неё не заводим
+   * намеренно: две карты живых сессий разошлись бы, и следующий ход получил бы
+   * второй процесс на тот же транскрипт.
+   *
+   * Поток читаем в фоне и в ленту НЕ эмитим: события этой сессии относятся к
+   * служебному подъёму, а не к разговору. Чужой init в ленте читался бы как
+   * «агент что-то сделал сам».
+   */
+  private async leaseSession(
+    requestId: string,
+    o: { resume: string; cwd?: string }
+  ): Promise<Session | null> {
+    let sdk: typeof import('@anthropic-ai/claude-agent-sdk')
+    try {
+      sdk = await loadSdk('@anthropic-ai/claude-agent-sdk')
+    } catch {
+      return null
+    }
+    const pick = await claudeExe()
+    const exePath = pick.path
+    const checkpoints = checkpointDecision({
+      // Аренду поднимают РАДИ отката: без копий движок ответит «rewinding is
+      // not enabled», и подъём был бы напрасным.
+      wanted: true,
+      exeKnown: !!exePath,
+      flagSupported: exePath ? await supportsFlag(exePath, REPLAY_FLAG, EXE_RECHECK_MS) : false
+    })
+    const input = createInputQueue()
+    const abort = new AbortController()
+    const options: Options = {
+      cwd: o.cwd,
+      abortController: abort,
+      resume: o.resume,
+      permissionMode: 'default',
+      stderr: (data) => {
+        if (process.env.ZARYA_DEBUG) console.error('[claude-code lease]', data.trim())
+      },
+      ...(exePath ? { pathToClaudeCodeExecutable: exePath } : {}),
+      ...(checkpoints.enable
+        ? { enableFileCheckpointing: true, extraArgs: checkpoints.extraArgs }
+        : {})
+    }
+    let query: Query
+    try {
+      query = sdk.query({ prompt: input.iterable, options })
+    } catch {
+      return null
+    }
+    const session: Session = {
+      query,
+      input,
+      abort,
+      cwd: o.cwd,
+      perms: new Map(),
+      pendingQuestions: new Map(),
+      bypass: false,
+      editsAuto: false,
+      shellTasks: new Set<string>(),
+      taskKinds: new Map<string, string>(),
+      toolNames: new Map<string, string>(),
+      running: false,
+      // Аренда всегда продолжает существующую беседу: она и поднимается только
+      // ради неё.
+      resumed: true,
+      lease: true
+    }
+    this.sessions.set(requestId, session)
+    void (async () => {
+      try {
+        for await (const msg of session.query as AsyncIterable<SDKMessage>) {
+          void msg
+        }
+      } catch {
+        /* аренда умерла — это не сбой разговора */
+      }
+    })()
+    return session
+  }
+
+  /** Снять аренду: она живёт ровно на один служебный запрос. */
+  private dropLease(requestId: string, session: Session): void {
+    if (!session.lease) return
+    if (this.sessions.get(requestId) === session) this.sessions.delete(requestId)
+    try {
+      session.abort.abort()
+      session.input.close()
+    } catch {
+      /* уже мертва */
+    }
+  }
+
   /**
    * Вернуть файлы к состоянию на выбранном ходе.
    *
@@ -2565,11 +2675,20 @@ export class ClaudeCodeDriver implements AgentDriver {
   async rewindFiles(
     requestId: string,
     userMessageId: string,
-    opts?: { dryRun?: boolean }
+    opts?: { dryRun?: boolean; resume?: string; cwd?: string }
   ): Promise<RewindFilesOutcome> {
     if (!userMessageId) return { canRewind: false, refused: 'no-turn-id' }
-    const session = this.sessions.get(requestId)
-    if (!session) return { canRewind: false, refused: 'no-session' }
+    let session = this.sessions.get(requestId)
+    let leased = false
+    if (!session) {
+      // Беседа поднята с диска: живого процесса нет. Но откат ходом не
+      // является и токенов не стоит — поднимаем сессию под него самого.
+      if (!opts?.resume) return { canRewind: false, refused: 'no-session' }
+      const lease = await this.leaseSession(requestId, { resume: opts.resume, cwd: opts.cwd })
+      if (!lease) return { canRewind: false, refused: 'no-session' }
+      session = lease
+      leased = true
+    }
     if (session.running || session.perms.size > 0) {
       return { canRewind: false, refused: 'busy' }
     }
@@ -2591,6 +2710,10 @@ export class ClaudeCodeDriver implements AgentDriver {
       // Настоящий откат при выключенных чекпоинтах бросает — для человека это
       // тот же случай, что и canRewind:false, и объяснение у него то же.
       return { canRewind: false, error: e instanceof Error ? e.message : String(e) }
+    } finally {
+      // Аренда живёт ровно на один запрос: оставить её значило бы держать
+      // чужой процесс и подсунуть его следующему ходу вместо своей сессии.
+      if (leased && session) this.dropLease(requestId, session)
     }
   }
 
