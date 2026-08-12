@@ -174,7 +174,12 @@ export interface ZaryaApi {
       engine: AgentEngine,
       requestId: string,
       userMessageId: string,
-      opts?: { dryRun?: boolean; cwd?: string; resume?: string }
+      opts?: {
+        dryRun?: boolean
+        cwd?: string
+        resume?: string
+        seen?: Array<{ path: string; existsNow: boolean; hash?: string }>
+      }
     ): Promise<RewindFilesOutcome>
     stopTask(
       engine: AgentEngine,

@@ -8,7 +8,7 @@ import { formatDuration, formatRelative, shortenPath } from '@/lib/ansi'
 import { editPreview, lineDiff, type EditPreview } from '@shared/editDiff'
 import { listChanges, type ChangedFile } from '@shared/changes'
 import { matchTouched, touchedSince } from '@shared/touched'
-import { rewindPlan, type FileFacts, type RewindMark } from '@shared/rewindPlan'
+import { rewindPlan, type FileFacts, type RewindMark, type SeenFile } from '@shared/rewindPlan'
 import { canRewindTurn } from '@shared/rewindGate'
 import { useBlocksStore } from '@/state/blocksStore'
 import { useSessionsStore } from '@/state/sessionsStore'
@@ -1676,10 +1676,25 @@ function RewindCard({
   onClose: () => void
 }): React.JSX.Element {
   useLang()
+  const [refresh, setRefresh] = useState(0)
+  /*
+   * Предупреждение «пока вы читали, изменилось» живёт ОТДЕЛЬНО от списка.
+   *
+   * Расхождение заставляет перезапросить список, а перерисовка стирала бы
+   * собственное предупреждение — человек увидел бы просто новый список и не
+   * понял, почему его нажатие ничего не сделало.
+   */
+  const [stale, setStale] = useState<string[]>([])
   const [state, setState] = useState<
     | { kind: 'checking' }
     | { kind: 'refused'; text: string }
-    | { kind: 'plan'; rows: ReturnType<typeof rewindPlan>['rows']; noList: boolean }
+    | {
+        kind: 'plan'
+        rows: ReturnType<typeof rewindPlan>['rows']
+        noList: boolean
+        /** Что человек ВИДИТ сейчас — с этим сверимся перед записью. */
+        seen: SeenFile[]
+      }
     | { kind: 'running' }
     | {
         kind: 'done'
@@ -1720,7 +1735,7 @@ function RewindCard({
         const paths = r.filesChanged ?? []
         // «Откатить можно, но файлов не назову» — это не пустой список: пустой
         // читается как «ничего не изменится», то есть как знание, которого нет.
-        if (!paths.length) return setState({ kind: 'plan', rows: [], noList: true })
+        if (!paths.length) return setState({ kind: 'plan', rows: [], noList: true, seen: [] })
         const byPath = new Map((r.facts ?? []).map((f) => [f.path, f]))
         const facts: FileFacts[] = paths.map((path) => {
           const d = byPath.get(path)
@@ -1736,20 +1751,40 @@ function RewindCard({
             ...(d?.changedAfterAgent ? { changedAfterAgent: true } : {})
           }
         })
-        setState({ kind: 'plan', rows: rewindPlan(facts).rows, noList: false })
+        setState({
+          kind: 'plan',
+          rows: rewindPlan(facts).rows,
+          noList: false,
+          seen: (r.facts ?? []).map((f) => ({
+            path: f.path,
+            existsNow: f.existsNow,
+            ...(f.hash ? { hash: f.hash } : {})
+          }))
+        })
       })
     return () => {
       alive = false
     }
-  }, [conv.id, conv.engine, conv.claudeSessionId, turnId, cwd])
+  }, [conv.id, conv.engine, conv.claudeSessionId, turnId, cwd, refresh])
 
-  const run = async (): Promise<void> => {
+  const run = async (seen: SeenFile[]): Promise<void> => {
+    setStale([])
     setState({ kind: 'running' })
     const r = await window.zarya.agent.rewindFiles(conv.engine as never, conv.id, turnId, {
       dryRun: false,
       cwd,
-      resume: conv.claudeSessionId
+      resume: conv.claudeSessionId,
+      // То, что человек видел своими глазами. Если мир с тех пор изменился,
+      // главный процесс НЕ пишет, а возвращает расхождение.
+      seen
     })
+    if (r.refused === 'stale') {
+      // Перерисовываем список заново и требуем нового нажатия: согласие
+      // относилось к другому набору файлов.
+      setStale(r.stale ?? [])
+      setRefresh((n) => n + 1)
+      return
+    }
     if (r.refused || (!r.canRewind && r.error)) {
       return setState({ kind: 'refused', text: r.error || t('rw.refuse.busy') })
     }
@@ -1778,6 +1813,11 @@ function RewindCard({
       {state.kind === 'running' && <div className="zy-rw-note">{t('rw.checking')}</div>}
       {state.kind === 'refused' && <div className="zy-rw-refuse">{state.text}</div>}
 
+      {stale.length > 0 && (
+        <div className="zy-rw-stale">
+          {t('rw.stale', { n: stale.length })} {stale.map((x) => shortenPath(x, 40)).join(', ')}
+        </div>
+      )}
       {state.kind === 'plan' && (
         <>
           {state.noList ? (
@@ -1849,7 +1889,7 @@ function RewindCard({
 
       {state.kind === 'plan' && !state.noList && (
         <div className="zy-rw-actions">
-          <button type="button" className="zy-rw-go" onClick={() => void run()}>
+          <button type="button" className="zy-rw-go" onClick={() => void run(state.seen)}>
             {t('rw.go')}
           </button>
           <button type="button" className="zy-rw-cancel" onClick={onClose}>

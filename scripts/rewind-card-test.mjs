@@ -15,7 +15,7 @@
  *    которых откат не дошёл.
  */
 import { _electron as electron } from 'playwright'
-import { mkdtempSync, readdirSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -200,6 +200,38 @@ await withApp('ok', async (page, work, userData) => {
   }
   ok('копия и правда лежит на диске', saved.length > 0, saved)
   if (shots) await page.screenshot({ path: join(shots, 'rewind-backup.png') })
+})
+
+console.log('\n[7] Мир изменился, пока человек читал карточку — откат не пишет')
+await withApp('ok', async (page, work) => {
+  const cid = await page.evaluate(() => window.__zaryaStartAgent?.('codex', 'привет'))
+  await page.waitForTimeout(1200)
+  await page.evaluate((c) => window.__zaryaSetBypassFor?.(c, true), cid)
+  await page.waitForTimeout(400)
+  await page.evaluate(() => window.__zaryaFollowUp?.('tool edit: поправь файл'))
+  await page.waitForTimeout(2400)
+
+  await clickRewind(page)
+  await page.waitForTimeout(1800)
+  const before = await text(page, '.zy-rw')
+  ok('карточка показала список', /fake\.ts/.test(before), before.slice(0, 200))
+
+  // Пока человек читает, файл меняется — так бывает от соседней панели, от
+  // сборки или от сохранения из редактора.
+  writeFileSync(join(work, 'src', 'shared', 'fake.ts'), 'CHANGED WHILE READING\n')
+  await page.waitForTimeout(300)
+
+  await page.click('.zy-rw-go')
+  await page.waitForTimeout(2000)
+  const after = await text(page, '.zy-rw')
+  // Согласие относилось к другому набору файлов: писать по устаревшему списку
+  // значит стереть то, о чём карточка не сказала.
+  ok('сказано, что список изменился', /Пока вы читали/.test(after), after.slice(0, 300))
+  ok('откат НЕ выполнен', !/Вернулось/.test(after), after.slice(0, 300))
+  // И правка человека на месте: мы ничего не тронули.
+  const onDisk = readFileSync(join(work, 'src', 'shared', 'fake.ts'), 'utf8')
+  ok('файл на диске не тронут', /CHANGED WHILE READING/.test(onDisk), onDisk)
+  if (shots) await page.screenshot({ path: join(shots, 'rewind-stale.png') })
 })
 
 console.log(`\nИтог: ${pass} ok, ${fail} fail`)

@@ -174,3 +174,45 @@ export function rewindPlan(facts: FileFacts[]): RewindView {
 export function noFileList(files: string[] | undefined | null): boolean {
   return !files || files.length === 0
 }
+
+/** Снимок файла, каким его ВИДЕЛ человек в карточке. */
+export interface SeenFile {
+  path: string
+  existsNow: boolean
+  hash?: string
+}
+
+/**
+ * Что изменилось, пока человек читал карточку.
+ *
+ * Между показом списка и нажатием проходит время — иногда минута: в карточке
+ * четыре вида значков и три строки предупреждений, их читают. За эту минуту
+ * человек мог сам сохранить файл из соседнего редактора, агент в другой панели
+ * — дописать свой, а сборка — переписать lock. Откатить по устаревшему списку
+ * значит стереть то, о чём карточка не сказала: формально мы не соврали,
+ * фактически показали снимок, которого уже нет.
+ *
+ * Сравнение по содержимому и по факту существования: и то и другое человек
+ * видел своими глазами.
+ */
+export function staleAgainst(seen: SeenFile[], fresh: SeenFile[]): string[] {
+  const now = new Map(fresh.map((f) => [f.path, f]))
+  const out: string[] = []
+  for (const s of seen) {
+    const f = now.get(s.path)
+    // Путь исчез из списка движка — это тоже другой мир, чем показанный.
+    if (!f) {
+      out.push(s.path)
+      continue
+    }
+    if (f.existsNow !== s.existsNow) {
+      out.push(s.path)
+      continue
+    }
+    // Отпечатка нет ни там ни там (ссылка, нечитаемый файл) — сравнивать
+    // нечем, и объявлять расхождение по незнанию нельзя: это была бы ложная
+    // тревога, которая учит жать «дальше» не глядя.
+    if (s.hash && f.hash && s.hash !== f.hash) out.push(s.path)
+  }
+  return out
+}

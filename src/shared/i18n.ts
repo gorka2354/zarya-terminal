@@ -372,6 +372,7 @@ export const RU: Dict = {
    * Обещание «мы сохранили» без адреса — половина обещания: человек должен
    * знать, куда идти за своей правкой.
    */
+  'rw.stale': 'Пока вы читали, изменилось ({n}) — список обновлён, посмотрите заново:',
   'rw.backup': 'Ваши правки сохранены перед откатом ({n}) — папка копий',
   'rw.backupOpen': 'открыть',
   'rw.backupSkipped': 'НЕ сохранено (не поместилось в лимит): {n}',
@@ -1800,6 +1801,7 @@ export const EN: Dict = {
   'rw.doneCounts': 'Restored: {ok} · unchanged: {same} · unknown: {unknown}',
   'rw.doneSkipped': 'Links skipped: {n}',
   'rw.stayed': 'Stayed unchanged:',
+  'rw.stale': 'While you were reading, {n} file(s) changed — the list is refreshed, look again:',
   'rw.backup': 'Your edits were saved before the rewind ({n}) — backup folder',
   'rw.backupOpen': 'open',
   'rw.backupSkipped': 'NOT saved (over the limit): {n}',

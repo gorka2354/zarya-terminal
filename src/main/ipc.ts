@@ -37,6 +37,7 @@ import { checkpointUsage, fileHistoryDir } from './checkpointStore'
 import { diskFacts, verifyRewind } from './rewindFacts'
 import { agentFiles, agentFileStore, compareNote } from './agentFileMap'
 import { backupBeforeRewind } from './rewindBackup'
+import { staleAgainst, type SeenFile } from '@shared/rewindPlan'
 import type { SettingsStore } from './settingsStore'
 import type { SttService } from './sttService'
 import type { UpdateService } from './updateService'
@@ -718,7 +719,13 @@ export function registerIpc(ctx: IpcContext): void {
       engine: AgentEngine,
       requestId: string,
       userMessageId: string,
-      opts?: { dryRun?: boolean; cwd?: string; resume?: string }
+      opts?: {
+        dryRun?: boolean
+        cwd?: string
+        resume?: string
+        /** Снимок, который человек видел в карточке (для сверки перед записью). */
+        seen?: SeenFile[]
+      }
     ) => {
       const drv = driverFor(engine)
       // Движок так не умеет — это ответ, а не ошибка: интерфейс обязан сказать
@@ -778,6 +785,24 @@ export function registerIpc(ctx: IpcContext): void {
         })
         const paths = plan.filesChanged ?? []
         const before = paths.length ? await diskFacts(paths, opts?.cwd ?? '') : []
+        /*
+         * Сверка с тем, что человек ВИДЕЛ.
+         *
+         * Между показом карточки и нажатием проходит время: список читают. За
+         * эту минуту файл могли сохранить из редактора, дописать соседней
+         * панелью или переписать сборкой. Откатить по устаревшему списку значит
+         * стереть то, о чём карточка не сказала — формально не соврали,
+         * фактически показали снимок, которого уже нет. Поэтому не пишем, а
+         * возвращаем расхождение: карточка перерисуется и потребует НОВОГО
+         * нажатия.
+         */
+        if (opts?.seen?.length) {
+          const stale = staleAgainst(
+            opts.seen,
+            before.map((f) => ({ path: f.path, existsNow: f.existsNow, hash: f.hash }))
+          )
+          if (stale.length) return { canRewind: false, refused: 'stale', stale }
+        }
         /*
          * Страхуем то, что человек рискует потерять НАВСЕГДА.
          *

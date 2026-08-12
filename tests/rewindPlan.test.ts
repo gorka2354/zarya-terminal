@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { marksFor, noFileList, rewindPlan, type FileFacts } from '@shared/rewindPlan'
+import {
+  marksFor,
+  noFileList,
+  rewindPlan,
+  staleAgainst,
+  type FileFacts,
+  type SeenFile
+} from '@shared/rewindPlan'
 
 /**
  * Карточка отката — единственное место, где человек узнаёт, что произойдёт с
@@ -110,5 +117,43 @@ describe('rewindPlan', () => {
     expect(noFileList([])).toBe(true)
     expect(noFileList(undefined)).toBe(true)
     expect(noFileList(['a.ts'])).toBe(false)
+  })
+})
+
+/**
+ * Между показом карточки и нажатием проходит время: список читают. За эту
+ * минуту файл могли сохранить из редактора, дописать соседней панелью или
+ * переписать сборкой. Откат по устаревшему списку стирает то, о чём карточка
+ * не сказала — формально не соврали, фактически показали снимок, которого уже
+ * нет.
+ */
+describe('staleAgainst', () => {
+  const f = (path: string, hash?: string, existsNow = true): SeenFile => ({
+    path,
+    existsNow,
+    ...(hash ? { hash } : {})
+  })
+
+  it('ничего не менялось — расхождений нет', () => {
+    const seen = [f('a.ts', 'h1'), f('b.ts', 'h2')]
+    expect(staleAgainst(seen, seen)).toEqual([])
+  })
+
+  it('содержимое изменилось, пока читали', () => {
+    expect(staleAgainst([f('a.ts', 'h1')], [f('a.ts', 'h2')])).toEqual(['a.ts'])
+  })
+
+  it('файл появился или исчез — тоже другой мир', () => {
+    expect(staleAgainst([f('a.ts', 'h1')], [f('a.ts', 'h1', false)])).toEqual(['a.ts'])
+    expect(staleAgainst([f('a.ts', undefined, false)], [f('a.ts', 'h1')])).toEqual(['a.ts'])
+  })
+
+  it('путь пропал из списка движка — считаем расхождением', () => {
+    expect(staleAgainst([f('a.ts', 'h1')], [])).toEqual(['a.ts'])
+  })
+
+  it('нечитаемый файл не объявляем изменившимся по незнанию', () => {
+    // Ложная тревога дороже пропуска: она приучает жать «дальше» не глядя.
+    expect(staleAgainst([f('link.ts')], [f('link.ts')])).toEqual([])
   })
 })
