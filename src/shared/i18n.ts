@@ -1512,6 +1512,19 @@ export const RU: Dict = {
   'set.micGoneDesc':
     'Пока его нет, диктовка пишет в системный микрофон и говорит об этом. Настройка сохранена — устройство подхватится, когда вернётся.',
   'set.micBackToSystem': 'Вернуть системный',
+  'set.micMode': 'Как диктовать',
+  'set.micMode.stream': 'Нажал и говорю',
+  'set.micMode.phrase': 'Одна фраза',
+  'set.micMode.hold': 'Нажал — говорю — нажал',
+  /*
+   * Описание меняется вместе с выбором: три строки разом человек не сравнивает,
+   * а вот «что будет, если оставить так» — читает.
+   */
+  'set.micMode.stream.desc': 'Текст идёт по ходу речи. Стоп — второе нажатие.',
+  'set.micMode.phrase.desc': 'Замолчали — текст пришёл, микрофон закрылся сам.',
+  'set.micMode.hold.desc': 'Ни пауз, ни разрезания: текст придёт целиком в конце.',
+  'set.micHold':
+    'Ctrl+Shift+Space — зажал и говоришь, отпустил и получил текст. Работает в любом режиме.',
   'set.micCheck': 'Проверка микрофона',
   'set.micCheckDesc': 'Что слышит Заря: уровень, порог речи и конец фразы.',
   /*
@@ -2411,6 +2424,14 @@ export const EN: Dict = {
   'set.micGoneDesc':
     'While it is gone, dictation records through the system microphone and says so. The setting is kept — the device is picked up when it returns.',
   'set.micBackToSystem': 'Back to system default',
+  'set.micMode': 'How to dictate',
+  'set.micMode.stream': 'Press and talk',
+  'set.micMode.phrase': 'Single phrase',
+  'set.micMode.hold': 'Press — talk — press',
+  'set.micMode.stream.desc': 'Text arrives as you speak. Second press stops it.',
+  'set.micMode.phrase.desc': 'Go quiet — the text arrives and the mic closes itself.',
+  'set.micMode.hold.desc': 'No pauses, no splitting: the text arrives whole at the end.',
+  'set.micHold': 'Ctrl+Shift+Space — hold and talk, release to get the text. Works in every mode.',
   'set.micCheck': 'Microphone check',
   'set.micCheckDesc': 'What Zarya hears: level, speech threshold and end of phrase.',
   'mic.start': 'Check',

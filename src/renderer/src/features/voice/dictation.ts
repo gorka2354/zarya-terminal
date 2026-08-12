@@ -13,6 +13,16 @@
 export interface Recording {
   /** Stop, release the microphone and return the captured mono PCM. */
   stop: () => Promise<{ samples: Float32Array; sampleRate: number }>
+  /**
+   * Забрать накопленное и продолжить запись.
+   *
+   * Ради режима «нажал и говорю»: текст обязан появляться ПО ХОДУ речи, а не
+   * через минуту после её конца. Кусок отдаётся на распознавание в паузе — там,
+   * где его можно отрезать, не разрубив слово, — и микрофон при этом не
+   * закрывается ни на миг: закрыть и открыть заново значит потерять начало
+   * следующей фразы.
+   */
+  take: () => { samples: Float32Array; sampleRate: number }
   /** Give up without transcribing (Esc). */
   cancel: () => void
   /** Current input level, 0..1 — drives the on-screen meter. */
@@ -151,20 +161,33 @@ export async function startRecording(
   // живом железе не воспроизводился.
   for (const t of tracks) t.addEventListener('ended', onEnded)
 
+  /** Склеить накопленные куски в один буфер. */
+  const drain = (): Float32Array => {
+    const samples = new Float32Array(total)
+    let at = 0
+    for (const c of chunks) {
+      samples.set(c, at)
+      at += c.length
+    }
+    return samples
+  }
+
   return {
     fellBackToDefault,
     level: () => Math.min(1, peak * 1.6),
     cancel: release,
+    take: () => {
+      const samples = drain()
+      // Отданное не копим второй раз: иначе каждый следующий кусок содержал бы
+      // все предыдущие, и текст дублировался бы в строке.
+      chunks.length = 0
+      total = 0
+      return { samples, sampleRate: ctx.sampleRate }
+    },
     stop: async () => {
       const sampleRate = ctx.sampleRate
       release()
-      const samples = new Float32Array(total)
-      let at = 0
-      for (const c of chunks) {
-        samples.set(c, at)
-        at += c.length
-      }
-      return { samples, sampleRate }
+      return { samples: drain(), sampleRate }
     }
   }
 }

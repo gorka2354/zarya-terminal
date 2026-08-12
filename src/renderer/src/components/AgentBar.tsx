@@ -24,7 +24,7 @@ import { nextGate } from '@/features/ai/gates'
 import { registerPaneKeys } from '@/features/ai/keyRouter'
 import { fileToAttachment, imageFilesFrom } from '@/features/ai/imageAttach'
 import { canAcceptMore, type ImageAttachment } from '@shared/images'
-import { dictationStop } from '@shared/dictationStop'
+import { chunkOverdue, dictationFlow, initialFlow } from '@shared/dictationFlow'
 import { Icon, EngineGlyph } from './Icon'
 import { PixelIcon } from './PixelIcon'
 import { isSilent, startRecording, type Recording } from '@/features/voice/dictation'
@@ -380,6 +380,7 @@ export const AgentBar = memo(function AgentBar({
   /** Бар ещё на экране. Ложь = запись, открывшуюся после ухода, надо закрыть. */
   const aliveRef = useRef(true)
   const voiceCfg = useSettingsStore((s) => s.settings.voice)
+  const voiceMode = voiceCfg.mode ?? 'stream'
   const [mics, setMics] = useState<MicDevice[]>([])
   const { menu: micMenu, open: openMicMenu } = useContextMenu()
   /** Recording started by holding the key — silence must not end it early. */
@@ -1046,6 +1047,38 @@ ${prev}`
    * mistakes and this bar runs commands, so the last read belongs to the human.
    * The mic opens on an explicit action and closes the moment the take ends.
    */
+  /**
+   * Дописать распознанное в строку.
+   *
+   * Одна дорога и для куска на лету, и для конца записи: две разные вставки
+   * рано или поздно разъехались бы в мелочах — где пробел, где фокус, что
+   * делать с пустотой, — а человек видит одно и то же поле.
+   */
+  const putSaid = (said: string): void => {
+    if (!said) return
+    setText((prev) => (prev ? `${prev} ${said}` : said))
+    setTimeout(() => ref.current?.focus(), 0)
+  }
+
+  /**
+   * Забрать накопленный кусок и распознать его, НЕ прерывая запись.
+   *
+   * Ради режима «нажал и говорю»: текст появляется по ходу речи. Микрофон не
+   * закрывается — иначе начало следующей фразы пропало бы, пока модель думает
+   * над предыдущей.
+   */
+  const flushChunk = async (): Promise<void> => {
+    const rec = recRef.current
+    if (!rec) return
+    const { samples, sampleRate } = rec.take()
+    if (isSilent(samples)) return
+    const res = await window.zarya.stt.transcribe(samples, sampleRate)
+    // Ошибку на куске не показываем красным: запись идёт, человек говорит, и
+    // выдёргивать его на сообщение посреди фразы — хуже, чем промолчать до
+    // конца, где ошибка всё равно всплывёт.
+    if (res.ok) putSaid((res.text ?? '').trim())
+  }
+
   const finishVoice = async (): Promise<void> => {
     const rec = recRef.current
     if (!rec) return
@@ -1072,11 +1105,13 @@ ${prev}`
     setVoiceNote('')
     const said = (res.text ?? '').trim()
     if (!said) {
-      useUiStore.getState().toast(t('voice.nothing'), 'error')
+      // В потоковом режиме молчать правильнее: последний кусок мог уже уехать в
+      // строку, и «ничего не расслышала» противоречило бы тому, что человек
+      // видит своими глазами.
+      if (voiceMode !== 'stream') useUiStore.getState().toast(t('voice.nothing'), 'error')
       return
     }
-    setText((t) => (t ? `${t} ${said}` : said))
-    setTimeout(() => ref.current?.focus(), 0)
+    putSaid(said)
   }
 
   const startVoice = async (): Promise<void> => {
@@ -1344,20 +1379,57 @@ ${prev}`
     []
   )
 
-  // Индикатор уровня и автостоп по тишине. Само решение — чистая функция
-  // (@shared/dictationStop): здесь только таймер и показания микрофона.
+  /*
+   * Индикатор уровня и ход диктовки.
+   *
+   * Решения — чистая функция (@shared/dictationFlow), здесь только таймер,
+   * показания микрофона и то, что нельзя вычислить: занят ли распознаватель.
+   * Режим удержания клавиши перевешивает настройку: человек держит клавишу
+   * ЗДЕСЬ И СЕЙЧАС, а настройка — про обычное нажатие.
+   */
   useEffect(() => {
     if (voice !== 'rec') return
-    let st = { heard: false, peak: 0, quietSince: 0, stop: false }
+    let st = initialFlow()
+    let busy = false
+    const send = (): void => {
+      // Два распознавания разом не запускаем: они делят один процесс, и второе
+      // всё равно ждало бы первого — зато куски могли бы уехать в строку не в
+      // том порядке, в каком были сказаны.
+      if (busy) return
+      busy = true
+      void flushChunk().finally(() => {
+        busy = false
+      })
+    }
     const timer = window.setInterval(() => {
       const lvl = recRef.current?.level() ?? 0
       setVoiceLevel(lvl)
-      st = dictationStop({ ...st, level: lvl, now: Date.now(), heldByKey: pttRef.current })
-      if (st.stop) void finishVoice()
+      const now = Date.now()
+      const d = dictationFlow(st, {
+        level: lvl,
+        now,
+        mode: pttRef.current ? 'hold' : voiceMode,
+        heldByKey: pttRef.current
+      })
+      st = { heard: d.heard, peak: d.peak, quietSince: d.quietSince, chunkSince: d.chunkSince }
+      if (d.stop) {
+        void finishVoice()
+        return
+      }
+      if (d.flush) {
+        send()
+        return
+      }
+      // Речь без единой паузы: режем по длине, иначе человек не увидит ни слова
+      // до самого конца — ровно то, от чего уходили.
+      if (voiceMode === 'stream' && !pttRef.current && chunkOverdue(st, now)) {
+        st = { ...st, chunkSince: 0, heard: false, quietSince: 0 }
+        send()
+      }
     }, 100)
     return () => clearInterval(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [voice])
+  }, [voice, voiceMode])
 
   // Закрепить режим за панелью при рождении. Без этого панель, в которой режим
   // ни разу не выбирали, продолжала бы читать общее умолчание — и менялась бы

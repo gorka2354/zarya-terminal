@@ -1,3 +1,4 @@
+import type { DictationMode } from './dictationFlow'
 import type { SecretProtection } from './secretProtection'
 import type { CustomSttModel } from './sttCustom'
 
@@ -274,6 +275,15 @@ export interface AiSettings {
 
 /** Диктовка: какой микрофон слушать. Распознавание всегда локальное. */
 export interface VoiceSettings {
+  /**
+   * Как ведёт себя диктовка при нажатии на значок.
+   *
+   * Три ритма работы, и они не сводятся один к другому (см. @shared/dictationFlow):
+   * 'stream' — нажал и говорю, текст дописывается по ходу, стоп по второму
+   * нажатию; 'phrase' — одна фраза, замолчал и получил текст; 'hold' — значок
+   * ведёт себя как удержание, конец только по второму нажатию, без разрезания.
+   */
+  mode?: DictationMode
   /**
    * Устройство ввода. '' = системное по умолчанию (следует за настройкой ОС).
    * Chromium солит deviceId для каждого origin — id переживает перезапуск, но

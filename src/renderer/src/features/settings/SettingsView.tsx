@@ -1348,6 +1348,7 @@ function VoiceTab(): React.JSX.Element {
 
   const list = usableMics(mics)
   const hidden = labelsHidden(mics)
+  const mode = voice.mode ?? 'stream'
   const options = [
     { value: '', label: t('set.micSystem') },
     ...list.map((d, i) => ({ value: d.deviceId, label: micName(d, i) }))
@@ -1393,6 +1394,22 @@ function VoiceTab(): React.JSX.Element {
         </Row>
       )}
       {/*
+        Режим — второй вопрос после «какой микрофон»: он про то, как человек
+        работает, а не про железо. Три ритма не сводятся один к другому, поэтому
+        выбор, а не тумблер «выключать при молчании».
+      */}
+      <Row title={t('set.micMode')} sub="MODE" desc={t(`set.micMode.${mode}.desc`)}>
+        <SelectField
+          value={mode}
+          options={[
+            { value: 'stream', label: t('set.micMode.stream') },
+            { value: 'phrase', label: t('set.micMode.phrase') },
+            { value: 'hold', label: t('set.micMode.hold') }
+          ]}
+          onChange={(v) => void update({ voice: { mode: v } as never })}
+        />
+      </Row>
+      {/*
         Проверка стоит СРАЗУ под выбором устройства: вопрос «тот ли микрофон
         выбран» и вопрос «слышит ли он меня» — один и тот же вопрос, и разносить
         их по разным местам значит заставлять человека помнить первый, пока он
@@ -1413,6 +1430,7 @@ function VoiceTab(): React.JSX.Element {
         </Row>
       )}
       <SttModels />
+      <div className="zy-item-sub zy-set-footnote">{t('set.micHold')}</div>
       <div className="zy-item-sub zy-set-footnote">{t('set.micNote')}</div>
     </section>
   )

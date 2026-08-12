@@ -1,5 +1,5 @@
 /**
- * Диктовка со значка обязана заканчиваться сама.
+ * Режим «одна фраза» обязан заканчиваться сам.
  *
  *   node scripts/voice-autostop-test.mjs
  *
@@ -57,7 +57,14 @@ note('копирую модель в изолированный профиль�
 cpSync(realModels, join(ud, 'models'), { recursive: true })
 writeFileSync(
   join(ud, 'settings.json'),
-  JSON.stringify({ appearance: { language: 'ru' }, sessions: { restoreOnLaunch: 'none' } })
+  JSON.stringify({
+    appearance: { language: 'ru' },
+    sessions: { restoreOnLaunch: 'none' },
+    // Режим задаётся ЯВНО: этот прогон про автостоп по молчанию, а он живёт
+    // только здесь. По умолчанию диктовка теперь потоковая и не заканчивается
+    // сама — это её обещание, и проверяет его voice-modes-test.
+    voice: { mode: 'phrase' }
+  })
 )
 
 const app = await electron.launch({

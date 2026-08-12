@@ -2,6 +2,11 @@
  * Дописать тишину в конец WAV.
  *
  *   node scripts/lib/wav-pad.mjs вход.wav выход.wav 4
+ *   node scripts/lib/wav-pad.mjs а.wav,б.wav выход.wav 6   # склейка с паузой
+ *
+ * Несколько входов склеиваются через паузу WAV_GAP секунд (по умолчанию 2): так
+ * получается запись из НЕСКОЛЬКИХ фраз — единственный способ проверить, что в
+ * потоковом режиме текст приходит по ходу речи, а не одним куском в конце.
  *
  * Нужно для прогонов с подменённым микрофоном: Chromium ЗАЦИКЛИВАЕТ файл, и без
  * паузы в конце получается человек, который говорит без остановки. Автостоп по
@@ -12,9 +17,10 @@
  */
 import { readFileSync, writeFileSync } from 'node:fs'
 
-const [src, dst, secStr] = process.argv.slice(2)
+const [srcArg, dst, secStr] = process.argv.slice(2)
 const seconds = Number(secStr || 4)
-const b = readFileSync(src)
+const sources = srcArg.split(',').filter(Boolean)
+const b = readFileSync(sources[0])
 
 if (b.toString('ascii', 0, 4) !== 'RIFF' || b.toString('ascii', 8, 12) !== 'WAVE') {
   console.error('это не WAV')
@@ -66,13 +72,34 @@ if (noise > 0) {
 }
 
 const head = b.subarray(0, data.pos + 8)
-const body = b.subarray(data.pos + 8, data.pos + 8 + data.size)
+let body = b.subarray(data.pos + 8, data.pos + 8 + data.size)
+
+// Остальные входы — их звук, разделённый паузой. Заголовки берём от первого:
+// прогоны генерируют файлы одним и тем же синтезатором, формат совпадает.
+const gap = Buffer.alloc(Math.round(bytesPerSec * Number(process.env.WAV_GAP || 2)))
+for (const extra of sources.slice(1)) {
+  const e = readFileSync(extra)
+  let p2 = 12
+  let d2 = null
+  while (p2 + 8 <= e.length) {
+    const id = e.toString('ascii', p2, p2 + 4)
+    const size = e.readUInt32LE(p2 + 4)
+    if (id === 'data') {
+      d2 = { pos: p2, size: Math.min(size, e.length - p2 - 8) }
+      break
+    }
+    p2 += 8 + size + (size % 2)
+  }
+  if (!d2) continue
+  body = Buffer.concat([body, gap, e.subarray(d2.pos + 8, d2.pos + 8 + d2.size)])
+}
+
 const out = Buffer.concat([head, body, pad])
 out.writeUInt32LE(out.length - 8, 4) // RIFF
 out.writeUInt32LE(body.length + pad.length, data.pos + 4) // data
 writeFileSync(dst, out)
 
-const было = data.size / bytesPerSec
+const было = body.length / bytesPerSec
 console.log(
   `${rate} Гц · ${bits} бит · ${channels} кан. | было ${было.toFixed(1)} с → стало ${(было + seconds).toFixed(1)} с` +
     (noise > 0 ? ` | хвост — ФОН ${noise}` : ' | хвост — тишина')
