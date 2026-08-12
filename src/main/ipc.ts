@@ -36,7 +36,7 @@ import { checkpointPolicy } from '@shared/checkpointPolicy'
 import { checkpointUsage, fileHistoryDir } from './checkpointStore'
 import { diskFacts, verifyRewind } from './rewindFacts'
 import { agentFiles, agentFileStore, compareNote } from './agentFileMap'
-import { backupBeforeRewind } from './rewindBackup'
+import { backupBeforeRewind, backupUsage, clearBackups } from './rewindBackup'
 import { staleAgainst, type SeenFile } from '@shared/rewindPlan'
 import type { SettingsStore } from './settingsStore'
 import type { SttService } from './sttService'
@@ -873,6 +873,11 @@ export function registerIpc(ctx: IpcContext): void {
       }
     }
   )
+  ipcMain.handle(CH.backupUsage, () => backupUsage())
+  ipcMain.handle(CH.backupClear, async () => {
+    await clearBackups()
+    return backupUsage()
+  })
   ipcMain.handle(CH.checkpointUsage, async () => ({
     dir: fileHistoryDir(),
     ...(await checkpointUsage())

@@ -124,6 +124,22 @@ try {
   ok('нажатие выключает', after === 'false', after)
   if (shots) await page.screenshot({ path: join(shots, 'checkpoint-setting.png') })
 
+  console.log('\n[4b] Наши копии показаны отдельно от копий движка')
+  const own = await page.evaluate(() =>
+    [...document.querySelectorAll('.zy-eng-sub, .zy-eng-note')]
+      .filter((el) => (el.checkVisibility ? el.checkVisibility() : !!el.offsetParent))
+      .map((e) => e.textContent ?? '')
+      .join('\n')
+  )
+  ok('сказано про копии Зари', /Заря своих копий пока не делала|Копии Зари/.test(own), own.slice(0, 300))
+  // Главное — не смешивать: копии движка живут по его сроку, наши по нашему, и
+  // предлагать удалить чужое мы не вправе.
+  ok(
+    'сказано, что копии движка — отдельно',
+    /Копии самого движка живут отдельно/.test(own),
+    own.slice(0, 400)
+  )
+
   console.log('\n[5] В изолированном прогоне чекпоинты всё равно не уходят движку')
   // Настройка включена (пункт 4), но запуск изолированный. Проверяем не UI, а
   // то, что реально уедет драйверу: копии лежат ВНЕ подменяемой папки, поэтому

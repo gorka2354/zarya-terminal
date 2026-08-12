@@ -1844,6 +1844,20 @@ function RewindCard({
     if (r.refused || (!r.canRewind && r.error)) {
       return setState({ kind: 'refused', text: r.error || t('rw.refuse.busy') })
     }
+    /*
+     * Диск переписан — вкладки об этом не знают.
+     *
+     * Чистые перечитываем молча; грязные не трогаем и называем человеку: его
+     * несохранённый текст дороже нашей аккуратности, а Ctrl+S поверх отката
+     * затёр бы всё, что мы только что вернули.
+     */
+    const touched = r.filesChanged ?? []
+    if (touched.length) {
+      const left = await useEditorStore.getState().reloadFromDisk(touched)
+      if (left.length) {
+        useUiStore.getState().toast(t('rw.tabsDirty', { n: left.length }), 'error')
+      }
+    }
     // Отметка в ленте — ЧИСЛАМИ, без путей: лента уезжает на диск и в
     // стенограмму, которую человек отдаёт коллеге. Подробности живут в
     // карточке, она эфемерна.

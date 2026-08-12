@@ -113,6 +113,43 @@ export async function cleanupOld(now = Date.now()): Promise<void> {
   }
 }
 
+/**
+ * Сколько занимают НАШИ страховочные копии — и сколько их.
+ *
+ * Показываем отдельно от папки движка: там его копии и его же срок, а здесь
+ * наши, и убирать их человек вправе в один клик. Смешать их в одну цифру
+ * значило бы предложить удалить чужое.
+ */
+export async function backupUsage(): Promise<{ dir: string; bytes: number; runs: number }> {
+  const dir = root()
+  let entries: string[]
+  try {
+    entries = await fs.readdir(dir)
+  } catch {
+    return { dir, bytes: 0, runs: 0 }
+  }
+  let bytes = 0
+  for (const name of entries) {
+    try {
+      for (const f of await fs.readdir(join(dir, name))) {
+        bytes += (await fs.stat(join(dir, name, f))).size
+      }
+    } catch {
+      /* исчезло по дороге */
+    }
+  }
+  return { dir, bytes, runs: entries.length }
+}
+
+/** Убрать ВСЕ наши страховочные копии по просьбе человека. */
+export async function clearBackups(): Promise<void> {
+  try {
+    await fs.rm(root(), { recursive: true, force: true })
+  } catch {
+    /* нечего убирать */
+  }
+}
+
 /** Снять копии этой беседы (беседу закрыли или удалили). */
 export async function forgetBackups(convId: string): Promise<void> {
   let entries: string[]

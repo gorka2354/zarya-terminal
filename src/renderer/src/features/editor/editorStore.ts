@@ -52,6 +52,18 @@ interface EditorState {
   /** Called by EditorPane on every keystroke to mirror the Monaco model into the store. */
   setContent: (id: string, content: string) => void
   save: (id: string) => Promise<void>
+  /**
+   * Перечитать открытые вкладки после того, как файлы изменились НЕ через нас.
+   *
+   * Так бывает после отката кода: диск переписан, а вкладка про это не знает.
+   * Дальше два исхода, и оба плохие — Ctrl+S затирает откат устаревшей копией,
+   * либо человек закрывает вкладку и теряет свой текст. Поэтому чистые вкладки
+   * молча обновляем, а грязные НЕ трогаем: несохранённый текст человека дороже
+   * нашей аккуратности, и решать за него мы не вправе.
+   *
+   * Возвращает пути, которые остались расходиться, — о них надо сказать вслух.
+   */
+  reloadFromDisk: (paths: string[]) => Promise<string[]>
   clearPendingReveal: () => void
 }
 
@@ -229,6 +241,35 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     } catch (e) {
       useUiStore.getState().toast(t('ed.saveFail', { name: f.name, err: String(e) }), 'error')
     }
+  },
+
+  reloadFromDisk: async (paths) => {
+    const norm = (p: string): string => p.split('\\').join('/').toLowerCase()
+    const wanted = new Set(paths.map(norm))
+    const open = get().files.filter((f) => f.kind === 'file' && wanted.has(norm(f.path)))
+    const untouched: string[] = []
+    for (const f of open) {
+      if (f.dirty) {
+        // Несохранённый текст человека дороже нашей аккуратности: молча
+        // перезаписать его буфер — значит потерять то, что он писал.
+        untouched.push(f.path)
+        continue
+      }
+      try {
+        const res = await window.zarya.fs.readFile(f.path)
+        if (res.binary) continue
+        set((s) => ({
+          files: s.files.map((x) =>
+            x.id === f.id ? { ...x, content: res.content, savedContent: res.content } : x
+          )
+        }))
+      } catch {
+        // Файла может уже не быть — откат умеет и удалять. Вкладку оставляем
+        // человеку: закрыть её за него значит убрать с глаз то, что он видел.
+        untouched.push(f.path)
+      }
+    }
+    return untouched
   },
 
   clearPendingReveal: () => set({ pendingReveal: null })

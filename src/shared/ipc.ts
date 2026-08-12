@@ -141,6 +141,9 @@ export const CH = {
   showItemInFolder: 'app:show-item-in-folder',
   /** Сколько места занимают копии файлов движка (для честной строки в настройках). */
   checkpointUsage: 'checkpoints:usage',
+  /** Наши страховочные копии: размер и очистка по просьбе человека. */
+  backupUsage: 'rewind:backup-usage',
+  backupClear: 'rewind:backup-clear',
   /** Вернуть файлы к состоянию на ходе (или посмотреть, что будет). */
   agentRewindFiles: 'agent:rewind-files',
   pickDirectory: 'app:pick-directory',

@@ -340,11 +340,21 @@ function FileCheckpoints(): React.JSX.Element {
     missing?: boolean
     partial?: boolean
   } | null>(null)
+  /*
+   * НАШИ страховочные копии — отдельной строкой от копий движка.
+   *
+   * Там его копии и его же срок, здесь наши, и убрать их человек вправе в один
+   * клик. Смешать их в одну цифру значило бы предложить удалить чужое.
+   */
+  const [mine, setMine] = useState<{ dir: string; bytes: number; runs: number } | null>(null)
 
   useEffect(() => {
     let alive = true
     void window.zarya.app.checkpointUsage().then((u) => {
       if (alive) setUsage(u)
+    })
+    void window.zarya.app.backupUsage().then((b) => {
+      if (alive) setMine(b)
     })
     return () => {
       alive = false
@@ -371,6 +381,26 @@ function FileCheckpoints(): React.JSX.Element {
         </button>
         <span className="zy-eng-cp-label">{t('eng.cpToggle')}</span>
       </div>
+      {mine && (
+        <div className="zy-eng-sub">
+          {mine.runs === 0
+            ? t('eng.cpBackupNone')
+            : t('eng.cpBackup', { size: human(mine.bytes), n: mine.runs })}
+          {mine.runs > 0 && (
+            <>
+              {' · '}
+              <button
+                type="button"
+                className="zy-eng-btn"
+                onClick={() => void window.zarya.app.backupClear().then(setMine)}
+              >
+                {t('eng.cpBackupClear')}
+              </button>
+            </>
+          )}
+          <div className="zy-eng-note">{t('eng.cpBackupWhat')}</div>
+        </div>
+      )}
       {usage && (
         <div className="zy-eng-sub">
           {usage.missing || usage.bytes === 0

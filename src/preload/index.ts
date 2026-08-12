@@ -284,6 +284,8 @@ const api = {
     openExternal: (url: string) => ipcRenderer.send(CH.openExternal, url),
     showItemInFolder: (path: string) => ipcRenderer.send(CH.showItemInFolder, path),
     checkpointUsage: () => ipcRenderer.invoke(CH.checkpointUsage),
+    backupUsage: () => ipcRenderer.invoke(CH.backupUsage),
+    backupClear: () => ipcRenderer.invoke(CH.backupClear),
     pickDirectory: () => ipcRenderer.invoke(CH.pickDirectory),
     /** Папка из командной строки (`zarya .`) — от ВТОРОГО запуска, на лету. */
     onOpenFolderArg: (cb: (msg: { dir?: string; bad?: string }) => void) =>

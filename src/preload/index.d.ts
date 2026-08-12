@@ -344,6 +344,8 @@ export interface ZaryaApi {
     onMaximized(cb: (maximized: boolean) => void): Unsub
     openExternal(url: string): void
     showItemInFolder(path: string): void
+    backupUsage(): Promise<{ dir: string; bytes: number; runs: number }>
+    backupClear(): Promise<{ dir: string; bytes: number; runs: number }>
     checkpointUsage(): Promise<{
       dir: string
       bytes: number

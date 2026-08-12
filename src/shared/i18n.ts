@@ -330,6 +330,11 @@ export const RU: Dict = {
   'eng.cpSizeAtLeast': 'Сейчас занято: не меньше {size} · сессий: {n}',
   'eng.cpEmpty': 'Копий пока нет',
   'eng.cpOpen': 'Открыть папку',
+  'eng.cpBackup': 'Копии Зари перед откатами: {size} · откатов: {n}',
+  'eng.cpBackupNone': 'Заря своих копий пока не делала',
+  'eng.cpBackupClear': 'удалить копии Зари',
+  'eng.cpBackupWhat':
+    'Это НАШИ копии: перед откатом Заря сохраняет то, что рискует пропасть. Копии самого движка живут отдельно и удаляются им же.',
   'eng.cpQa': 'В изолированном прогоне выключено принудительно: копии лежат вне подменяемой папки.',
   'drv.ccNoRewindFlag':
     'Этот Claude Code не понимает флаг для отката кода — ход повторён без него. Чекпоинты файлов недоступны на этой версии CLI.',
@@ -381,6 +386,8 @@ export const RU: Dict = {
   'rw.feedNote': 'Файлы откачены к этому ходу: вернулось {ok}, осталось прежними {same}',
   'rw.feedNoteBackup': ' · копии ваших правок сохранены ({n})',
   'rw.stale': 'Пока вы читали, изменилось ({n}) — список обновлён, посмотрите заново:',
+  'rw.tabsDirty':
+    'Вкладок с несохранёнными правками: {n}. Они НЕ обновлены — сохранение поверх отката вернёт старое.',
   'rw.backup': 'Ваши правки сохранены перед откатом ({n}) — папка копий',
   'rw.backupOpen': 'открыть',
   'rw.backupSkipped': 'НЕ сохранено (не поместилось в лимит): {n}',
@@ -1777,6 +1784,11 @@ export const EN: Dict = {
   'eng.cpSizeAtLeast': 'Currently used: at least {size} · sessions: {n}',
   'eng.cpEmpty': 'No copies yet',
   'eng.cpOpen': 'Open the folder',
+  'eng.cpBackup': 'Zarya copies made before rewinds: {size} · rewinds: {n}',
+  'eng.cpBackupNone': 'Zarya has not made any copies yet',
+  'eng.cpBackupClear': 'delete Zarya copies',
+  'eng.cpBackupWhat':
+    'These are OUR copies: before a rewind Zarya saves what is at risk. The engine keeps its own copies separately and removes them itself.',
   'eng.cpQa': 'Force-disabled in an isolated run: the copies live outside the overridden folder.',
   'drv.ccNoRewindFlag':
     'This Claude Code does not understand the code-rewind flag — the turn was retried without it. File checkpoints are unavailable on this CLI version.',
@@ -1812,6 +1824,8 @@ export const EN: Dict = {
   'rw.feedNote': 'Files rewound to this turn: restored {ok}, unchanged {same}',
   'rw.feedNoteBackup': ' · your edits were backed up ({n})',
   'rw.stale': 'While you were reading, {n} file(s) changed — the list is refreshed, look again:',
+  'rw.tabsDirty':
+    'Tabs with unsaved edits: {n}. They were NOT refreshed — saving over the rewind would bring the old text back.',
   'rw.backup': 'Your edits were saved before the rewind ({n}) — backup folder',
   'rw.backupOpen': 'open',
   'rw.backupSkipped': 'NOT saved (over the limit): {n}',
