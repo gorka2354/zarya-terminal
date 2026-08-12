@@ -1681,7 +1681,15 @@ function RewindCard({
     | { kind: 'refused'; text: string }
     | { kind: 'plan'; rows: ReturnType<typeof rewindPlan>['rows']; noList: boolean }
     | { kind: 'running' }
-    | { kind: 'done'; ok: number; same: number; unknown: number; skipped: number; stayed: string[] }
+    | {
+        kind: 'done'
+        ok: number
+        same: number
+        unknown: number
+        skipped: number
+        stayed: string[]
+        backup?: { dir?: string; saved: number; skipped: string[] }
+      }
   >({ kind: 'checking' })
 
   useEffect(() => {
@@ -1752,7 +1760,8 @@ function RewindCard({
       same: r.verdict?.untouched ?? 0,
       unknown: r.verdict?.unknown ?? 0,
       skipped: r.skippedLinks ?? 0,
-      stayed: r.verdict?.untouchedPaths ?? []
+      stayed: r.verdict?.untouchedPaths ?? [],
+      ...(r.backup ? { backup: r.backup } : {})
     })
   }
 
@@ -1808,6 +1817,27 @@ function RewindCard({
             {t('rw.doneCounts', { ok: state.ok, same: state.same, unknown: state.unknown })}
           </div>
           {state.skipped > 0 && <div>{t('rw.doneSkipped', { n: state.skipped })}</div>}
+          {state.backup && (state.backup.saved > 0 || state.backup.skipped.length > 0) && (
+            <div className="zy-rw-backup">
+              {state.backup.saved > 0 && (
+                <>
+                  {t('rw.backup', { n: state.backup.saved })}{' '}
+                  <button
+                    type="button"
+                    className="zy-rw-link"
+                    onClick={() =>
+                      state.backup?.dir && window.zarya.app.showItemInFolder(state.backup.dir)
+                    }
+                  >
+                    {t('rw.backupOpen')}
+                  </button>
+                </>
+              )}
+              {state.backup.skipped.length > 0 && (
+                <div>{t('rw.backupSkipped', { n: state.backup.skipped.length })}</div>
+              )}
+            </div>
+          )}
           {state.stayed.length > 0 && (
             <div className="zy-rw-stayed">
               {t('rw.stayed')}{' '}

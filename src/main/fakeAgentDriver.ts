@@ -17,7 +17,7 @@ import type {
 import { rewindPoint } from '@shared/rewind'
 import type { AgentDriver } from './agentDriver'
 import { irreversible } from '@shared/irreversible'
-import { agentFiles } from './agentFileMap'
+import { agentFiles, agentFileStore } from './agentFileMap'
 import type { ToolFact } from '@shared/toolFacts'
 
 /**
@@ -837,7 +837,9 @@ export class FakeAgentDriver implements AgentDriver {
             // человека от правки агента и там, где прогон идёт на фейке.
             // Отпечаток берётся ПОСЛЕ записи: до неё файла может не быть вовсе,
             // и карта запомнила бы пустоту.
-            void agentFiles.noteAfter(requestId, abs)
+            void agentFiles
+              .noteAfter(requestId, abs)
+              .then(() => agentFileStore.schedule(agentFiles, requestId))
           }
           this.emit(requestId, {
             type: 'tool_result',

@@ -15,7 +15,7 @@
  *    которых откат не дошёл.
  */
 import { _electron as electron } from 'playwright'
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -69,7 +69,7 @@ async function withApp(mode, fn) {
     await page.evaluate((d) => window.__zaryaNewTerminal?.(d), work)
     await page.waitForTimeout(1500)
     await page.evaluate(() => window.__zaryaSetUi?.({ sidebarView: null }))
-    await fn(page, work)
+    await fn(page, work, userData)
   } finally {
     await app.close()
   }
@@ -162,7 +162,7 @@ await withApp('off', async (page) => {
 })
 
 console.log('\n[6] Правку человека поверх агента карточка называет ДО отката')
-await withApp('ok', async (page, work) => {
+await withApp('ok', async (page, work, userData) => {
   // Ровно тот случай, ради которого весь инкремент: агент записал файл,
   // человек дописал в него руками, и родной откат снёс бы дописанное молча —
   // сухой прогон движка об этом не предупреждает вовсе.
@@ -183,6 +183,23 @@ await withApp('ok', async (page, work) => {
   ok('карточка предупреждает о потере правки', /правка пропадёт|правили после хода/.test(card), card.slice(0, 500))
   ok('и не называет файл спокойным «вернётся»', !/вернётся к прежнему виду/.test(card), card.slice(0, 500))
   if (shots) await page.screenshot({ path: join(shots, 'rewind-human-edit.png') })
+
+  // Откат необратим: у движка есть «до агента», но нет «до отката». Значит
+  // спорный файл обязан быть скопирован ДО записи, и человеку сказано, куда
+  // идти за своей правкой.
+  await page.click('.zy-rw-go')
+  await page.waitForTimeout(2000)
+  const done = await text(page, '.zy-rw-done')
+  ok('сказано, что правки сохранены перед откатом', /сохранены перед откатом/.test(done), done)
+  // Обещание «сохранили» проверяем не по словам на экране, а по диску.
+  let saved = []
+  try {
+    saved = readdirSync(join(userData, 'rewind-backup'))
+  } catch {
+    saved = []
+  }
+  ok('копия и правда лежит на диске', saved.length > 0, saved)
+  if (shots) await page.screenshot({ path: join(shots, 'rewind-backup.png') })
 })
 
 console.log(`\nИтог: ${pass} ok, ${fail} fail`)

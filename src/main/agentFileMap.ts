@@ -1,4 +1,7 @@
+import { app } from 'electron'
+import { join } from 'path'
 import { fileHash } from './rewindFacts'
+import { readJson, writeJsonAtomic } from './jsonStore'
 
 /**
  * Что агент записал в файл — и трогал ли его кто-то ещё после этого.
@@ -126,6 +129,85 @@ export function compareNote(
   if (!diskHash) return { observed: true, changedAfterAgent: false }
   return { observed: true, changedAfterAgent: diskHash !== note.hash }
 }
+
+
+/** Больше этого числа бесед не храним: файл не должен расти сам по себе. */
+const MAX_CONVS = 60
+
+type MapFile = Record<string, { at: number; files: Record<string, FileNote> }>
+
+/**
+ * Карта переживает перезапуск — иначе она бесполезна ровно в самом частом
+ * случае.
+ *
+ * Вечером правил агент, ночью человек поправил файл руками, утром Заря
+ * открывается заново. Без сохранённой карты карточка отката не может отличить
+ * «файл вернётся к прежнему виду» от «ты потеряешь свою правку» и честно
+ * говорит «не ручаемся» — то есть теряет главное, ради чего затевалась.
+ *
+ * Файл маленький и ограниченный: путь → отпечаток и номер хода, не больше
+ * MAX_PATHS путей на беседу и не больше MAX_CONVS бесед. Старшее по времени
+ * выбывает — это не архив, а рабочая память.
+ */
+export class AgentFileStore {
+  private get file(): string {
+    return join(app.getPath('userData'), 'agent-files.json')
+  }
+
+  private cache: MapFile | null = null
+  private timer: ReturnType<typeof setTimeout> | undefined
+
+  private async read(): Promise<MapFile> {
+    if (!this.cache) this.cache = await readJson<MapFile>(this.file, {})
+    return this.cache
+  }
+
+  /** Поднять карту беседы с диска (при первом обращении к ней). */
+  async restore(map: AgentFileMap, convId: string): Promise<void> {
+    const all = await this.read()
+    map.load(convId, all[convId]?.files)
+  }
+
+  /**
+   * Отложенная запись: правок за ход бывает десяток, и писать файл на каждую
+   * значит трогать диск ради того, что через секунду перезапишется.
+   */
+  schedule(map: AgentFileMap, convId: string): void {
+    if (this.timer) clearTimeout(this.timer)
+    this.timer = setTimeout(() => {
+      void this.flush(map, convId)
+    }, 800)
+  }
+
+  async flush(map: AgentFileMap, convId: string): Promise<void> {
+    const all = await this.read()
+    const files = map.dump(convId)
+    if (Object.keys(files).length) all[convId] = { at: Date.now(), files }
+    else delete all[convId]
+    // Кап по числу бесед: самые старые выбывают. Иначе файл растёт всю жизнь
+    // приложения, а обещание «не оставляем мусор» держится на честном слове.
+    const ids = Object.keys(all)
+    if (ids.length > MAX_CONVS) {
+      ids
+        .sort((a, b) => (all[a]?.at ?? 0) - (all[b]?.at ?? 0))
+        .slice(0, ids.length - MAX_CONVS)
+        .forEach((id) => delete all[id])
+    }
+    this.cache = all
+    await writeJsonAtomic(this.file, all)
+  }
+
+  /** Беседа удалена — её карту тоже. */
+  async forget(convId: string): Promise<void> {
+    const all = await this.read()
+    if (!(convId in all)) return
+    delete all[convId]
+    this.cache = all
+    await writeJsonAtomic(this.file, all)
+  }
+}
+
+export const agentFileStore = new AgentFileStore()
 
 /**
  * Одна карта на приложение: у драйверов ключ беседы общий (requestId), а

@@ -1936,3 +1936,20 @@
   background: transparent;
   color: var(--fg-dim);
 }
+/* Куда идти за своей правкой: обещание «сохранили» без адреса — половина
+   обещания. */
+.zy-rw-backup {
+  margin-top: 4px;
+  color: var(--success);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+.zy-rw-link {
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  text-decoration: underline;
+}

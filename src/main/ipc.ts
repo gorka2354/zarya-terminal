@@ -35,7 +35,8 @@ import type { SessionStore } from './sessionStore'
 import { checkpointPolicy } from '@shared/checkpointPolicy'
 import { checkpointUsage, fileHistoryDir } from './checkpointStore'
 import { diskFacts, verifyRewind } from './rewindFacts'
-import { agentFiles, compareNote } from './agentFileMap'
+import { agentFiles, agentFileStore, compareNote } from './agentFileMap'
+import { backupBeforeRewind } from './rewindBackup'
 import type { SettingsStore } from './settingsStore'
 import type { SttService } from './sttService'
 import type { UpdateService } from './updateService'
@@ -741,6 +742,10 @@ export function registerIpc(ctx: IpcContext): void {
           })
           const paths = dry.filesChanged ?? []
           if (!paths.length) return dry
+          // Беседа могла быть поднята с диска — тогда карта в памяти пуста, и
+          // без этого карточка сказала бы «не ручаемся» о файлах, про которые
+          // на самом деле всё знает.
+          await agentFileStore.restore(agentFiles, requestId)
           const facts = await diskFacts(paths, opts.cwd ?? '')
           /*
            * К фактам с диска добавляем то, что знаем только мы: что именно
@@ -773,13 +778,38 @@ export function registerIpc(ctx: IpcContext): void {
         })
         const paths = plan.filesChanged ?? []
         const before = paths.length ? await diskFacts(paths, opts?.cwd ?? '') : []
+        /*
+         * Страхуем то, что человек рискует потерять НАВСЕГДА.
+         *
+         * У движка есть «до агента», но нет «до отката»: ручная правка исчезнет
+         * без следа, и обратиться будет некуда, если файл не в git. Копируем не
+         * всё подряд — только спорное: где содержимое разошлось с тем, что
+         * записал агент, и где мы вообще ничего не знаем. Обычно это ноль-три
+         * файла.
+         */
+        await agentFileStore.restore(agentFiles, requestId)
+        const risky = before
+          .filter((f) => {
+            if (!f.existsNow || f.linkSkipped) return false
+            const cmp = compareNote(agentFiles.note(requestId, f.path), f.hash)
+            return cmp.changedAfterAgent || !cmp.observed
+          })
+          .map((f) => f.path)
+        const backup = await backupBeforeRewind(requestId, risky)
         const done = await drv.rewindFiles(requestId, userMessageId, {
           dryRun: false,
           resume: opts?.resume,
           cwd: opts?.cwd
         })
         if (!before.length) return done
-        return { ...done, verdict: await verifyRewind(before, opts?.cwd ?? '') }
+        return {
+          ...done,
+          verdict: await verifyRewind(before, opts?.cwd ?? ''),
+          ...(backup.saved ? { backup } : {}),
+          // Не поместившееся в лимит называем, а не проглатываем: «сохранили»
+          // там, где не сохранили, хуже, чем честное «не сохранили».
+          ...(backup.skipped.length && !backup.saved ? { backup } : {})
+        }
       } catch (e) {
         /*
          * Граница процессов ловит ВСЁ.

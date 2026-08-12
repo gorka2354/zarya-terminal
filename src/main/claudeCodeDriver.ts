@@ -21,7 +21,7 @@ import type {
   SkillState
 } from '@shared/types'
 import { rewindPoint } from '@shared/rewind'
-import { agentFiles } from './agentFileMap'
+import { agentFiles, agentFileStore } from './agentFileMap'
 import { toolPath } from '@shared/touched'
 import { asSkillState, withSkillOverride } from '@shared/skills'
 import { readSettingsFile, readSkillOverrides, skillSettingsPaths } from './skillSettings'
@@ -1624,7 +1624,11 @@ export class ClaudeCodeDriver implements AgentDriver {
                 const editedPath = session.pendingEdits.get(id)
                 if (editedPath && !b.is_error) {
                   session.pendingEdits.delete(id)
-                  void agentFiles.noteAfter(requestId, editedPath)
+                  void agentFiles
+                    .noteAfter(requestId, editedPath)
+                    // Карта нужна и завтра: без записи на диск она бесполезна
+                    // ровно в самом частом случае — «открыл Зарю утром».
+                    .then(() => agentFileStore.schedule(agentFiles, requestId))
                 }
                 this.emit(requestId, {
                   type: 'tool_result',

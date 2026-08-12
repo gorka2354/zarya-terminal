@@ -368,6 +368,13 @@ export const RU: Dict = {
   'rw.doneCounts': 'Вернулось: {ok} · осталось прежними: {same} · не знаем: {unknown}',
   'rw.doneSkipped': 'Пропущено ссылок: {n}',
   'rw.stayed': 'Остались прежними:',
+  /*
+   * Обещание «мы сохранили» без адреса — половина обещания: человек должен
+   * знать, куда идти за своей правкой.
+   */
+  'rw.backup': 'Ваши правки сохранены перед откатом ({n}) — папка копий',
+  'rw.backupOpen': 'открыть',
+  'rw.backupSkipped': 'НЕ сохранено (не поместилось в лимит): {n}',
   'feed.changes': 'что изменилось',
   'feed.changesTitle': 'Что изменилось в проекте',
   'feed.changesOpen': 'Показать изменения в файлах проекта',
@@ -1793,6 +1800,9 @@ export const EN: Dict = {
   'rw.doneCounts': 'Restored: {ok} · unchanged: {same} · unknown: {unknown}',
   'rw.doneSkipped': 'Links skipped: {n}',
   'rw.stayed': 'Stayed unchanged:',
+  'rw.backup': 'Your edits were saved before the rewind ({n}) — backup folder',
+  'rw.backupOpen': 'open',
+  'rw.backupSkipped': 'NOT saved (over the limit): {n}',
   'feed.changes': 'what changed',
   'feed.changesTitle': 'What changed in the project',
   'feed.changesOpen': 'Show changes to the project files',
