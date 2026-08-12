@@ -1,4 +1,5 @@
 import { app } from 'electron'
+import { writeFileSync } from 'fs'
 import { join } from 'path'
 import { fileHash } from './rewindFacts'
 import { readJson, writeJsonAtomic } from './jsonStore'
@@ -156,6 +157,15 @@ export class AgentFileStore {
 
   private cache: MapFile | null = null
   private timer: ReturnType<typeof setTimeout> | undefined
+  /**
+   * Беседы, чья карта ещё не на диске.
+   *
+   * Отложенная запись экономит диск, но при закрытии приложения последние
+   * правки просто не успевали сохраниться — и наутро карточка отката честно
+   * говорила «не ручаемся» о файле, про который всё знала вчера. Найдено
+   * прогоном перезапуска.
+   */
+  private dirty = new Set<string>()
 
   private async read(): Promise<MapFile> {
     if (!this.cache) this.cache = await readJson<MapFile>(this.file, {})
@@ -173,10 +183,49 @@ export class AgentFileStore {
    * значит трогать диск ради того, что через секунду перезапишется.
    */
   schedule(map: AgentFileMap, convId: string): void {
+    this.dirty.add(convId)
     if (this.timer) clearTimeout(this.timer)
     this.timer = setTimeout(() => {
-      void this.flush(map, convId)
+      void this.flushAll(map)
     }, 800)
+  }
+
+  /**
+   * Дописать всё несохранённое СИНХРОННО — на выходе из приложения.
+   *
+   * Асинхронная запись здесь не годится: процесс умирает раньше, чем она
+   * доходит до диска, и правки последней минуты пропадают. Проверено прогоном
+   * перезапуска — файла карты просто не оказывалось.
+   */
+  flushAllSync(map: AgentFileMap): void {
+    if (this.timer) {
+      clearTimeout(this.timer)
+      this.timer = undefined
+    }
+    const all = this.cache ?? {}
+    for (const id of this.dirty) {
+      const files = map.dump(id)
+      if (Object.keys(files).length) all[id] = { at: Date.now(), files }
+      else delete all[id]
+    }
+    this.dirty.clear()
+    this.cache = all
+    try {
+      writeFileSync(this.file, JSON.stringify(all), 'utf8')
+    } catch {
+      /* на выходе жаловаться некому */
+    }
+  }
+
+  /** Дописать всё несохранённое — вызывается на выходе из приложения. */
+  async flushAll(map: AgentFileMap): Promise<void> {
+    if (this.timer) {
+      clearTimeout(this.timer)
+      this.timer = undefined
+    }
+    const ids = [...this.dirty]
+    this.dirty.clear()
+    for (const id of ids) await this.flush(map, id)
   }
 
   async flush(map: AgentFileMap, convId: string): Promise<void> {

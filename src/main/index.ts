@@ -21,6 +21,7 @@ import { hardenDir } from './filePerms'
 import { APP_VERSION } from './appVersion'
 import { bindLang } from './lang'
 import { SettingsStore } from './settingsStore'
+import { agentFileStore, agentFiles } from './agentFileMap'
 import { WorkflowStore, builtinResourcesDir } from './workflowStore'
 
 // Same userData in dev and production (dev would otherwise use "Electron").
@@ -474,6 +475,11 @@ if (!gotLock) {
         if (quitTimer) clearTimeout(quitTimer)
         quitConfirmed = true
         settingsStore.flush()
+    agentFileStore.flushAllSync(agentFiles)
+        // Карта «что записал агент» пишется отложенно — на выходе дописываем
+        // остаток, иначе последние правки не доживут до следующего запуска и
+        // карточка отката наутро скажет «не ручаемся» о том, что знала вчера.
+        agentFileStore.flushAllSync(agentFiles)
         if (installAfterQuit) {
           // Сессии сняты, настройки на диске — теперь можно отдавать управление
           // установщику. Он погасит процесс сам и поднимет приложение обратно.

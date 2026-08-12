@@ -1562,7 +1562,6 @@ function UserTurn({
     canRewindTurn({
       messages: conv.messages,
       index,
-      checkpointing: conv.checkpointing,
       engineCan: conv.engine !== 'builtin' && caps?.[conv.engine]?.rewindFiles === true
     })
   const turnId = conv?.messages[index]?.turnId

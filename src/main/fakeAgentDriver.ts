@@ -1308,7 +1308,13 @@ export class FakeAgentDriver implements AgentDriver {
         ? { canRewind: true, filesChanged: [`${this.cwds.get(requestId) ?? ''}/linked.ts`] }
         : { canRewind: true, skippedLinks: 1 }
     }
-    const cwd = this.cwds.get(requestId) ?? ''
+    /*
+     * Папка беседы: своя, а если ход в этом запуске не отправлялся — та, что
+     * пришла с запросом. Так ведёт себя и настоящий драйвер, поднимая сессию по
+     * `resume`: без этого после перезапуска путь собирался бы от пустой строки,
+     * и карточка объявляла бы файл «вне папки агента».
+     */
+    const cwd = this.cwds.get(requestId) || opts?.cwd || ''
     const edited = fakeEditPath()
     return {
       canRewind: true,

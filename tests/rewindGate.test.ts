@@ -19,7 +19,7 @@ const compact = (): AiMessage => ({
   content: [{ type: 'compact', before: 100, after: 20 }]
 })
 
-const base = { checkpointing: true, engineCan: true }
+const base = { engineCan: true }
 
 describe('canRewindTurn', () => {
   it('всё сошлось — кнопка есть', () => {
@@ -30,18 +30,15 @@ describe('canRewindTurn', () => {
     expect(canRewindTurn({ messages: [user('раз')], index: 0, ...base })).toBe(false)
   })
 
-  it('у сессии нет копий — кнопки нет, даже если настройка включена', () => {
-    // Настройка отвечает на «чего мы хотим», а не на «что есть»: её могли
-    // включить уже после старта сессии, и копий за кнопкой не будет.
-    expect(
-      canRewindTurn({ messages: [user('раз', 'u1')], index: 0, checkpointing: false, engineCan: true })
-    ).toBe(false)
+  it('движок так не умеет — кнопки нет', () => {
+    expect(canRewindTurn({ messages: [user('раз', 'u1')], index: 0, engineCan: false })).toBe(false)
   })
 
-  it('движок так не умеет — кнопки нет', () => {
-    expect(
-      canRewindTurn({ messages: [user('раз', 'u1')], index: 0, checkpointing: true, engineCan: false })
-    ).toBe(false)
+  it('беседа поднята с диска: живой сессии нет, а кнопка есть', () => {
+    // Наличие точки само доказывает, что копии снимались: движок называет id
+    // хода только тогда. Требовать сверх этого «жива ли сессия» значило бы
+    // убрать кнопку в самом частом случае — «открыл Зарю утром».
+    expect(canRewindTurn({ messages: [user('вчерашний ход', 'u1')], index: 0, ...base })).toBe(true)
   })
 
   it('ход выше черты /clear — кнопки нет', () => {
