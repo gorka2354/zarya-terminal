@@ -2330,6 +2330,30 @@ onBus('terminal:focus', ({ sessionId }) => {
   return id
 }
 ;(
+  window as unknown as { __zaryaConvNotice?: (convId: string, text: string) => void }
+).__zaryaConvNotice = (convId, text) => {
+  /*
+   * Служебная отметка в ленте — например, что откат состоялся.
+   *
+   * Пишем ЧИСЛА и только их: лента уезжает на диск и в стенограмму, а полные
+   * пути чужих проектов остались бы там навсегда. Подробный список живёт в
+   * карточке, которая никуда не сохраняется.
+   */
+  useAiStore.setState((s) => ({
+    conversations: s.conversations.map((c) =>
+      c.id === convId
+        ? {
+            ...c,
+            messages: [
+              ...c.messages,
+              { role: 'assistant' as const, content: [{ type: 'notice' as const, level: 'info' as const, text }] }
+            ]
+          }
+        : c
+    )
+  }))
+}
+;(
   window as unknown as { __zaryaSetBypassFor?: (convId: string, on: boolean) => void }
 ).__zaryaSetBypassFor = (convId, on) => useAiStore.getState().setBypass(convId, on)
 

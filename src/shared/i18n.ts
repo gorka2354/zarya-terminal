@@ -372,6 +372,14 @@ export const RU: Dict = {
    * Обещание «мы сохранили» без адреса — половина обещания: человек должен
    * знать, куда идти за своей правкой.
    */
+  /*
+   * Отметка в ленте — ЧИСЛАМИ, без путей. Лента уезжает на диск и в
+   * стенограмму, которую человек отдаёт коллеге: полные пути чужих клиентских
+   * проектов остались бы там навсегда. Список файлов живёт в карточке — она
+   * эфемерна и никуда не сохраняется.
+   */
+  'rw.feedNote': 'Файлы откачены к этому ходу: вернулось {ok}, осталось прежними {same}',
+  'rw.feedNoteBackup': ' · копии ваших правок сохранены ({n})',
   'rw.stale': 'Пока вы читали, изменилось ({n}) — список обновлён, посмотрите заново:',
   'rw.backup': 'Ваши правки сохранены перед откатом ({n}) — папка копий',
   'rw.backupOpen': 'открыть',
@@ -1801,6 +1809,8 @@ export const EN: Dict = {
   'rw.doneCounts': 'Restored: {ok} · unchanged: {same} · unknown: {unknown}',
   'rw.doneSkipped': 'Links skipped: {n}',
   'rw.stayed': 'Stayed unchanged:',
+  'rw.feedNote': 'Files rewound to this turn: restored {ok}, unchanged {same}',
+  'rw.feedNoteBackup': ' · your edits were backed up ({n})',
   'rw.stale': 'While you were reading, {n} file(s) changed — the list is refreshed, look again:',
   'rw.backup': 'Your edits were saved before the rewind ({n}) — backup folder',
   'rw.backupOpen': 'open',

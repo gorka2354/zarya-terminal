@@ -1819,6 +1819,17 @@ function RewindCard({
     if (r.refused || (!r.canRewind && r.error)) {
       return setState({ kind: 'refused', text: r.error || t('rw.refuse.busy') })
     }
+    // Отметка в ленте — ЧИСЛАМИ, без путей: лента уезжает на диск и в
+    // стенограмму, которую человек отдаёт коллеге. Подробности живут в
+    // карточке, она эфемерна.
+    const ok = r.verdict?.restored ?? 0
+    const same = r.verdict?.untouched ?? 0
+    const note =
+      t('rw.feedNote', { ok, same }) +
+      (r.backup?.saved ? t('rw.feedNoteBackup', { n: r.backup.saved }) : '')
+    ;(
+      window as unknown as { __zaryaConvNotice?: (id: string, text: string) => void }
+    ).__zaryaConvNotice?.(conv.id, note)
     // Числа — НАШЕЙ сверки, а не движка: он не считает часть своих промахов.
     setState({
       kind: 'done',
