@@ -195,11 +195,9 @@ export default function AiPanel(): React.JSX.Element {
             className="zy-icon-btn"
             title={t('ide.newConv')}
             onClick={() =>
-              useAiStore
-                .getState()
-                .newConversation({
-                  sessionId: useSessionsStore.getState().activeSessionId() ?? undefined
-                })
+              useAiStore.getState().newConversation({
+                sessionId: useSessionsStore.getState().activeSessionId() ?? undefined
+              })
             }
           >
             <Icon name="plus" size={14} />

@@ -452,9 +452,7 @@ interface AiState {
    * (менять доступ на лету значило бы оборвать работу); `already` — папка уже
    * в списке. Окно обязано сказать это словами, а не молча ничего не сделать.
    */
-  addWorkDir: (
-    conversationId: string
-  ) => Promise<{
+  addWorkDir: (conversationId: string) => Promise<{
     ok: boolean
     dir?: string
     reason?: 'canceled' | 'busy' | 'already' | 'no-engine'
