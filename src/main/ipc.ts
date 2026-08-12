@@ -441,7 +441,10 @@ export function registerIpc(ctx: IpcContext): void {
       fileCheckpoints: checkpointPolicy({
         wanted: settingsStore.get().ai.fileCheckpoints === true,
         isolated: !!process.env.ZARYA_USER_DATA,
-        configDirOverridden: !!process.env.CLAUDE_CONFIG_DIR
+        configDirOverridden: !!process.env.CLAUDE_CONFIG_DIR,
+        // Живой прогон против настоящего движка: авторизация живёт в его
+        // профиле, увести её нельзя — исключение просим явно.
+        liveOverride: process.env.ZARYA_QA_LIVE_CHECKPOINTS === '1'
       }).on
     })
   })

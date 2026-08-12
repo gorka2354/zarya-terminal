@@ -36,3 +36,21 @@ describe('checkpointPolicy', () => {
     ).toEqual({ on: true })
   })
 })
+
+describe('checkpointPolicy — живой прогон', () => {
+  it('изолированный прогон может ОСОЗНАННО попросить чекпоинты', () => {
+    // Единственный случай: проверка на настоящем Claude Code. Увести
+    // CLAUDE_CONFIG_DIR нельзя — вместе с настройками уедет авторизация, и
+    // движок не запустится. Поэтому исключение явное и названное.
+    expect(checkpointPolicy({ wanted: true, isolated: true, liveOverride: true })).toEqual({
+      on: true
+    })
+  })
+
+  it('без явной просьбы изоляция по-прежнему сильнее', () => {
+    expect(checkpointPolicy({ wanted: true, isolated: true })).toEqual({
+      on: false,
+      off: 'qa-isolated'
+    })
+  })
+})

@@ -2,7 +2,7 @@ import { tm } from './lang'
 import { app, type BrowserWindow } from 'electron'
 import { existsSync, readFileSync } from 'fs'
 import { homedir } from 'os'
-import { join } from 'path'
+import { isAbsolute, join } from 'path'
 import { CH } from '@shared/ipc'
 import type {
   AgentCapabilities,
@@ -1536,8 +1536,19 @@ export class ClaudeCodeDriver implements AgentDriver {
                  */
                 const path = toolPath(p.name, p.input)
                 if (path) {
-                  session.pendingEdits.set(p.id, path)
-                  void agentFiles.noteBefore(requestId, path)
+                  /*
+                   * Путь приводим к абсолютному ПО ПАПКЕ СЕССИИ.
+                   *
+                   * Настоящий Claude Code называет файл относительно рабочей
+                   * папки (`src/notes.txt`), а список файлов отката отдаёт
+                   * абсолютным. Найдено живым прогоном: ключи не совпадали, и
+                   * карточка говорила «не ручаемся» о файле, который сама же и
+                   * видела; отпечаток при этом не снимался вовсе — искали файл
+                   * относительно папки процесса Зари.
+                   */
+                  const abs = isAbsolute(path) ? path : join(session.cwd ?? '', path)
+                  session.pendingEdits.set(p.id, abs)
+                  void agentFiles.noteBefore(requestId, abs)
                 }
               }
             }

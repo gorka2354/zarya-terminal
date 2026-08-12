@@ -28,8 +28,20 @@ export function checkpointPolicy(o: {
   isolated: boolean
   /** Прогон увёл настройки движка в свою папку и осознанно просит чекпоинты. */
   configDirOverridden?: boolean
+  /**
+   * Живой прогон ОСОЗНАННО просит чекпоинты в настоящем профиле движка.
+   *
+   * Нужен ровно для одного: проверить путь на настоящем Claude Code. Увести
+   * `CLAUDE_CONFIG_DIR` в этом случае нельзя — вместе с настройками уедет и
+   * авторизация, и движок не запустится. Поэтому исключение отдельное, явное и
+   * названное: копии лягут в настоящий `~/.claude/file-history` и будут удалены
+   * движком по его же сроку.
+   */
+  liveOverride?: boolean
 }): CheckpointPolicy {
   if (!o.wanted) return { on: false, off: 'setting' }
-  if (o.isolated && !o.configDirOverridden) return { on: false, off: 'qa-isolated' }
+  if (o.isolated && !o.configDirOverridden && !o.liveOverride) {
+    return { on: false, off: 'qa-isolated' }
+  }
   return { on: true }
 }
