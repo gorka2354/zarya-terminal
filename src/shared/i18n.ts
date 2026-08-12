@@ -1512,6 +1512,25 @@ export const RU: Dict = {
   'set.micGoneDesc':
     'Пока его нет, диктовка пишет в системный микрофон и говорит об этом. Настройка сохранена — устройство подхватится, когда вернётся.',
   'set.micBackToSystem': 'Вернуть системный',
+  'set.micCheck': 'Проверка микрофона',
+  'set.micCheckDesc': 'Что слышит Заря: уровень, порог речи и конец фразы.',
+  /*
+   * Слова вердикта — те же, какими судит автостоп. Иначе проверка говорила бы
+   * на своём языке о чужом решении, и совпадение пришлось бы додумывать.
+   */
+  'mic.start': 'Проверить',
+  'mic.stop': 'Хватит',
+  'mic.working': 'Разбираю…',
+  'mic.idle': 'Нажмите и скажите фразу',
+  'mic.sayIt': 'Слушаю — скажите что-нибудь',
+  'mic.hearing': 'Слышу речь',
+  'mic.quiet': 'Тихо',
+  'mic.endingIn': 'Конец фразы через {s} с',
+  'mic.levelNow': 'уровень: {n}',
+  'mic.threshold': 'порог речи: {n}',
+  'mic.heardText': 'Разобрано:',
+  'mic.heardNothing': 'Звук был, но слов не разобрано — попробуйте ближе к микрофону.',
+  'mic.fellBack': 'Выбранный микрофон не открылся — пишу в системный.',
   'set.micNote':
     'Микрофон открывается только на время диктовки и закрывается сразу после фразы. Звук распознаётся на этой машине и никуда не отправляется.',
   'set.sttModel': 'Модель распознавания',
@@ -2392,6 +2411,21 @@ export const EN: Dict = {
   'set.micGoneDesc':
     'While it is gone, dictation records through the system microphone and says so. The setting is kept — the device is picked up when it returns.',
   'set.micBackToSystem': 'Back to system default',
+  'set.micCheck': 'Microphone check',
+  'set.micCheckDesc': 'What Zarya hears: level, speech threshold and end of phrase.',
+  'mic.start': 'Check',
+  'mic.stop': 'Done',
+  'mic.working': 'Transcribing…',
+  'mic.idle': 'Press and say a phrase',
+  'mic.sayIt': 'Listening — say something',
+  'mic.hearing': 'Hearing speech',
+  'mic.quiet': 'Quiet',
+  'mic.endingIn': 'Phrase ends in {s} s',
+  'mic.levelNow': 'level: {n}',
+  'mic.threshold': 'speech threshold: {n}',
+  'mic.heardText': 'Transcribed:',
+  'mic.heardNothing': 'There was sound, but no words — try speaking closer to the mic.',
+  'mic.fellBack': 'The chosen microphone did not open — recording from the system one.',
   'set.micNote':
     'The microphone opens only while you dictate and closes as soon as the phrase ends. Audio is recognised on this machine and goes nowhere else.',
   'set.sttModel': 'Speech model',

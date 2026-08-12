@@ -725,3 +725,62 @@
   letter-spacing: 0.04em;
   color: var(--fg-faint);
 }
+
+/* ── Проверка микрофона ───────────────────────────────────────────────────
+   Шкала с чертой порога: «что-то слышно» — не ответ на вопрос человека.
+   Ответ — достаточно ли громко, чтобы это сочли речью. */
+.zy-miccheck {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 260px;
+}
+.zy-miccheck-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.zy-miccheck-verdict {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.zy-miccheck-meter {
+  position: relative;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.zy-miccheck-fill {
+  height: 100%;
+  background: var(--text-dim);
+  transition: width 80ms linear;
+}
+/* Речь — цветом акцента: разницу «слышу/тихо» видно боковым зрением, не читая. */
+.zy-miccheck-fill--speech {
+  background: var(--accent);
+}
+/* Черта порога — светлая и выше самой шкалы: на цветной заливке тонкая линия
+   в тон акценту не читается вовсе, а именно она отвечает на вопрос «достаточно
+   ли громко». */
+.zy-miccheck-mark {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 2px;
+  background: var(--text);
+  box-shadow: 0 0 0 1px var(--bg);
+}
+.zy-miccheck-nums,
+.zy-miccheck-said {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.zy-miccheck-said b {
+  color: var(--text);
+  font-weight: 500;
+}
+.zy-miccheck-err {
+  font-size: 11px;
+  color: var(--danger);
+}

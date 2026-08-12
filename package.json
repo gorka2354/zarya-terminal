@@ -1,7 +1,7 @@
 {
   "name": "zarya-terminal",
   "productName": "Zarya",
-  "version": "0.7.5-beta.1",
+  "version": "0.7.5-beta.2",
   "description": "Zarya — AI-native terminal with IDE superpowers. A new dawn for your terminal.",
   "main": "./out/main/index.js",
   "author": {
@@ -29,7 +29,7 @@
     "qa:models": "npm run build && node scripts/qa-claude-catalog.mjs && node scripts/qa-model-refresh.mjs && node scripts/models-test.mjs",
     "qa:codex": "npm run build && node scripts/qa-codex-driver.mjs && node scripts/qa-codex-graceful.mjs",
     "qa:acp": "npm run build && node scripts/qa-acp-driver.mjs && node scripts/qa-acp-graceful.mjs",
-    "qa:voice": "npm run build && node scripts/stt-smoke.mjs && node scripts/mic-select-test.mjs && node scripts/stt-model-migration-test.mjs && node scripts/stt-custom-test.mjs",
+    "qa:voice": "npm run build && node scripts/voice-autostop-test.mjs && node scripts/mic-check-test.mjs",
     "qa:voice-custom": "npm run build && node scripts/stt-custom-live.mjs",
     "qa:agent": "npm run build && node scripts/lp-logic-test.mjs && node scripts/bypass-question-test.mjs && node scripts/lp-live-test.mjs && node scripts/qa-fake-agents.mjs && node scripts/qa-codex-driver.mjs && node scripts/qa-codex-graceful.mjs && node scripts/qa-acp-driver.mjs && node scripts/qa-acp-graceful.mjs",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",

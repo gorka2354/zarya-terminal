@@ -30,6 +30,7 @@ import {
   usableMics,
   type MicDevice
 } from '@/features/voice/devices'
+import { MicCheck } from './MicCheck'
 import { useUpdateStore } from '@/features/updates/updateStore'
 import { useSettingsStore } from '@/state/settingsStore'
 import { useUiStore } from '@/state/uiStore'
@@ -1391,6 +1392,15 @@ function VoiceTab(): React.JSX.Element {
           </button>
         </Row>
       )}
+      {/*
+        Проверка стоит СРАЗУ под выбором устройства: вопрос «тот ли микрофон
+        выбран» и вопрос «слышит ли он меня» — один и тот же вопрос, и разносить
+        их по разным местам значит заставлять человека помнить первый, пока он
+        ищет второй.
+      */}
+      <Row title={t('set.micCheck')} sub="CHECK" desc={t('set.micCheckDesc')}>
+        <MicCheck />
+      </Row>
       {missing && (
         <Row title={t('set.micGone')} sub="DEVICE MISSING" desc={t('set.micGoneDesc')}>
           <button

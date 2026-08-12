@@ -24,6 +24,7 @@ import { nextGate } from '@/features/ai/gates'
 import { registerPaneKeys } from '@/features/ai/keyRouter'
 import { fileToAttachment, imageFilesFrom } from '@/features/ai/imageAttach'
 import { canAcceptMore, type ImageAttachment } from '@shared/images'
+import { dictationStop } from '@shared/dictationStop'
 import { Icon, EngineGlyph } from './Icon'
 import { PixelIcon } from './PixelIcon'
 import { isSilent, startRecording, type Recording } from '@/features/voice/dictation'
@@ -1343,22 +1344,16 @@ ${prev}`
     []
   )
 
-  // Meter + silence auto-stop for the click-to-toggle mode. Not a neural VAD:
-  // it simply ends the take once speech has been heard and then stops.
+  // Индикатор уровня и автостоп по тишине. Само решение — чистая функция
+  // (@shared/dictationStop): здесь только таймер и показания микрофона.
   useEffect(() => {
     if (voice !== 'rec') return
-    let heard = false
-    let quietSince = 0
+    let st = { heard: false, peak: 0, quietSince: 0, stop: false }
     const timer = window.setInterval(() => {
       const lvl = recRef.current?.level() ?? 0
       setVoiceLevel(lvl)
-      if (lvl > 0.12) {
-        heard = true
-        quietSince = 0
-      } else if (heard && !pttRef.current) {
-        quietSince = quietSince || Date.now()
-        if (Date.now() - quietSince > 1500) void finishVoice()
-      }
+      st = dictationStop({ ...st, level: lvl, now: Date.now(), heldByKey: pttRef.current })
+      if (st.stop) void finishVoice()
     }, 100)
     return () => clearInterval(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1445,11 +1440,25 @@ ${prev}`
       pttRef.current = false
       if (recRef.current) void finishVoice()
     }
+    /*
+     * Окно потеряло фокус — считаем, что клавишу отпустили.
+     *
+     * `keyup` в этот момент уходит уже другому окну и к нам не придёт никогда.
+     * Без этого флаг удержания оставался бы поднятым до перезапуска, а вместе с
+     * ним — незакрытая запись и микрофон, занятый неизвестно кем.
+     */
+    const blur = (): void => {
+      if (!pttRef.current) return
+      pttRef.current = false
+      if (recRef.current) void finishVoice()
+    }
     window.addEventListener('keydown', down)
     window.addEventListener('keyup', up)
+    window.addEventListener('blur', blur)
     return () => {
       window.removeEventListener('keydown', down)
       window.removeEventListener('keyup', up)
+      window.removeEventListener('blur', blur)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voice])
@@ -1824,7 +1833,25 @@ ${prev}`
                     : t('voice.hint', { mic: micLabel })
           }
           aria-label={t('bar.dictate')}
-          onClick={() => (voice === 'rec' ? void finishVoice() : void startVoice())}
+          onClick={() => {
+            if (voice === 'rec') {
+              void finishVoice()
+              return
+            }
+            /*
+             * Запись начата МЫШЬЮ — значит клавишу никто не держит.
+             *
+             * Флаг удержания ставится нажатием Ctrl+Shift+Space, а снимается
+             * отпусканием пробела. Стоит окну потерять фокус между этими
+             * событиями (Alt+Tab, чужое окно, комбинация, перехваченная
+             * системой), `keyup` уходит не нам — и флаг застревает в «держат».
+             * С этого мига автостоп по тишине не срабатывал НИКОГДА, и любая
+             * запись со значка требовала второго нажатия. Здесь мы знаем
+             * достоверно: клавишу не держат.
+             */
+            pttRef.current = false
+            void startVoice()
+          }}
           // Правый клик по кнопке — выбор микрофона, и ТОЛЬКО он. Без остановки
           // всплытия событие доходило до панели, та открывала своё меню
           // («Копировать», «Разделить вправо»…), и на экране оказывались два
