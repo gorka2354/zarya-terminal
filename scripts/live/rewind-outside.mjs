@@ -30,6 +30,7 @@ import {
   shot,
   skip,
   text,
+  waitDone,
   waitForGo
 } from '../lib/live-harness.mjs'
 
@@ -69,7 +70,7 @@ try {
   const goReady = await waitForGo(page, LIVE ? 20000 : 8000)
   if (ok('кнопка «Откатить» доступна', goReady, (await text(page, '.zy-rw')).slice(0, 240))) {
     await page.click('.zy-rw-go')
-    await page.waitForTimeout(LIVE ? 4500 : 2000)
+    await waitDone(page)
     const done = await text(page, '.zy-rw-done')
     note('итог:', done.replace(/\s+/g, ' ').slice(0, 160))
     if (LIVE) {

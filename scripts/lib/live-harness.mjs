@@ -122,7 +122,7 @@ export const writeWork = (work, rel, text) => writeFileSync(join(work, rel), tex
  * ними уедет авторизация. Поэтому на фейке уводим (полная изоляция), а в живом
  * просим исключение явно.
  */
-export async function launchZarya({ work, userData, settings = {}, editPath } = {}) {
+export async function launchZarya({ work, userData, settings = {}, editPath, env = {} } = {}) {
   const ud = userData ?? mkdtempSync(join(tmpdir(), 'zarya-ud-'))
   writeFileSync(
     join(ud, 'settings.json'),
@@ -151,7 +151,10 @@ export async function launchZarya({ work, userData, settings = {}, editPath } = 
             // сценарий на два движка невозможен.
             ...(editPath ? { ZARYA_FAKE_EDIT_PATH: editPath } : {})
           }),
-      NODE_ENV: 'production'
+      NODE_ENV: 'production',
+      // Сценарию иногда нужно своё окружение — например укоротить предел
+      // ожидания движка, чтобы проверка шла секунды, а не две минуты.
+      ...env
     }
   })
   const page = await app.firstWindow()
@@ -349,6 +352,41 @@ export async function waitForGo(page, ms = 8000) {
     if (n > 0) return true
     if (Date.now() - t0 > ms) return false
     await page.waitForTimeout(250)
+  }
+}
+
+/**
+ * Дождаться, пока откат ЗАКОНЧИТСЯ, — а не поспать наугад.
+ *
+ * Стоило целого класса флейков: сценарии ждали фиксированные 5 секунд и читали
+ * диск, пока движок ещё писал. Прогон падал на «файл не вернулся» примерно раз
+ * из четырёх, печатая пустую строку итога, — и выглядело это как дефект
+ * продукта, хотя дефект был в стенде.
+ *
+ * Ждём факта: карточка показала итог ИЛИ назвала отказ. Оба — конец ожидания;
+ * молчание концом не считается.
+ */
+export async function waitDone(page, ms = LIVE ? 90000 : 15000) {
+  const t0 = Date.now()
+  for (;;) {
+    const st = await page.evaluate(() => {
+      const vis = (el) => (el.checkVisibility ? el.checkVisibility() : !!el.offsetParent)
+      const card = [...document.querySelectorAll('.zy-rw')].filter(vis)[0]
+      if (!card) return { gone: true }
+      const done = card.querySelector('.zy-rw-done')?.textContent?.trim() ?? ''
+      return { done, text: card.textContent ?? '' }
+    })
+    if (st.gone) return { gone: true }
+    if (st.done) return { done: true, text: st.text }
+    // Отказ — тоже ответ: ждать после него бессмысленно.
+    if (/не ответил вовремя|Пока вы читали|не удалось сохранить|Идёт ход/i.test(st.text)) {
+      return { refused: true, text: st.text }
+    }
+    if (Date.now() - t0 > ms) {
+      ok('откат ответил за отведённое время', false, st.text.replace(/\s+/g, ' ').slice(0, 240))
+      return { timeout: true, text: st.text }
+    }
+    await page.waitForTimeout(400)
   }
 }
 

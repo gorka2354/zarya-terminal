@@ -69,7 +69,7 @@
     "qa:plan-mode": "node scripts/plan-mode-test.mjs",
     "qa:find": "npm run build && node scripts/feed-search-test.mjs",
     "qa:onboarding": "npm run build && node scripts/onboarding-test.mjs",
-    "qa:rewind": "npm run build && node scripts/rewind-outcomes-test.mjs && node scripts/rewind-card-test.mjs && node scripts/changes-panel-test.mjs && node scripts/checkpoint-setting-test.mjs && node scripts/live/rewind-basic.mjs && node scripts/live/rewind-deep.mjs && node scripts/live/rewind-restart.mjs && node scripts/live/rewind-outside.mjs && node scripts/live/rewind-created.mjs",
+    "qa:rewind": "npm run build && node scripts/rewind-outcomes-test.mjs && node scripts/rewind-card-test.mjs && node scripts/changes-panel-test.mjs && node scripts/checkpoint-setting-test.mjs && node scripts/live/rewind-basic.mjs && node scripts/live/rewind-deep.mjs && node scripts/live/rewind-restart.mjs && node scripts/live/rewind-outside.mjs && node scripts/live/rewind-created.mjs && node scripts/live/rewind-hang.mjs",
     "qa:rewind:live": "npm run build && node scripts/live/run-live.mjs",
     "qa:checkpoint-flag": "npm run build && node scripts/checkpoint-flag-live.mjs"
   },

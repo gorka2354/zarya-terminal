@@ -28,6 +28,7 @@ import {
   shot,
   skip,
   text,
+  waitDone,
   waitForGo,
   writeWork
 } from '../lib/live-harness.mjs'
@@ -66,7 +67,7 @@ try {
   const goReady = await waitForGo(page, LIVE ? 20000 : 8000)
   if (ok('кнопка «Откатить» доступна', goReady, (await text(page, '.zy-rw')).slice(0, 240))) {
     await page.click('.zy-rw-go')
-    await page.waitForTimeout(LIVE ? 5000 : 2500)
+    await waitDone(page)
     const done = await text(page, '.zy-rw')
     note('итог:', done.replace(/\s+/g, ' ').slice(-200))
     if (LIVE) {
@@ -79,6 +80,40 @@ try {
       skip('файла больше нет', 'фейк не трогает диск при откате')
     }
     await shot(page, 'created-2-done')
+
+    section('[5] Ход ПОЗЖЕ отката: интерфейс не обещает вернуть файл обратно')
+    /*
+     * Тест-план требовал обратного — «откат к ходу 2 создаёт файл заново», — и
+     * это оказалось неверным предположением о движке. Проверено прямым вызовом
+     * на живом Claude Code 2.1.227: на ход позже уже сделанного отката он
+     * отвечает `canRewind: true` с ПУСТЫМ списком файлов и не делает ничего;
+     * удалённый файл обратно не появляется. Механизм односторонний.
+     *
+     * Значит проверяем не возврат, а честность: карточка обязана сказать, что
+     * вперёд нельзя, и НЕ давать кнопку, за которой ничего не произойдёт.
+     */
+    const back = await openRewind(page, { timeoutMs: LIVE ? 30000 : 12000 })
+    ok('карточка позднего хода открылась', back.opened, (back.card ?? '').slice(0, 160))
+    if (LIVE) {
+      ok(
+        'сказано, что возвращают только назад',
+        /только назад/.test(back.card ?? ''),
+        (back.card ?? '').slice(0, 300)
+      )
+      const go = await page.evaluate(
+        () =>
+          [...document.querySelectorAll('.zy-rw-go')].filter((el) =>
+            el.checkVisibility ? el.checkVisibility() : !!el.offsetParent
+          ).length
+      )
+      // Кнопка здесь соврала бы самим фактом своего существования: нажатие
+      // прошло бы «успешно», а на диске не изменилось бы ничего.
+      ok('кнопки, которая ничего не сделает, нет', go === 0, go)
+      ok('файла по-прежнему нет', !existsSync(join(stand, NEW_FILE)), NEW_FILE)
+    } else {
+      skip('поведение отката вперёд', 'фейк не воспроизводит одностороннюю историю движка')
+    }
+    await shot(page, 'created-3-forward')
   }
 } finally {
   await app.close()

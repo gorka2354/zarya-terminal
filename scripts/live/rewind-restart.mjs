@@ -32,6 +32,7 @@ import {
   shot,
   skip,
   text,
+  waitDone,
   waitForGo,
   writeWork
 } from '../lib/live-harness.mjs'
@@ -126,9 +127,18 @@ let userData = null
     const goReady = await waitForGo(run.page, LIVE ? 20000 : 8000)
     if (ok('кнопка «Откатить» доступна', goReady, (await text(run.page, '.zy-rw')).slice(0, 300))) {
       await run.page.click('.zy-rw-go')
-      await run.page.waitForTimeout(LIVE ? 5000 : 2000)
+      await waitDone(run.page)
       const done = await text(run.page, '.zy-rw-done')
       note('итог:', done.replace(/\s+/g, ' ').slice(0, 160))
+      /*
+       * Пустой итог — это не «нечего сказать», это отказ, о котором прогон
+       * промолчал бы. Так и случилось: один прогон из четырёх падал на «файл не
+       * вернулся», печатая пустую строку итога, — причина жила в карточке, а
+       * читали мы только блок результата.
+       */
+      if (!done.trim()) {
+        note('ИТОГА НЕТ — вся карточка:', (await text(run.page, '.zy-rw')).replace(/\s+/g, ' ').slice(0, 400))
+      }
       if (LIVE) {
         ok('файл вернулся к состоянию до правки агента', readWork(stand, NOTES) === atStart, {
           ожидали: atStart,

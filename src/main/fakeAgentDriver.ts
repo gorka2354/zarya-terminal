@@ -1353,6 +1353,19 @@ export class FakeAgentDriver implements AgentDriver {
       throw new Error('File rewinding is not enabled.')
     }
     if (mode === 'nofiles') return { canRewind: true }
+    if (mode === 'hang') {
+      /*
+       * Движок замолчал.
+       *
+       * Настоящий `rewindFiles` — вызов в чужом процессе, и он может не
+       * вернуться вовсе: сессия поднялась, а ответа нет. Без этого сценария
+       * таймаут драйвера не проверяется ничем, а карточка в этом случае вечно
+       * показывает «Смотрю, что изменится…».
+       *
+       * Ждём заведомо дольше предела драйвера и НЕ отвечаем.
+       */
+      await new Promise(() => {})
+    }
     if (mode === 'links') {
       return opts?.dryRun
         ? { canRewind: true, filesChanged: [`${this.cwds.get(requestId) ?? ''}/linked.ts`] }

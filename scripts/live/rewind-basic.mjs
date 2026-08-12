@@ -29,6 +29,7 @@ import {
   shot,
   skip,
   text,
+  waitDone,
   writeWork
 } from '../lib/live-harness.mjs'
 
@@ -76,7 +77,7 @@ try {
 
   section('[4] Откат вернул файл и сохранил мою правку')
   await page.click('.zy-rw-go')
-  await page.waitForTimeout(LIVE ? 3500 : 2000)
+  await waitDone(page)
   const done = await text(page, '.zy-rw-done')
   note('итог:', done.replace(/\s+/g, ' ').slice(0, 160))
   // Единственная проверка, которую фейк дать не может: он отвечает в
@@ -105,6 +106,25 @@ try {
   await app.close()
 }
 
-if (LIVE) note('папок в ~/.claude/file-history было', histBefore, '· стало', fileHistoryCount())
+/*
+ * Настоящий профиль человека — не полигон.
+ *
+ * На фейке чекпоинты выключены политикой (прогон изолирован, `CLAUDE_CONFIG_DIR`
+ * уведён), и движок в `~/.claude` не должен положить НИ ОДНОЙ папки. Раньше это
+ * число только печаталось примечанием — то есть прогон смотрел на него и молчал,
+ * что бы там ни оказалось. Пункт тест-плана требует проверки, а не отчёта.
+ *
+ * В живом режиме рост папки ожидаем и законен: копии для того и включены. Там
+ * число печатается — по нему видно цену настройки.
+ */
+const histAfter = fileHistoryCount()
+if (LIVE) {
+  note('папок в ~/.claude/file-history было', histBefore, '· стало', histAfter)
+} else {
+  ok('изолированный прогон не насорил в профиле человека', histAfter === histBefore, {
+    было: histBefore,
+    стало: histAfter
+  })
+}
 cleanup([stand])
 finish()

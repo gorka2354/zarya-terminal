@@ -132,6 +132,23 @@ const EXE_RECHECK_MS = 30 * 60_000
 const IDLE_QUERY_TIMEOUT_MS = 20_000
 
 /**
+ * Сколько ждём движок на СУХОМ прогоне отката.
+ *
+ * Он только читает свои копии и считает разницу — это секунды. Ждать дольше
+ * значит держать человека перед крутилкой ради случая, которого не бывает.
+ */
+const REWIND_DRY_TIMEOUT_MS = Number(process.env.ZARYA_QA_REWIND_TIMEOUT_MS) || 30_000
+
+/**
+ * Сколько ждём на НАСТОЯЩЕМ откате.
+ *
+ * Здесь движок пишет файлы — их может быть много, а диск медленным. Предел
+ * всё равно нужен: без него зависший вызов оставляет карточку в «Смотрю, что
+ * изменится…» навсегда, и человек не знает, случился откат или нет.
+ */
+const REWIND_RUN_TIMEOUT_MS = Number(process.env.ZARYA_QA_REWIND_TIMEOUT_MS) || 120_000
+
+/**
  * How long a freshly fetched model catalog is reused. Long enough that opening
  * and closing the launch console repeatedly costs one CLI spawn, short enough
  * that a model released (or a CLI updated) mid-session shows up on its own.
@@ -2793,7 +2810,27 @@ export class ClaudeCodeDriver implements AgentDriver {
     }
     if (!q.rewindFiles) return { canRewind: false, refused: 'unsupported' }
     try {
-      const r = await q.rewindFiles(userMessageId, { dryRun: opts?.dryRun === true })
+      /*
+       * У ожидания есть предел.
+       *
+       * `rewindFiles` — чужой вызов в чужом процессе, и вернуться он обязан не
+       * потому, что мы на это надеемся. Арендованная сессия может подняться и
+       * замолчать (движок ушёл в себя, сеть отвалилась, процесс жив, но нем), и
+       * тогда карточка вечно показывает «Смотрю, что изменится…»: ни кнопки, ни
+       * причины, ни способа выйти. Отказ по времени хуже успеха, но лучше
+       * молчания: он называет причину и оставляет ручной путь.
+       */
+      const limit = opts?.dryRun === true ? REWIND_DRY_TIMEOUT_MS : REWIND_RUN_TIMEOUT_MS
+      const r = await Promise.race([
+        q.rewindFiles(userMessageId, { dryRun: opts?.dryRun === true }),
+        new Promise<'timeout'>((res) => setTimeout(() => res('timeout'), limit))
+      ])
+      /*
+       * Оговорка про НАСТОЯЩИЙ откат: молчание движка не значит, что он ничего
+       * не сделал. Он мог успеть переписать часть файлов — поэтому текст отказа
+       * не обещает, что на диске всё по-прежнему, а зовёт посмотреть глазами.
+       */
+      if (r === 'timeout') return { canRewind: false, refused: 'timeout' }
       return {
         canRewind: r?.canRewind === true,
         ...(r?.error ? { error: r.error } : {}),

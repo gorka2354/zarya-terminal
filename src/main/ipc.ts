@@ -15,6 +15,7 @@ import type {
   AiProviderKind,
   HistoryEntry,
   PtySpawnRequest,
+  RewindFilesOutcome,
   SessionSnapshot,
   Settings,
   WindowCommand,
@@ -85,6 +86,15 @@ const skillUsageStore = new SkillUsageStore()
 export function flushSkillUsage(): Promise<void> {
   return skillUsageStore.flush()
 }
+
+/**
+ * Сколько ждёт ГРАНИЦА, за которой стоит человек.
+ *
+ * Заведомо больше драйверного предела: пусть сначала ответит сам драйвер — он
+ * знает причину точнее и снимает за собой аренду сессии. Эта цифра ловит те
+ * драйверы, у которых своего предела нет вовсе.
+ */
+const REWIND_IPC_TIMEOUT_MS = Number(process.env.ZARYA_QA_REWIND_TIMEOUT_MS) || 150_000
 
 export function registerIpc(ctx: IpcContext): void {
   const {
@@ -760,8 +770,27 @@ export function registerIpc(ctx: IpcContext): void {
       //
       // Спрашиваем СПОСОБНОСТЬ, а не наличие метода: драйверы делят реализацию
       // (фейки — один класс), и «метод существует» не значит «движок умеет».
-      if (!drv?.rewindFiles || drv.capabilities?.rewindFiles !== true) {
+      const rewind = drv?.rewindFiles?.bind(drv)
+      if (!rewind || drv?.capabilities?.rewindFiles !== true) {
         return { canRewind: false, refused: 'unsupported' }
+      }
+      /*
+       * Ответ придёт ВСЕГДА.
+       *
+       * За этой границей ждёт человек: карточка показывает «Смотрю, что
+       * изменится…», пока IPC не вернётся. Драйвер Claude свой предел знает
+       * (там он ещё и аренду снимает за собой), но драйверов больше одного, и
+       * повиснуть может любой — а карточка про причину не догадается, она
+       * просто будет крутиться. Поэтому предел стоит и здесь, выше драйверного:
+       * пусть сначала ответит он сам, со своей причиной, и только если
+       * промолчал и он — отвечаем мы.
+       */
+      const call = async (o: Parameters<typeof rewind>[2]): Promise<RewindFilesOutcome> => {
+        const r = await Promise.race([
+          rewind(requestId, userMessageId, o),
+          new Promise<'timeout'>((res) => setTimeout(() => res('timeout'), REWIND_IPC_TIMEOUT_MS))
+        ])
+        return r === 'timeout' ? { canRewind: false, refused: 'timeout' } : r
       }
       // Та же граница, что и на старте хода: служебный подъём сессии не должен
       // включать копии там, где прогон их не заслужил.
@@ -777,7 +806,7 @@ export function registerIpc(ctx: IpcContext): void {
           // знает: какие пути он пропустит (ссылки), какие лежат вне папки
           // агента и что вообще есть на диске. Об этом надо сказать ДО, а не
           // числом после.
-          const dry = await drv.rewindFiles(requestId, userMessageId, {
+          const dry = await call({
             dryRun: true,
             resume: opts.resume,
             cwd: opts.cwd,
@@ -833,7 +862,7 @@ export function registerIpc(ctx: IpcContext): void {
          * необратимого действия. Поэтому снимаем состояние до, откатываем и
          * сверяем сами.
          */
-        const plan = await drv.rewindFiles(requestId, userMessageId, {
+        const plan = await call({
           dryRun: true,
           resume: opts?.resume,
           cwd: opts?.cwd,
@@ -894,7 +923,7 @@ export function registerIpc(ctx: IpcContext): void {
             filesChanged: paths
           }
         }
-        const done = await drv.rewindFiles(requestId, userMessageId, {
+        const done = await call({
           dryRun: false,
           resume: opts?.resume,
           cwd: opts?.cwd,

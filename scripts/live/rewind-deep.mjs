@@ -27,6 +27,7 @@ import {
   shot,
   skip,
   text,
+  waitDone,
   waitForGo
 } from '../lib/live-harness.mjs'
 
@@ -82,7 +83,7 @@ try {
     throw new Error('карточка не дала кнопку — дальше проверять нечего')
   }
   await page.click('.zy-rw-go')
-  await page.waitForTimeout(LIVE ? 4000 : 2000)
+  await waitDone(page)
   const done = await text(page, '.zy-rw-done')
   note('итог:', done.replace(/\s+/g, ' ').slice(0, 160))
   if (LIVE) {

@@ -529,7 +529,15 @@ export interface RewindFilesOutcome {
   /** Сколько путей движок пропустил (симлинки и прочее не-обычное). */
   skippedLinks?: number
   /** Отказ НАШЕЙ стороны, до движка. */
-  refused?: 'busy' | 'no-session' | 'unsupported' | 'no-turn-id' | 'stale' | 'backup-failed'
+  refused?:
+    | 'busy'
+    | 'no-session'
+    | 'unsupported'
+    | 'no-turn-id'
+    | 'stale'
+    | 'backup-failed'
+    /** Движок не ответил за отведённое время — что на диске, мы не знаем. */
+    | 'timeout'
   /**
    * Что изменилось, пока человек читал карточку.
    *

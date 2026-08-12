@@ -1777,13 +1777,15 @@ function RewindCard({
         if (!alive) return
         if (r.refused) {
           const key =
-            r.refused === 'busy'
-              ? 'rw.refuse.busy'
-              : r.refused === 'unsupported'
-                ? 'rw.refuse.unsupported'
-                : r.refused === 'no-turn-id'
-                  ? 'rw.refuse.noTurnId'
-                  : 'rw.refuse.noSession'
+            r.refused === 'timeout'
+              ? t('rw.refuse.timeout')
+              : r.refused === 'busy'
+                ? 'rw.refuse.busy'
+                : r.refused === 'unsupported'
+                  ? 'rw.refuse.unsupported'
+                  : r.refused === 'no-turn-id'
+                    ? 'rw.refuse.noTurnId'
+                    : 'rw.refuse.noSession'
           return setState({ kind: 'refused', text: t(key) })
         }
         // Причину отказа НЕ придумываем: у движка она своя, и он её называет.

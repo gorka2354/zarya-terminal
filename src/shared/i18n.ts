@@ -396,7 +396,21 @@ export const RU: Dict = {
   'rw.refuse.noSession': 'Беседа не поднята: откат станет доступен, когда движок ответит.',
   'rw.refuse.unsupported': 'Этот движок не умеет возвращать файлы.',
   'rw.refuse.noTurnId': 'У этого хода нет точки отката.',
-  'rw.noFiles': 'Движок не назвал файлы — объём не обещаем.',
+  /*
+   * Не обещаем, что на диске ничего не изменилось: движок мог успеть
+   * переписать часть файлов и замолчать уже после этого. Сказать «откат не
+   * выполнен» было бы удобнее и было бы враньём.
+   */
+  'rw.refuse.timeout':
+    'Движок не ответил вовремя. Что успело измениться на диске — неизвестно; посмотрите в «что изменилось».',
+  /*
+   * Проверено на живом Claude Code 2.1.227: откат работает ТОЛЬКО НАЗАД. На ход
+   * позже уже сделанного отката движок отвечает «могу» с пустым списком и не
+   * делает ничего — файл, который он только что удалил, обратно не создаётся.
+   * Молчать об этом значит оставить человека ждать возврата, которого не будет.
+   */
+  'rw.noFiles':
+    'Движок не назвал ни одного файла — объём не обещаем. Возвращать он умеет только назад: к более позднему ходу файлы не вернутся.',
   'rw.doneCounts': 'Вернулось: {ok} · осталось прежними: {same} · не знаем: {unknown}',
   'rw.doneSkipped': 'Пропущено ссылок: {n}',
   'rw.stayed': 'Остались прежними:',
@@ -1933,7 +1947,10 @@ export const EN: Dict = {
     'The conversation is not live: the rewind becomes available once the engine answers.',
   'rw.refuse.unsupported': 'This engine cannot return files.',
   'rw.refuse.noTurnId': 'This turn has no rewind point.',
-  'rw.noFiles': 'The engine did not name the files — we do not promise the scope.',
+  'rw.refuse.timeout':
+    'The engine did not answer in time. What changed on disk is unknown — check “what changed”.',
+  'rw.noFiles':
+    'The engine named no files — we do not promise the scope. It only rewinds backwards: files will not come back at a later turn.',
   'rw.doneCounts': 'Restored: {ok} · unchanged: {same} · unknown: {unknown}',
   'rw.doneSkipped': 'Links skipped: {n}',
   'rw.stayed': 'Stayed unchanged:',
