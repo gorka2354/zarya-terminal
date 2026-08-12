@@ -104,6 +104,7 @@ const api = {
         cwd?: string
         resume?: string
         seen?: Array<{ path: string; existsNow: boolean; hash?: string }>
+        others?: Array<{ id: string; title?: string }>
       }
     ) =>
       ipcRenderer.invoke(

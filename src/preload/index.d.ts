@@ -179,6 +179,7 @@ export interface ZaryaApi {
         cwd?: string
         resume?: string
         seen?: Array<{ path: string; existsNow: boolean; hash?: string }>
+        others?: Array<{ id: string; title?: string }>
       }
     ): Promise<RewindFilesOutcome>
     stopTask(

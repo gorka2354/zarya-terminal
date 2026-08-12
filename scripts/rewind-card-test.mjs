@@ -234,5 +234,31 @@ await withApp('ok', async (page, work) => {
   if (shots) await page.screenshot({ path: join(shots, 'rewind-stale.png') })
 })
 
+console.log('\n[8] Файл, который держит соседняя панель, назван поимённо')
+await withApp('ok', async (page) => {
+  // Две беседы в ОДНОЙ папке правят один и тот же файл. Движок про соседа не
+  // знает: он ведёт историю по своей сессии. Откат одной панели снёс бы работу
+  // другой, и человек узнал бы об этом уже постфактум.
+  const a = await page.evaluate(() => window.__zaryaStartAgent?.('codex', 'первая панель'))
+  await page.waitForTimeout(1000)
+  await page.evaluate((c) => window.__zaryaSetBypassFor?.(c, true), a)
+  await page.waitForTimeout(300)
+  await page.evaluate(() => window.__zaryaFollowUp?.('tool edit: поправь файл'))
+  await page.waitForTimeout(2400)
+
+  const b = await page.evaluate(() => window.__zaryaStartAgent?.('codex', 'вторая панель'))
+  await page.waitForTimeout(1000)
+  await page.evaluate((c) => window.__zaryaSetBypassFor?.(c, true), b)
+  await page.waitForTimeout(300)
+  await page.evaluate(() => window.__zaryaFollowUp?.('tool edit: поправь файл'))
+  await page.waitForTimeout(2600)
+
+  await clickRewind(page)
+  await page.waitForTimeout(2000)
+  const card = await text(page, '.zy-rw')
+  ok('сказано, что файл держит другая панель', /держит другая панель/.test(card), card.slice(0, 400))
+  if (shots) await page.screenshot({ path: join(shots, 'rewind-neighbor.png') })
+})
+
 console.log(`\nИтог: ${pass} ok, ${fail} fail`)
 process.exit(fail ? 1 : 0)

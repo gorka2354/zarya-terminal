@@ -554,6 +554,8 @@ export interface RewindFilesOutcome {
     observed?: boolean
     /** На диске уже НЕ то, что записал агент: правку потеряют. */
     changedAfterAgent?: boolean
+    /** Этот же файл держит другая живая панель — она об откате не узнает. */
+    heldByPane?: string
   }>
   /**
    * Копия спорных файлов, снятая ПЕРЕД откатом.

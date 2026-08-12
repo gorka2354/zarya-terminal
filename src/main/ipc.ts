@@ -725,6 +725,12 @@ export function registerIpc(ctx: IpcContext): void {
         resume?: string
         /** Снимок, который человек видел в карточке (для сверки перед записью). */
         seen?: SeenFile[]
+        /**
+         * Другие живые беседы — чтобы назвать панель, которая держит тот же
+         * файл. Список приходит из окна: оно знает, какие панели открыты и как
+         * они называются.
+         */
+        others?: Array<{ id: string; title?: string }>
       }
     ) => {
       const drv = driverFor(engine)
@@ -760,12 +766,27 @@ export function registerIpc(ctx: IpcContext): void {
            * вернётся к прежнему виду» от «ты потеряешь свою правку» — а движок
            * такую разницу не показывает вовсе и затирает правку молча.
            */
+          /*
+           * Соседняя панель ищется по ПУТИ, а не по папке.
+           *
+           * Папочное сравнение врёт дважды: агент из одной папки спокойно
+           * пишет в другую (проверено прогоном — файл в чужом проекте), а
+           * панель на другом движке при сравнении «внутри Claude» не видна
+           * вовсе. Карта общая для всех драйверов, поэтому достаточно
+           * спросить её про чужие беседы.
+           */
+          const others = (opts.others ?? []).filter((o) => o.id !== requestId)
+          for (const o of others) await agentFileStore.restore(agentFiles, o.id)
           return {
             ...dry,
-            facts: facts.map((f) => ({
-              ...f,
-              ...compareNote(agentFiles.note(requestId, f.path), f.hash)
-            }))
+            facts: facts.map((f) => {
+              const pane = others.find((o) => agentFiles.note(o.id, f.path))
+              return {
+                ...f,
+                ...compareNote(agentFiles.note(requestId, f.path), f.hash),
+                ...(pane ? { heldByPane: pane.title || pane.id } : {})
+              }
+            })
           }
         }
         /*

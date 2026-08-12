@@ -10,6 +10,7 @@ import { listChanges, type ChangedFile } from '@shared/changes'
 import { matchTouched, touchedSince } from '@shared/touched'
 import { rewindPlan, type FileFacts, type RewindMark, type SeenFile } from '@shared/rewindPlan'
 import { canRewindTurn } from '@shared/rewindGate'
+import { useEditorStore } from '@/features/editor/editorStore'
 import { useBlocksStore } from '@/state/blocksStore'
 import { useSessionsStore } from '@/state/sessionsStore'
 import { setBarModeOf, setRaw, useUiStore } from '@/state/uiStore'
@@ -1678,6 +1679,30 @@ function RewindCard({
   useLang()
   const [refresh, setRefresh] = useState(0)
   /*
+   * Соседние беседы и несохранённые вкладки читаются В МОМЕНТ запроса, а не
+   * подпиской.
+   *
+   * Селектор, возвращающий новый массив, заставляет стор считать состояние
+   * изменившимся при каждом обновлении — а во время хода они идут потоком.
+   * Карточка перерисовывалась бы без остановки и не успевала показать кнопку
+   * (поймано прогоном: `.zy-rw-go` не дожидался появления).
+   */
+  const snapshot = (): { others: Array<{ id: string; title?: string }>; dirty: string[] } => ({
+    others: useAiStore
+      .getState()
+      .conversations.filter((c) => c.id !== conv.id)
+      .map((c) => ({ id: c.id, title: c.title })),
+    /*
+     * Несохранённая вкладка опаснее, чем кажется: на диске сейчас версия
+     * агента, файл уверенно попал бы в спокойное «вернётся», откат перепишет
+     * диск — и человек либо потеряет абзац, либо затрёт откат своим Ctrl+S.
+     */
+    dirty: useEditorStore
+      .getState()
+      .files.filter((f) => f.dirty)
+      .map((f) => f.path.split('\\').join('/').toLowerCase())
+  })
+  /*
    * Предупреждение «пока вы читали, изменилось» живёт ОТДЕЛЬНО от списка.
    *
    * Расхождение заставляет перезапросить список, а перерисовка стирала бы
@@ -1709,11 +1734,13 @@ function RewindCard({
 
   useEffect(() => {
     let alive = true
+    const { others, dirty } = snapshot()
     void window.zarya.agent
       .rewindFiles(conv.engine as never, conv.id, turnId, {
         dryRun: true,
         cwd,
-        resume: conv.claudeSessionId
+        resume: conv.claudeSessionId,
+        others
       })
       .then((r) => {
         if (!alive) return
@@ -1748,7 +1775,11 @@ function RewindCard({
             // там лежит отпечаток того, что записал агент, и там же читается
             // диск. Считать это в окне значило бы гадать по путям.
             observed: d?.observed === true,
-            ...(d?.changedAfterAgent ? { changedAfterAgent: true } : {})
+            ...(d?.changedAfterAgent ? { changedAfterAgent: true } : {}),
+            ...(d?.heldByPane ? { heldByPane: d.heldByPane } : {}),
+            ...(dirty.includes(path.split('\\').join('/').toLowerCase())
+              ? { dirtyInEditor: true }
+              : {})
           }
         })
         setState({
