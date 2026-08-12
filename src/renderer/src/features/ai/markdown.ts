@@ -65,7 +65,8 @@ function decorateCodeBlocks(html: string): string {
     langSpan.className = 'zy-md-code-lang'
     // Patch header: «ПАТЧ · <file>» if the diff names a target file.
     if (isDiff) {
-      const fileMatch = /^\+\+\+\s+b?\/?(\S+)/m.exec(codeText) || /^diff --git a\/\S+ b\/(\S+)/m.exec(codeText)
+      const fileMatch =
+        /^\+\+\+\s+b?\/?(\S+)/m.exec(codeText) || /^diff --git a\/\S+ b\/(\S+)/m.exec(codeText)
       langSpan.textContent = fileMatch ? t('md.patchFile', { file: fileMatch[1] }) : t('md.patch')
     } else {
       langSpan.textContent = lang

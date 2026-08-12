@@ -72,7 +72,10 @@ export function planOnToolUse(
     if (!subject) return plan
     return {
       ...plan,
-      awaiting: { ...plan.awaiting, [toolUseId]: { subject, activeForm: text(o?.activeForm) || undefined } }
+      awaiting: {
+        ...plan.awaiting,
+        [toolUseId]: { subject, activeForm: text(o?.activeForm) || undefined }
+      }
     }
   }
   if (name === 'TaskUpdate') {
@@ -125,7 +128,10 @@ export function planOnToolResult(plan: AgentPlan, toolUseId: string, content: st
   return {
     ...plan,
     awaiting,
-    tasks: [...plan.tasks, { id, subject: pending.subject, activeForm: pending.activeForm, status: 'pending' }]
+    tasks: [
+      ...plan.tasks,
+      { id, subject: pending.subject, activeForm: pending.activeForm, status: 'pending' }
+    ]
   }
 }
 

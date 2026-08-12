@@ -179,5 +179,5 @@ export function coveredToolUseIds(runs: Record<string, SubagentRun>): Set<string
   const out = new Set<string>()
   for (const r of Object.values(runs)) if (r.toolUseId) out.add(r.toolUseId)
   return out
-}import { t } from '@/lib/i18n'
-
+}
+import { t } from '@/lib/i18n'

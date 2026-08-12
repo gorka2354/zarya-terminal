@@ -30,7 +30,9 @@ import './updates.css'
 function fmtSize(bytes: number): string {
   if (!bytes) return ''
   const mb = bytes / 1_000_000
-  return mb >= 1 ? `${mb.toFixed(0)} ${t('unit.mb')}` : `${Math.max(1, Math.round(bytes / 1000))} ${t('unit.kb')}`
+  return mb >= 1
+    ? `${mb.toFixed(0)} ${t('unit.mb')}`
+    : `${Math.max(1, Math.round(bytes / 1000))} ${t('unit.kb')}`
 }
 
 /**
@@ -102,7 +104,9 @@ function InstallButton(): React.JSX.Element {
       <button className="zy-btn zy-upd-progress" disabled>
         <span className="zy-upd-progress-fill" style={{ width: `${dl.percent}%` }} />
         <span className="zy-upd-progress-text">
-          {dl.total ? t('upd.progress', { done: mb(dl.transferred), total: mb(dl.total) }) : t('upd.downloading')}
+          {dl.total
+            ? t('upd.progress', { done: mb(dl.transferred), total: mb(dl.total) })
+            : t('upd.downloading')}
         </span>
       </button>
     )
@@ -253,7 +257,9 @@ export default function UpdateView(): React.JSX.Element | null {
             <PixelIcon name="download" />
           </span>
           <div className="zy-upd-title">
-            <div className="zy-upd-name">{rel?.name || (rel ? t('upd.name', { v: rel.version }) : t('upd.update'))}</div>
+            <div className="zy-upd-name">
+              {rel?.name || (rel ? t('upd.name', { v: rel.version }) : t('upd.update'))}
+            </div>
             <div className="zy-upd-sub">
               {rel ? t('upd.versionCaps', { v: rel.version }) : 'UPDATE'}
               {rel && fmtDate(rel.publishedAt) ? ` · ${fmtDate(rel.publishedAt)}` : ''}
@@ -267,13 +273,13 @@ export default function UpdateView(): React.JSX.Element | null {
 
         <div className="zy-upd-body">
           {state?.installError && (
-            <div className="zy-set-warning">{t('upd.installFail', { err: state.installError })}</div>
+            <div className="zy-set-warning">
+              {t('upd.installFail', { err: state.installError })}
+            </div>
           )}
           {rel && state?.signature && !signed && (
             <div className="zy-set-warning">
-              {state.signature === 'bad'
-                ? t('upd.sigBad')
-                : t('upd.sigNone')}
+              {state.signature === 'bad' ? t('upd.sigBad') : t('upd.sigNone')}
             </div>
           )}
           {!rel ? (
@@ -287,7 +293,9 @@ export default function UpdateView(): React.JSX.Element | null {
           ) : (
             <>
               <div className="zy-upd-vers">
-                <span className="zy-upd-vers-cur">{t('upd.yours', { v: state?.current ?? '' })}</span>
+                <span className="zy-upd-vers-cur">
+                  {t('upd.yours', { v: state?.current ?? '' })}
+                </span>
                 <span className="zy-upd-vers-arrow">→</span>
                 <span className="zy-upd-vers-new">{rel.version}</span>
               </div>
@@ -367,7 +375,11 @@ export default function UpdateView(): React.JSX.Element | null {
             ) : null}
           </span>
           <div className="zy-upd-spacer" />
-          <button className="zy-btn" onClick={() => void check()} disabled={state?.checking || busy}>
+          <button
+            className="zy-btn"
+            onClick={() => void check()}
+            disabled={state?.checking || busy}
+          >
             {state?.checking ? t('upd.checking') : t('upd.checkAgain')}
           </button>
           {rel && selfInstall && <InstallButton />}

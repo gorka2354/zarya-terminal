@@ -36,7 +36,10 @@ function targetSessionId(sessionId: string | undefined): string | null {
 /** Short "✓ …" summary line for a settled tool result (first non-empty line, truncated). */
 function summarizeToolResult(content: string | undefined): string {
   if (!content) return t('ide.done')
-  const firstLine = content.split('\n').find((l) => l.trim().length > 0)?.trim()
+  const firstLine = content
+    .split('\n')
+    .find((l) => l.trim().length > 0)
+    ?.trim()
   if (!firstLine) return t('ide.done')
   return firstLine.length > 72 ? `${firstLine.slice(0, 72)}…` : firstLine
 }
@@ -192,7 +195,11 @@ export default function AiPanel(): React.JSX.Element {
             className="zy-icon-btn"
             title={t('ide.newConv')}
             onClick={() =>
-              useAiStore.getState().newConversation({ sessionId: useSessionsStore.getState().activeSessionId() ?? undefined })
+              useAiStore
+                .getState()
+                .newConversation({
+                  sessionId: useSessionsStore.getState().activeSessionId() ?? undefined
+                })
             }
           >
             <Icon name="plus" size={14} />
@@ -202,7 +209,8 @@ export default function AiPanel(): React.JSX.Element {
               className="zy-icon-btn"
               title={t('ide.deleteConv')}
               onClick={() => {
-                if (window.confirm(t('ide.deleteConvAsk'))) useAiStore.getState().deleteConversation(conv.id)
+                if (window.confirm(t('ide.deleteConvAsk')))
+                  useAiStore.getState().deleteConversation(conv.id)
               }}
             >
               <Icon name="trash" size={14} />
@@ -217,7 +225,11 @@ export default function AiPanel(): React.JSX.Element {
           >
             <Icon name="bolt" size={13} /> {t('ide.agent')}
           </button>
-          <button className="zy-icon-btn" title={t('common.close')} onClick={() => useUiStore.getState().set({ aiPanelOpen: false })}>
+          <button
+            className="zy-icon-btn"
+            title={t('common.close')}
+            onClick={() => useUiStore.getState().set({ aiPanelOpen: false })}
+          >
             <Icon name="close" size={14} />
           </button>
         </div>
@@ -226,9 +238,7 @@ export default function AiPanel(): React.JSX.Element {
       <div className="zy-sidebar-body zy-ai-body" ref={listRef} onClick={handleBodyClick}>
         {!conv || conv.messages.length === 0 ? (
           <div className="zy-ai-empty">
-            <div className="zy-empty">
-              {t('ide.emptyHint')}
-            </div>
+            <div className="zy-empty">{t('ide.emptyHint')}</div>
             <div className="zy-ai-examples">
               {EXAMPLES.map((ex) => (
                 <button key={ex} className="zy-ai-example" onClick={() => doSend(ex)}>
@@ -241,7 +251,8 @@ export default function AiPanel(): React.JSX.Element {
           conv.messages.map((m, mi) => {
             const isLastMsg = mi === conv.messages.length - 1
             if (m.role === 'user') {
-              const toolResultsOnly = m.content.length > 0 && m.content.every((p) => p.type === 'tool_result')
+              const toolResultsOnly =
+                m.content.length > 0 && m.content.every((p) => p.type === 'tool_result')
               if (toolResultsOnly) return null
               const text = m.content
                 .filter((p): p is Extract<AiContentPart, { type: 'text' }> => p.type === 'text')
@@ -275,7 +286,10 @@ export default function AiPanel(): React.JSX.Element {
                     if (!p.text && !(conv.streaming && isLastPart)) return null
                     return (
                       <div key={pi} className="zy-ai-answer">
-                        <div className="zy-md" dangerouslySetInnerHTML={{ __html: renderMarkdown(p.text) }} />
+                        <div
+                          className="zy-md"
+                          dangerouslySetInnerHTML={{ __html: renderMarkdown(p.text) }}
+                        />
                         {conv.streaming && isLastPart && <span className="zy-ai-cursor">▍</span>}
                       </div>
                     )
@@ -350,7 +364,10 @@ export default function AiPanel(): React.JSX.Element {
         {conv?.error && (
           <div className="zy-ai-error">
             <span>⚠ {conv.error}</span>
-            <button className="zy-icon-btn" onClick={() => useAiStore.getState().dismissError(conv.id)}>
+            <button
+              className="zy-icon-btn"
+              onClick={() => useAiStore.getState().dismissError(conv.id)}
+            >
               <Icon name="close" size={12} />
             </button>
           </div>
@@ -460,8 +477,18 @@ function ToolCard(props: {
   onApprove: () => void
   onDeny: () => void
 }): React.JSX.Element {
-  const { command, reason, resolved, denied, awaitingDecision, executing, isAuto, resultContent, onApprove, onDeny } =
-    props
+  const {
+    command,
+    reason,
+    resolved,
+    denied,
+    awaitingDecision,
+    executing,
+    isAuto,
+    resultContent,
+    onApprove,
+    onDeny
+  } = props
   const [expanded, setExpanded] = useState(false)
 
   return (

@@ -139,13 +139,15 @@ export function peekPendingRestore(sessionId: string): string | undefined {
  * перестройке раскладки экран панели ОСТАЛСЯ тем же: метку, которой оболочка
  * никогда не присылала, новый терминал показать не может.
  */
-;(window as unknown as { __zaryaTermWrite?: (sessionId: string, text: string) => void }).__zaryaTermWrite =
-  (sessionId, text) => handles.get(sessionId)?.term.write(text)
+;(
+  window as unknown as { __zaryaTermWrite?: (sessionId: string, text: string) => void }
+).__zaryaTermWrite = (sessionId, text) => handles.get(sessionId)?.term.write(text)
 
 // Прогонам: сколько раз создавали терминал каждой сессии. Больше одного — панель
 // перемонтировали, и то, что было на экране, человек уже не увидит.
-;(window as unknown as { __zaryaTermCreations?: () => Record<string, number> }).__zaryaTermCreations =
-  () => Object.fromEntries(creations)
+;(
+  window as unknown as { __zaryaTermCreations?: () => Record<string, number> }
+).__zaryaTermCreations = () => Object.fromEntries(creations)
 
 // QA hook: the live xterm option bag of the first registered terminal, so a
 // harness can verify that a settings change actually reached the terminal.

@@ -49,9 +49,7 @@ export function launchClaudeNative(): void {
   } else {
     store.setActiveConversation(existing.id)
   }
-  useUiStore
-    .getState()
-    .toast(t('cli.claudeActive'), 'success')
+  useUiStore.getState().toast(t('cli.claudeActive'), 'success')
 }
 
 /**
@@ -92,9 +90,7 @@ export function AiCliLauncher(): React.JSX.Element | null {
   return (
     <div className="zy-clilaunch">
       <div className="zy-clilaunch-label">
-        {installed.length > 0
-          ? t('feed.launchAgentLower')
-          : t('cli.noneInstalled')}
+        {installed.length > 0 ? t('feed.launchAgentLower') : t('cli.noneInstalled')}
       </div>
       <div className="zy-clilaunch-grid">
         {shown.map((cli) => (

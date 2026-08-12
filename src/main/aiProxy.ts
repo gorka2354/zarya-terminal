@@ -247,7 +247,12 @@ export class AiProxy {
       } catch {
         input = { _raw: tc.args }
       }
-      this.emit(requestId, { type: 'tool_use', id: tc.id || `call_${Date.now()}`, name: tc.name, input })
+      this.emit(requestId, {
+        type: 'tool_use',
+        id: tc.id || `call_${Date.now()}`,
+        name: tc.name,
+        input
+      })
     }
     this.emit(requestId, {
       type: 'done',
@@ -275,7 +280,9 @@ export class AiProxy {
     const base = (baseUrl?.trim() || CATALOG_BASE[provider] || '').replace(/\/$/, '')
     if (!base) throw new Error(tm('main.err.noBaseUrl'))
     if (!apiKey) {
-      throw new Error(tm(provider === 'anthropic' ? 'main.err.noAnthropicKey' : 'main.err.noOpenaiKey'))
+      throw new Error(
+        tm(provider === 'anthropic' ? 'main.err.noAnthropicKey' : 'main.err.noOpenaiKey')
+      )
     }
     const headers: Record<string, string> =
       provider === 'anthropic'

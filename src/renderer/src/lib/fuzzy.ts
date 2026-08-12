@@ -23,7 +23,14 @@ export function fuzzyScore(query: string, target: string): number {
       run++
       score += 10 + run * 2
       const prev = t[ti - 1]
-      if (ti === 0 || prev === ' ' || prev === '-' || prev === '_' || prev === '/' || prev === '.') {
+      if (
+        ti === 0 ||
+        prev === ' ' ||
+        prev === '-' ||
+        prev === '_' ||
+        prev === '/' ||
+        prev === '.'
+      ) {
         score += 15 // word-start bonus
       }
     } else {

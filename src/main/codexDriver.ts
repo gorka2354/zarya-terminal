@@ -72,10 +72,8 @@ interface CodexSession {
 
 function friendlyError(e: unknown): string {
   const msg = e instanceof Error ? e.message : String(e)
-  if (/ENOENT|not found|не найден/i.test(msg))
-    return tm('drv.codexMissing')
-  if (/auth|login|unauthor/i.test(msg))
-    return tm('drv.codexAuth')
+  if (/ENOENT|not found|не найден/i.test(msg)) return tm('drv.codexMissing')
+  if (/auth|login|unauthor/i.test(msg)) return tm('drv.codexAuth')
   return `Codex: ${msg}`
 }
 
@@ -192,7 +190,8 @@ export class CodexDriver implements AgentDriver {
         // now-dead threadId. Tell every live conversation and drop the sessions
         // so the next turn re-opens a fresh thread on a respawned server.
         const msg = friendlyError(err)
-        for (const requestId of this.sessions.keys()) this.emit(requestId, { type: 'error', message: msg })
+        for (const requestId of this.sessions.keys())
+          this.emit(requestId, { type: 'error', message: msg })
         this.sessions.clear()
         this.threadToRequest.clear()
         this.proc = undefined
@@ -305,7 +304,10 @@ export class CodexDriver implements AgentDriver {
         const turn = (params as CodexTurnNotification).turn
         const failed = turn?.status === 'failed'
         if (failed)
-          this.emit(requestId, { type: 'error', message: turn?.error?.message ?? tm('drv.turnFailed') })
+          this.emit(requestId, {
+            type: 'error',
+            message: turn?.error?.message ?? tm('drv.turnFailed')
+          })
         const model = this.sessions.get(requestId)?.model
         this.emit(requestId, {
           type: 'result',
@@ -354,7 +356,8 @@ export class CodexDriver implements AgentDriver {
    * hangs waiting on us.
    */
   private handleServerRequest(c: Extract<CodexInbound, { kind: 'serverRequest' }>): void {
-    const params = c.params as (CodexCommandApprovalParams | CodexFileChangeApprovalParams) | undefined
+    const params = c.params as
+      (CodexCommandApprovalParams | CodexFileChangeApprovalParams) | undefined
     const requestId = this.routeThread(params?.threadId)
     const session = requestId ? this.sessions.get(requestId) : undefined
     if (!requestId || !session || !params?.itemId) {
@@ -538,7 +541,9 @@ export class CodexDriver implements AgentDriver {
     for (const jsonRpcId of s.approvals.values()) this.respond(jsonRpcId, { decision: 'decline' })
     s.approvals.clear()
     if (s.threadId)
-      this.request(CODEX_METHOD.turnInterrupt, { threadId: s.threadId, turnId: s.turnId }).catch(() => {})
+      this.request(CODEX_METHOD.turnInterrupt, { threadId: s.threadId, turnId: s.turnId }).catch(
+        () => {}
+      )
   }
 
   /** Reply to a pending approval gate from a renderer approve/deny click. */

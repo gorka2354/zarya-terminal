@@ -68,7 +68,11 @@ export function ruleFor(toolName: string, input: unknown): AllowRule | null {
 }
 
 /** Подпадает ли вызов под уже созданное правило. */
-export function matchesRule(rules: AllowRule[] | undefined, toolName: string, input: unknown): boolean {
+export function matchesRule(
+  rules: AllowRule[] | undefined,
+  toolName: string,
+  input: unknown
+): boolean {
   if (!rules?.length) return false
   // Пол выше правил всегда: даже если правило каким-то образом появилось,
   // необратимое всё равно спрашивают.

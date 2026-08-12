@@ -49,7 +49,9 @@ export function cleanCommands(raw: unknown): AgentCommand[] {
   for (const item of raw) {
     if (!item || typeof item !== 'object') continue
     const o = item as Record<string, unknown>
-    const name = String(o.name ?? '').replace(/^\/+/, '').trim()
+    const name = String(o.name ?? '')
+      .replace(/^\/+/, '')
+      .trim()
     if (!name || HIDDEN.test(name)) continue
     const key = name.toLowerCase()
     if (seen.has(key)) continue
@@ -121,7 +123,11 @@ export function matchCommands(list: AgentCommand[], query: string): AgentCommand
  * пришлось бы стирать его перед отправкой, а лишнее нажатие в самом частом
  * жесте — это плохая сделка.
  */
-export function applyCommand(text: string, caret: number, cmd: AgentCommand): {
+export function applyCommand(
+  text: string,
+  caret: number,
+  cmd: AgentCommand
+): {
   text: string
   caret: number
 } {

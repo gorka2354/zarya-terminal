@@ -273,8 +273,7 @@ export class SttService {
     const key = (c?: CustomSttModel): string =>
       c ? `${c.id}|${c.dir}|${c.family}|${JSON.stringify(c.files)}` : ''
     const same =
-      list.length === this.customs.length &&
-      list.every((c, i) => key(c) === key(this.customs[i]))
+      list.length === this.customs.length && list.every((c, i) => key(c) === key(this.customs[i]))
     this.customs = list
     if (!same) {
       this.recognizer = null
@@ -444,9 +443,12 @@ export class SttService {
           onProgress?.(this.downloading)
         })
         const size = statSync(tmp).size
-        if (size !== f.bytes) throw new Error(tm('main.stt.sizeMismatch', { name: f.name, got: size, want: f.bytes }))
+        if (size !== f.bytes)
+          throw new Error(tm('main.stt.sizeMismatch', { name: f.name, got: size, want: f.bytes }))
         if (f.sha256) {
-          const actual = createHash('sha256').update(await readFile(tmp)).digest('hex')
+          const actual = createHash('sha256')
+            .update(await readFile(tmp))
+            .digest('hex')
           if (actual !== f.sha256) throw new Error(tm('main.stt.shaMismatch', { name: f.name }))
         }
         renameSync(tmp, dest)
@@ -475,14 +477,18 @@ export class SttService {
     // A redirect loop would otherwise recurse until the stack dies instead of
     // surfacing an error.
     if (hops > 5) return Promise.reject(new Error(tm('main.upd.tooManyHops')))
-    if (!url.startsWith('https://'))
-      return Promise.reject(new Error(tm('main.stt.httpsOnly')))
+    if (!url.startsWith('https://')) return Promise.reject(new Error(tm('main.stt.httpsOnly')))
     return new Promise((resolve, reject) => {
       const req = get(url, { headers: { 'user-agent': 'Zarya' } }, (res) => {
         // HuggingFace redirects to a CDN — and the Location can be RELATIVE
         // (`/api/resolve-cache/…`), which `get()` rejects as an invalid URL.
         // Resolve it against the current one.
-        if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        if (
+          res.statusCode &&
+          res.statusCode >= 300 &&
+          res.statusCode < 400 &&
+          res.headers.location
+        ) {
           res.resume()
           const next = new URL(res.headers.location, url).toString()
           this.download(next, dest, expected, onChunk, hops + 1).then(resolve, reject)

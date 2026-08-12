@@ -81,97 +81,97 @@ export function BlocksPanel(): React.JSX.Element {
           const badge = exitBadge(b)
           const failed = b.exitCode !== undefined && b.exitCode !== 0
           return (
-          <div
-            key={b.id}
-            className="zy-block-card"
-            style={
-              failed
-                ? { borderLeft: '2px solid color-mix(in srgb, var(--danger) 50%, transparent)' }
-                : undefined
-            }
-            onClick={() => sessionId && getTerminal(sessionId)?.engine.scrollToBlock(b.id)}
-          >
-            <div className="zy-block-card-head">
-              <span
-                style={{
-                  fontFamily: 'var(--font-tech)',
-                  fontSize: 12,
-                  lineHeight: '18px',
-                  padding: '0 7px',
-                  borderRadius: 8,
-                  letterSpacing: '0.02em',
-                  whiteSpace: 'nowrap',
-                  flexShrink: 0,
-                  background: badge.background,
-                  color: badge.color
-                }}
-              >
-                {badge.label}
-              </span>
-              <span className="zy-block-card-cmd" title={b.command}>
-                {b.command || t('blocks.unknownCmd')}
-              </span>
+            <div
+              key={b.id}
+              className="zy-block-card"
+              style={
+                failed
+                  ? { borderLeft: '2px solid color-mix(in srgb, var(--danger) 50%, transparent)' }
+                  : undefined
+              }
+              onClick={() => sessionId && getTerminal(sessionId)?.engine.scrollToBlock(b.id)}
+            >
+              <div className="zy-block-card-head">
+                <span
+                  style={{
+                    fontFamily: 'var(--font-tech)',
+                    fontSize: 12,
+                    lineHeight: '18px',
+                    padding: '0 7px',
+                    borderRadius: 8,
+                    letterSpacing: '0.02em',
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0,
+                    background: badge.background,
+                    color: badge.color
+                  }}
+                >
+                  {badge.label}
+                </span>
+                <span className="zy-block-card-cmd" title={b.command}>
+                  {b.command || t('blocks.unknownCmd')}
+                </span>
+              </div>
+              {b.output && <pre className="zy-block-card-out">{b.output.slice(-400)}</pre>}
+              <div className="zy-block-card-foot">
+                <span className="zy-block-card-meta">
+                  {formatRelative(b.startedAt)}
+                  {b.endedAt ? ` · ${formatDuration(b.endedAt - b.startedAt)}` : ''}
+                </span>
+                <span className="zy-block-card-actions">
+                  <button
+                    className="zy-icon-btn"
+                    title={t('blocks.copyCmd')}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      copy(b.command, t('blocks.cmdWord'))
+                    }}
+                  >
+                    <Icon name="copy" size={13} />
+                  </button>
+                  <button
+                    className="zy-icon-btn"
+                    title={t('blocks.copyOut')}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      copy(b.output, t('blocks.outWord'))
+                    }}
+                  >
+                    <Icon name="download" size={13} />
+                  </button>
+                  <button
+                    className="zy-icon-btn"
+                    title={t('blocks.exportMd')}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      exportMd(b)
+                    }}
+                  >
+                    <Icon name="download" size={13} />
+                  </button>
+                  <button
+                    className="zy-icon-btn"
+                    title={t('blocks.rerun')}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      rerun(b)
+                    }}
+                  >
+                    <Icon name="rerun" size={13} />
+                  </button>
+                  <button
+                    className="zy-icon-btn"
+                    title={t('blocks.askAi')}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      aiExplainBlock(b)
+                    }}
+                  >
+                    <Icon name="sputnik" size={13} />
+                  </button>
+                </span>
+              </div>
             </div>
-            {b.output && <pre className="zy-block-card-out">{b.output.slice(-400)}</pre>}
-            <div className="zy-block-card-foot">
-              <span className="zy-block-card-meta">
-                {formatRelative(b.startedAt)}
-                {b.endedAt ? ` · ${formatDuration(b.endedAt - b.startedAt)}` : ''}
-              </span>
-              <span className="zy-block-card-actions">
-                <button
-                  className="zy-icon-btn"
-                  title={t('blocks.copyCmd')}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    copy(b.command, t('blocks.cmdWord'))
-                  }}
-                >
-                  <Icon name="copy" size={13} />
-                </button>
-                <button
-                  className="zy-icon-btn"
-                  title={t('blocks.copyOut')}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    copy(b.output, t('blocks.outWord'))
-                  }}
-                >
-                  <Icon name="download" size={13} />
-                </button>
-                <button
-                  className="zy-icon-btn"
-                  title={t('blocks.exportMd')}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    exportMd(b)
-                  }}
-                >
-                  <Icon name="download" size={13} />
-                </button>
-                <button
-                  className="zy-icon-btn"
-                  title={t('blocks.rerun')}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    rerun(b)
-                  }}
-                >
-                  <Icon name="rerun" size={13} />
-                </button>
-                <button
-                  className="zy-icon-btn"
-                  title={t('blocks.askAi')}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    aiExplainBlock(b)
-                  }}
-                >
-                  <Icon name="sputnik" size={13} />
-                </button>
-              </span>
-            </div>
-          </div>
           )
         })}
       </div>

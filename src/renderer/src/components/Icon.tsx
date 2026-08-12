@@ -91,7 +91,13 @@ interface Props {
 // everything else strokes with currentColor.
 const PATHS: Record<IconName, React.ReactNode> = {
   // Five-point star — favorite / accent / AI. Filled.
-  star: <path d="M12 2.4l2.7 6.1 6.6.6-5 4.4 1.5 6.5L12 17.1 6.7 20.6 8.2 14 3.2 9.7l6.6-.6z" fill="currentColor" stroke="none" />,
+  star: (
+    <path
+      d="M12 2.4l2.7 6.1 6.6.6-5 4.4 1.5 6.5L12 17.1 6.7 20.6 8.2 14 3.2 9.7l6.6-.6z"
+      fill="currentColor"
+      stroke="none"
+    />
+  ),
   'star-outline': (
     <path d="M12 3.2l2.5 5.6 6.1.5-4.6 4 1.4 6-5.4-3.2-5.4 3.2 1.4-6-4.6-4 6.1-.5z" />
   ),
@@ -146,7 +152,11 @@ const PATHS: Record<IconName, React.ReactNode> = {
   ),
   pin: (
     <>
-      <path d="M12 3.5l4.5 4.5-2 .6-1.2 4.9-2.6-2.6-4.6 4.6 4.6-4.6-2.6-2.6 4.9-1.2z" fill="currentColor" stroke="none" />
+      <path
+        d="M12 3.5l4.5 4.5-2 .6-1.2 4.9-2.6-2.6-4.6 4.6 4.6-4.6-2.6-2.6 4.9-1.2z"
+        fill="currentColor"
+        stroke="none"
+      />
       <path d="M9.8 14.2L5 19" />
     </>
   ),
@@ -179,9 +189,7 @@ const PATHS: Record<IconName, React.ReactNode> = {
   run: <path d="M8 5.5l11 6.5-11 6.5z" fill="currentColor" stroke="none" />,
   insert: <path d="M20 6v5a3 3 0 0 1-3 3H5m0 0l4-4m-4 4l4 4" />,
   download: <path d="M12 4v11m0 0l-4-4m4 4l4-4M5 20h14" />,
-  rerun: (
-    <path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v4h-4" />
-  ),
+  rerun: <path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v4h-4" />,
   search: (
     <>
       <circle cx="10.5" cy="10.5" r="6" />
@@ -273,7 +281,13 @@ const PATHS: Record<IconName, React.ReactNode> = {
   external: <path d="M14 5h5v5M19 5l-8 8M17 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1h5" />
 }
 
-export function Icon({ name, size = 16, className, strokeWidth = 1.6, title }: Props): React.JSX.Element {
+export function Icon({
+  name,
+  size = 16,
+  className,
+  strokeWidth = 1.6,
+  title
+}: Props): React.JSX.Element {
   // Pixel glyph if we have one at this small scale; otherwise the line glyph.
   const pixelName = PIXEL_ALIAS[name] ?? (PIXEL_SMALL.has(name) ? name : undefined)
   if (pixelName) {
@@ -324,7 +338,13 @@ const ENGINE_ICON: Record<string, PixelIconName> = {
   qwen: 'qwen' as PixelIconName
 }
 
-export function EngineGlyph({ engine, size = 15 }: { engine: string; size?: number }): React.JSX.Element {
+export function EngineGlyph({
+  engine,
+  size = 15
+}: {
+  engine: string
+  size?: number
+}): React.JSX.Element {
   // The shell isn't an agent — it keeps the terminal glyph it always had.
   if (engine === 'shell') return <Icon name="terminal" size={size} />
   // Zarya's own agent gets Zarya's own mark.
@@ -347,7 +367,13 @@ export function EngineGlyph({ engine, size = 15 }: { engine: string; size?: numb
   )
 }
 
-export function ShellGlyph({ code, size = 15 }: { code: string; size?: number }): React.JSX.Element {
+export function ShellGlyph({
+  code,
+  size = 15
+}: {
+  code: string
+  size?: number
+}): React.JSX.Element {
   const up = code.toUpperCase()
   if (!SHELL_CODES.has(up)) {
     // Legacy emoji or unknown — show a generic terminal glyph, not the emoji.

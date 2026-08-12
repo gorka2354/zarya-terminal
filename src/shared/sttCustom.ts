@@ -264,20 +264,21 @@ export function identifyModel(dirName: string, entries: DirEntry[]): Identified 
     // Из редакций берём КРУПНУЮ: она точнее, а место человек уже потратил,
     // скачав папку целиком.
     const single = [...onnx].sort((a, b) => b.bytes - a.bytes)[0].name
-    const family: SttFamily | null = hint.includes('sense-voice') || hint.includes('sensevoice')
-      ? 'senseVoice'
-      : hint.includes('paraformer')
-        ? 'paraformer'
-        : hint.includes('zipformer')
-          ? 'zipformerCtc'
-          : hint.includes('dolphin')
-            ? 'dolphin'
-            : // «ctc» нарочно НЕ считается приметой NeMo: так называются и чужие
-              // семейства (telespeech-ctc, wenet-ctc), а часть из них аддон не
-              // умеет вовсе. Отдать их под nemoCtc — это не догадка, а неправда.
-              hint.includes('nemo') || hint.includes('giga')
-              ? 'nemoCtc'
-              : null
+    const family: SttFamily | null =
+      hint.includes('sense-voice') || hint.includes('sensevoice')
+        ? 'senseVoice'
+        : hint.includes('paraformer')
+          ? 'paraformer'
+          : hint.includes('zipformer')
+            ? 'zipformerCtc'
+            : hint.includes('dolphin')
+              ? 'dolphin'
+              : // «ctc» нарочно НЕ считается приметой NeMo: так называются и чужие
+                // семейства (telespeech-ctc, wenet-ctc), а часть из них аддон не
+                // умеет вовсе. Отдать их под nemoCtc — это не догадка, а неправда.
+                hint.includes('nemo') || hint.includes('giga')
+                ? 'nemoCtc'
+                : null
     // Шесть семейств выглядят одинаково — один файл и словарь. Угадать «скорее
     // всего nemoCtc» значило бы отдать движку модель не той формы, а он на этом
     // не ошибается вежливо: нативный код просто убивает процесс.

@@ -90,7 +90,9 @@ export async function closePaneAsking(sessionId: string): Promise<void> {
     const losses = lossesOf(sessionId)
     if (
       losses.length &&
-      !window.confirm(`${t('close.paneQuestion')}\n\n${t('close.willLose')}\n· ${losses.join('\n· ')}`)
+      !window.confirm(
+        `${t('close.paneQuestion')}\n\n${t('close.willLose')}\n· ${losses.join('\n· ')}`
+      )
     ) {
       return
     }
@@ -174,5 +176,6 @@ export function isMaximized(sessionId: string): boolean {
 // Прогонам: закрытие ИМЕННО тем путём, которым закрывает человек — с вопросом о
 // потерях. Соседний `__zaryaCloseSession` закрывает молча и для проверки самого
 // вопроса не годится.
-;(window as unknown as { __zaryaClosePaneAsking?: (sid: string) => Promise<void> }).__zaryaClosePaneAsking =
-  (sid) => closePaneAsking(sid)
+;(
+  window as unknown as { __zaryaClosePaneAsking?: (sid: string) => Promise<void> }
+).__zaryaClosePaneAsking = (sid) => closePaneAsking(sid)

@@ -101,9 +101,7 @@ export default function HistoryPanel(): React.JSX.Element {
       </div>
       <div className="zy-sidebar-body" role="listbox" aria-label={t('hist.aria')}>
         {!filtered.length && (
-          <div className="zy-empty">
-            {results.length ? t('hist.noMatch') : t('hist.empty')}
-          </div>
+          <div className="zy-empty">{results.length ? t('hist.noMatch') : t('hist.empty')}</div>
         )}
         {filtered.map((entry) => (
           <div
@@ -123,7 +121,11 @@ export default function HistoryPanel(): React.JSX.Element {
                     : 'zy-badge--fail'
               }`}
             >
-              {entry.exitCode === undefined ? '⋯' : entry.exitCode === 0 ? '✓' : `✗${entry.exitCode}`}
+              {entry.exitCode === undefined
+                ? '⋯'
+                : entry.exitCode === 0
+                  ? '✓'
+                  : `✗${entry.exitCode}`}
             </span>
             <div className="zy-item-body">
               <div className="zy-item-title zy-history-item-cmd">{entry.command}</div>

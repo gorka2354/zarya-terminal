@@ -43,7 +43,9 @@
   border: 1px solid transparent;
   border-bottom: none;
   flex-shrink: 0;
-  transition: background-color 0.12s ease, color 0.12s ease;
+  transition:
+    background-color 0.12s ease,
+    color 0.12s ease;
 }
 .zy-editor-tab:hover {
   background: var(--bg-elev1);
@@ -153,7 +155,9 @@
   font-size: 12.5px;
   white-space: nowrap;
   overflow: hidden;
-  transition: background-color 0.1s ease, color 0.1s ease;
+  transition:
+    background-color 0.1s ease,
+    color 0.1s ease;
 }
 .zy-tree-row:hover {
   background: var(--bg-elev1);

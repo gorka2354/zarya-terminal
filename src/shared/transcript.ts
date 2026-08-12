@@ -87,7 +87,12 @@ ${p.text.trim()}
      */
     const fromTool =
       m.role === 'user' && m.content.length > 0 && m.content.every((p) => p.type === 'tool_result')
-    out.push('', fromTool ? '## Инструмент' : m.role === 'user' ? '## Человек' : '## Агент', '', body)
+    out.push(
+      '',
+      fromTool ? '## Инструмент' : m.role === 'user' ? '## Человек' : '## Агент',
+      '',
+      body
+    )
   }
   return out.join('\n').trim() + '\n'
 }

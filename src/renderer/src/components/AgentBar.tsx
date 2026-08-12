@@ -44,7 +44,13 @@ import { ClaudeQuestionBar } from './ClaudeQuestionBar'
 import { PermissionsPanel } from './PermissionsPanel'
 import { launchClaudeNative } from './AiCliLauncher'
 import './agentbar.css'
-import { applyCommand, cleanCommands, commandQuery, matchCommands, type AgentCommand } from '@shared/agentCommands'
+import {
+  applyCommand,
+  cleanCommands,
+  commandQuery,
+  matchCommands,
+  type AgentCommand
+} from '@shared/agentCommands'
 import { applyMention, mentionQuery } from '@shared/mentions'
 import { localVerb, memoryNote } from '@shared/inputVerbs'
 import { fuzzyFilter } from '@/lib/fuzzy'
@@ -281,7 +287,9 @@ export function UsagePanel({
         label={t('usage.fiveHours')}
         pct={usage.fiveHourPct}
         note={
-          usage.fiveHourResetsAt ? t('usage.resetsIn', { time: resetLabel(usage.fiveHourResetsAt) }) : undefined
+          usage.fiveHourResetsAt
+            ? t('usage.resetsIn', { time: resetLabel(usage.fiveHourResetsAt) })
+            : undefined
         }
       />
     )
@@ -292,7 +300,9 @@ export function UsagePanel({
         label={t('usage.sevenDays')}
         pct={usage.sevenDayPct}
         note={
-          usage.sevenDayResetsAt ? t('usage.resetsIn', { time: resetLabel(usage.sevenDayResetsAt) }) : undefined
+          usage.sevenDayResetsAt
+            ? t('usage.resetsIn', { time: resetLabel(usage.sevenDayResetsAt) })
+            : undefined
         }
       />
     )
@@ -304,7 +314,10 @@ export function UsagePanel({
         pct={context.pct}
         note={
           context.tokens != null && context.window != null
-            ? t('usage.tokensOf', { used: fmtTokens(context.tokens), total: fmtTokens(context.window) })
+            ? t('usage.tokensOf', {
+                used: fmtTokens(context.tokens),
+                total: fmtTokens(context.window)
+              })
             : undefined
         }
       />
@@ -318,13 +331,7 @@ export function UsagePanel({
           <span className="zy-usage-sub">{usage.subscriptionType}</span>
         ) : null}
       </div>
-      {rows.length ? (
-        rows
-      ) : (
-        <div className="zy-usage-empty">
-          {t('usage.empty')}
-        </div>
-      )}
+      {rows.length ? rows : <div className="zy-usage-empty">{t('usage.empty')}</div>}
     </div>
   )
 }
@@ -436,9 +443,7 @@ export const AgentBar = memo(function AgentBar({
   const editsAuto = activeConv ? !!activeConv.editsAuto : paneEditsAuto
   // Режим плана — по той же схеме, что и автопилот: решение принадлежит панели
   // и живёт до первой беседы, иначе чип был бы мёртвым до отправки.
-  const panePlan = useAiStore((s) =>
-    activeSessionId ? !!s.planBySession[activeSessionId] : false
-  )
+  const panePlan = useAiStore((s) => (activeSessionId ? !!s.planBySession[activeSessionId] : false))
   const planMode = activeConv ? !!activeConv.planMode : panePlan
   // Микрофон занят другой панелью — кнопка обязана это сказать, а не молчать и
   // не начинать вторую запись.
@@ -448,9 +453,8 @@ export const AgentBar = memo(function AgentBar({
   // Пустой список — ОДНА И ТА ЖЕ ссылка: `?? []` в селекторе создавал новый
   // массив на каждый рендер, zustand считал состояние изменившимся и перерисовка
   // уходила в бесконечный цикл — приложение не поднималось вовсе.
-  const pendingImages = useAiStore((s) =>
-    activeSessionId ? s.pendingImages[activeSessionId] : undefined
-  ) ?? NO_IMAGES
+  const pendingImages =
+    useAiStore((s) => (activeSessionId ? s.pendingImages[activeSessionId] : undefined)) ?? NO_IMAGES
 
   /**
    * Клавиши своей панели. Строка ввода БОЛЬШЕ НЕ СЛУШАЕТ ОКНО: она заявляет свои
@@ -831,7 +835,9 @@ ${prev}`
         : undefined
       if (cwd && filesFor.current !== cwd) {
         filesFor.current = cwd
-        void scanFiles(cwd).then(setFiles).catch(() => setFiles([]))
+        void scanFiles(cwd)
+          .then(setFiles)
+          .catch(() => setFiles([]))
       }
     }
   }
@@ -920,9 +926,7 @@ ${prev}`
     // Don't switch away from a busy/gated engine: its permission or question
     // would land on a now-hidden conversation and hang with no UI to resolve it.
     if (busyConv) {
-      useUiStore
-        .getState()
-        .toast(t('bar.engineBusy'), 'info')
+      useUiStore.getState().toast(t('bar.engineBusy'), 'info')
       return
     }
     const order = modeCycle(Object.keys(agentCaps))
@@ -941,9 +945,7 @@ ${prev}`
     // Движок, который картинок не принимает, не должен молча их проглатывать:
     // отправить запрос без вложения — соврать о том, что агент их видел.
     if (activeEngine && agentCaps[activeEngine]?.images !== true) {
-      useUiStore
-        .getState()
-        .toast(t('bar.noImages', { engine: modeLabel(mode) }), 'error')
+      useUiStore.getState().toast(t('bar.noImages', { engine: modeLabel(mode) }), 'error')
       return 0
     }
     let added = 0
@@ -979,9 +981,7 @@ ${prev}`
     if (activeConv) useAiStore.getState().setPlanMode(activeConv.id, next)
     else if (activeSessionId) useAiStore.getState().setPanePlanMode(activeSessionId, next)
     else return
-    useUiStore
-      .getState()
-      .toast(next ? t('bar.planToastOn') : t('bar.planToastOff'), 'success')
+    useUiStore.getState().toast(next ? t('bar.planToastOn') : t('bar.planToastOff'), 'success')
   }
 
   /**
@@ -1035,9 +1035,7 @@ ${prev}`
     useUiStore
       .getState()
       .toast(
-        next
-          ? t('bar.autopilotToastOn')
-          : t('bar.autopilotToastOff'),
+        next ? t('bar.autopilotToastOn') : t('bar.autopilotToastOff'),
         next ? 'error' : 'success'
       )
   }
@@ -1139,9 +1137,7 @@ ${prev}`
         // в подсказке на кнопке и отдельной строкой в настройках.
         if (!warnedMissingMics.has(cfg.deviceId)) {
           warnedMissingMics.add(cfg.deviceId)
-          useUiStore
-            .getState()
-            .toast(t('voice.micMissing', { name: pick.label }), 'error')
+          useUiStore.getState().toast(t('voice.micMissing', { name: pick.label }), 'error')
         }
       } else {
         // Устройство вернулось — право на предупреждение восстановлено. Без
@@ -1188,10 +1184,7 @@ ${prev}`
       if (rec.fellBackToDefault) {
         useUiStore
           .getState()
-          .toast(
-            t('voice.micUnavailable', { name: cfg.deviceLabel || t('voice.chosen') }),
-            'error'
-          )
+          .toast(t('voice.micUnavailable', { name: cfg.deviceLabel || t('voice.chosen') }), 'error')
       }
       recRef.current = rec
       setVoice('rec')
@@ -1466,12 +1459,7 @@ ${prev}`
     void useSettingsStore.getState().update({ ai: { autoApprove: next } as never })
     useUiStore
       .getState()
-      .toast(
-        next
-          ? t('bar.autoApproveOn')
-          : t('bar.autoApproveOff'),
-        next ? 'error' : 'success'
-      )
+      .toast(next ? t('bar.autoApproveOn') : t('bar.autoApproveOff'), next ? 'error' : 'success')
   }
 
   const isShell = mode === 'shell'
@@ -1599,47 +1587,47 @@ ${prev}`
           индикатора показывали бы одно и то же число, отнимая место у работы. */}
       {!paneSessionId && (
         <div className="zy-agentbar-fuel">
-        <button
-          ref={fuelBtnRef}
-          className="zy-agentbar-fuel-main"
-          title={
-            lead
-              ? t('usage.leadHint', { label: lead.label, pct: Math.round(lead.pct) })
-              : t('usage.allHint')
-          }
-          aria-expanded={usageOpen}
-          onClick={() => setUsageOpen((v) => !v)}
-        >
-          <span className="zy-agentbar-fuel-icon">
-            <svg
-              width="10"
-              height="10"
-              viewBox="0 0 16 16"
-              shapeRendering="crispEdges"
-              fill="var(--accent-2)"
-            >
-              <rect x="4" y="2" width="6" height="2" />
-              <rect x="4" y="4" width="6" height="9" />
-              <rect x="10" y="5" width="3" height="2" />
-              <rect x="12" y="6" width="1" height="4" />
-            </svg>
-          </span>
-          {lead ? (
-            <>
-              <FuelGauge used={lead.pct} />
-              <span className="zy-agentbar-fuel-val">
-                {lead.short} {Math.round(lead.pct)}%
-              </span>
-            </>
-          ) : (
-            <span className="zy-agentbar-fuel-val">
-              {t(showFuel ? 'strip.fueled' : 'strip.noLimit')}
+          <button
+            ref={fuelBtnRef}
+            className="zy-agentbar-fuel-main"
+            title={
+              lead
+                ? t('usage.leadHint', { label: lead.label, pct: Math.round(lead.pct) })
+                : t('usage.allHint')
+            }
+            aria-expanded={usageOpen}
+            onClick={() => setUsageOpen((v) => !v)}
+          >
+            <span className="zy-agentbar-fuel-icon">
+              <svg
+                width="10"
+                height="10"
+                viewBox="0 0 16 16"
+                shapeRendering="crispEdges"
+                fill="var(--accent-2)"
+              >
+                <rect x="4" y="2" width="6" height="2" />
+                <rect x="4" y="4" width="6" height="9" />
+                <rect x="10" y="5" width="3" height="2" />
+                <rect x="12" y="6" width="1" height="4" />
+              </svg>
             </span>
-          )}
-          <Icon name={usageOpen ? 'chevron-down' : 'chevron-up'} size={10} />
-        </button>
-        <span className="zy-agentbar-fuel-spacer" />
-        {/*
+            {lead ? (
+              <>
+                <FuelGauge used={lead.pct} />
+                <span className="zy-agentbar-fuel-val">
+                  {lead.short} {Math.round(lead.pct)}%
+                </span>
+              </>
+            ) : (
+              <span className="zy-agentbar-fuel-val">
+                {t(showFuel ? 'strip.fueled' : 'strip.noLimit')}
+              </span>
+            )}
+            <Icon name={usageOpen ? 'chevron-down' : 'chevron-up'} size={10} />
+          </button>
+          <span className="zy-agentbar-fuel-spacer" />
+          {/*
           Во сколько обошёлся ЭТОТ разговор — цифра самого движка, которую он
           считал всегда, а мы выбрасывали.
 
@@ -1648,28 +1636,28 @@ ${prev}`
           человеку о его деньгах. По своему ключу — наоборот, это счёт, который
           он оплатит.
         */}
-        {costLabel && (
-          <span
-            className="zy-agentbar-fuel-cost"
-            title={t(onPlan ? 'bar.costHintPlan' : 'bar.costHintApi')}
-          >
-            {costLabel}
-          </span>
-        )}
-        {showModel && (paneStatus.model || paneStatus.effort || ultracode) && (
-          <button
-            className="zy-agentbar-fuel-model"
-            onClick={openLaunchPad}
-            title={t('bar.engineHint')}
-          >
-            {paneStatus.model ? prettyModel(paneStatus.model) : ''}
-            {ultracode
-              ? ' · ⚡ULTRACODE'
-              : paneStatus.effort
-                ? ` · ${paneStatus.effort.toUpperCase()}`
-                : ''}
-          </button>
-        )}
+          {costLabel && (
+            <span
+              className="zy-agentbar-fuel-cost"
+              title={t(onPlan ? 'bar.costHintPlan' : 'bar.costHintApi')}
+            >
+              {costLabel}
+            </span>
+          )}
+          {showModel && (paneStatus.model || paneStatus.effort || ultracode) && (
+            <button
+              className="zy-agentbar-fuel-model"
+              onClick={openLaunchPad}
+              title={t('bar.engineHint')}
+            >
+              {paneStatus.model ? prettyModel(paneStatus.model) : ''}
+              {ultracode
+                ? ' · ⚡ULTRACODE'
+                : paneStatus.effort
+                  ? ` · ${paneStatus.effort.toUpperCase()}`
+                  : ''}
+            </button>
+          )}
           <button
             className="zy-agentbar-fuel-pult"
             onClick={openLaunchPad}
@@ -1683,14 +1671,20 @@ ${prev}`
       {pendingImages.length > 0 && (
         <div className="zy-img-chips">
           {pendingImages.map((img, i) => (
-            <span key={img.id} className="zy-img-chip" title={`${img.width}×${img.height} · ${Math.round(img.bytes / 1024)} ${t('common.kb')}`}>
+            <span
+              key={img.id}
+              className="zy-img-chip"
+              title={`${img.width}×${img.height} · ${Math.round(img.bytes / 1024)} ${t('common.kb')}`}
+            >
               {img.thumb ? <img src={img.thumb} alt="" /> : null}
               <span className="zy-img-chip-n">#{i + 1}</span>
               <span className="zy-img-chip-name">{img.name ?? t('bar.snapshot')}</span>
               <button
                 className="zy-img-chip-x"
                 title={t('bar.removeAttachment')}
-                onClick={() => activeSessionId && useAiStore.getState().dropImage(activeSessionId, img.id)}
+                onClick={() =>
+                  activeSessionId && useAiStore.getState().dropImage(activeSessionId, img.id)
+                }
               >
                 ✕
               </button>
@@ -1858,24 +1852,22 @@ ${prev}`
         {voiceNote && <span className="zy-agentbar-voicenote">{voiceNote}</span>}
         <textarea
           ref={ref}
-        onPaste={(e) => {
-          const files = imageFilesFrom(e.clipboardData).filter((f) =>
-            f.type.startsWith('image/')
-          )
-          if (!files.length) return
-          // Текстовую часть буфера вставляем сами: preventDefault отменил бы её
-          // вместе с картинкой, и человек потерял бы скопированный текст.
-          e.preventDefault()
-          const txt = e.clipboardData.getData('text/plain')
-          if (txt) setText((prev) => prev + txt)
-          void acceptImages(files)
-        }}
-        // Курсор в поле — панель становится активной. Без этого «панель, куда я
-        // печатаю» и «панель, на которую действует Enter» расходятся: можно
-        // одобрить запуск команды, которую даже не видел.
-        onFocus={() => {
-          if (paneSessionId) useSessionsStore.getState().setActiveSession(paneSessionId)
-        }}
+          onPaste={(e) => {
+            const files = imageFilesFrom(e.clipboardData).filter((f) => f.type.startsWith('image/'))
+            if (!files.length) return
+            // Текстовую часть буфера вставляем сами: preventDefault отменил бы её
+            // вместе с картинкой, и человек потерял бы скопированный текст.
+            e.preventDefault()
+            const txt = e.clipboardData.getData('text/plain')
+            if (txt) setText((prev) => prev + txt)
+            void acceptImages(files)
+          }}
+          // Курсор в поле — панель становится активной. Без этого «панель, куда я
+          // печатаю» и «панель, на которую действует Enter» расходятся: можно
+          // одобрить запуск команды, которую даже не видел.
+          onFocus={() => {
+            if (paneSessionId) useSessionsStore.getState().setActiveSession(paneSessionId)
+          }}
           className="zy-agentbar-input"
           rows={1}
           placeholder={

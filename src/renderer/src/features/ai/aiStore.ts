@@ -454,7 +454,11 @@ interface AiState {
    */
   addWorkDir: (
     conversationId: string
-  ) => Promise<{ ok: boolean; dir?: string; reason?: 'canceled' | 'busy' | 'already' | 'no-engine' }>
+  ) => Promise<{
+    ok: boolean
+    dir?: string
+    reason?: 'canceled' | 'busy' | 'already' | 'no-engine'
+  }>
   /** Забрать доступ к папке обратно. */
   removeWorkDir: (conversationId: string, dir: string) => Promise<void>
   /** Deny a pending tool by id (defaults to the first unsettled one). */
@@ -655,10 +659,7 @@ async function buildSystemPrompt(conv: Conversation): Promise<string> {
       // fenced, labeled block and tell the model to treat it strictly as data,
       // never as instructions, so injected "ignore previous / run X" payloads
       // can't steer the agent into a run_command call.
-      lines.push(
-        '',
-        t('ai.sys.untrusted')
-      )
+      lines.push('', t('ai.sys.untrusted'))
       for (const b of blocks) {
         lines.push(`$ ${b.command || t('ai.unknownCmd')}`)
         lines.push(`exit: ${b.exitCode ?? '—'}`)
@@ -675,10 +676,7 @@ async function buildSystemPrompt(conv: Conversation): Promise<string> {
   }
 
   if (conv.agentMode) {
-    lines.push(
-      '',
-      t('ai.sys.tool')
-    )
+    lines.push('', t('ai.sys.tool'))
   }
 
   if (settings.ai.systemPromptExtra.trim()) {
@@ -798,7 +796,10 @@ export const useAiStore = create<AiState>((set, get) => {
    * `TaskUpdate`, а номер задачи называется только в тексте результата. Поэтому
    * здесь два входа — на вызов и на результат (см. shared/agentPlan.ts).
    */
-  const notePlanUse = (id: string, calls: { toolUseId: string; name: string; input: unknown }[]): void => {
+  const notePlanUse = (
+    id: string,
+    calls: { toolUseId: string; name: string; input: unknown }[]
+  ): void => {
     const useful = calls.filter((c) => c.name === 'TaskCreate' || c.name === 'TaskUpdate')
     if (!useful.length) return
     patchConversation(id, (c) => {
@@ -1371,10 +1372,7 @@ export const useAiStore = create<AiState>((set, get) => {
           claudeSessionId: ev.sessionId,
           // Отматывать больше некуда: прежней ветки у движка не осталось.
           resumeAt: undefined,
-          messages: [
-            ...c.messages,
-            { role: 'assistant', content: [{ type: 'reset' }] }
-          ]
+          messages: [...c.messages, { role: 'assistant', content: [{ type: 'reset' }] }]
         }))
         break
 
@@ -1524,9 +1522,7 @@ export const useAiStore = create<AiState>((set, get) => {
         const convNow = get().conversations.find((c) => c.id === convId)
         const allowed = matchesRule(convNow?.sessionAllows, ev.name, ev.input)
         const auto =
-          ev.name === 'run_command'
-            ? !stop && (allowed || getSettings().ai.autoApprove)
-            : true
+          ev.name === 'run_command' ? !stop && (allowed || getSettings().ai.autoApprove) : true
         // Queue the tool; parallel tool_use blocks each get their own card.
         patchConversation(convId, (c) => ({
           ...c,
@@ -1553,7 +1549,13 @@ export const useAiStore = create<AiState>((set, get) => {
         requestConv.delete(requestId)
         patchConversation(convId, (c) =>
           c.activeRequestId === requestId
-            ? { ...c, streaming: false, typed: undefined, typedTool: undefined, activeRequestId: undefined }
+            ? {
+                ...c,
+                streaming: false,
+                typed: undefined,
+                typedTool: undefined,
+                activeRequestId: undefined
+              }
             : c
         )
         // If the finished turn contained tool calls that are already all
@@ -1585,10 +1587,10 @@ export const useAiStore = create<AiState>((set, get) => {
     activeId: null,
     activeBySession: {},
     commandBarSessionId: null,
-  bypassBySession: {},
-  editsAutoBySession: {},
-  planBySession: {},
-  pendingImages: {},
+    bypassBySession: {},
+    editsAutoBySession: {},
+    planBySession: {},
+    pendingImages: {},
 
     hydrate: async () => {
       const saved = await window.zarya.aiConversations.load()
@@ -1855,7 +1857,10 @@ export const useAiStore = create<AiState>((set, get) => {
 
     attachImage: (sessionId, att) => {
       set((s) => ({
-        pendingImages: { ...s.pendingImages, [sessionId]: [...(s.pendingImages[sessionId] ?? []), att] }
+        pendingImages: {
+          ...s.pendingImages,
+          [sessionId]: [...(s.pendingImages[sessionId] ?? []), att]
+        }
       }))
     },
 
@@ -2346,7 +2351,10 @@ onBus('terminal:focus', ({ sessionId }) => {
             ...c,
             messages: [
               ...c.messages,
-              { role: 'assistant' as const, content: [{ type: 'notice' as const, level: 'info' as const, text }] }
+              {
+                role: 'assistant' as const,
+                content: [{ type: 'notice' as const, level: 'info' as const, text }]
+              }
             ]
           }
         : c
@@ -2367,10 +2375,10 @@ onBus('terminal:focus', ({ sessionId }) => {
 // Второй ход В ТОЙ ЖЕ беседе. Правила «до конца сессии» — свойство беседы, и
 // проверять их новым запуском бессмысленно: у новой беседы своих правил нет,
 // как и должно быть.
-;(
-  window as unknown as { __zaryaSendIn?: (convId: string, text: string) => void }
-).__zaryaSendIn = (convId, text) =>
-  void useAiStore.getState().send(text, { conversationId: convId })
+;(window as unknown as { __zaryaSendIn?: (convId: string, text: string) => void }).__zaryaSendIn = (
+  convId,
+  text
+) => void useAiStore.getState().send(text, { conversationId: convId })
 /** Правка беседы для прогонов скорости — тем же путём, что и настоящая. */
 function seedPatch(convId: string, fn: (c: Conversation) => Conversation): void {
   useAiStore.setState((s) => ({
@@ -2397,7 +2405,9 @@ function seedPatch(convId: string, fn: (c: Conversation) => Conversation): void 
           type: 'text',
           text:
             `### Ответ ${i}\n\nСмотри, тут **важное** и \`код\`:\n\n` +
-            '```ts\nconst x = ' + i + '\nconsole.log(x)\n```\n\n' +
+            '```ts\nconst x = ' +
+            i +
+            '\nconsole.log(x)\n```\n\n' +
             `- пункт раз\n- пункт два\n- пункт три\n\nИ ещё абзац текста про панели, ленту и всё остальное, чтобы разметка была не в одну строку.`
         },
         { type: 'tool_use', id: `t${i}`, name: 'Read', input: { file_path: `C:/p/file${i}.ts` } }
@@ -2597,17 +2607,16 @@ function seedPatch(convId: string, fn: (c: Conversation) => Conversation): void 
       }
     : null
 }
-;(
-  window as unknown as { __zaryaPendingImages?: (sid: string) => unknown[] }
-).__zaryaPendingImages = (sid) =>
-  (useAiStore.getState().pendingImages[sid] ?? []).map((a) => ({
-    id: a.id,
-    mediaType: a.mediaType,
-    bytes: a.bytes,
-    width: a.width,
-    height: a.height,
-    name: a.name
-  }))
+;(window as unknown as { __zaryaPendingImages?: (sid: string) => unknown[] }).__zaryaPendingImages =
+  (sid) =>
+    (useAiStore.getState().pendingImages[sid] ?? []).map((a) => ({
+      id: a.id,
+      mediaType: a.mediaType,
+      bytes: a.bytes,
+      width: a.width,
+      height: a.height,
+      name: a.name
+    }))
 ;(window as unknown as { __zaryaQueue?: (t: string) => void }).__zaryaQueue = (t) => {
   const c = useAiStore.getState().activeConversation()
   if (c) useAiStore.getState().queueMessage(c.id, t)
@@ -2688,11 +2697,9 @@ registerAiBridge({
             title: t('ai.explainTitle', { cmd: truncateText(block.command || t('ai.cmdWord'), 28) })
           })
     useAiStore.getState().attachBlockContext(block, convId)
-    void useAiStore
-      .getState()
-      .send(question ?? t('ai.explainPrompt'), {
-        conversationId: convId
-      })
+    void useAiStore.getState().send(question ?? t('ai.explainPrompt'), {
+      conversationId: convId
+    })
   },
 
   openCommandBar: (sessionId) => {

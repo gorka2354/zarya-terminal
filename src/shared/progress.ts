@@ -29,7 +29,8 @@ export interface ProgressLine {
 
 /** Управляющие последовательности: до разбора их надо снять. */
 // eslint-disable-next-line no-control-regex
-const ANSI = /\x1b\[[0-9;?]*[A-Za-z]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)?|[\x00-\x08\x0b\x0c\x0e-\x1f]/g
+const ANSI =
+  /\x1b\[[0-9;?]*[A-Za-z]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)?|[\x00-\x08\x0b\x0c\x0e-\x1f]/g
 
 const UNIT = '(?:[KMGT]i?)?B'
 const PERCENT = /(\d{1,3}(?:[.,]\d+)?)\s*%/

@@ -65,12 +65,7 @@ export function ExtrasBar({
   return (
     <div className="zy-extras" data-extras-bar>
       <span className="zy-extras-text">{t('extras.found')}</span>
-      <button
-        type="button"
-        className="zy-extras-go"
-        disabled={busy}
-        onClick={() => void pick()}
-      >
+      <button type="button" className="zy-extras-go" disabled={busy} onClick={() => void pick()}>
         {busy ? t('extras.working') : t('extras.pick')}
       </button>
       <button

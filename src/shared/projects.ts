@@ -33,7 +33,11 @@ export function withProject(list: string[], dir: string, max = PROJECTS_MAX): st
  * `~/code` — разные папки, и слить их значило бы соврать в другую сторону.
  */
 export function samePath(a: string, b: string): boolean {
-  const norm = (p: string): string => p.trim().replace(/[\\/]+/g, '/').replace(/\/+$/, '')
+  const norm = (p: string): string =>
+    p
+      .trim()
+      .replace(/[\\/]+/g, '/')
+      .replace(/\/+$/, '')
   const x = norm(a)
   const y = norm(b)
   if (!x || !y) return false

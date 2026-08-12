@@ -2,12 +2,7 @@ import { PANE_DRAG_CWD } from '@shared/types'
 import { samePath } from '@shared/projects'
 import { useState } from 'react'
 import { closeTabAsking } from '@/actions/panes'
-import {
-  forgetProject,
-  openFolderAsTab,
-  openProject,
-  openProjectBeside
-} from '@/actions/projects'
+import { forgetProject, openFolderAsTab, openProject, openProjectBeside } from '@/actions/projects'
 import { t, useLang } from '@/lib/i18n'
 import { askText } from '@/components/AskText'
 import { useSessionsStore } from '@/state/sessionsStore'
@@ -80,7 +75,11 @@ ${t('title.projectsHint')}`}
             // пункт «добавить папку в проекты» открывал ТО ЖЕ окно выбора и
             // отличался лишь тем, что папку не открывал, — снаружи это читалось
             // как один пункт, продублированный дважды.
-            { label: t('projects.openFolder'), hint: 'Ctrl+Shift+O', onClick: () => void openFolderAsTab() }
+            {
+              label: t('projects.openFolder'),
+              hint: 'Ctrl+Shift+O',
+              onClick: () => void openFolderAsTab()
+            }
           ]
           if (bookmarks.length) {
             // Одна строка на проект. Раньше их было две: под каждым проектом

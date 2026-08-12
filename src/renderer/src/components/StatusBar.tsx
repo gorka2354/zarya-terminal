@@ -81,7 +81,9 @@ export function StatusBar(): React.JSX.Element {
       ...(cwd
         ? [
             {
-              label: t(bookmarks.some((b) => samePath(b, cwd)) ? 'status.unbookmark' : 'status.bookmark'),
+              label: t(
+                bookmarks.some((b) => samePath(b, cwd)) ? 'status.unbookmark' : 'status.bookmark'
+              ),
               onClick: () => {
                 const known = bookmarks.find((b) => samePath(b, cwd))
                 if (known) void forgetProject(known)

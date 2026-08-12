@@ -166,7 +166,11 @@ function LoginHint({
  * Кнопки для него нет вовсе — показать её и получить отказ хуже, чем не
  * показывать.
  */
-function MemoryRow({ file }: { file: NonNullable<McpSnapshot['memoryFiles']>[number] }): React.JSX.Element {
+function MemoryRow({
+  file
+}: {
+  file: NonNullable<McpSnapshot['memoryFiles']>[number]
+}): React.JSX.Element {
   const [open, setOpen] = useState(false)
   const [text, setText] = useState<string | null>(null)
   const [dirty, setDirty] = useState(false)
@@ -246,7 +250,11 @@ function MemoryRow({ file }: { file: NonNullable<McpSnapshot['memoryFiles']>[num
       const LF = String.fromCharCode(10)
       const crlf = base !== null && base.includes(CR + LF)
       const body = crlf
-        ? text.split(CR + LF).join(LF).split(LF).join(CR + LF)
+        ? text
+            .split(CR + LF)
+            .join(LF)
+            .split(LF)
+            .join(CR + LF)
         : text
       await window.zarya.fs.writeFile(file.path, body)
       setBase(body)
@@ -383,10 +391,7 @@ export function ToolsTab(): React.JSX.Element {
 
   // Беседы встроенного агента сюда не попадают: у него нет MCP вообще, и
   // строка «движок не умеет» про него была бы не отказом, а недоразумением.
-  const panes = useMemo(
-    () => conversations.filter((c) => c.engine !== 'builtin'),
-    [conversations]
-  )
+  const panes = useMemo(() => conversations.filter((c) => c.engine !== 'builtin'), [conversations])
   const [picked, setPicked] = useState<string | null>(null)
   const chosen = useMemo(
     () => panes.find((c) => c.id === (picked ?? activeId)) ?? panes[0],
@@ -505,9 +510,7 @@ export function ToolsTab(): React.JSX.Element {
         <>
           {stale && (
             <div className="zy-tools-stale">
-              {snap?.at
-                ? t('tools.staleAt', { time: timeOf(snap.at) })
-                : t('tools.staleNone')}
+              {snap?.at ? t('tools.staleAt', { time: timeOf(snap.at) }) : t('tools.staleNone')}
             </div>
           )}
           {note.text && (
@@ -517,9 +520,7 @@ export function ToolsTab(): React.JSX.Element {
           )}
 
           {!rows.length && !busy && (
-            <div className="zy-tools-empty">
-              {stale ? t('tools.staleEmpty') : t('tools.none')}
-            </div>
+            <div className="zy-tools-empty">{stale ? t('tools.staleEmpty') : t('tools.none')}</div>
           )}
 
           <div className={`zy-tools-list${stale ? ' zy-tools-list--stale' : ''}`}>
@@ -555,19 +556,19 @@ export function ToolsTab(): React.JSX.Element {
                     {s.status !== 'disabled' &&
                       s.status !== 'connected' &&
                       s.status !== 'needs-auth' && (
-                      <button
-                        type="button"
-                        className="zy-tools-btn"
-                        disabled={busy}
-                        onClick={() =>
-                          void act(() =>
-                            window.zarya.agent.mcpReconnect(engine!, chosen!.id, s.name)
-                          )
-                        }
-                      >
-                        {t('tools.reconnect')}
-                      </button>
-                    )}
+                        <button
+                          type="button"
+                          className="zy-tools-btn"
+                          disabled={busy}
+                          onClick={() =>
+                            void act(() =>
+                              window.zarya.agent.mcpReconnect(engine!, chosen!.id, s.name)
+                            )
+                          }
+                        >
+                          {t('tools.reconnect')}
+                        </button>
+                      )}
                     <button
                       type="button"
                       className="zy-tools-btn"

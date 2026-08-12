@@ -16,13 +16,7 @@
  */
 
 export type IrreversibleKind =
-  | 'delete'
-  | 'force-push'
-  | 'drop'
-  | 'device'
-  | 'wipe'
-  | 'clean'
-  | 'history'
+  'delete' | 'force-push' | 'drop' | 'device' | 'wipe' | 'clean' | 'history'
 
 export interface Irreversible {
   kind: IrreversibleKind
@@ -46,7 +40,10 @@ const RULES: Rule[] = [
     kind: 'delete',
     re: /\brm\b(?=[^|;&]*(?:\s-[a-z]*r|--recursive))(?=[^|;&]*(?:\s-[a-z]*f|--force))/i
   },
-  { kind: 'delete', re: /\bremove-item\b[^|;&]*-recurse[^|;&]*-force|\bremove-item\b[^|;&]*-force[^|;&]*-recurse/i },
+  {
+    kind: 'delete',
+    re: /\bremove-item\b[^|;&]*-recurse[^|;&]*-force|\bremove-item\b[^|;&]*-force[^|;&]*-recurse/i
+  },
   { kind: 'delete', re: /\brmdir\b[^|;&]*\s\/s\b/i },
 
   // Перезапись чужой истории в общем репозитории.

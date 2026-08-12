@@ -136,14 +136,16 @@ export class HistoryStore {
     await this.ensureLoaded()
     this.entries = []
     this.sinceCompact = 0
-    this.appendQueue = this.appendQueue.catch(() => {}).then(async () => {
-      try {
-        await fs.writeFile(this.file, '', { encoding: 'utf8', mode: FILE_MODE })
-        await hardenFile(this.file)
-      } catch {
-        /* файла может и не быть */
-      }
-    })
+    this.appendQueue = this.appendQueue
+      .catch(() => {})
+      .then(async () => {
+        try {
+          await fs.writeFile(this.file, '', { encoding: 'utf8', mode: FILE_MODE })
+          await hardenFile(this.file)
+        } catch {
+          /* файла может и не быть */
+        }
+      })
     await this.appendQueue
     return { ok: true }
   }

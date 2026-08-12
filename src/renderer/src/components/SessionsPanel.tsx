@@ -142,8 +142,16 @@ export function SessionsPanel(): React.JSX.Element {
   // «панелью рядом» и без крестика. Папки живут в одном месте — в шапке.
   const openNewMenu = (e: React.MouseEvent): void => {
     const items: MenuItem[] = [
-      { label: t('projects.newTerminal'), hint: 'Ctrl+Shift+T', onClick: () => void store.newTab() },
-      { label: t('projects.openFolder'), hint: 'Ctrl+Shift+O', onClick: () => void openFolderAsTab() },
+      {
+        label: t('projects.newTerminal'),
+        hint: 'Ctrl+Shift+T',
+        onClick: () => void store.newTab()
+      },
+      {
+        label: t('projects.openFolder'),
+        hint: 'Ctrl+Shift+O',
+        onClick: () => void openFolderAsTab()
+      },
       { label: t('projects.newPaneIn'), onClick: () => void openFolderAsPane() }
     ]
     const btn = e.currentTarget as HTMLElement
@@ -184,9 +192,7 @@ export function SessionsPanel(): React.JSX.Element {
       }}
     >
       <div className="zy-drop-zone-title">{t('pane.dropZoneTitle')}</div>
-      <div className="zy-drop-zone-sub">
-        {t('pane.dropZoneSub')}
-      </div>
+      <div className="zy-drop-zone-sub">{t('pane.dropZoneSub')}</div>
     </div>
   ) : null
 
@@ -252,8 +258,7 @@ export function SessionsPanel(): React.JSX.Element {
   const openIds = useMemo(() => new Set(tabs.flatMap((t) => listLeaves(t.layout))), [tabs])
 
   const filtered = useMemo(
-    () =>
-      fuzzyFilter(query, savedList, (m) => `${m.title} ${m.cwd} ${m.lastCommand ?? ''}`, 200),
+    () => fuzzyFilter(query, savedList, (m) => `${m.title} ${m.cwd} ${m.lastCommand ?? ''}`, 200),
     [query, savedList]
   )
 
@@ -318,7 +323,11 @@ export function SessionsPanel(): React.JSX.Element {
         <div className="zy-item-body">
           <div className="zy-item-title">
             {m.title}
-            {isOpen && <span className="zy-badge zy-badge--ok" style={{ marginLeft: 6 }}>{t('sidebar.openBadge')}</span>}
+            {isOpen && (
+              <span className="zy-badge zy-badge--ok" style={{ marginLeft: 6 }}>
+                {t('sidebar.openBadge')}
+              </span>
+            )}
           </div>
           <div className="zy-item-sub zy-item-sub--path">
             {m.lastCommand ? `❯ ${m.lastCommand}` : shortenPath(m.cwd, 34)} ·{' '}
@@ -387,8 +396,7 @@ export function SessionsPanel(): React.JSX.Element {
     const panes = listLeaves(tab.layout).length
     open(e.clientX, e.clientY, [
       {
-        label:
-          t(maximizedByTab[tab.id] === sessionId ? 'pane.restore' : 'pane.maximize'),
+        label: t(maximizedByTab[tab.id] === sessionId ? 'pane.restore' : 'pane.maximize'),
         hint: t('pane.dblclick'),
         onClick: () => setPaneMaximized(sessionId, maximizedByTab[tab.id] !== sessionId)
       },
@@ -756,11 +764,7 @@ export function SessionsPanel(): React.JSX.Element {
           >
             <Icon name="plus" size={15} />
           </button>
-          <button
-            className="zy-icon-btn"
-            title={t('sidebar.moreMenu')}
-            onClick={openNewMenu}
-          >
+          <button className="zy-icon-btn" title={t('sidebar.moreMenu')} onClick={openNewMenu}>
             <Icon name="chevron-down" size={12} />
           </button>
         </div>
@@ -840,7 +844,9 @@ export function SessionsPanel(): React.JSX.Element {
         )}
         {sectionHead(
           'crew',
-          waitingCrew.length ? t('sidebar.crewWaitCount', { n: waitingCrew.length }) : t('sidebar.crew'),
+          waitingCrew.length
+            ? t('sidebar.crewWaitCount', { n: waitingCrew.length })
+            : t('sidebar.crew'),
           crewActive.length,
           undefined,
           crewLabelStyle
@@ -867,7 +873,9 @@ export function SessionsPanel(): React.JSX.Element {
                 <div className="zy-item-body">
                   <div className="zy-item-title">{conv.title}</div>
                   <div className="zy-item-sub" style={crewStatusStyle}>
-                    {waits ? t('sidebar.crewWaiting', { time: waitedFor(since, nowTick) }) : t('sidebar.crewBusy')}
+                    {waits
+                      ? t('sidebar.crewWaiting', { time: waitedFor(since, nowTick) })
+                      : t('sidebar.crewBusy')}
                   </div>
                 </div>
               </div>

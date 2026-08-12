@@ -166,23 +166,24 @@ export const AI_MODEL_PRESETS: Record<string, string[]> = {
  * International endpoints by default (USD billing). Kimi/Qwen also expose native
  * ACP agent chips (inc-12) — this API path is the BYOK alternative.
  */
-export const OPENAI_COMPAT_PRESETS: { id: string; label: string; baseUrl: string; hint: string }[] = [
-  {
-    id: 'kimi',
-    label: 'Kimi (Moonshot)',
-    baseUrl: 'https://api.moonshot.ai/v1',
-    hint: 'Key: platform.moonshot.ai · models: kimi-k3, kimi-k2.7-code (see platform.kimi.ai/docs/models)'
-  },
-  {
-    id: 'qwen',
-    label: 'Qwen (DashScope)',
-    baseUrl: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
-    hint: 'Key: Alibaba Cloud Model Studio · models: qwen3-coder-plus, qwen-max'
-  },
-  {
-    id: 'deepseek',
-    label: 'DeepSeek',
-    baseUrl: 'https://api.deepseek.com/v1',
-    hint: 'Key: platform.deepseek.com · models: deepseek-chat, deepseek-reasoner'
-  }
-]
+export const OPENAI_COMPAT_PRESETS: { id: string; label: string; baseUrl: string; hint: string }[] =
+  [
+    {
+      id: 'kimi',
+      label: 'Kimi (Moonshot)',
+      baseUrl: 'https://api.moonshot.ai/v1',
+      hint: 'Key: platform.moonshot.ai · models: kimi-k3, kimi-k2.7-code (see platform.kimi.ai/docs/models)'
+    },
+    {
+      id: 'qwen',
+      label: 'Qwen (DashScope)',
+      baseUrl: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
+      hint: 'Key: Alibaba Cloud Model Studio · models: qwen3-coder-plus, qwen-max'
+    },
+    {
+      id: 'deepseek',
+      label: 'DeepSeek',
+      baseUrl: 'https://api.deepseek.com/v1',
+      hint: 'Key: platform.deepseek.com · models: deepseek-chat, deepseek-reasoner'
+    }
+  ]

@@ -113,7 +113,9 @@ export default function CommandPalette(): React.JSX.Element | null {
             role="combobox"
             aria-expanded
             aria-controls="zy-palette-listbox"
-            aria-activedescendant={flat[selectedIndex] ? `zy-palette-opt-${flat[selectedIndex].id}` : undefined}
+            aria-activedescendant={
+              flat[selectedIndex] ? `zy-palette-opt-${flat[selectedIndex].id}` : undefined
+            }
           />
           <span className="zy-palette-title">{t('pal.title')}</span>
         </div>

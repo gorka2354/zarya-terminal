@@ -130,7 +130,11 @@ export default function HistoryOverlay(): React.JSX.Element | null {
                       : 'zy-badge--fail'
                 }`}
               >
-                {entry.exitCode === undefined ? '⋯' : entry.exitCode === 0 ? '✓' : `✗${entry.exitCode}`}
+                {entry.exitCode === undefined
+                  ? '⋯'
+                  : entry.exitCode === 0
+                    ? '✓'
+                    : `✗${entry.exitCode}`}
               </span>
               <div className="zy-palette-item-body">
                 <div className="zy-palette-item-title zy-palette-item-title--mono">

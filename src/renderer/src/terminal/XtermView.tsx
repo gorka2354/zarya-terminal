@@ -215,7 +215,11 @@ export const XtermView = memo(function XtermView({
     const pasteChecked = (text: string): void => {
       if (!text) return
       const st = useSettingsStore.getState().settings
-      if (st.terminal.pasteWarnMultiline && text.includes('\n') && !window.confirm(t('term.pasteAsk')))
+      if (
+        st.terminal.pasteWarnMultiline &&
+        text.includes('\n') &&
+        !window.confirm(t('term.pasteAsk'))
+      )
         return
       term.paste(text)
     }
@@ -483,9 +487,11 @@ export const XtermView = memo(function XtermView({
           <div className="zy-term-exited-card">
             <div className="zy-term-exited-title">
               {t('term.exited', {
-              code:
-                session?.exitCode !== undefined ? t('term.exitCode', { code: session.exitCode }) : ''
-            })}
+                code:
+                  session?.exitCode !== undefined
+                    ? t('term.exitCode', { code: session.exitCode })
+                    : ''
+              })}
             </div>
             <div className="zy-row">
               <button
@@ -494,10 +500,7 @@ export const XtermView = memo(function XtermView({
               >
                 {t('term.restart')}
               </button>
-              <button
-                className="zy-btn"
-                onClick={() => void closePaneAsking(sessionId)}
-              >
+              <button className="zy-btn" onClick={() => void closePaneAsking(sessionId)}>
                 {t('term.close')}
               </button>
             </div>

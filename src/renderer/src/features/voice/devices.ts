@@ -148,5 +148,5 @@ export function onDeviceChange(cb: () => void): () => void {
   if (!md?.addEventListener) return () => {}
   md.addEventListener('devicechange', cb)
   return () => md.removeEventListener('devicechange', cb)
-}import { t } from '@/lib/i18n'
-
+}
+import { t } from '@/lib/i18n'

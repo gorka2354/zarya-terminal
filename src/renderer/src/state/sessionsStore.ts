@@ -463,9 +463,7 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
       // было места в дереве: терминал работал, в списке не значился, а Enter и
       // Esc адресовались именно ему. Пятая уходит НОВОЙ ВКЛАДКОЙ.
       if (listLeaves(tab.layout).length >= MAX_PANES) {
-        useUiStore
-          .getState()
-          .toast(t('sess.maxPanesNewTab', { n: MAX_PANES }), 'info')
+        useUiStore.getState().toast(t('sess.maxPanesNewTab', { n: MAX_PANES }), 'info')
         await get().newTab(undefined, cwd)
         return
       }
@@ -519,9 +517,7 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
       const tab = state.tabs.find((t) => listLeaves(t.layout).includes(targetSessionId))
       if (!tab) return
       if (listLeaves(tab.layout).length >= MAX_PANES) {
-        useUiStore
-          .getState()
-          .toast(t('sess.maxPanesNewTab', { n: MAX_PANES }), 'info')
+        useUiStore.getState().toast(t('sess.maxPanesNewTab', { n: MAX_PANES }), 'info')
         await get().newTab(undefined, cwd)
         return
       }
@@ -561,15 +557,12 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
       const toTab = before.tabs.find((t) => listLeaves(t.layout).includes(targetSessionId))
       if (!fromTab || !toTab) return
       if (fromTab.id !== toTab.id && listLeaves(toTab.layout).length >= MAX_PANES) {
-        useUiStore
-          .getState()
-          .toast(t('sess.maxPanes', { n: MAX_PANES }), 'error')
+        useUiStore.getState().toast(t('sess.maxPanes', { n: MAX_PANES }), 'error')
         return
       }
       // Вкладка отдала последнюю панель — она закроется, и её разворот вместе
       // с ней. Считаем ДО правки состояния: после неё вкладки уже нет.
-      const donorEmpties =
-        fromTab.id !== toTab.id && !removeLeaf(fromTab.layout, sessionId)
+      const donorEmpties = fromTab.id !== toTab.id && !removeLeaf(fromTab.layout, sessionId)
       setPartial((s) => {
         const from = s.tabs.find((t) => listLeaves(t.layout).includes(sessionId))
         const to = s.tabs.find((t) => listLeaves(t.layout).includes(targetSessionId))
@@ -603,7 +596,13 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
             if (t.id === to.id) {
               return {
                 ...t,
-                layout: placeBeside(t.layout, targetSessionId, sessionId, side, isAutoLayout(t.layout)),
+                layout: placeBeside(
+                  t.layout,
+                  targetSessionId,
+                  sessionId,
+                  side,
+                  isAutoLayout(t.layout)
+                ),
                 activeSessionId: sessionId
               }
             }
@@ -662,7 +661,9 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
             ...t,
             layout,
             activeSessionId: wasFocused
-              ? (focus && leaves.includes(focus) ? focus : leaves[0])
+              ? focus && leaves.includes(focus)
+                ? focus
+                : leaves[0]
               : t.activeSessionId
           })
           // Новый стол встаёт СРАЗУ ЗА исходным: искать его будут рядом.
@@ -693,7 +694,9 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
 
     setSplitRatio: (tabId, path, ratio) => {
       setPartial((s) => ({
-        tabs: s.tabs.map((t) => (t.id === tabId ? { ...t, layout: setRatioAt(t.layout, path, ratio) } : t))
+        tabs: s.tabs.map((t) =>
+          t.id === tabId ? { ...t, layout: setRatioAt(t.layout, path, ratio) } : t
+        )
       }))
       schedulePersistWorkspace(get)
     },
@@ -747,10 +750,14 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
             const leaves = listLeaves(layout)
             const wasFocused = tab.activeSessionId === sessionId
             const nextActive = wasFocused
-              ? (focus && leaves.includes(focus) ? focus : leaves[0])
+              ? focus && leaves.includes(focus)
+                ? focus
+                : leaves[0]
               : tab.activeSessionId
             if (wasFocused && tab.id === activeTabId) handOver = nextActive
-            tabs = s.tabs.map((t) => (t.id === tab.id ? { ...t, layout, activeSessionId: nextActive } : t))
+            tabs = s.tabs.map((t) =>
+              t.id === tab.id ? { ...t, layout, activeSessionId: nextActive } : t
+            )
           }
         }
         return { sessions, tabs, activeTabId }
@@ -952,12 +959,13 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
 if (typeof window !== 'undefined') {
   // QA hook: force a full persist (terminal snapshots + workspace + conversations)
   // so a restart-restore test is deterministic without relying on graceful close.
-  ;(window as unknown as { __zaryaPersistAll?: () => Promise<void> }).__zaryaPersistAll = async () => {
-    await useSessionsStore.getState().snapshotAll()
-    const { tabs, activeTabId } = useSessionsStore.getState()
-    await window.zarya.sessions.saveWorkspace({ tabs, activeTabId })
-    await runQuitFlushers()
-  }
+  ;(window as unknown as { __zaryaPersistAll?: () => Promise<void> }).__zaryaPersistAll =
+    async () => {
+      await useSessionsStore.getState().snapshotAll()
+      const { tabs, activeTabId } = useSessionsStore.getState()
+      await window.zarya.sessions.saveWorkspace({ tabs, activeTabId })
+      await runQuitFlushers()
+    }
 
   // QA hook: inspect the tab/session model from the offscreen harness.
   ;(window as unknown as { __zaryaDumpSessions?: () => unknown }).__zaryaDumpSessions = () => {
@@ -965,22 +973,32 @@ if (typeof window !== 'undefined') {
     return {
       activeTabId: s.activeTabId,
       activeSessionId: s.activeSessionId(),
-      tabs: s.tabs.map((t) => ({ id: t.id, activeSessionId: t.activeSessionId, leaves: listLeaves(t.layout) })),
-      sessions: Object.values(s.sessions).map((x) => ({ id: x.id, title: x.title, cwd: x.cwd, status: x.status }))
+      tabs: s.tabs.map((t) => ({
+        id: t.id,
+        activeSessionId: t.activeSessionId,
+        leaves: listLeaves(t.layout)
+      })),
+      sessions: Object.values(s.sessions).map((x) => ({
+        id: x.id,
+        title: x.title,
+        cwd: x.cwd,
+        status: x.status
+      }))
     }
   }
 
   // QA hooks: drive terminals from the offscreen harness (create / run a shell
   // command / split / close) so a full-app QA sweep can exercise the real PTY.
-  ;(window as unknown as { __zaryaNewTerminal?: (cwd?: string) => Promise<string> }).__zaryaNewTerminal = (
-    cwd
-  ) => useSessionsStore.getState().newTab(undefined, cwd)
-  ;(window as unknown as { __zaryaRunShell?: (cmd: string, sessionId?: string) => string | null }).__zaryaRunShell =
-    (cmd, sessionId) => {
-      const sid = sessionId || useSessionsStore.getState().activeSessionId()
-      if (sid) window.zarya.pty.write(sid, cmd + '\r')
-      return sid
-    }
+  ;(
+    window as unknown as { __zaryaNewTerminal?: (cwd?: string) => Promise<string> }
+  ).__zaryaNewTerminal = (cwd) => useSessionsStore.getState().newTab(undefined, cwd)
+  ;(
+    window as unknown as { __zaryaRunShell?: (cmd: string, sessionId?: string) => string | null }
+  ).__zaryaRunShell = (cmd, sessionId) => {
+    const sid = sessionId || useSessionsStore.getState().activeSessionId()
+    if (sid) window.zarya.pty.write(sid, cmd + '\r')
+    return sid
+  }
   /**
    * Текст терминала как его видит человек, и фокус конкретной панели. Нужны
    * многопанельным прогонам: «шелл ответил» проверяется тем, что он ОТВЕТИЛ, а
@@ -1007,21 +1025,25 @@ if (typeof window !== 'undefined') {
     sessionId
   ) => useSessionsStore.getState().setActiveSession(sessionId)
   ;(
-    window as unknown as { __zaryaSplitActive?: (dir: SplitDirection, cwd?: string) => Promise<void> }
-  ).__zaryaSplitActive =
-    (dir, cwd) => useSessionsStore.getState().splitActive(dir, cwd)
+    window as unknown as {
+      __zaryaSplitActive?: (dir: SplitDirection, cwd?: string) => Promise<void>
+    }
+  ).__zaryaSplitActive = (dir, cwd) => useSessionsStore.getState().splitActive(dir, cwd)
   ;(
     window as unknown as { __zaryaMovePane?: (sid: string, target: string) => void }
   ).__zaryaMovePane = (sid, target) => useSessionsStore.getState().movePaneNextTo(sid, target)
-  ;(window as unknown as { __zaryaCloseSession?: (sid: string) => Promise<void> }).__zaryaCloseSession = (sid) =>
-    useSessionsStore.getState().closeSession(sid, { save: false })
+  ;(
+    window as unknown as { __zaryaCloseSession?: (sid: string) => Promise<void> }
+  ).__zaryaCloseSession = (sid) => useSessionsStore.getState().closeSession(sid, { save: false })
   /**
    * Снимкам для README: подписать панель нейтрально. В документации не должно
    * быть ни чужих папок, ни личных путей — а настоящие берутся из настоящей
    * файловой системы, какая есть на машине.
    */
   ;(
-    window as unknown as { __zaryaRenameForShot?: (sid: string, title: string, cwd: string) => void }
+    window as unknown as {
+      __zaryaRenameForShot?: (sid: string, title: string, cwd: string) => void
+    }
   ).__zaryaRenameForShot = (sid, title, cwd) => {
     useSessionsStore.setState((s) => {
       const cur = s.sessions[sid]

@@ -201,9 +201,7 @@ export class UpdateService {
     if (this.state.signature !== 'ok') {
       this.set({
         installError:
-          this.state.signature === 'bad'
-            ? tm('main.upd.sigMismatch')
-            : tm('main.upd.unsigned')
+          this.state.signature === 'bad' ? tm('main.upd.sigMismatch') : tm('main.upd.unsigned')
       })
       return this.state
     }

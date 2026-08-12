@@ -41,10 +41,7 @@ export function EngineTab(): React.JSX.Element {
    * берётся у беседы: `claude doctor` читает настройки ТЕКУЩЕЙ папки, и без
    * неё отчёт был бы о чужом проекте.
    */
-  const panes = useMemo(
-    () => conversations.filter((c) => c.engine !== 'builtin'),
-    [conversations]
-  )
+  const panes = useMemo(() => conversations.filter((c) => c.engine !== 'builtin'), [conversations])
   const [picked, setPicked] = useState<string | null>(null)
   const chosen = useMemo(
     () => panes.find((c) => c.id === (picked ?? activeId)) ?? panes[0],
@@ -179,7 +176,9 @@ export function EngineTab(): React.JSX.Element {
       ) : (
         <>
           <div className="zy-section-label">{t('eng.whatRuns')}</div>
-          {!health && <div className="zy-eng-empty">{t(busy ? 'eng.loading' : 'eng.noAnswer')}</div>}
+          {!health && (
+            <div className="zy-eng-empty">{t(busy ? 'eng.loading' : 'eng.noAnswer')}</div>
+          )}
           {/*
             Ничего не выбрано — САМЫЙ ВАЖНЫЙ случай этого экрана, и раньше он был
             единственным, где экран показывал пустоту: блок рисовался только для
@@ -275,11 +274,7 @@ export function EngineTab(): React.JSX.Element {
           <div className="zy-eng-note">
             {cwd ? t('eng.doctorWhatIn', { dir: cwd }) : t('eng.doctorNoCwd')}
           </div>
-          <button
-            className="zy-eng-btn"
-            disabled={asking || !cwd}
-            onClick={() => void load(true)}
-          >
+          <button className="zy-eng-btn" disabled={asking || !cwd} onClick={() => void load(true)}>
             {t(asking ? 'eng.asking' : 'eng.ask')}
           </button>
           {health?.doctor?.ok === false && (
@@ -305,7 +300,6 @@ export function EngineTab(): React.JSX.Element {
     </section>
   )
 }
-
 
 /**
  * Человеческий размер: точность до десятых там, где она что-то значит.

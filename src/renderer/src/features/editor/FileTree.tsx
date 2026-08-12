@@ -135,15 +135,26 @@ export default function FileTree(): React.JSX.Element {
 
   const loadChildren = useCallback(async (path: string, force = false): Promise<void> => {
     if (!force && nodesRef.current[path]?.children) return
-    setNodes((p) => ({ ...p, [path]: { ...(p[path] ?? { expanded: true, error: false }), loading: true } }))
+    setNodes((p) => ({
+      ...p,
+      [path]: { ...(p[path] ?? { expanded: true, error: false }), loading: true }
+    }))
     try {
       const entries = await window.zarya.fs.readDir(path)
       setNodes((p) => ({
         ...p,
-        [path]: { ...(p[path] ?? { expanded: true }), children: entries, loading: false, error: false }
+        [path]: {
+          ...(p[path] ?? { expanded: true }),
+          children: entries,
+          loading: false,
+          error: false
+        }
       }))
     } catch {
-      setNodes((p) => ({ ...p, [path]: { ...(p[path] ?? { expanded: true }), loading: false, error: true } }))
+      setNodes((p) => ({
+        ...p,
+        [path]: { ...(p[path] ?? { expanded: true }), loading: false, error: true }
+      }))
     }
   }, [])
 
@@ -209,7 +220,10 @@ export default function FileTree(): React.JSX.Element {
   const toggleExpand = useCallback(
     (path: string): void => {
       const expanded = !(nodesRef.current[path]?.expanded ?? false)
-      setNodes((p) => ({ ...p, [path]: { ...(p[path] ?? { loading: false, error: false }), expanded } }))
+      setNodes((p) => ({
+        ...p,
+        [path]: { ...(p[path] ?? { loading: false, error: false }), expanded }
+      }))
       if (expanded) void loadChildren(path)
     },
     [loadChildren]
@@ -260,7 +274,10 @@ export default function FileTree(): React.JSX.Element {
     e.stopPropagation()
     const items: MenuItem[] = []
     if (!entry.isDir) {
-      items.push({ label: t('ft.open'), onClick: () => void useEditorStore.getState().openFile(entry.path) })
+      items.push({
+        label: t('ft.open'),
+        onClick: () => void useEditorStore.getState().openFile(entry.path)
+      })
       if (gitCode && root) {
         items.push({
           label: t('ft.diffHead'),
@@ -310,25 +327,30 @@ export default function FileTree(): React.JSX.Element {
           >
             <Icon name="pin" size={14} />
           </button>
-          <button className="zy-icon-btn" title={t('ft.refresh')} onClick={() => void refresh()} disabled={!root}>
+          <button
+            className="zy-icon-btn"
+            title={t('ft.refresh')}
+            onClick={() => void refresh()}
+            disabled={!root}
+          >
             <Icon name="refresh" size={14} />
           </button>
         </div>
       </div>
       {!followTerminal && (
         <div className="zy-sidebar-search">
-          <button className="zy-btn zy-btn--sm" style={{ width: '100%' }} onClick={() => void pickRoot()}>
+          <button
+            className="zy-btn zy-btn--sm"
+            style={{ width: '100%' }}
+            onClick={() => void pickRoot()}
+          >
             {pinnedRoot ? shortenPath(pinnedRoot, 30) : t('ft.pickFolder')}
           </button>
         </div>
       )}
       <div className="zy-sidebar-body" onContextMenu={openRootContext}>
         {!root && (
-          <div className="zy-empty">
-            {followTerminal
-              ? t('ft.waiting')
-              : t('ft.pickHint')}
-          </div>
+          <div className="zy-empty">{followTerminal ? t('ft.waiting') : t('ft.pickHint')}</div>
         )}
         {root && (
           <>
@@ -364,12 +386,19 @@ interface TreeChildrenProps {
   onContextMenu: (e: React.MouseEvent, entry: DirEntry, gitCode: GitCode) => void
 }
 
-function TreeChildren({ parentPath, depth, nodes, ...handlers }: TreeChildrenProps): React.JSX.Element | null {
+function TreeChildren({
+  parentPath,
+  depth,
+  nodes,
+  ...handlers
+}: TreeChildrenProps): React.JSX.Element | null {
   const state = nodes[parentPath]
   if (!state?.expanded && depth > 0) return null
-  if (state?.loading && !state.children) return <div className="zy-tree-empty">{t('ft.loading')}</div>
+  if (state?.loading && !state.children)
+    return <div className="zy-tree-empty">{t('ft.loading')}</div>
   if (state?.error) return <div className="zy-tree-empty">{t('ft.readFail')}</div>
-  if (!state?.children) return depth === 0 ? <div className="zy-tree-empty">{t('ft.loading')}</div> : null
+  if (!state?.children)
+    return depth === 0 ? <div className="zy-tree-empty">{t('ft.loading')}</div> : null
   if (!state.children.length) return <div className="zy-tree-empty">{t('ft.empty')}</div>
   return (
     <>
@@ -417,7 +446,9 @@ function TreeEntry({
         onContextMenu={(e) => onContextMenu(e, entry, gitCode)}
       >
         <span className="zy-tree-arrow">
-          {entry.isDir && <Icon name={expanded ? 'chevron-down' : 'chevron-right'} size={10} strokeWidth={1.8} />}
+          {entry.isDir && (
+            <Icon name={expanded ? 'chevron-down' : 'chevron-right'} size={10} strokeWidth={1.8} />
+          )}
         </span>
         <span className="zy-tree-icon">
           <Icon name={entry.isDir ? (expanded ? 'folder-open' : 'folder') : 'files'} size={13} />

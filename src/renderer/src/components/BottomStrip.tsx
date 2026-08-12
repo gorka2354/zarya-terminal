@@ -36,9 +36,7 @@ export function BottomStrip(): React.JSX.Element {
 
   // Сколько панелей ждут решения человека. Считаем по тому же правилу, что и
   // карточка одобрения, — иначе счётчик и карточки разойдутся.
-  const waiting = useAiStore(
-    (s) => s.conversations.filter((c) => nextGate(c) !== undefined).length
-  )
+  const waiting = useAiStore((s) => s.conversations.filter((c) => nextGate(c) !== undefined).length)
 
   // Стоимость — у беседы ТОЙ панели, на которую человек смотрит: полоса одна на
   // окно, а разговоров в нём столько же, сколько панелей.
@@ -121,10 +119,7 @@ export function BottomStrip(): React.JSX.Element {
       </button>
       <div className="zy-strip-spacer" />
       {waiting > 0 && (
-        <span
-          className="zy-strip-waiting"
-          title={t('strip.pendingHint')}
-        >
+        <span className="zy-strip-waiting" title={t('strip.pendingHint')}>
           {t('strip.pendingLower', { n: waiting })}
         </span>
       )}

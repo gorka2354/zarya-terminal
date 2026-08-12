@@ -89,9 +89,7 @@ export interface ZaryaApi {
      * Каталог моделей провайдера: живой, с кешем. `at` — когда получен, `error`
      * стоит, если спросить не вышло и список пришёл из кеша.
      */
-    listModels(
-      provider: string
-    ): Promise<{
+    listModels(provider: string): Promise<{
       ids: string[]
       at: number
       error?: string
@@ -144,12 +142,20 @@ export interface ZaryaApi {
       engine: AgentEngine,
       requestId?: string
     ): Promise<{
-      commands: Array<{ name: string; description: string; argumentHint?: string; aliases?: string[] }>
+      commands: Array<{
+        name: string
+        description: string
+        argumentHint?: string
+        aliases?: string[]
+      }>
       source: 'engine' | 'unknown'
       note?: string
     }>
     /** Перечитать скиллы/плагины/MCP ЭТОЙ беседы, не перезапуская её. */
-    reloadExtras(engine: AgentEngine, requestId?: string): Promise<{
+    reloadExtras(
+      engine: AgentEngine,
+      requestId?: string
+    ): Promise<{
       ok: boolean
       unsupported?: boolean
       commands?: Array<{ name: string; description: string; argumentHint?: string }>

@@ -33,7 +33,11 @@ export function asSkillState(v: unknown): SkillState | undefined {
 export const SKILL_LAYERS: SkillLayer[] = ['user', 'project', 'local']
 
 export function layerLabel(layer: SkillLayer): string {
-  return layer === 'user' ? 'личных настройках' : layer === 'project' ? 'настройках проекта' : 'локальных настройках проекта'
+  return layer === 'user'
+    ? 'личных настройках'
+    : layer === 'project'
+      ? 'настройках проекта'
+      : 'локальных настройках проекта'
 }
 
 /** Эффективное состояние скилла и слой, который его задал. */
@@ -72,7 +76,9 @@ export function withSkillOverride(
   const next = { ...settings }
   const src = next.skillOverrides
   const overrides: Record<string, unknown> =
-    src && typeof src === 'object' && !Array.isArray(src) ? { ...(src as Record<string, unknown>) } : {}
+    src && typeof src === 'object' && !Array.isArray(src)
+      ? { ...(src as Record<string, unknown>) }
+      : {}
   if (state === 'on') delete overrides[name]
   else overrides[name] = state
   if (Object.keys(overrides).length) next.skillOverrides = overrides

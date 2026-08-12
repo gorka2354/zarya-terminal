@@ -68,7 +68,9 @@ export function systemClaudeCandidates(
     const localAppData = env.LOCALAPPDATA
     const out: string[] = []
     if (appData) {
-      out.push(j(appData, 'npm', 'node_modules', '@anthropic-ai', 'claude-code', 'bin', 'claude.exe'))
+      out.push(
+        j(appData, 'npm', 'node_modules', '@anthropic-ai', 'claude-code', 'bin', 'claude.exe')
+      )
     }
     out.push(j(home, '.local', 'bin', 'claude.exe'))
     out.push(j(home, '.claude', 'local', 'claude.exe'))

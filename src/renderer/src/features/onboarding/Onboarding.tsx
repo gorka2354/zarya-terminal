@@ -166,7 +166,13 @@ export function Onboarding(): React.JSX.Element | null {
     <div className="zy-overlay-backdrop zy-overlay-backdrop--center">
       <div className="zy-ob" role="dialog" aria-label={t('ob.aria')}>
         <header className="zy-ob-head">
-          <img src={logoZarya} width={28} height={28} alt="" style={{ imageRendering: 'pixelated' }} />
+          <img
+            src={logoZarya}
+            width={28}
+            height={28}
+            alt=""
+            style={{ imageRendering: 'pixelated' }}
+          />
           <div>
             <div className="zy-ob-title">{steps[step].title}</div>
             <div className="zy-ob-step">{t('ob.step', { i: step + 1, n: steps.length })}</div>
@@ -179,7 +185,11 @@ export function Onboarding(): React.JSX.Element | null {
         <footer className="zy-ob-foot">
           {/* Пропуск стоит первым и не прячется: человек, которому это не нужно,
               не должен искать выход. */}
-          <button type="button" className="zy-ob-btn zy-ob-btn--quiet" onClick={() => void finish()}>
+          <button
+            type="button"
+            className="zy-ob-btn zy-ob-btn--quiet"
+            onClick={() => void finish()}
+          >
             {t('ob.skip')}
           </button>
           <div className="zy-ob-spacer" />

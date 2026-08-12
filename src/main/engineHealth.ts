@@ -60,7 +60,10 @@ function ver(v?: number[]): string | undefined {
  */
 export function buildBinaries(
   pick: ExePick,
-  found: { bundled?: { path: string; version?: number[] }; system?: { path: string; version?: number[] } },
+  found: {
+    bundled?: { path: string; version?: number[] }
+    system?: { path: string; version?: number[] }
+  },
   envOverride?: string
 ): EngineBinary[] {
   const out: EngineBinary[] = []

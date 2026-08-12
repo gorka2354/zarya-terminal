@@ -44,9 +44,7 @@ export function installLongCommandCall(): () => void {
     if (!getSettings().notifications.whenLongDone) return
     // Окно в фокусе — человек здесь и всё видит сам.
     if (typeof document !== 'undefined' && document.hasFocus()) return
-    const block = useBlocksStore
-      .getState()
-      .bySession[sessionId]?.find((b) => b.id === blockId)
+    const block = useBlocksStore.getState().bySession[sessionId]?.find((b) => b.id === blockId)
     if (!block?.endedAt) return
     const ms = block.endedAt - block.startedAt
     if (ms < LONG_COMMAND_MS) return

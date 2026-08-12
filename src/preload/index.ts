@@ -223,8 +223,7 @@ const api = {
   fs: {
     readDir: (path: string) => ipcRenderer.invoke(CH.fsReadDir, path),
     readFile: (path: string) => ipcRenderer.invoke(CH.fsReadFile, path),
-    writeFile: (path: string, content: string) =>
-      ipcRenderer.invoke(CH.fsWriteFile, path, content),
+    writeFile: (path: string, content: string) => ipcRenderer.invoke(CH.fsWriteFile, path, content),
     stat: (path: string) => ipcRenderer.invoke(CH.fsStat, path),
     create: (path: string, isDir: boolean) => ipcRenderer.invoke(CH.fsCreate, path, isDir),
     rename: (from: string, to: string) => ipcRenderer.invoke(CH.fsRename, from, to),

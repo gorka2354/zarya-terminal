@@ -48,7 +48,10 @@ export function folderArg(argv: readonly string[], packaged: boolean): string | 
  */
 export function cleanArgPath(raw: string): string {
   let p = raw.trim()
-  if (p.length >= 2 && ((p.startsWith('"') && p.endsWith('"')) || (p.startsWith("'") && p.endsWith("'")))) {
+  if (
+    p.length >= 2 &&
+    ((p.startsWith('"') && p.endsWith('"')) || (p.startsWith("'") && p.endsWith("'")))
+  ) {
     p = p.slice(1, -1)
   }
   return p.trim()

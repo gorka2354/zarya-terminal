@@ -250,7 +250,13 @@ export function imageSize(head: Uint8Array): { width: number; height: number } |
       }
       const marker = b[i + 1]
       // SOF0..SOF15, кроме DHT (c4), JPGA (c8) и DAC (cc) — они не кадры.
-      if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+      if (
+        marker >= 0xc0 &&
+        marker <= 0xcf &&
+        marker !== 0xc4 &&
+        marker !== 0xc8 &&
+        marker !== 0xcc
+      ) {
         return { height: be16(i + 5), width: be16(i + 7) }
       }
       const len = be16(i + 2)

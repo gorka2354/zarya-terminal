@@ -39,12 +39,31 @@ const ACCOUNTS: Array<{ tagKey: string; provider: AiProviderKind; full: string }
  * live catalog (which does carry resolvedModel) supplies the exact version.
  */
 const CLAUDE_MODEL_FALLBACK: ClaudeModelInfo[] = [
-  { value: 'opus[1m]', displayName: 'Opus', description: '1M context', supportsEffort: true, supportedEffortLevels: ['low', 'medium', 'high', 'xhigh', 'max'] },
+  {
+    value: 'opus[1m]',
+    displayName: 'Opus',
+    description: '1M context',
+    supportsEffort: true,
+    supportedEffortLevels: ['low', 'medium', 'high', 'xhigh', 'max']
+  },
   // No floating 'fable' alias is published — its own id already names the
   // version, so this one row is version-qualified by nature (and mirrors the
   // live catalog, where the [1m] value resolves to the plain id).
-  { value: 'claude-fable-5[1m]', resolvedModel: 'claude-fable-5', displayName: 'Fable', description: '1M context', supportsEffort: true, supportedEffortLevels: ['low', 'medium', 'high', 'xhigh', 'max'] },
-  { value: 'sonnet', displayName: 'Sonnet', description: '', supportsEffort: true, supportedEffortLevels: ['low', 'medium', 'high', 'xhigh', 'max'] },
+  {
+    value: 'claude-fable-5[1m]',
+    resolvedModel: 'claude-fable-5',
+    displayName: 'Fable',
+    description: '1M context',
+    supportsEffort: true,
+    supportedEffortLevels: ['low', 'medium', 'high', 'xhigh', 'max']
+  },
+  {
+    value: 'sonnet',
+    displayName: 'Sonnet',
+    description: '',
+    supportsEffort: true,
+    supportedEffortLevels: ['low', 'medium', 'high', 'xhigh', 'max']
+  },
   { value: 'haiku', displayName: 'Haiku', description: '' }
 ]
 
@@ -82,7 +101,10 @@ const NO_EFFORT_FAMILIES = new Set(['haiku'])
 function effortOffFor(info: ClaudeModelInfo): boolean {
   if (info.supportsEffort === false) return true
   if (Array.isArray(info.supportedEffortLevels)) return info.supportedEffortLevels.length === 0
-  return NO_EFFORT_FAMILIES.has(famOf(info.value)) || NO_EFFORT_FAMILIES.has(famOf(info.resolvedModel || ''))
+  return (
+    NO_EFFORT_FAMILIES.has(famOf(info.value)) ||
+    NO_EFFORT_FAMILIES.has(famOf(info.resolvedModel || ''))
+  )
 }
 
 /** Prettify a model id for the non-Claude (builtin provider) console readout. */
@@ -287,7 +309,9 @@ export function LaunchPad(): React.JSX.Element | null {
     const list = providerModels.length ? [...providerModels] : [...preset]
     if (provider === ai.provider && ai.model && !list.includes(ai.model)) list.unshift(ai.model)
     if (model && !list.includes(model)) list.unshift(model)
-    const values = list.length ? list : [model || (catalogError ? t('lp.catalogFail') : t('lp.noModel'))]
+    const values = list.length
+      ? list
+      : [model || (catalogError ? t('lp.catalogFail') : t('lp.noModel'))]
     return values.map((v) => ({
       value: v,
       title: prettyModel(v),
@@ -334,11 +358,12 @@ export function LaunchPad(): React.JSX.Element | null {
   const effortIdx = claudeMode
     ? Math.max(0, claudeEfforts.indexOf(effectiveEffort))
     : EFFORTS.indexOf(effort as AiEffort)
-  const selIdx = Math.max(0, rows.findIndex((r) => r.selected))
+  const selIdx = Math.max(
+    0,
+    rows.findIndex((r) => r.selected)
+  )
   const rocketType = claudeMode ? Math.max(0, selIdx - 1) : selIdx
-  const effortValueLabel = ultracode
-    ? `${t('lp.effort.max')} · ULTRACODE`
-    : effortLabel(effort)
+  const effortValueLabel = ultracode ? `${t('lp.effort.max')} · ULTRACODE` : effortLabel(effort)
   const launchPreview = claudeMode
     ? claudeEfforts.length === 0 && !ultracode
       ? (rows[selIdx]?.title ?? t('lp.model'))
@@ -359,7 +384,10 @@ export function LaunchPad(): React.JSX.Element | null {
       effortOff: r.effortOff,
       selected: r.selected,
       active: r.active,
-      current: claudeMode && !!runningName && parseVersion(r.value).name.split(' ')[0] === runningName.split(' ')[0]
+      current:
+        claudeMode &&
+        !!runningName &&
+        parseVersion(r.value).name.split(' ')[0] === runningName.split(' ')[0]
     })),
     efforts: claudeEfforts,
     effort,
@@ -424,7 +452,9 @@ export function LaunchPad(): React.JSX.Element | null {
   return (
     <div className="zy-lp-backdrop" onMouseDown={close}>
       <div className="zy-launchpad" onMouseDown={(e) => e.stopPropagation()}>
-        <div className={`zy-lp-console zy-lp-console--idle${launching ? ' zy-lp-console--fired' : ''}`}>
+        <div
+          className={`zy-lp-console zy-lp-console--idle${launching ? ' zy-lp-console--fired' : ''}`}
+        >
           <div className="zy-lp-idle">
             <IdleRocket type={rocketType} />
             <div className="zy-lp-idle-meta">
@@ -468,7 +498,9 @@ export function LaunchPad(): React.JSX.Element | null {
                   <span className={`zy-lp-bullet${r.selected ? ' zy-lp-bullet--on' : ''}`} />
                   <span className="zy-lp-model-name">{r.title}</span>
                   {r.ctx && <span className="zy-lp-ver">1M</span>}
-                  {r.effortOff && <span className="zy-lp-ver zy-lp-ver--muted">{t('lp.noEffort')}</span>}
+                  {r.effortOff && (
+                    <span className="zy-lp-ver zy-lp-ver--muted">{t('lp.noEffort')}</span>
+                  )}
                   {r.active && <span className="zy-lp-tag-active">{t('lp.active')}</span>}
                 </div>
                 {r.desc && <span className="zy-lp-model-desc">{r.desc}</span>}
@@ -480,7 +512,9 @@ export function LaunchPad(): React.JSX.Element | null {
             <>
               <div className="zy-lp-eff-head">
                 <span className="zy-lp-label zy-lp-label--inline">{t('lp.thrustEffort')}</span>
-                <span className={`zy-lp-eff-val${ultracode || effort === 'max' ? ' zy-lp-eff-val--hot' : ''}`}>
+                <span
+                  className={`zy-lp-eff-val${ultracode || effort === 'max' ? ' zy-lp-eff-val--hot' : ''}`}
+                >
                   {claudeEfforts.length === 0 && !ultracode ? '—' : effortValueLabel}
                 </span>
               </div>
@@ -534,14 +568,18 @@ export function LaunchPad(): React.JSX.Element | null {
                   />
                 ))}
               </div>
-              <span className={`zy-lp-thrust-label${effort === 'max' ? ' zy-lp-thrust-label--max' : ''}`}>
+              <span
+                className={`zy-lp-thrust-label${effort === 'max' ? ' zy-lp-thrust-label--max' : ''}`}
+              >
                 {t(EFFORT_TUNING[effort as AiEffort].labelKey)}
               </span>
             </div>
           )}
 
           {claudeMode && launchPreview && (
-            <div className="zy-lp-preview">{t('lp.apply')}: {launchPreview}</div>
+            <div className="zy-lp-preview">
+              {t('lp.apply')}: {launchPreview}
+            </div>
           )}
           <button className="zy-lp-launch" onClick={launch} disabled={launching}>
             {t('lp.launch')}
@@ -551,8 +589,6 @@ export function LaunchPad(): React.JSX.Element | null {
     </div>
   )
 }
-
-
 
 /*
  * Восход (11×18) — четыре фазы одного рассвета вместо четырёх разных ракет.
@@ -565,19 +601,101 @@ export function LaunchPad(): React.JSX.Element | null {
  * потому что рисунок обязан читаться на любой из тем, а не совпадать с одной.
  */
 const SUN_PAL: Record<string, string> = {
-  Y: '#ffd79a', y: '#ffb05c', o: '#ff8f5c', r: '#e2683c',
-  H: '#7fd4e0', h: '#4a90a4', d: '#2b4757', s: '#1a2b36'
+  Y: '#ffd79a',
+  y: '#ffb05c',
+  o: '#ff8f5c',
+  r: '#e2683c',
+  H: '#7fd4e0',
+  h: '#4a90a4',
+  d: '#2b4757',
+  s: '#1a2b36'
 }
 /** Четыре фазы: от первой полоски света до полного диска. */
 const SUNRISE: string[][] = [
   // 1. Только горизонт и первая полоска
-  ['...........', '...........', '...........', '...........', '...........', '...........', '...........', '...........', '...........', '...........', '....ooo....', '...oyyyo...', '..hHHHHHh..', '...ddddd...', '...sssss...', '...........', '...........', '...........'],
+  [
+    '...........',
+    '...........',
+    '...........',
+    '...........',
+    '...........',
+    '...........',
+    '...........',
+    '...........',
+    '...........',
+    '...........',
+    '....ooo....',
+    '...oyyyo...',
+    '..hHHHHHh..',
+    '...ddddd...',
+    '...sssss...',
+    '...........',
+    '...........',
+    '...........'
+  ],
   // 2. Край диска показался
-  ['...........', '...........', '...........', '...........', '...........', '...........', '...........', '....ooo....', '...oyyyo...', '..oyYYYyo..', '..ryYYYyr..', '..hHHHHHh..', '...ddddd...', '...sssss...', '...........', '...........', '...........', '...........'],
+  [
+    '...........',
+    '...........',
+    '...........',
+    '...........',
+    '...........',
+    '...........',
+    '...........',
+    '....ooo....',
+    '...oyyyo...',
+    '..oyYYYyo..',
+    '..ryYYYyr..',
+    '..hHHHHHh..',
+    '...ddddd...',
+    '...sssss...',
+    '...........',
+    '...........',
+    '...........',
+    '...........'
+  ],
   // 3. Половина диска
-  ['...........', '...........', '...........', '...........', '....ooo....', '...oyyyo...', '..oyYYYyo..', '.oyYYYYYyo.', '.ryYYYYYyr.', '.ryyYYYyyr.', '..hHHHHHh..', '...ddddd...', '...sssss...', '...........', '...........', '...........', '...........', '...........'],
+  [
+    '...........',
+    '...........',
+    '...........',
+    '...........',
+    '....ooo....',
+    '...oyyyo...',
+    '..oyYYYyo..',
+    '.oyYYYYYyo.',
+    '.ryYYYYYyr.',
+    '.ryyYYYyyr.',
+    '..hHHHHHh..',
+    '...ddddd...',
+    '...sssss...',
+    '...........',
+    '...........',
+    '...........',
+    '...........',
+    '...........'
+  ],
   // 4. Диск целиком над горизонтом
-  ['...........', '....ooo....', '...oyyyo...', '..oyYYYyo..', '.oyYYYYYyo.', '.oyYYYYYyo.', '.ryYYYYYyr.', '.ryyYYYyyr.', '..ryyyyyr..', '...rrrrr...', '...........', '..hHHHHHh..', '...ddddd...', '...sssss...', '...........', '...........', '...........', '...........']
+  [
+    '...........',
+    '....ooo....',
+    '...oyyyo...',
+    '..oyYYYyo..',
+    '.oyYYYYYyo.',
+    '.oyYYYYYyo.',
+    '.ryYYYYYyr.',
+    '.ryyYYYyyr.',
+    '..ryyyyyr..',
+    '...rrrrr...',
+    '...........',
+    '..hHHHHHh..',
+    '...ddddd...',
+    '...sssss...',
+    '...........',
+    '...........',
+    '...........',
+    '...........'
+  ]
 ]
 
 /** Маленький восход для свёрнутой полосы — рисуется один раз. */

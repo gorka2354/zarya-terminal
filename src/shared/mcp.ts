@@ -301,7 +301,6 @@ const STATUS_ORDER: Record<McpServerRow['status'], number> = {
 
 export function sortMcpRows(rows: McpServerRow[]): McpServerRow[] {
   return [...rows].sort(
-    (a, b) =>
-      STATUS_ORDER[a.status] - STATUS_ORDER[b.status] || a.name.localeCompare(b.name, 'en')
+    (a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status] || a.name.localeCompare(b.name, 'en')
   )
 }

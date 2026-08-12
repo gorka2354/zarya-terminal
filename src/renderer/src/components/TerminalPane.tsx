@@ -64,7 +64,9 @@ export const TerminalPane = memo(function TerminalPane({
   const raw = useUiStore((s) => isRaw(s, sessionId))
   // Разворот — по своей вкладке: чужая развёрнутая панель этой ничего не говорит.
   const maximized = useUiStore((s) => {
-    const tab = useSessionsStore.getState().tabs.find((t) => listLeaves(t.layout).includes(sessionId))
+    const tab = useSessionsStore
+      .getState()
+      .tabs.find((t) => listLeaves(t.layout).includes(sessionId))
     return !!tab && s.maximizedByTab[tab.id] === sessionId
   })
   /** Ребро, к которому встанет принесённая панель, пока её держат над этой. */
@@ -262,7 +264,7 @@ export const TerminalPane = memo(function TerminalPane({
           собой, как накрыла рамку панели. */}
       <div className="zy-pane-stage">
         <XtermView sessionId={sessionId} active={active} visible={visible} />
-      {/* Лента живёт ВНУТРИ панели, а не поверх всей рабочей области. Раньше она
+        {/* Лента живёт ВНУТРИ панели, а не поверх всей рабочей области. Раньше она
           была непрозрачным слоем на всё окно: в блочном режиме сплитов не было
           видно вообще — четыре панели существовали, но человек видел одну ленту.
           Слой позиционируется по .zy-pane (position: relative), заголовок панели
@@ -402,8 +404,7 @@ const PaneHeader = memo(function PaneHeader({
   )
 })
 
-function TermSearchBar({
- sessionId }: { sessionId: string }): React.JSX.Element {
+function TermSearchBar({ sessionId }: { sessionId: string }): React.JSX.Element {
   // Подписка на язык: без неё надписи этого компонента сменились бы не в
   // момент переключения, а при следующей перерисовке по другой причине.
   useLang()
@@ -473,9 +474,7 @@ function TermSearchBar({
           нашлось» выглядят одинаково — а это разные ответы. */}
       {!raw && query && (
         <span className="zy-searchbar-count">
-          {hits.count
-            ? t('search.hit', { i: hits.index + 1, n: hits.count })
-            : t('search.none')}
+          {hits.count ? t('search.hit', { i: hits.index + 1, n: hits.count }) : t('search.none')}
         </span>
       )}
       <button className="zy-icon-btn" title={t('search.prev')} onClick={() => find(-1)}>

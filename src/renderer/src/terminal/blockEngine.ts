@@ -227,9 +227,7 @@ export class BlockEngine {
       const parts = data.slice(2).split(';')
       const raw = parts[0] ?? ''
       const text = raw
-        .replace(/\\x([0-9a-fA-F]{2})/g, (_, h: string) =>
-          String.fromCharCode(parseInt(h, 16))
-        )
+        .replace(/\\x([0-9a-fA-F]{2})/g, (_, h: string) => String.fromCharCode(parseInt(h, 16)))
         .replace(/\\\\/g, '\\')
       this.setCommandText(text, parts[1])
       return

@@ -8,8 +8,7 @@ export interface PathMatch {
 }
 
 // Absolute windows (C:\...), unix (/...), relative (./ ../), home (~/)
-const PATH_RE =
-  /(?:[A-Za-z]:[\\/]|\.{1,2}[\\/]|~[\\/]|\/(?!\/))[\w\-. ~+@()\\/]*[\w\-+@)/\\]/g
+const PATH_RE = /(?:[A-Za-z]:[\\/]|\.{1,2}[\\/]|~[\\/]|\/(?!\/))[\w\-. ~+@()\\/]*[\w\-+@)/\\]/g
 
 /** Find file-ish paths in a rendered terminal line. */
 export function findPathsInLine(text: string): PathMatch[] {

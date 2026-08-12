@@ -111,7 +111,9 @@ export function toolLabel(
     return kind ? `${description} · ${kind}` : description
   }
   // Файлы, которые агент отдаёт человеку.
-  const files = Array.isArray(o?.files) ? (o.files as unknown[]).filter((f) => typeof f === 'string') : []
+  const files = Array.isArray(o?.files)
+    ? (o.files as unknown[]).filter((f) => typeof f === 'string')
+    : []
   if (files.length) {
     const first = shortName(files[0] as string)
     return files.length > 1 ? `${first} +${files.length - 1}` : first

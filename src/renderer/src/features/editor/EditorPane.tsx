@@ -127,13 +127,20 @@ export default function EditorPane(): React.JSX.Element {
   useEffect(() => {
     if (!monacoApi || !editorHostRef.current || !diffHostRef.current || editorRef.current) return
     const monaco = monacoApi
-    const themeName = ensureMonacoTheme(monaco, getTheme(useSettingsStore.getState().settings.appearance.themeId))
+    const themeName = ensureMonacoTheme(
+      monaco,
+      getTheme(useSettingsStore.getState().settings.appearance.themeId)
+    )
     const options = buildOptions(
       useSettingsStore.getState().settings.editor,
       useSettingsStore.getState().settings.appearance.fontFamily
     )
 
-    const editor = monaco.editor.create(editorHostRef.current, { ...options, theme: themeName, model: null })
+    const editor = monaco.editor.create(editorHostRef.current, {
+      ...options,
+      theme: themeName,
+      model: null
+    })
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
       const id = activeIdRef.current
       if (id) void useEditorStore.getState().save(id)
@@ -178,7 +185,14 @@ export default function EditorPane(): React.JSX.Element {
     // Diff editor options don't include tabSize/insertSpaces (model-level only, N/A for read-only diffs).
     const { tabSize: _tabSize, ...diffSafe } = options
     diffEditorRef.current?.updateOptions(diffSafe)
-  }, [monacoApi, editorSettings.fontSize, editorSettings.wordWrap, editorSettings.minimap, editorSettings.tabSize, fontFamily])
+  }, [
+    monacoApi,
+    editorSettings.fontSize,
+    editorSettings.wordWrap,
+    editorSettings.minimap,
+    editorSettings.tabSize,
+    fontFamily
+  ])
 
   // Switch the visible model when the active tab (or its load state) changes.
   const switchSignal = activeFile ? `${activeFile.id}:${activeFile.loading}:${activeFile.kind}` : ''
@@ -304,8 +318,14 @@ export default function EditorPane(): React.JSX.Element {
         {monacoApi && activeFile?.kind === 'file' && activeFile.loading && (
           <div className="zy-editor-loading">{t('ed.opening', { name: activeFile.name })}</div>
         )}
-        <div ref={editorHostRef} className={`zy-editor-host${showDiff ? ' zy-editor-host--hidden' : ''}`} />
-        <div ref={diffHostRef} className={`zy-editor-host${showDiff ? '' : ' zy-editor-host--hidden'}`} />
+        <div
+          ref={editorHostRef}
+          className={`zy-editor-host${showDiff ? ' zy-editor-host--hidden' : ''}`}
+        />
+        <div
+          ref={diffHostRef}
+          className={`zy-editor-host${showDiff ? '' : ' zy-editor-host--hidden'}`}
+        />
       </div>
     </div>
   )

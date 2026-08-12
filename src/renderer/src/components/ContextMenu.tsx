@@ -229,7 +229,9 @@ export function useContextMenu(): {
     // умеет закрыться само (щелчком мимо, Esc, уходом фокуса), и любой такой
     // флаг у кнопки немедленно разошёлся бы с правдой. Здесь же состояние одно.
     open: (x, y, items, anchor) =>
-      setState((prev) => (prev && anchor && prev.anchor === anchor ? null : { x, y, items, anchor })),
+      setState((prev) =>
+        prev && anchor && prev.anchor === anchor ? null : { x, y, items, anchor }
+      ),
     close: () => setState(null)
   }
 }

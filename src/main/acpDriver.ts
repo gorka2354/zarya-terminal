@@ -241,7 +241,11 @@ export class AcpDriver implements AgentDriver {
     this.proc?.stdin?.write(JSON.stringify({ jsonrpc: '2.0', ...msg }) + '\n')
   }
 
-  private request(method: string, params: unknown, opts?: { timeout?: number | null }): Promise<unknown> {
+  private request(
+    method: string,
+    params: unknown,
+    opts?: { timeout?: number | null }
+  ): Promise<unknown> {
     const id = this.nextId++
     const key = String(id)
     const timeoutMs = opts?.timeout === undefined ? REQUEST_TIMEOUT_MS : opts.timeout
@@ -249,7 +253,8 @@ export class AcpDriver implements AgentDriver {
       let timer: ReturnType<typeof setTimeout> | undefined
       if (timeoutMs != null) {
         timer = setTimeout(() => {
-          if (this.pending.delete(key)) reject(new Error(tm('main.acp.noReply', { engine: this.engine, method })))
+          if (this.pending.delete(key))
+            reject(new Error(tm('main.acp.noReply', { engine: this.engine, method })))
         }, timeoutMs)
       }
       this.pending.set(key, {
@@ -305,12 +310,15 @@ export class AcpDriver implements AgentDriver {
         if (this.proc !== proc) return
         const tail = this.lastStderr.trim()
         const err = new Error(
-        tail ? tm('main.acp.exitedTail', { engine: this.engine, tail }) : tm('main.acp.exited', { engine: this.engine })
-      )
+          tail
+            ? tm('main.acp.exitedTail', { engine: this.engine, tail })
+            : tm('main.acp.exited', { engine: this.engine })
+        )
         for (const w of this.pending.values()) w.reject(err)
         this.pending.clear()
         const msg = friendlyError(err, this.cfg.installHintKey)
-        for (const requestId of this.sessions.keys()) this.emit(requestId, { type: 'error', message: msg })
+        for (const requestId of this.sessions.keys())
+          this.emit(requestId, { type: 'error', message: msg })
         this.sessions.clear()
         this.sessionToRequest.clear()
         this.proc = undefined
@@ -401,7 +409,12 @@ export class AcpDriver implements AgentDriver {
           // completed on both the tool_call and a tool_call_update).
           if (!session.completedTools.has(tid)) {
             session.completedTools.add(tid)
-            this.emit(requestId, { type: 'tool_result', toolUseId: tid, content: '', isError: u.status === 'failed' })
+            this.emit(requestId, {
+              type: 'tool_result',
+              toolUseId: tid,
+              content: '',
+              isError: u.status === 'failed'
+            })
           }
         }
         break
@@ -552,13 +565,22 @@ export class AcpDriver implements AgentDriver {
 
     let session = this.sessions.get(requestId)
     if (!session) {
-      session = { pendingText: '', permissions: new Map(), completedTools: new Set(), cwd: opts.cwd }
+      session = {
+        pendingText: '',
+        permissions: new Map(),
+        completedTools: new Set(),
+        cwd: opts.cwd
+      }
       this.sessions.set(requestId, session)
       const cwd = opts.cwd || process.cwd()
       let res: unknown
       try {
         res = opts.resume
-          ? await this.request(ACP_METHOD.sessionLoad, { sessionId: opts.resume, cwd, mcpServers: [] })
+          ? await this.request(ACP_METHOD.sessionLoad, {
+              sessionId: opts.resume,
+              cwd,
+              mcpServers: []
+            })
           : await this.request(ACP_METHOD.sessionNew, { cwd, mcpServers: [] })
       } catch (e) {
         this.sessions.delete(requestId)
@@ -568,7 +590,10 @@ export class AcpDriver implements AgentDriver {
       const sessionId = opts.resume || (res as AcpNewSessionResult)?.sessionId
       if (!sessionId) {
         this.sessions.delete(requestId)
-        this.emit(requestId, { type: 'error', message: tm('main.acp.noSessionId', { engine: this.engine }) })
+        this.emit(requestId, {
+          type: 'error',
+          message: tm('main.acp.noSessionId', { engine: this.engine })
+        })
         return
       }
       session.sessionId = sessionId
@@ -600,7 +625,10 @@ export class AcpDriver implements AgentDriver {
         { timeout: null }
       )) as AcpPromptResult
       if (session.pendingText) {
-        this.emit(requestId, { type: 'assistant', content: [{ type: 'text', text: session.pendingText }] })
+        this.emit(requestId, {
+          type: 'assistant',
+          content: [{ type: 'text', text: session.pendingText }]
+        })
         session.pendingText = ''
       }
       const stop = res?.stopReason
@@ -641,7 +669,11 @@ export class AcpDriver implements AgentDriver {
     const allow = decision?.behavior === 'allow'
     // optionId is opaque — pick by kind. No matching option → fail closed to
     // cancelled rather than risk echoing the wrong outcome.
-    const optionId = pickOptionId(pending.options, allow, decision?.behavior === 'allow' && decision.always === true)
+    const optionId = pickOptionId(
+      pending.options,
+      allow,
+      decision?.behavior === 'allow' && decision.always === true
+    )
     this.respond(
       pending.jsonRpcId,
       optionId !== undefined
@@ -686,7 +718,8 @@ export class AcpDriver implements AgentDriver {
   }
 
   killAll(): void {
-    for (const w of this.pending.values()) w.reject(new Error(tm('main.acp.stopped', { engine: this.engine })))
+    for (const w of this.pending.values())
+      w.reject(new Error(tm('main.acp.stopped', { engine: this.engine })))
     this.pending.clear()
     this.sessions.clear()
     this.sessionToRequest.clear()

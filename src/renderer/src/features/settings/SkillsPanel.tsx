@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react'
 import type { AgentEngine, McpSkills, SkillRow, SkillState } from '@shared/types'
 import { t } from '@/lib/i18n'
-import { SKILL_STATES, isPluginSkill, pluginDisableCommand, pluginOf, sourceLabel } from '@shared/skills'
+import {
+  SKILL_STATES,
+  isPluginSkill,
+  pluginDisableCommand,
+  pluginOf,
+  sourceLabel
+} from '@shared/skills'
 import { idleSkills, type SkillUsageSummary } from '@shared/skillUsage'
 
 /**

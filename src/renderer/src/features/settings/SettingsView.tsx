@@ -52,8 +52,20 @@ type TabId =
 
 type TabGroup = 'base' | 'ide' | 'meta'
 const TABS: Array<{ id: TabId; labelKey: string; sub: string; icon: IconName; group: TabGroup }> = [
-  { id: 'appearance', labelKey: 'set.tab.appearance', sub: 'APPEARANCE', icon: 'star', group: 'base' },
-  { id: 'terminal', labelKey: 'set.tab.terminal', sub: 'TERMINAL', icon: 'terminal', group: 'base' },
+  {
+    id: 'appearance',
+    labelKey: 'set.tab.appearance',
+    sub: 'APPEARANCE',
+    icon: 'star',
+    group: 'base'
+  },
+  {
+    id: 'terminal',
+    labelKey: 'set.tab.terminal',
+    sub: 'TERMINAL',
+    icon: 'terminal',
+    group: 'base'
+  },
   { id: 'blocks', labelKey: 'set.tab.blocks', sub: 'BLOCKS', icon: 'split-h', group: 'base' },
   { id: 'voice', labelKey: 'set.tab.voice', sub: 'VOICE', icon: 'mic', group: 'base' },
   { id: 'sessions', labelKey: 'set.tab.sessions', sub: 'SESSIONS', icon: 'save', group: 'base' },
@@ -64,7 +76,13 @@ const TABS: Array<{ id: TabId; labelKey: string; sub: string; icon: IconName; gr
   // Движок — тоже базовая группа, и по тому же доводу, что и «Инструменты»:
   // когда Claude Code сломан, сломанной выглядит Заря, и спрятать диагноз за
   // IDE-надстройку значит спрятать его ровно от того, кому он нужен.
-  { id: 'engine', labelKey: 'set.tab.engine', sub: 'ENGINE · HEALTH', icon: 'sputnik', group: 'base' },
+  {
+    id: 'engine',
+    labelKey: 'set.tab.engine',
+    sub: 'ENGINE · HEALTH',
+    icon: 'sputnik',
+    group: 'base'
+  },
   { id: 'keybindings', labelKey: 'set.tab.keys', sub: 'KEYBINDINGS', icon: 'gear', group: 'base' },
   // IDE superstructure — only shown when the IDE layer is enabled.
   { id: 'ai', labelKey: 'set.tab.ai', sub: 'IDE · AGENT', icon: 'sputnik', group: 'ide' },
@@ -176,9 +194,7 @@ export default function SettingsView(): React.JSX.Element | null {
             {ideMode ? (
               visibleTabs.filter((x) => x.group === 'ide').map(renderNavItem)
             ) : (
-              <div className="zy-settings-nav-hint">
-                {t('set.ideHint')}
-              </div>
+              <div className="zy-settings-nav-hint">{t('set.ideHint')}</div>
             )}
 
             <div className="zy-settings-nav-group" />
@@ -191,12 +207,19 @@ export default function SettingsView(): React.JSX.Element | null {
         <div className="zy-settings-content">
           <header className="zy-settings-content-header">
             <div className="zy-settings-content-title-wrap">
-              <h2 className="zy-settings-content-title">{activeTab ? t(activeTab.labelKey) : null}</h2>
+              <h2 className="zy-settings-content-title">
+                {activeTab ? t(activeTab.labelKey) : null}
+              </h2>
               {activeTab && showSub(t(activeTab.labelKey), activeTab.sub) && (
                 <span className="zy-settings-content-sub">{activeTab.sub}</span>
               )}
             </div>
-            <button type="button" className="zy-icon-btn" onClick={close} title={t('common.closeEsc')}>
+            <button
+              type="button"
+              className="zy-icon-btn"
+              onClick={close}
+              title={t('common.closeEsc')}
+            >
               <Icon name="close" size={16} />
             </button>
           </header>
@@ -610,7 +633,9 @@ function ThemeCardsGrid(): React.JSX.Element {
             </div>
             <div className="zy-set-theme-info">
               <div className="zy-set-theme-name">{t(th.nameKey)}</div>
-              <div className="zy-set-theme-type">{t(th.type === 'dark' ? 'set.themeDark' : 'set.themeLight')}</div>
+              <div className="zy-set-theme-type">
+                {t(th.type === 'dark' ? 'set.themeDark' : 'set.themeLight')}
+              </div>
             </div>
             {active && <span className="zy-set-theme-active">{t('set.themeActive')}</span>}
           </button>
@@ -720,12 +745,11 @@ function AppearanceTab(): React.JSX.Element {
             onChange={(v) => void update({ appearance: { windowOpacity: v } as never })}
           />
         </Row>
-        <Row
-          title={t('set.acrylic')}
-          sub="ACRYLIC BLUR"
-          desc={t('set.acrylicDesc')}
-        >
-          <Toggle checked={a.acrylic} onChange={(v) => void update({ appearance: { acrylic: v } as never })} />
+        <Row title={t('set.acrylic')} sub="ACRYLIC BLUR" desc={t('set.acrylicDesc')}>
+          <Toggle
+            checked={a.acrylic}
+            onChange={(v) => void update({ appearance: { acrylic: v } as never })}
+          />
         </Row>
         <Row title={t('set.density')} sub="UI DENSITY">
           <SegmentedField
@@ -792,12 +816,11 @@ function TerminalTab(): React.JSX.Element {
           onChange={(v) => void update({ terminal: { pasteWarnMultiline: v } as never })}
         />
       </Row>
-      <Row
-        title={t('set.webgl')}
-        sub="WEBGL RENDERER"
-        desc={t('set.webglDesc')}
-      >
-        <Toggle checked={term.webgl} onChange={(v) => void update({ terminal: { webgl: v } as never })} />
+      <Row title={t('set.webgl')} sub="WEBGL RENDERER" desc={t('set.webglDesc')}>
+        <Toggle
+          checked={term.webgl}
+          onChange={(v) => void update({ terminal: { webgl: v } as never })}
+        />
       </Row>
       <Row title={t('set.bell')} sub="BELL">
         <SelectField
@@ -824,12 +847,11 @@ function BlocksTab(): React.JSX.Element {
   const update = useSettingsStore((s) => s.update)
   return (
     <section className="zy-set-section">
-      <Row
-        title={t('set.blocks')}
-        sub="COMMAND BLOCKS"
-        desc={t('set.blocksDesc')}
-      >
-        <Toggle checked={b.enabled} onChange={(v) => void update({ blocks: { enabled: v } as never })} />
+      <Row title={t('set.blocks')} sub="COMMAND BLOCKS" desc={t('set.blocksDesc')}>
+        <Toggle
+          checked={b.enabled}
+          onChange={(v) => void update({ blocks: { enabled: v } as never })}
+        />
       </Row>
       <Row title={t('set.separators')} sub="SEPARATORS" desc={t('set.separatorsDesc')}>
         <Toggle
@@ -838,22 +860,14 @@ function BlocksTab(): React.JSX.Element {
           onChange={(v) => void update({ blocks: { separators: v } as never })}
         />
       </Row>
-      <Row
-        title={t('set.exitBadges')}
-        sub="EXIT BADGES"
-        desc={t('set.exitBadgesDesc')}
-      >
+      <Row title={t('set.exitBadges')} sub="EXIT BADGES" desc={t('set.exitBadgesDesc')}>
         <Toggle
           checked={b.exitBadges}
           disabled={!b.enabled}
           onChange={(v) => void update({ blocks: { exitBadges: v } as never })}
         />
       </Row>
-      <Row
-        title={t('set.ghost')}
-        sub="AUTOSUGGEST"
-        desc={t('set.ghostDesc')}
-      >
+      <Row title={t('set.ghost')} sub="AUTOSUGGEST" desc={t('set.ghostDesc')}>
         <Toggle
           checked={b.autosuggest}
           disabled={!b.enabled}
@@ -896,16 +910,14 @@ function AiTab(): React.JSX.Element {
         <Row title={t('set.provider')} sub="PROVIDER">
           <SelectField
             value={ai.provider}
-            options={PROVIDERS.map((p) => ({ value: p.id, label: p.labelKey ? t(p.labelKey) : p.label }))}
+            options={PROVIDERS.map((p) => ({
+              value: p.id,
+              label: p.labelKey ? t(p.labelKey) : p.label
+            }))}
             onChange={(v) => void update({ ai: { provider: v } as never })}
           />
         </Row>
-        <Row
-          title={t('set.model')}
-          sub="MODEL"
-          desc={t('set.modelDesc')}
-          stack
-        >
+        <Row title={t('set.model')} sub="MODEL" desc={t('set.modelDesc')} stack>
           <div className="zy-inline-group zy-inline-group--wrap">
             <ModelField
               value={ai.model}
@@ -963,8 +975,14 @@ function AiTab(): React.JSX.Element {
             </div>
           )}
         </Row>
-        <Row title={t('set.effort')} sub={`REASONING EFFORT · ${t(EFFORT_TUNING[ai.effort].labelKey)}`}>
-          <EffortControl value={ai.effort} onChange={(v) => void update({ ai: { effort: v } as never })} />
+        <Row
+          title={t('set.effort')}
+          sub={`REASONING EFFORT · ${t(EFFORT_TUNING[ai.effort].labelKey)}`}
+        >
+          <EffortControl
+            value={ai.effort}
+            onChange={(v) => void update({ ai: { effort: v } as never })}
+          />
         </Row>
         <Row title={t('set.temperature')} sub="TEMPERATURE" desc={t('set.temperatureDesc')}>
           <RangeField
@@ -984,11 +1002,7 @@ function AiTab(): React.JSX.Element {
             onCommit={(v) => void update({ ai: { maxTokens: v } as never })}
           />
         </Row>
-        <Row
-          title={t('set.ctxBlocks')}
-          sub="CONTEXT BLOCKS"
-          desc={t('set.ctxBlocksDesc')}
-        >
+        <Row title={t('set.ctxBlocks')} sub="CONTEXT BLOCKS" desc={t('set.ctxBlocksDesc')}>
           <NumberField
             value={ai.contextBlocks}
             min={0}
@@ -1006,17 +1020,8 @@ function AiTab(): React.JSX.Element {
             onChange={(v) => void update({ ai: { autoApprove: v } as never })}
           />
         </Row>
-        {ai.autoApprove && (
-          <div className="zy-set-warning">
-            {t('set.autoApproveWarn')}
-          </div>
-        )}
-        <Row
-          title={t('set.sysPrompt')}
-          sub="SYSTEM PROMPT"
-          stack
-          desc={t('set.sysPromptDesc')}
-        >
+        {ai.autoApprove && <div className="zy-set-warning">{t('set.autoApproveWarn')}</div>}
+        <Row title={t('set.sysPrompt')} sub="SYSTEM PROMPT" stack desc={t('set.sysPromptDesc')}>
           <TextAreaField
             value={ai.systemPromptExtra}
             rows={4}
@@ -1149,7 +1154,11 @@ function SessionsTab(): React.JSX.Element {
     <section className="zy-set-section">
       {/* Зов живёт здесь, а не в «Внешнем виде»: это про работу с панелями, а
           не про то, как приложение выглядит. */}
-      <Row title={t('set.notifyWaiting')} sub="NOTIFY WHEN WAITING" desc={t('set.notifyWaitingDesc')}>
+      <Row
+        title={t('set.notifyWaiting')}
+        sub="NOTIFY WHEN WAITING"
+        desc={t('set.notifyWaitingDesc')}
+      >
         <Toggle
           checked={notifications?.whenWaiting ?? true}
           onChange={(v) => void update({ notifications: { whenWaiting: v } as never })}
@@ -1183,11 +1192,7 @@ function SessionsTab(): React.JSX.Element {
           onCommit={(v) => void update({ sessions: { autosaveSec: v } as never })}
         />
       </Row>
-      <Row
-        title={t('set.histLines')}
-        sub="SCROLLBACK LINES"
-        desc={t('set.histLinesDesc')}
-      >
+      <Row title={t('set.histLines')} sub="SCROLLBACK LINES" desc={t('set.histLinesDesc')}>
         <NumberField
           value={s.scrollbackSaveLines}
           min={0}
@@ -1196,9 +1201,7 @@ function SessionsTab(): React.JSX.Element {
           onCommit={(v) => void update({ sessions: { scrollbackSaveLines: v } as never })}
         />
       </Row>
-      <div className="zy-item-sub zy-set-footnote">
-        {t('set.sessionsNote')}
-      </div>
+      <div className="zy-item-sub zy-set-footnote">{t('set.sessionsNote')}</div>
       <div className="zy-section-label">{t('set.cmdHistory')}</div>
       <HistoryRows />
     </section>
@@ -1232,21 +1235,13 @@ function HistoryRows(): React.JSX.Element {
 
   return (
     <>
-      <Row
-        title={t('set.keepHistory')}
-        sub="RECORD HISTORY"
-        desc={t('set.keepHistoryDesc')}
-      >
+      <Row title={t('set.keepHistory')} sub="RECORD HISTORY" desc={t('set.keepHistoryDesc')}>
         <Toggle
           checked={h.record}
           onChange={(v) => void update({ history: { record: v } as never })}
         />
       </Row>
-      <Row
-        title={t('set.histCap')}
-        sub="MAX ENTRIES"
-        desc={t('set.histCapDesc')}
-      >
+      <Row title={t('set.histCap')} sub="MAX ENTRIES" desc={t('set.histCapDesc')}>
         <NumberField
           value={h.maxEntries}
           min={0}
@@ -1296,10 +1291,16 @@ function EditorTab(): React.JSX.Element {
         />
       </Row>
       <Row title={t('set.wordWrap')} sub="WORD WRAP">
-        <Toggle checked={e.wordWrap} onChange={(v) => void update({ editor: { wordWrap: v } as never })} />
+        <Toggle
+          checked={e.wordWrap}
+          onChange={(v) => void update({ editor: { wordWrap: v } as never })}
+        />
       </Row>
       <Row title={t('set.minimap')} sub="MINIMAP">
-        <Toggle checked={e.minimap} onChange={(v) => void update({ editor: { minimap: v } as never })} />
+        <Toggle
+          checked={e.minimap}
+          onChange={(v) => void update({ editor: { minimap: v } as never })}
+        />
       </Row>
       <Row title={t('set.tabSize')} sub="TAB SIZE">
         <NumberField
@@ -1363,11 +1364,7 @@ function VoiceTab(): React.JSX.Element {
   return (
     <section className="zy-set-section">
       <div className="zy-section-label">{t('set.dictation')}</div>
-      <Row
-        title={t('set.mic')}
-        sub="INPUT DEVICE"
-        desc={t('set.micDesc')}
-      >
+      <Row title={t('set.mic')} sub="INPUT DEVICE" desc={t('set.micDesc')}>
         <SelectField
           value={voice.deviceId}
           options={options}
@@ -1380,11 +1377,7 @@ function VoiceTab(): React.JSX.Element {
         />
       </Row>
       {hidden && (
-        <Row
-          title={t('set.micHidden')}
-          sub="PERMISSION NEEDED"
-          desc={t('set.micHiddenDesc')}
-        >
+        <Row title={t('set.micHidden')} sub="PERMISSION NEEDED" desc={t('set.micHiddenDesc')}>
           <button
             type="button"
             className="zy-btn"
@@ -1399,11 +1392,7 @@ function VoiceTab(): React.JSX.Element {
         </Row>
       )}
       {missing && (
-        <Row
-          title={t('set.micGone')}
-          sub="DEVICE MISSING"
-          desc={t('set.micGoneDesc')}
-        >
+        <Row title={t('set.micGone')} sub="DEVICE MISSING" desc={t('set.micGoneDesc')}>
           <button
             type="button"
             className="zy-btn"
@@ -1414,9 +1403,7 @@ function VoiceTab(): React.JSX.Element {
         </Row>
       )}
       <SttModels />
-      <div className="zy-item-sub zy-set-footnote">
-        {t('set.micNote')}
-      </div>
+      <div className="zy-item-sub zy-set-footnote">{t('set.micNote')}</div>
     </section>
   )
 }
@@ -1460,12 +1447,16 @@ function SttModels(): React.JSX.Element {
                 {/* Своя модель подписана именем, которое дал человек: ключа в
                     словаре у неё нет и быть не может. */}
                 {m.custom ? m.name : t(m.labelKey)}
-                {m.id === activeId && <span className="zy-badge zy-badge--ok">{t('set.badgeActive')}</span>}
+                {m.id === activeId && (
+                  <span className="zy-badge zy-badge--ok">{t('set.badgeActive')}</span>
+                )}
                 {m.custom && <span className="zy-badge">{t('set.customBadge')}</span>}
                 {m.custom && !m.installed && (
                   <span className="zy-badge zy-badge--warn">{t('set.customMissing')}</span>
                 )}
-                {m.legacy && <span className="zy-badge zy-badge--warn">{t('set.badgeLegacy')}</span>}
+                {m.legacy && (
+                  <span className="zy-badge zy-badge--warn">{t('set.badgeLegacy')}</span>
+                )}
               </div>
               <div className="zy-set-row-sub">
                 {[m.lang, mb(m.bytes), m.license].filter(Boolean).join(' · ')}
@@ -1532,7 +1523,9 @@ function SttModels(): React.JSX.Element {
                         .finally(() => setBusy(null))
                     }}
                   >
-                    {busy === m.id ? t('set.downloading') : t('set.download', { size: mb(m.bytes) })}
+                    {busy === m.id
+                      ? t('set.downloading')
+                      : t('set.download', { size: mb(m.bytes) })}
                   </button>
                 )}
                 {!m.custom && m.installed && !isChosen && (
@@ -1678,9 +1671,7 @@ function KeybindingsTab(): React.JSX.Element {
   return (
     <section className="zy-set-section">
       <div className="zy-kb-toolbar">
-        <div className="zy-item-sub">
-          {t('set.keysHint')}
-        </div>
+        <div className="zy-item-sub">{t('set.keysHint')}</div>
         <button type="button" className="zy-btn zy-btn--sm" onClick={resetAll}>
           {t('set.resetAll')}
         </button>
@@ -1754,17 +1745,14 @@ function UpdateRows(): React.JSX.Element {
     if (state?.checking) return t('set.updChecking')
     if (state?.error) return t('set.updFail', { err: state.error, ago })
     if (!state?.checkedAt) return t('set.updNever')
-    if (state.updateAvailable && state.latest) return t('set.updAvail', { v: state.latest.version, ago })
+    if (state.updateAvailable && state.latest)
+      return t('set.updAvail', { v: state.latest.version, ago })
     return t('set.updLatest', { ago })
   })()
 
   return (
     <>
-      <Row
-        title={t('set.updCheck')}
-        sub="UPDATE CHECK"
-        desc={t('set.updCheckDesc')}
-      >
+      <Row title={t('set.updCheck')} sub="UPDATE CHECK" desc={t('set.updCheckDesc')}>
         <Toggle
           checked={enabled}
           onChange={(v) => void update({ updates: { check: v } as never })}
@@ -1781,7 +1769,12 @@ function UpdateRows(): React.JSX.Element {
               {t('set.whatsNew')}
             </button>
           )}
-          <button type="button" className="zy-btn" disabled={state?.checking} onClick={() => void check()}>
+          <button
+            type="button"
+            className="zy-btn"
+            disabled={state?.checking}
+            onClick={() => void check()}
+          >
             {t('set.checkNow')}
           </button>
         </div>
@@ -1803,7 +1796,9 @@ function AboutTab(): React.JSX.Element {
         <div className="zy-about-logo">Z</div>
         <div>
           <div className="zy-about-title">Zarya Terminal</div>
-          <div className="zy-item-sub">{info ? t('set.version', { v: info.version }) : t('set.loading')}</div>
+          <div className="zy-item-sub">
+            {info ? t('set.version', { v: info.version }) : t('set.loading')}
+          </div>
         </div>
       </div>
       {info && (
@@ -1827,7 +1822,9 @@ function AboutTab(): React.JSX.Element {
         <button
           type="button"
           className="zy-btn zy-btn--accent"
-          onClick={() => window.zarya.app.openExternal('https://github.com/gorka2354/zarya-terminal')}
+          onClick={() =>
+            window.zarya.app.openExternal('https://github.com/gorka2354/zarya-terminal')
+          }
         >
           {t('set.repo')}
         </button>

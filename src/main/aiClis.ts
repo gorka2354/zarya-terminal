@@ -39,7 +39,14 @@ const KNOWN: Array<Omit<AiCli, 'detected' | 'path'>> = [
     install: 'npm install -g @google/gemini-cli',
     site: 'https://github.com/google-gemini/gemini-cli'
   },
-  { id: 'aider', name: 'Aider', cmd: 'aider', glyph: 'AI', tint: 'accent', site: 'https://aider.chat' },
+  {
+    id: 'aider',
+    name: 'Aider',
+    cmd: 'aider',
+    glyph: 'AI',
+    tint: 'accent',
+    site: 'https://aider.chat'
+  },
   {
     id: 'cursor-agent',
     name: 'Cursor Agent',
@@ -60,10 +67,9 @@ const KNOWN: Array<Omit<AiCli, 'detected' | 'path'>> = [
 
 async function which(cmd: string): Promise<string | null> {
   try {
-    const { stdout } = await execFileAsync(
-      process.platform === 'win32' ? 'where.exe' : 'which',
-      [cmd]
-    )
+    const { stdout } = await execFileAsync(process.platform === 'win32' ? 'where.exe' : 'which', [
+      cmd
+    ])
     const first = stdout.split(/\r?\n/).find((l) => l.trim())
     return first?.trim() ?? null
   } catch {

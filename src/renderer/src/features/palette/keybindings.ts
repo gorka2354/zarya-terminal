@@ -28,7 +28,11 @@ export function chordFromEvent(e: KeyboardEvent): string | null {
 
 /** Pretty-print a chord for UI (⌃⇧P style is skipped — Windows-first app). */
 export function formatChord(chord: string): string {
-  return chord.replace('ArrowUp', '↑').replace('ArrowDown', '↓').replace('ArrowLeft', '←').replace('ArrowRight', '→')
+  return chord
+    .replace('ArrowUp', '↑')
+    .replace('ArrowDown', '↓')
+    .replace('ArrowLeft', '←')
+    .replace('ArrowRight', '→')
 }
 
 function findActionForChord(chord: string): string | null {
@@ -84,9 +88,7 @@ export function initKeybindings(): void {
       const target = e.target as HTMLElement | null
       const inInput =
         target &&
-        (target.tagName === 'INPUT' ||
-          target.tagName === 'TEXTAREA' ||
-          target.isContentEditable)
+        (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
       const isXtermInput = target?.classList.contains('xterm-helper-textarea')
       if (inInput && !isXtermInput && !e.ctrlKey && !e.altKey && !e.metaKey) return
       // Inside the Monaco editor, only app-level actions bypass it — everything

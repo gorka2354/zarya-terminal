@@ -76,11 +76,10 @@ export default function AiCommandBar(): React.JSX.Element | null {
     setPreview('')
     setError(null)
     setStreaming(true)
-    const system =
-      t('acb.sys', {
-        shell: session?.shellName || t('ai.sys.unknownShell'),
-        cwd: session?.cwd || t('ai.sys.unknownCwd')
-      })
+    const system = t('acb.sys', {
+      shell: session?.shellName || t('ai.sys.unknownShell'),
+      cwd: session?.cwd || t('ai.sys.unknownCwd')
+    })
     window.zarya.ai.chat(requestId, {
       provider: settings.ai.provider,
       model: settings.ai.model,

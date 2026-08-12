@@ -1205,7 +1205,10 @@ body {
         transparent 100%
       )
       no-repeat,
-    linear-gradient(color-mix(in srgb, var(--success) 34%, transparent), color-mix(in srgb, var(--success) 34%, transparent));
+    linear-gradient(
+      color-mix(in srgb, var(--success) 34%, transparent),
+      color-mix(in srgb, var(--success) 34%, transparent)
+    );
   background-size:
     38% 100%,
     100% 100%;

@@ -36,16 +36,16 @@ export default function ThemeGallery(): React.JSX.Element {
               className="zy-theme-preview"
               style={{ background: t.ui.bg, borderColor: t.ui.border }}
             >
-              <div className="zy-theme-preview-accent" style={{ background: t.ui.accentGradient }} />
+              <div
+                className="zy-theme-preview-accent"
+                style={{ background: t.ui.accentGradient }}
+              />
               <div className="zy-theme-preview-dots">
                 {previewDots(t).map((c, i) => (
                   <span key={i} className="zy-theme-preview-dot" style={{ background: c }} />
                 ))}
               </div>
-              <div
-                className="zy-theme-preview-code"
-                style={{ color: t.terminal.foreground }}
-              >
+              <div className="zy-theme-preview-code" style={{ color: t.terminal.foreground }}>
                 <span style={{ color: t.ui.accent }}>❯</span> zarya --theme
               </div>
             </div>

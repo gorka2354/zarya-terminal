@@ -84,11 +84,7 @@ export function shownRows(catalog: ClaudeModelInfo[]): ClaudeModelInfo[] {
  * someone else's. With no pin we follow the model actually running, exact match
  * first so two rows of one family can't steal each other's marker.
  */
-export function resolveRowValue(
-  shown: ClaudeModelInfo[],
-  pin: string,
-  runningId: string
-): string {
+export function resolveRowValue(shown: ClaudeModelInfo[], pin: string, runningId: string): string {
   if (!pin) {
     return (
       shown.find((m) => (m.resolvedModel || m.value) === runningId)?.value ??

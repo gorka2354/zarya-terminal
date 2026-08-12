@@ -31,7 +31,10 @@ export function ClaudeQuestionBar({
   // questions are answered in sequence before the whole set submits.
   const [qi, setQi] = useState(0)
   const q = questions[Math.min(qi, questions.length - 1)]
-  const options = useMemo(() => [...q.options, { label: OTHER, description: t('question.ownOption') }], [q])
+  const options = useMemo(
+    () => [...q.options, { label: OTHER, description: t('question.ownOption') }],
+    [q]
+  )
 
   const [picked, setPicked] = useState<Record<number, string[]>>({})
   const [otherText, setOtherText] = useState<Record<number, string>>({})
@@ -54,7 +57,9 @@ export function ClaudeQuestionBar({
   const answersKeyed = (): Record<string, string[]> => {
     const out: Record<string, string[]> = {}
     questions.forEach((qq, i) => {
-      const labels = (picked[i] ?? []).map((l) => (l === OTHER ? otherText[i]?.trim() || t('question.other') : l))
+      const labels = (picked[i] ?? []).map((l) =>
+        l === OTHER ? otherText[i]?.trim() || t('question.other') : l
+      )
       if (labels.length) out[qq.question] = labels
     })
     return out
@@ -99,14 +104,21 @@ export function ClaudeQuestionBar({
       // single-select: pick and (if last question) submit immediately
       setPicked((p) => ({ ...p, [qi]: [label] }))
       if (qi >= questions.length - 1) {
-        useAiStore.getState().answerQuestion(conv.id, toolId, (() => {
-          const out: Record<string, string[]> = {}
-          questions.forEach((qq, i) => {
-            const labels = i === qi ? [label] : picked[i] ?? []
-            if (labels.length) out[qq.question] = labels.map((l) => (l === OTHER ? otherText[i]?.trim() || t('question.other') : l))
-          })
-          return out
-        })())
+        useAiStore.getState().answerQuestion(
+          conv.id,
+          toolId,
+          (() => {
+            const out: Record<string, string[]> = {}
+            questions.forEach((qq, i) => {
+              const labels = i === qi ? [label] : (picked[i] ?? [])
+              if (labels.length)
+                out[qq.question] = labels.map((l) =>
+                  l === OTHER ? otherText[i]?.trim() || t('question.other') : l
+                )
+            })
+            return out
+          })()
+        )
       } else {
         setQi((n) => n + 1)
         setCursor(0)
@@ -138,7 +150,8 @@ export function ClaudeQuestionBar({
   }
 
   const active = options[cursor]
-  const preview = active && 'preview' in active ? (active as { preview?: string }).preview : undefined
+  const preview =
+    active && 'preview' in active ? (active as { preview?: string }).preview : undefined
   const pickedSet = new Set(picked[qi] ?? [])
 
   return (
@@ -177,9 +190,13 @@ export function ClaudeQuestionBar({
                 onClick={() => choose(o.label)}
               >
                 <span className="zy-cqb-opt-num">{i + 1}</span>
-                {q.multiSelect && <span className={`zy-cqb-check${on ? ' zy-cqb-check--on' : ''}`} />}
+                {q.multiSelect && (
+                  <span className={`zy-cqb-check${on ? ' zy-cqb-check--on' : ''}`} />
+                )}
                 <span className="zy-cqb-opt-body">
-                  <span className="zy-cqb-opt-label">{isOther ? t('question.otherDots') : o.label}</span>
+                  <span className="zy-cqb-opt-label">
+                    {isOther ? t('question.otherDots') : o.label}
+                  </span>
                   {o.description && !isOther && (
                     <span className="zy-cqb-opt-desc">{o.description}</span>
                   )}
@@ -205,14 +222,13 @@ export function ClaudeQuestionBar({
           )}
         </div>
 
-        {preview && (
-          <pre className="zy-cqb-preview">{preview}</pre>
-        )}
+        {preview && <pre className="zy-cqb-preview">{preview}</pre>}
       </div>
 
       <div className="zy-cqb-foot">
         <span className="zy-cqb-hint">
-          {t(q.multiSelect ? 'question.hintMulti' : 'question.hintSingle')} · {t('question.hintDeny')}
+          {t(q.multiSelect ? 'question.hintMulti' : 'question.hintSingle')} ·{' '}
+          {t('question.hintDeny')}
         </span>
         {q.multiSelect && (
           <button className="zy-cqb-confirm" onClick={advanceOrCommit}>

@@ -68,7 +68,9 @@ export function CommandList({
       title=""
     >
       <div className="zy-cmdlist-head">
-        <span className="zy-cmdlist-title">{t(kind === 'files' ? 'cmd.filesTitle' : 'cmd.title')}</span>
+        <span className="zy-cmdlist-title">
+          {t(kind === 'files' ? 'cmd.filesTitle' : 'cmd.title')}
+        </span>
         {/* Шапка называет источник. «Движок команд не назвал» и «команд нет» —
             разные вещи, и пустой список без этой подписи человек прочитает как
             вторую, хотя правда первая. */}
