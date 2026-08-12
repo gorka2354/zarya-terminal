@@ -151,12 +151,20 @@ export async function gitStatus(cwd: string): Promise<GitStatus | null> {
   }
 }
 
+/**
+ * Больше этого в дифф не читаем.
+ *
+ * Обе стороны едут в рендерер через IPC целиком: без потолка один клик по
+ * случайному дампу или видеофайлу в панели «что изменилось» затаскивает сотни
+ * мегабайт в память главного процесса, сериализует их и вешает окно. Молчать об
+ * обрезке нельзя — человек решит, что правка на этом и кончилась.
+ */
+const MAX_DIFF_BYTES = 4 * 1024 * 1024
+
 export async function gitDiffFile(cwd: string, filePath: string): Promise<GitDiff | null> {
   try {
     const root = (await git(cwd, ['rev-parse', '--show-toplevel'])).trim()
-    const rel = filePath
-      .replace(/\\/g, '/')
-      .replace(root.replace(/\\/g, '/') + '/', '')
+    const rel = filePath.replace(/\\/g, '/').replace(root.replace(/\\/g, '/') + '/', '')
     let original = ''
     try {
       original = await git(cwd, ['show', `HEAD:${rel}`])
@@ -164,12 +172,33 @@ export async function gitDiffFile(cwd: string, filePath: string): Promise<GitDif
       original = '' // new / untracked file
     }
     let modified = ''
+    let tooBig = false
     try {
-      modified = await fs.readFile(join(root, rel), 'utf8')
+      const abs = join(root, rel)
+      const st = await fs.stat(abs)
+      if (st.size > MAX_DIFF_BYTES) {
+        // Читаем начало и честно говорим, что это начало: показать пустоту или
+        // подвесить окно — оба варианта хуже обрезанного, но названного куска.
+        const fh = await fs.open(abs, 'r')
+        try {
+          const buf = Buffer.alloc(MAX_DIFF_BYTES)
+          const { bytesRead } = await fh.read(buf, 0, MAX_DIFF_BYTES, 0)
+          modified = buf.subarray(0, bytesRead).toString('utf8')
+        } finally {
+          await fh.close()
+        }
+        tooBig = true
+      } else {
+        modified = await fs.readFile(abs, 'utf8')
+      }
     } catch {
       modified = '' // deleted file
     }
-    return { path: filePath, original, modified }
+    if (original.length > MAX_DIFF_BYTES) {
+      original = original.slice(0, MAX_DIFF_BYTES)
+      tooBig = true
+    }
+    return { path: filePath, original, modified, ...(tooBig ? { tooBig: true } : {}) }
   } catch {
     return null
   }

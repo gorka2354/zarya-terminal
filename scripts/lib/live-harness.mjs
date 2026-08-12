@@ -65,7 +65,23 @@ export const note = (...a) => console.log('   ·', ...a)
 export const section = (title) => console.log(`\n${title}`)
 
 export function finish() {
-  console.log(`\nИтог (${LIVE ? 'живой Claude Code' : 'фейковый движок'}): ${pass} ok, ${fail} fail`)
+  const tail = skipped ? `, ${skipped} пропущено` : ''
+  console.log(
+    `\nИтог (${LIVE ? 'живой Claude Code' : 'фейковый движок'}): ${pass} ok, ${fail} fail${tail}`
+  )
+  /*
+   * Пропуски объявляем ГРОМКО.
+   *
+   * На фейке пропускаются ровно те проверки, что смотрят на диск, — то есть
+   * доказательство, что откат и правда вернул файлы. Зелёный итог без этой
+   * строки читается как «откат проверен», хотя проверено было всё, кроме него.
+   */
+  if (skipped && !LIVE) {
+    console.log(
+      `ВНИМАНИЕ: ${skipped} проверок не выполнялись — фейк не трогает диск при откате. ` +
+        'Настоящий откат проверяет только ZARYA_LIVE=1.'
+    )
+  }
   process.exit(fail ? 1 : 0)
 }
 
@@ -169,6 +185,19 @@ export function editPrompt(relPath, line) {
 }
 
 /**
+ * Промпт, заставляющий агента СОЗДАТЬ файл, которого ещё нет.
+ *
+ * Отдельно от `editPrompt` не ради красоты: тот прямо запрещает создавать файлы,
+ * и живой движок этот запрет уважает. А созданный файл — единственный случай,
+ * где откат не возвращает, а удаляет.
+ */
+export function createPrompt(relPath, line) {
+  return LIVE
+    ? `Создай новый файл ${relPath} с единственной строкой: «${line}». Больше ничего не меняй и не запускай команд.`
+    : 'tool edit: поправь файл'
+}
+
+/**
  * Начать беседу и дождаться конца хода. Возвращает id беседы.
  *
  * Автопилот включается ДО хода с правкой, а не после: он свойство беседы, и
@@ -200,17 +229,34 @@ export async function followUp(page, convId, prompt) {
   await waitIdle(page, convId)
 }
 
-/** Ждать, пока ход не кончится. Живой движок думает дольше фейка. */
-export async function waitIdle(page, convId, ms = LIVE ? 180000 : 20000) {
+/**
+ * Ждать, пока ход не кончится. Живой движок думает дольше фейка.
+ *
+ * Таймаут и ошибка хода — ГРОМКИЕ: прогон, поехавший дальше по недоделанному
+ * ходу, не падает — он выдумывает. Так и вышло: ход не успел создать файл,
+ * сценарий сам дописал его следующей строкой, и один и тот же прогон дал
+ * подряд «2 провала» и «0 провалов» на неизменном коде. Провал стенда обязан
+ * называться провалом стенда, иначе он читается как дефект продукта.
+ */
+export async function waitIdle(page, convId, ms = LIVE ? 240000 : 20000) {
   const started = Date.now()
   for (;;) {
     const st = await page.evaluate((id) => {
       const c = window.__zaryaConvById?.(id)
       return c ? { streaming: c.streaming === true, error: c.error ?? null } : null
     }, convId)
-    if (!st) return { gone: true }
-    if (!st.streaming) return st
-    if (Date.now() - started > ms) return { timeout: true }
+    if (!st) {
+      ok('беседа не исчезла посреди хода', false, convId)
+      return { gone: true }
+    }
+    if (!st.streaming) {
+      if (st.error) ok('ход закончился без ошибки', false, String(st.error).slice(0, 160))
+      return st
+    }
+    if (Date.now() - started > ms) {
+      ok('ход уложился в отведённое время', false, `${Math.round(ms / 1000)} с, беседа ${convId}`)
+      return { timeout: true }
+    }
     await page.waitForTimeout(700)
   }
 }
@@ -263,10 +309,16 @@ export const clickByText = (page, sel, needle, { first = false } = {}) =>
     [sel, needle, first]
   )
 
-/** Открыть карточку отката у последнего хода и дождаться, пока она соберётся. */
-export async function openRewind(page, { timeoutMs = 20000 } = {}) {
+/**
+ * Открыть карточку отката и дождаться, пока она соберётся.
+ *
+ * По умолчанию — у последнего хода. `first: true` берёт САМЫЙ РАННИЙ ход беседы:
+ * так проверяются случаи, где важна дистанция во времени — файл, созданный уже
+ * после выбранной точки, откат не вернёт, а удалит.
+ */
+export async function openRewind(page, { timeoutMs = 20000, first = false } = {}) {
   const t0 = Date.now()
-  const found = await clickByText(page, '.zy-mf-changes-btn', 'Откатить файлы')
+  const found = await clickByText(page, '.zy-mf-changes-btn', 'Откатить файлы', { first })
   if (!found) return { opened: false, ms: 0 }
   for (;;) {
     const card = await text(page, '.zy-rw')

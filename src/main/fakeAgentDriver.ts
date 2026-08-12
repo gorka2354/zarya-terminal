@@ -1,4 +1,4 @@
-import { appendFileSync, mkdirSync, writeFileSync } from 'fs'
+import { appendFileSync, existsSync, mkdirSync, writeFileSync } from 'fs'
 import { dirname, isAbsolute, join } from 'path'
 import { type BrowserWindow } from 'electron'
 import { CH } from '@shared/ipc'
@@ -59,9 +59,7 @@ const FAKE_PNG =
  * что проверки на двух движках смотрят на разные файлы.
  */
 function fakeEditPath(): string {
-  return (
-    process.env.ZARYA_FAKE_EDIT_PATH || process.env.ZARYA_FAKE_OUTSIDE || 'src/shared/fake.ts'
-  )
+  return process.env.ZARYA_FAKE_EDIT_PATH || process.env.ZARYA_FAKE_OUTSIDE || 'src/shared/fake.ts'
 }
 
 function fakeWrite(cwd: string, path: string, text: string): void {
@@ -108,6 +106,8 @@ export class FakeAgentDriver implements AgentDriver {
       lastAssistantUuid?: string
       forkBase?: { sessionId: string; at: string }
       resumed: boolean
+      /** id текущего хода — к нему привязываются файлы, созданные на этом ходе. */
+      turnId?: string
     }
   >()
   private seq = 0
@@ -211,7 +211,8 @@ export class FakeAgentDriver implements AgentDriver {
     if (opts.fileCheckpoints) {
       // Настоящий движок присылает id хода отдельным повторным сообщением;
       // фейк называет его сразу — форма события та же.
-      this.emit(requestId, { type: 'turn-id', uuid: `fake-turn-${this.seq}` })
+      session.turnId = `fake-turn-${this.seq}`
+      this.emit(requestId, { type: 'turn-id', uuid: session.turnId })
     }
     if (this.capabilities.usage)
       this.emit(requestId, { type: 'usage', usage: { subscriptionType: 'fake', fiveHourPct: 10 } })
@@ -240,7 +241,12 @@ export class FakeAgentDriver implements AgentDriver {
       })
     if (mute) {
       this.schedule(requestId, 8000, () =>
-        this.emit(requestId, { type: 'result', isError: false, costUsd: 0.04, models: [`${this.engine}-model`] })
+        this.emit(requestId, {
+          type: 'result',
+          isError: false,
+          costUsd: 0.04,
+          models: [`${this.engine}-model`]
+        })
       )
     } else if (/подписи|labels/i.test(opts.prompt)) {
       /*
@@ -252,12 +258,21 @@ export class FakeAgentDriver implements AgentDriver {
         this.emit(requestId, {
           type: 'assistant',
           content: [
-            { type: 'tool_use', id: `${requestId}-l1`, name: 'WebSearch', input: { query: 'kimi cli acp' } },
+            {
+              type: 'tool_use',
+              id: `${requestId}-l1`,
+              name: 'WebSearch',
+              input: { query: 'kimi cli acp' }
+            },
             {
               type: 'tool_use',
               id: `${requestId}-l2`,
               name: 'Grep',
-              input: { pattern: 'launchPadOpen', path: 'C:/p/src', output_mode: 'files_with_matches' }
+              input: {
+                pattern: 'launchPadOpen',
+                path: 'C:/p/src',
+                output_mode: 'files_with_matches'
+              }
             },
             {
               type: 'tool_use',
@@ -581,13 +596,13 @@ export class FakeAgentDriver implements AgentDriver {
         })
         this.emit(requestId, { type: 'result', isError: false, costUsd: 0.001 })
       })
-    /*
-     * Английское слово выбрано так, чтобы не попасть под чужой регэксп: ветки
-     * разбираются по порядку, и `/печат|typing/` выше перехватила бы любое
-     * «typing…». Первым совпадением тут выигрывает не более точная ветка, а
-     * более ранняя — так уже терялся один сценарий, и заметно это только по
-     * тому, что прогон проверяет не то, что думает.
-     */
+      /*
+       * Английское слово выбрано так, чтобы не попасть под чужой регэксп: ветки
+       * разбираются по порядку, и `/печат|typing/` выше перехватила бы любое
+       * «typing…». Первым совпадением тут выигрывает не более точная ветка, а
+       * более ранняя — так уже терялся один сценарий, и заметно это только по
+       * тому, что прогон проверяет не то, что думает.
+       */
     } else if (/набор|argstream/i.test(opts.prompt)) {
       /*
        * Вызов, который печатается на глазах (inc-27). Отдаём то же, что отдаёт
@@ -760,7 +775,13 @@ export class FakeAgentDriver implements AgentDriver {
        */
       this.schedule(requestId, 300, () => {
         for (const m of [
-          { subtype: 'api_retry', attempt: 2, max_retries: 5, retry_delay_ms: 4000, error_status: 503 },
+          {
+            subtype: 'api_retry',
+            attempt: 2,
+            max_retries: 5,
+            retry_delay_ms: 4000,
+            error_status: 503
+          },
           { subtype: 'permission_denied', tool_name: 'Bash', decision_reason_type: 'rule' },
           {
             subtype: 'hook_response',
@@ -856,6 +877,9 @@ export class FakeAgentDriver implements AgentDriver {
           // приложения, а фейк живёт в тестах и чужого трогать не должен.
           if (viaEdit && opts.cwd) {
             const abs = isAbsolute(editPath) ? editPath : join(opts.cwd, editPath)
+            // Существовал ли файл ДО записи — узнаётся только здесь, как и у
+            // настоящего движка: дальше он уже создан.
+            const existed = existsSync(abs)
             fakeWrite(opts.cwd, editPath, ['const a = 42', 'keep me', 'const c = 3', ''].join('\n'))
             // Карта «что записал агент» — общая инфраструктура, а не деталь
             // claude-драйвера: без неё карточка отката не отличит правку
@@ -863,7 +887,10 @@ export class FakeAgentDriver implements AgentDriver {
             // Отпечаток берётся ПОСЛЕ записи: до неё файла может не быть вовсе,
             // и карта запомнила бы пустоту.
             void agentFiles
-              .noteAfter(requestId, abs)
+              .noteAfter(requestId, abs, {
+                // Файл создан на ЭТОМ ходе — откат к более раннему его сотрёт.
+                ...(existed ? {} : { createdTurnId: session.turnId })
+              })
               .then(() => agentFileStore.schedule(agentFiles, requestId))
           }
           this.emit(requestId, {
@@ -922,11 +949,21 @@ export class FakeAgentDriver implements AgentDriver {
       // агент работает: очередь, Esc, прерывание. На 500мс такие сценарии
       // превращаются в гонку с самим тестом.
       this.schedule(requestId, 8000, () =>
-        this.emit(requestId, { type: 'result', isError: false, costUsd: 0.04, models: [`${this.engine}-model`] })
+        this.emit(requestId, {
+          type: 'result',
+          isError: false,
+          costUsd: 0.04,
+          models: [`${this.engine}-model`]
+        })
       )
     } else {
       this.schedule(requestId, 500, () =>
-        this.emit(requestId, { type: 'result', isError: false, costUsd: 0.04, models: [`${this.engine}-model`] })
+        this.emit(requestId, {
+          type: 'result',
+          isError: false,
+          costUsd: 0.04,
+          models: [`${this.engine}-model`]
+        })
       )
     }
   }
@@ -939,7 +976,12 @@ export class FakeAgentDriver implements AgentDriver {
       })
     )
     this.schedule(requestId, 300, () =>
-      this.emit(requestId, { type: 'result', isError: false, costUsd: 0.04, models: [`${this.engine}-model`] })
+      this.emit(requestId, {
+        type: 'result',
+        isError: false,
+        costUsd: 0.04,
+        models: [`${this.engine}-model`]
+      })
     )
   }
 
@@ -982,7 +1024,12 @@ export class FakeAgentDriver implements AgentDriver {
         isError: decision.behavior === 'deny'
       })
       this.schedule(requestId, 120, () =>
-        this.emit(requestId, { type: 'result', isError: false, costUsd: 0.04, models: [`${this.engine}-model`] })
+        this.emit(requestId, {
+          type: 'result',
+          isError: false,
+          costUsd: 0.04,
+          models: [`${this.engine}-model`]
+        })
       )
     }
     if (slow) this.schedule(requestId, 6000, emitResult)
@@ -997,7 +1044,12 @@ export class FakeAgentDriver implements AgentDriver {
       isError: false
     })
     this.schedule(requestId, 120, () =>
-      this.emit(requestId, { type: 'result', isError: false, costUsd: 0.04, models: [`${this.engine}-model`] })
+      this.emit(requestId, {
+        type: 'result',
+        isError: false,
+        costUsd: 0.04,
+        models: [`${this.engine}-model`]
+      })
     )
   }
 
@@ -1026,9 +1078,7 @@ export class FakeAgentDriver implements AgentDriver {
    * Именно вторая доказывает маршрутизацию: две панели в разных проектах
    * обязаны получить разные списки, а не один от случайной сессии.
    */
-  async listCommands(
-    requestId?: string
-  ): Promise<import('@shared/agentCommands').AgentCommand[]> {
+  async listCommands(requestId?: string): Promise<import('@shared/agentCommands').AgentCommand[]> {
     const cwd = requestId ? this.cwds.get(requestId) : undefined
     const leaf = (cwd ?? '').split(/[\\/]/).filter(Boolean).pop()
     return [
@@ -1274,7 +1324,7 @@ export class FakeAgentDriver implements AgentDriver {
   async rewindFiles(
     requestId: string,
     userMessageId: string,
-    opts?: { dryRun?: boolean; resume?: string; cwd?: string }
+    opts?: { dryRun?: boolean; resume?: string; cwd?: string; checkpoints?: boolean }
   ): Promise<RewindFilesOutcome> {
     // Свою неспособность фейк обязан признавать сам: соседний движок (gemini)
     // использует этот же класс, и без проверки он «умел» бы откат.
@@ -1404,7 +1454,8 @@ export class FakeAgentDriver implements AgentDriver {
     if (name === 'team-deploy') return { ok: false, reason: 'overridden', by: 'project' }
     // Нечитаемый файл настроек: настоящий драйвер тут отказывается писать, и
     // окно обязано сказать почему — иначе человек потерял бы чужой конфиг.
-    if (name === 'dataviz') return { ok: false, reason: 'unreadable', error: '~/.claude/settings.json' }
+    if (name === 'dataviz')
+      return { ok: false, reason: 'unreadable', error: '~/.claude/settings.json' }
     if (name === 'cloudflare:email-service') return { ok: false, error: 'скилл плагина' }
     this.skillStates.set(name, state)
     return { ok: true }

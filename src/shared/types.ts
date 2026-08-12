@@ -529,7 +529,7 @@ export interface RewindFilesOutcome {
   /** Сколько путей движок пропустил (симлинки и прочее не-обычное). */
   skippedLinks?: number
   /** Отказ НАШЕЙ стороны, до движка. */
-  refused?: 'busy' | 'no-session' | 'unsupported' | 'no-turn-id' | 'stale'
+  refused?: 'busy' | 'no-session' | 'unsupported' | 'no-turn-id' | 'stale' | 'backup-failed'
   /**
    * Что изменилось, пока человек читал карточку.
    *
@@ -556,6 +556,13 @@ export interface RewindFilesOutcome {
     changedAfterAgent?: boolean
     /** Этот же файл держит другая живая панель — она об откате не узнает. */
     heldByPane?: string
+    /**
+     * Ход, на котором агент СОЗДАЛ этот файл.
+     *
+     * Если он идёт ПОЗЖЕ выбранного, откат файл не вернёт, а удалит — и об этом
+     * человек обязан прочитать до нажатия, а не узнать после.
+     */
+    createdTurnId?: string
   }>
   /**
    * Копия спорных файлов, снятая ПЕРЕД откатом.
@@ -563,10 +570,17 @@ export interface RewindFilesOutcome {
    * У движка есть «до агента», но нет «до отката». Путь показывается человеку:
    * обещание «мы сохранили» без адреса, куда идти, — половина обещания.
    */
-  backup?: { dir?: string; saved: number; skipped: string[] }
+  backup?: {
+    dir?: string
+    saved: number
+    /** Что НЕ сохранено и почему: причина решает, что человеку делать дальше. */
+    skipped: Array<{ path: string; reason: 'limit' | 'busy' | 'denied' | 'missing' | 'error' }>
+  }
   /** Наша собственная сверка ПОСЛЕ отката: числам движка верить нельзя. */
   verdict?: {
     restored: number
+    /** Файл был и его больше нет — для созданного после хода это и есть успех. */
+    deleted: number
     untouched: number
     unknown: number
     untouchedPaths: string[]
@@ -1414,6 +1428,13 @@ export interface GitDiff {
   original: string
   /** Current working-tree content. */
   modified: string
+  /**
+   * Показана только часть файла — он больше потолка чтения.
+   *
+   * Обрезать пришлось, чтобы не тащить сотни мегабайт через IPC. Но обрезать
+   * молча — значит показать «правка кончилась здесь» там, где она продолжается.
+   */
+  tooBig?: boolean
 }
 
 // ---------------------------------------------------------------------------

@@ -62,9 +62,7 @@ export interface AgentDriver {
    * притворяться, что их нет. Отсутствие метода и пустой список — разные вещи,
    * и окно скажет об этом разными словами.
    */
-  listCommands?(
-    requestId?: string
-  ): Promise<import('@shared/agentCommands').AgentCommand[]>
+  listCommands?(requestId?: string): Promise<import('@shared/agentCommands').AgentCommand[]>
   /**
    * В какой папке работает беседа.
    *
@@ -128,7 +126,7 @@ export interface AgentDriver {
   rewindFiles?(
     requestId: string,
     userMessageId: string,
-    opts?: { dryRun?: boolean; resume?: string; cwd?: string }
+    opts?: { dryRun?: boolean; resume?: string; cwd?: string; checkpoints?: boolean }
   ): Promise<RewindFilesOutcome>
   /**
    * Здоровье движка (гейт: `capabilities.health`).

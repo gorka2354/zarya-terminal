@@ -15,7 +15,7 @@
  *    которых откат не дошёл.
  */
 import { _electron as electron } from 'playwright'
-import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -72,6 +72,13 @@ async function withApp(mode, fn) {
     await fn(page, work, userData)
   } finally {
     await app.close()
+    for (const d of [userData, work, claudeHome]) {
+      try {
+        rmSync(d, { recursive: true, force: true })
+      } catch {
+        /* занято — переживём */
+      }
+    }
   }
 }
 

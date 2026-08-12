@@ -22,6 +22,7 @@ import { APP_VERSION } from './appVersion'
 import { bindLang } from './lang'
 import { SettingsStore } from './settingsStore'
 import { agentFileStore, agentFiles } from './agentFileMap'
+import { cleanupOld } from './rewindBackup'
 import { WorkflowStore, builtinResourcesDir } from './workflowStore'
 
 // Same userData in dev and production (dev would otherwise use "Electron").
@@ -162,27 +163,9 @@ function acpEngine(
     () => mainWindow
   )
 }
-const geminiDriver = acpEngine(
-  'gemini',
-  'gemini',
-  ['--acp'],
-  'GEMINI',
-  'drv.geminiMissing'
-)
-const kimiDriver = acpEngine(
-  'kimi',
-  'kimi',
-  ['acp'],
-  'KIMI',
-  'drv.kimiMissing'
-)
-const qwenDriver = acpEngine(
-  'qwen',
-  'qwen',
-  ['--acp'],
-  'QWEN',
-  'drv.qwenMissing'
-)
+const geminiDriver = acpEngine('gemini', 'gemini', ['--acp'], 'GEMINI', 'drv.geminiMissing')
+const kimiDriver = acpEngine('kimi', 'kimi', ['acp'], 'KIMI', 'drv.kimiMissing')
+const qwenDriver = acpEngine('qwen', 'qwen', ['--acp'], 'QWEN', 'drv.qwenMissing')
 const agentRegistry = new Map<AgentEngine, AgentDriver>([
   ['claude-code', claudeCodeDriver],
   ['codex', codexDriver],
@@ -459,6 +442,16 @@ if (!gotLock) {
     // Тексты главного процесса берут язык из тех же настроек, что и окно.
     bindLang(settingsStore)
 
+    /*
+     * Просроченные страховочные копии отката — при запуске.
+     *
+     * Раньше уборка случалась только перед следующим откатом: человек, который
+     * откатился однажды и больше к этому не вернулся, оставался с копиями
+     * навсегда. Заря не оставляет мусора, а не «убирает, если ты придёшь ещё
+     * раз». Тихо и в фоне: к запуску окна это отношения не имеет.
+     */
+    void cleanupOld().catch(() => undefined)
+
     registerIpc({
       getWindow: () => mainWindow,
       ptyManager,
@@ -475,7 +468,6 @@ if (!gotLock) {
         if (quitTimer) clearTimeout(quitTimer)
         quitConfirmed = true
         settingsStore.flush()
-    agentFileStore.flushAllSync(agentFiles)
         // Карта «что записал агент» пишется отложенно — на выходе дописываем
         // остаток, иначе последние правки не доживут до следующего запуска и
         // карточка отката наутро скажет «не ручаемся» о том, что знала вчера.
@@ -546,12 +538,20 @@ if (!gotLock) {
     // everything else is denied.
     session.defaultSession.setPermissionRequestHandler((wc, permission, callback) => {
       const ours = !!mainWindow && wc === mainWindow.webContents
-      const allowed = permission === 'media' || permission === 'clipboard-read' || permission === 'clipboard-sanitized-write'
+      const allowed =
+        permission === 'media' ||
+        permission === 'clipboard-read' ||
+        permission === 'clipboard-sanitized-write'
       callback(ours && allowed)
     })
     session.defaultSession.setPermissionCheckHandler((wc, permission) => {
       const ours = !!mainWindow && wc === mainWindow.webContents
-      return ours && (permission === 'media' || permission === 'clipboard-read' || permission === 'clipboard-sanitized-write')
+      return (
+        ours &&
+        (permission === 'media' ||
+          permission === 'clipboard-read' ||
+          permission === 'clipboard-sanitized-write')
+      )
     })
 
     createWindow()

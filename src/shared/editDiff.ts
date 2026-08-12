@@ -34,6 +34,14 @@ export interface EditPreview {
   removed: number
   /** Правка не поместилась в разумный предел — строки обрезаны. */
   truncated?: boolean
+  /**
+   * Сколько строк скрыто.
+   *
+   * «Дальше не показано» без числа одинаково читается и про три строки, и про
+   * три тысячи, — а решения это разные: одно можно достроить в голове, другое
+   * надо открывать целиком.
+   */
+  hidden?: number
   /** Сколько отдельных кусков было (MultiEdit). 1 — обычная правка. */
   chunks?: number
 }
@@ -113,9 +121,7 @@ function asText(v: unknown): string {
 export function editPreview(name: string, input: unknown): EditPreview | null {
   const n = (name || '').toLowerCase().replace(/^.*__/, '')
   const o = input as
-    | { file_path?: unknown; path?: unknown; content?: unknown; edits?: unknown }
-    | null
-    | undefined
+    { file_path?: unknown; path?: unknown; content?: unknown; edits?: unknown } | null | undefined
   if (!o || typeof o !== 'object') return null
   const path = asText(o.file_path) || asText(o.path)
 
@@ -128,7 +134,8 @@ export function editPreview(name: string, input: unknown): EditPreview | null {
       lines: lines.slice(0, MAX_SHOWN),
       added: lines.length,
       removed: 0,
-      truncated: lines.length > MAX_SHOWN
+      truncated: lines.length > MAX_SHOWN,
+      ...(lines.length > MAX_SHOWN ? { hidden: lines.length - MAX_SHOWN } : {})
     }
   }
 
@@ -166,6 +173,7 @@ function summarize(p: EditPreview): EditPreview {
     added,
     removed,
     lines: p.lines.slice(0, MAX_SHOWN),
-    truncated: p.lines.length > MAX_SHOWN
+    truncated: p.lines.length > MAX_SHOWN,
+    ...(p.lines.length > MAX_SHOWN ? { hidden: p.lines.length - MAX_SHOWN } : {})
   }
 }

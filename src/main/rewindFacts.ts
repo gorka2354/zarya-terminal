@@ -57,11 +57,7 @@ export async function fileHash(path: string): Promise<string | undefined> {
       const tail = Buffer.alloc(64 * 1024)
       await fh.read(head, 0, head.length, 0)
       await fh.read(tail, 0, tail.length, Math.max(0, st.size - tail.length))
-      return createHash('sha1')
-        .update(String(st.size))
-        .update(head)
-        .update(tail)
-        .digest('hex')
+      return createHash('sha1').update(String(st.size)).update(head).update(tail).digest('hex')
     } finally {
       await fh.close()
     }
@@ -100,8 +96,16 @@ export async function diskFacts(paths: string[], cwd: string): Promise<DiskFacts
 }
 
 export interface RewindVerdict {
-  /** Файл и правда изменился или исчез — откат до него дошёл. */
+  /** Файл и правда изменился или вернулся — откат до него дошёл. */
   restored: number
+  /**
+   * Файл был — и его больше нет.
+   *
+   * Откат двунаправленный, и для созданного после выбранного хода файла успех
+   * выглядит как исчезновение. Считать это «вернулось» — соврать в самой важной
+   * строке: человек прочитает «вернулось 1» и пойдёт искать файл, которого нет.
+   */
+  deleted: number
   /** Движок путь не тронул: как было до отката, так и осталось. */
   untouched: number
   /** Файл был и остался, но мы не смогли его прочитать ни до, ни после. */
@@ -122,12 +126,20 @@ export async function verifyRewind(before: DiskFacts[], cwd: string): Promise<Re
     before.map((b) => b.path),
     cwd
   )
-  const out: RewindVerdict = { restored: 0, untouched: 0, unknown: 0, untouchedPaths: [] }
+  const out: RewindVerdict = {
+    restored: 0,
+    deleted: 0,
+    untouched: 0,
+    unknown: 0,
+    untouchedPaths: []
+  }
   for (let i = 0; i < before.length; i++) {
     const b = before[i]
     const a = after[i]
     if (b.existsNow !== a.existsNow) {
-      out.restored++
+      // Был и исчез — удалён; не было и появился — вернулся.
+      if (b.existsNow) out.deleted++
+      else out.restored++
       continue
     }
     if (!b.existsNow && !a.existsNow) {

@@ -19,7 +19,7 @@
  *    должно.
  */
 import { _electron as electron } from 'playwright'
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -68,9 +68,21 @@ async function withApp(mode, fn) {
     await page.waitForTimeout(2400)
     await page.evaluate((d) => window.__zaryaNewTerminal?.(d), work)
     await page.waitForTimeout(1500)
-    await fn(page)
+    // Рабочая папка нужна сценарию: без неё три проверки уезжали с cwd
+    // `undefined` и молча проходили, ничего не проверив.
+    await fn(page, work, userData)
   } finally {
     await app.close()
+    // Каждый запуск создаёт три временные папки. Двадцать прогонов подряд —
+    // шестьдесят папок, которые никто не убирает. Заря не оставляет мусор, и
+    // её собственные прогоны — не исключение.
+    for (const d of [userData, work, claudeHome]) {
+      try {
+        rmSync(d, { recursive: true, force: true })
+      } catch {
+        /* занято — переживём */
+      }
+    }
   }
 }
 

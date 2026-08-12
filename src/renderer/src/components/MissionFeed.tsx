@@ -9,6 +9,7 @@ import { editPreview, lineDiff, type EditPreview } from '@shared/editDiff'
 import { listChanges, type ChangedFile } from '@shared/changes'
 import { matchTouched, touchedSince } from '@shared/touched'
 import { rewindPlan, type FileFacts, type RewindMark, type SeenFile } from '@shared/rewindPlan'
+import type { RewindSummary } from '@shared/rewindPlan'
 import { canRewindTurn } from '@shared/rewindGate'
 import { useEditorStore } from '@/features/editor/editorStore'
 import { useBlocksStore } from '@/state/blocksStore'
@@ -86,7 +87,6 @@ export function PaneFeedButtons({ sessionId }: { sessionId: string }): React.JSX
   useLang()
   const { menu: cliMenu, open: openMenu } = useContextMenu()
 
-
   // Header ↺ button → past Claude Code sessions for THIS folder (resume one).
   const openSessionsMenu = (e: React.MouseEvent): void => {
     const btn = e.currentTarget as HTMLElement
@@ -94,12 +94,7 @@ export function PaneFeedButtons({ sessionId }: { sessionId: string }): React.JSX
     const folder = useSessionsStore.getState().sessions[sessionId]?.cwd
     void window.zarya.claudeCode.listSessions(folder).then((list) => {
       if (!list.length) {
-        openMenu(
-          r.left,
-          r.bottom + 4,
-          [{ label: t('feed.noPastSessions'), disabled: true }],
-          btn
-        )
+        openMenu(r.left, r.bottom + 4, [{ label: t('feed.noPastSessions'), disabled: true }], btn)
         return
       }
       const SHOWN = 25
@@ -335,7 +330,9 @@ export const MissionFeed = memo(function MissionFeed({
       if (searchHere) useUiStore.getState().set({ feedHits: { count: 0, index: 0 } })
       return
     }
-    const items = [...root.querySelectorAll('.zy-mf-block, .zy-mf-user, .zy-mf-answer, .zy-mf-tool')]
+    const items = [
+      ...root.querySelectorAll('.zy-mf-block, .zy-mf-user, .zy-mf-answer, .zy-mf-tool')
+    ]
     const hits = items.filter((el) => (el.textContent ?? '').toLowerCase().includes(q))
     if (!hits.length) {
       useUiStore.getState().set({ feedHits: { count: 0, index: 0 } })
@@ -438,7 +435,6 @@ export const MissionFeed = memo(function MissionFeed({
    */
   return (
     <div className="zy-mf">
-
       <div
         className="zy-mf-scroll"
         ref={scrollRef}
@@ -639,7 +635,6 @@ function buildResultIndex(conv: Conversation): FeedConv['results'] {
   return map
 }
 
-
 function AgentSection({
   conv,
   cwd,
@@ -665,10 +660,7 @@ function AgentSection({
 
   // Индекс результатов пересчитывается при изменении сообщений — один проход на
   // перерисовку вместо перебора всей беседы в каждой карточке.
-  const feed = useMemo<FeedConv>(
-    () => ({ conv, results: buildResultIndex(conv) }),
-    [conv]
-  )
+  const feed = useMemo<FeedConv>(() => ({ conv, results: buildResultIndex(conv) }), [conv])
   // Признаки, от которых зависят СООБЩЕНИЯ, считаем здесь и отдаём значениями:
   // так их memo продолжает работать, пока меняется только последний ответ.
   const covered = useMemo(() => coveredToolUseIds(conv.subagents ?? {}), [conv.subagents])
@@ -830,8 +822,7 @@ function StopTaskButton({
  * showed N indistinguishable «субагент работает…» spinners and no way to tell
  * how many there were, how long they had run, or what they cost.
  */
-function SubagentWave({
- conv }: { conv: Conversation }): React.JSX.Element | null {
+function SubagentWave({ conv }: { conv: Conversation }): React.JSX.Element | null {
   // Подписка на язык: без неё надписи этого компонента сменились бы не в
   // момент переключения, а при следующей перерисовке по другой причине.
   useLang()
@@ -914,7 +905,9 @@ function SubagentWave({
         </div>
       ))}
       {w.running.length > 4 && (
-        <div className="zy-mf-wave-row zy-mf-wave-row--more">{t('feed.andMore', { n: w.running.length - 4 })}</div>
+        <div className="zy-mf-wave-row zy-mf-wave-row--more">
+          {t('feed.andMore', { n: w.running.length - 4 })}
+        </div>
       )}
       {/*
         Неудачи — всегда на виду и всегда своими словами. Успешную задачу можно
@@ -955,7 +948,11 @@ function SubagentWave({
  * закрыл бы ленту, ради которой он в панель и смотрит. Приоритет у идущего —
  * именно он отвечает на вопрос «оно движется?».
  */
-function PlanPanel({ plan }: { plan?: import('@shared/agentPlan').AgentPlan }): React.JSX.Element | null {
+function PlanPanel({
+  plan
+}: {
+  plan?: import('@shared/agentPlan').AgentPlan
+}): React.JSX.Element | null {
   useLang()
   const SHOWN = 5
   if (!plan?.tasks.length) return null
@@ -1239,11 +1236,7 @@ function ToolOutcome({
   // Есть ли что раскрывать: вторая непустая строка или хвост длинной первой.
   const more = lines.slice(1).some((l) => l.trim().length > 0) || first.length > 96
   const head = first.length > 96 ? `${first.slice(0, 96)}…` : first
-  const cls = isError
-    ? 'zy-mf-tool-denied'
-    : incomplete
-      ? 'zy-mf-tool-partial'
-      : 'zy-mf-tool-done'
+  const cls = isError ? 'zy-mf-tool-denied' : incomplete ? 'zy-mf-tool-partial' : 'zy-mf-tool-done'
   const label = isError
     ? `✗ ${head || t('feed.denied')}`
     : incomplete
@@ -1512,7 +1505,11 @@ function EditDiff({
             </div>
           ))}
           {preview.truncated && (
-            <div className="zy-mf-diff-more">{t('feed.diffTruncated')}</div>
+            <div className="zy-mf-diff-more">
+              {preview.hidden
+                ? t('feed.diffHidden', { n: preview.hidden })
+                : t('feed.diffTruncated')}
+            </div>
           )}
         </div>
       )}
@@ -1558,7 +1555,8 @@ function UserTurn({
   const caps = useUiStore((s) => s.agentCaps)
   // Кнопку показываем только по правилу (см. rewindGate): нет точки, нет копий
   // у этой сессии, движок так не умеет или ход выше черты /clear — кнопки нет.
-  const canRewind = !!conv &&
+  const canRewind =
+    !!conv &&
     canRewindTurn({
       messages: conv.messages,
       index,
@@ -1633,7 +1631,6 @@ function UserTurn({
     </div>
   )
 }
-
 
 const MARK_LABEL: Record<RewindMark, string> = {
   'will-delete': 'rw.mark.willDelete',
@@ -1741,6 +1738,7 @@ function RewindCard({
     | {
         kind: 'plan'
         rows: ReturnType<typeof rewindPlan>['rows']
+        summary?: RewindSummary
         noList: boolean
         /** Что человек ВИДИТ сейчас — с этим сверимся перед записью. */
         seen: SeenFile[]
@@ -1749,11 +1747,19 @@ function RewindCard({
     | {
         kind: 'done'
         ok: number
+        deleted: number
         same: number
         unknown: number
         skipped: number
         stayed: string[]
-        backup?: { dir?: string; saved: number; skipped: string[] }
+        backup?: {
+          dir?: string
+          saved: number
+          skipped: Array<{
+            path: string
+            reason: 'limit' | 'busy' | 'denied' | 'missing' | 'error'
+          }>
+        }
       }
   >({ kind: 'checking' })
 
@@ -1789,8 +1795,20 @@ function RewindCard({
         // читается как «ничего не изменится», то есть как знание, которого нет.
         if (!paths.length) return setState({ kind: 'plan', rows: [], noList: true, seen: [] })
         const byPath = new Map((r.facts ?? []).map((f) => [f.path, f]))
+        /*
+         * «Создан после этого хода» решается ЗДЕСЬ, а не в главном процессе:
+         * порядок ходов знает только лента. Ход создания ищем в беседе — если
+         * он идёт после выбранного, откат файл сотрёт.
+         */
+        const turnOrder = new Map(
+          conv.messages
+            .map((m, i) => [m.turnId, i] as const)
+            .filter((x): x is readonly [string, number] => !!x[0])
+        )
+        const chosenAt = turnOrder.get(turnId) ?? -1
         const facts: FileFacts[] = paths.map((path) => {
           const d = byPath.get(path)
+          const createdAt = d?.createdTurnId ? (turnOrder.get(d.createdTurnId) ?? -1) : -1
           return {
             path,
             existsNow: d?.existsNow ?? true,
@@ -1800,6 +1818,10 @@ function RewindCard({
             // там лежит отпечаток того, что записал агент, и там же читается
             // диск. Считать это в окне значило бы гадать по путям.
             observed: d?.observed === true,
+            // Ход создания известен И он позже выбранного — файл будет удалён.
+            ...(createdAt > -1 && chosenAt > -1 && createdAt > chosenAt
+              ? { createdAfterTurn: true }
+              : {}),
             ...(d?.changedAfterAgent ? { changedAfterAgent: true } : {}),
             ...(d?.heldByPane ? { heldByPane: d.heldByPane } : {}),
             ...(dirty.includes(path.split('\\').join('/').toLowerCase())
@@ -1807,9 +1829,11 @@ function RewindCard({
               : {})
           }
         })
+        const plan = rewindPlan(facts)
         setState({
           kind: 'plan',
-          rows: rewindPlan(facts).rows,
+          rows: plan.rows,
+          summary: plan.summary,
           noList: false,
           seen: (r.facts ?? []).map((f) => ({
             path: f.path,
@@ -1841,7 +1865,27 @@ function RewindCard({
       setRefresh((n) => n + 1)
       return
     }
-    if (r.refused || (!r.canRewind && r.error)) {
+    /*
+     * Успех — это ТОЛЬКО `canRewind === true`.
+     *
+     * Ответ «не могу» без текста ошибки раньше проходил дальше: Заря снимала
+     * копию, ничего не откатывала и писала в ленту «Файлы откачены к этому
+     * ходу». Лента уезжает в стенограмму, и человек читал бы там неправду.
+     */
+    if (r.refused === 'backup-failed') {
+      /*
+       * Ничего не стёрто — и это главное, что человек должен прочитать первым.
+       * Дальше причина у каждого файла своя: занят, нет прав, слишком велик.
+       */
+      const why = (r.backup?.skipped ?? [])
+        .map((x) => `${shortenPath(x.path, 40)} — ${t(`rw.skip.${x.reason}`)}`)
+        .join('; ')
+      return setState({
+        kind: 'refused',
+        text: `${t('rw.backupFailed', { n: r.backup?.skipped.length ?? 0 })} ${why}`
+      })
+    }
+    if (r.canRewind !== true) {
       return setState({ kind: 'refused', text: r.error || t('rw.refuse.busy') })
     }
     /*
@@ -1863,8 +1907,12 @@ function RewindCard({
     // карточке, она эфемерна.
     const ok = r.verdict?.restored ?? 0
     const same = r.verdict?.untouched ?? 0
+    const gone = r.verdict?.deleted ?? 0
     const note =
       t('rw.feedNote', { ok, same }) +
+      // Удаление называется отдельно и только когда оно было: приписка «удалено
+      // 0» к каждому откату — шум, а умолчать о «удалено 3» — обман.
+      (gone ? t('rw.feedNoteDeleted', { n: gone }) : '') +
       (r.backup?.saved ? t('rw.feedNoteBackup', { n: r.backup.saved }) : '')
     ;(
       window as unknown as { __zaryaConvNotice?: (id: string, text: string) => void }
@@ -1873,6 +1921,7 @@ function RewindCard({
     setState({
       kind: 'done',
       ok: r.verdict?.restored ?? 0,
+      deleted: r.verdict?.deleted ?? 0,
       same: r.verdict?.untouched ?? 0,
       unknown: r.verdict?.unknown ?? 0,
       skipped: r.skippedLinks ?? 0,
@@ -1905,7 +1954,21 @@ function RewindCard({
             <div className="zy-rw-refuse">{t('rw.noFiles')}</div>
           ) : (
             <>
-              <div className="zy-rw-count">{t('rw.files', { n: state.rows.length })}</div>
+              <div className={`zy-rw-count${state.summary?.risky ? ' zy-rw-count--risky' : ''}`}>
+                {t('rw.files', { n: state.rows.length })}
+                {state.summary && state.summary.willDelete > 0 && (
+                  <> · {t('rw.sumDelete', { n: state.summary.willDelete })}</>
+                )}
+                {state.summary && state.summary.editedAfter > 0 && (
+                  <> · {t('rw.sumEdited', { n: state.summary.editedAfter })}</>
+                )}
+                {state.summary && state.summary.unobserved > 0 && (
+                  <> · {t('rw.sumUnknown', { n: state.summary.unobserved })}</>
+                )}
+                {state.summary && state.summary.outside > 0 && (
+                  <> · {t('rw.sumOutside', { n: state.summary.outside })}</>
+                )}
+              </div>
               <ul className="zy-rw-list">
                 {state.rows.map((r) => (
                   <li key={r.path} className="zy-rw-row">
@@ -1936,6 +1999,7 @@ function RewindCard({
         <div className="zy-rw-done">
           <div>
             {t('rw.doneCounts', { ok: state.ok, same: state.same, unknown: state.unknown })}
+            {state.deleted > 0 && <> · {t('rw.doneDeleted', { n: state.deleted })}</>}
           </div>
           {state.skipped > 0 && <div>{t('rw.doneSkipped', { n: state.skipped })}</div>}
           {state.backup && (state.backup.saved > 0 || state.backup.skipped.length > 0) && (
@@ -1961,8 +2025,7 @@ function RewindCard({
           )}
           {state.stayed.length > 0 && (
             <div className="zy-rw-stayed">
-              {t('rw.stayed')}{' '}
-              {state.stayed.map((x) => shortenPath(x, 48)).join(', ')}
+              {t('rw.stayed')} {state.stayed.map((x) => shortenPath(x, 48)).join(', ')}
             </div>
           )}
         </div>
@@ -2041,7 +2104,13 @@ function ChangesPanel({ cwd, from }: { cwd: string; from: number }): React.JSX.E
 
   // Сопоставление «путь агента → строка git» и список того, о чём git молчит.
   const marks = useMemo(
-    () => matchTouched(touched, state.root || cwd, cwd, state.files.map((f) => f.path)),
+    () =>
+      matchTouched(
+        touched,
+        state.root || cwd,
+        cwd,
+        state.files.map((f) => f.path)
+      ),
     [touched, state.root, cwd, state.files]
   )
 
@@ -2121,7 +2190,10 @@ function ChangedFileRow({
         return setDiff({ rows: [], more: 0, problem: t('feed.changeBinary') })
       }
       const all = lineDiff(d.original, d.modified)
-      setDiff({ rows: all.slice(0, CHANGE_MAX_ROWS), more: Math.max(0, all.length - CHANGE_MAX_ROWS) })
+      setDiff({
+        rows: all.slice(0, CHANGE_MAX_ROWS),
+        more: Math.max(0, all.length - CHANGE_MAX_ROWS)
+      })
     })
     return () => {
       alive = false
@@ -2139,7 +2211,11 @@ function ChangedFileRow({
         title={file.path}
       >
         <span className="zy-mf-change-kind">
-          {t(file.dir && file.kind === 'untracked' ? 'feed.changeUntrackedDir' : CHANGE_LABEL[file.kind])}
+          {t(
+            file.dir && file.kind === 'untracked'
+              ? 'feed.changeUntrackedDir'
+              : CHANGE_LABEL[file.kind]
+          )}
         </span>
         <span className="zy-mf-change-path">{shortenPath(file.path, 64)}</span>
         {byAgent && <span className="zy-mf-change-agent">{t('feed.changeByAgent')}</span>}
@@ -2165,7 +2241,9 @@ function ChangedFileRow({
                   <span className="zy-mf-diff-text">{l.text || ' '}</span>
                 </div>
               ))}
-              {diff.more > 0 && <div className="zy-mf-diff-more">{t('feed.diffTruncated')}</div>}
+              {diff.more > 0 && (
+                <div className="zy-mf-diff-more">{t('feed.diffHidden', { n: diff.more })}</div>
+              )}
             </>
           )}
         </div>
@@ -2293,9 +2371,7 @@ const ToolCard = memo(function ToolCard({
         {stop && (
           /* Почему спросили при включённом автопилоте. Без этой строки вопрос
              читается как поломка тумблера, а не как защита от потери работы. */
-          <div className="zy-mf-tool-stop">
-            {t('feed.irreversible', { hit: stop.hit })}
-          </div>
+          <div className="zy-mf-tool-stop">{t('feed.irreversible', { hit: stop.hit })}</div>
         )}
         {pending.mcpMark?.destructive && (
           /*
@@ -2309,11 +2385,7 @@ const ToolCard = memo(function ToolCard({
         )}
         <button
           className={`zy-mf-btn-run${always ? ' zy-mf-btn-run--always' : ''}`}
-          title={
-            always
-              ? t('feed.alwaysOnlyHint')
-              : undefined
-          }
+          title={always ? t('feed.alwaysOnlyHint') : undefined}
           onClick={() => void store.approveTool(conv.id, id)}
         >
           {t(always ? 'feed.approveAlways' : 'feed.approve')}
@@ -2389,7 +2461,11 @@ const ToolCard = memo(function ToolCard({
         {/* Точка — только пока пульс СВЕЖИЙ. Один давний удар горел бы зелёным
             часами, утверждая жизнь там, где судить о ней нечем. */}
         {pulseAlive(pulse, Date.now()) && (
-          <span className="zy-mf-tool-beat" title={t('feed.pulseAlive')} aria-label={t('feed.pulseAlive')} />
+          <span
+            className="zy-mf-tool-beat"
+            title={t('feed.pulseAlive')}
+            aria-label={t('feed.pulseAlive')}
+          />
         )}
         {quiet != null && (
           <span className="zy-mf-tool-quiet" title={t('feed.pulseLostHint')}>
@@ -2467,8 +2543,7 @@ const ToolCard = memo(function ToolCard({
 
 // -------------------------------------------------------------------- empty
 
-function EmptyHero({
- sessionId }: { sessionId: string }): React.JSX.Element {
+function EmptyHero({ sessionId }: { sessionId: string }): React.JSX.Element {
   // Подписка на язык: без неё надписи этого компонента сменились бы не в
   // момент переключения, а при следующей перерисовке по другой причине.
   useLang()
@@ -2536,7 +2611,9 @@ function ClaudeResumeList({ sessionId }: { sessionId: string }): React.JSX.Eleme
         {sessions.map((s) => (
           <button key={s.sessionId} className="zy-resume-item" onClick={() => resume(s)}>
             <Icon name="history" size={13} />
-            <span className="zy-resume-summary">{(s.summary || t('feed.session')).slice(0, 52)}</span>
+            <span className="zy-resume-summary">
+              {(s.summary || t('feed.session')).slice(0, 52)}
+            </span>
             <span className="zy-resume-time">{formatRelative(s.lastModified)}</span>
           </button>
         ))}

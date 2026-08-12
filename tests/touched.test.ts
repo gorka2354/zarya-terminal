@@ -141,6 +141,13 @@ describe('matchTouched', () => {
     expect([...out.inRepo]).toEqual([])
   })
 
+  it('в списке возвращается путь в регистре GIT, а не агента', () => {
+    // Панель ищет в этом наборе свои строки: положив вариант агента, мы бы
+    // потеряли пометку «правил агент» после переименования каталога.
+    const out = matchTouched(['C:/repo/src/API/a.ts'], 'C:/repo', 'C:/repo', ['src/api/a.ts'])
+    expect([...out.inRepo]).toEqual(['src/api/a.ts'])
+  })
+
   it('регистр пути на Windows не мешает совпадению', () => {
     const out = matchTouched(['c:\\REPO\\src\\A.ts'], 'C:/repo', 'C:/repo', ['src/a.ts'])
     expect(out.inRepo.size).toBe(1)

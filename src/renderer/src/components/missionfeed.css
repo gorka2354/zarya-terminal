@@ -556,12 +556,7 @@
   bottom: 0;
   z-index: 3;
   padding: 6px 0 2px;
-  background: linear-gradient(
-    to bottom,
-    transparent 0,
-    var(--bg-elev1) 6px,
-    var(--bg-elev1) 100%
-  );
+  background: linear-gradient(to bottom, transparent 0, var(--bg-elev1) 6px, var(--bg-elev1) 100%);
 }
 .zy-mf-tool-kbd {
   margin-left: auto;
@@ -1069,7 +1064,6 @@
   background: color-mix(in srgb, var(--warn) 34%, transparent);
 }
 
-
 /* =====================================================================
    Узкая панель: лента в четверти экрана.
 
@@ -1122,7 +1116,6 @@
   }
 }
 
-
 /**
  * Внутри панели шапка ленты дублирует шапку панели: обе пишут «CLI-АГЕНТ · ЗАРЯ»
  * и путь, и стоят вплотную. Раньше их разделяла вся рабочая область. Оставляем
@@ -1137,7 +1130,6 @@
   padding-top: 0;
   padding-bottom: 0;
 }
-
 
 /* В узкой панели подпись «Enter · Esc» встаёт под кнопки, а не толкает их. */
 @container pane (max-width: 620px) {
@@ -1655,7 +1647,10 @@
   letter-spacing: 0.04em;
   cursor: pointer;
   opacity: 0.35;
-  transition: opacity 0.12s ease, color 0.12s ease, background 0.12s ease;
+  transition:
+    opacity 0.12s ease,
+    color 0.12s ease,
+    background 0.12s ease;
 }
 .zy-mf-userturn:hover .zy-mf-changes-btn,
 .zy-mf-changes-btn:focus-visible {
@@ -1962,4 +1957,9 @@
   color: var(--warn, var(--fg));
   font-size: 11.5px;
   line-height: 1.5;
+}
+/* Тревожная сводка не должна выглядеть как обычная подпись: человек читает её
+   первой и по ней решает, стоит ли вообще нажимать. */
+.zy-rw-count--risky {
+  color: var(--danger);
 }

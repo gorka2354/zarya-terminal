@@ -143,9 +143,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       return
     }
     if (res.truncated) {
-      useUiStore
-        .getState()
-        .toast(t('ed.tooBig', { name }), 'info')
+      useUiStore.getState().toast(t('ed.tooBig', { name }), 'info')
     }
 
     const loaded = res
@@ -205,10 +203,23 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     }
 
     const diff = res
+    /*
+     * Файл не поместился в потолок чтения — сказать об этом обязаны здесь.
+     *
+     * Вкладка покажет начало и на этом остановится. Без предупреждения человек
+     * прочитает её как «вот и вся правка» и решит по неполной картине.
+     */
+    if (diff.tooBig) useUiStore.getState().toast(t('ed.diffTooBig', { name }), 'info')
     set((s) => ({
       files: s.files.map((f) =>
         f.id === id
-          ? { ...f, content: diff.modified, savedContent: diff.modified, original: diff.original, loading: false }
+          ? {
+              ...f,
+              content: diff.modified,
+              savedContent: diff.modified,
+              original: diff.original,
+              loading: false
+            }
           : f
       )
     }))
@@ -225,7 +236,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   setContent: (id, content) =>
     set((s) => ({
-      files: s.files.map((f) => (f.id === id ? { ...f, content, dirty: content !== f.savedContent } : f))
+      files: s.files.map((f) =>
+        f.id === id ? { ...f, content, dirty: content !== f.savedContent } : f
+      )
     })),
 
   save: async (id) => {
@@ -234,7 +247,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     try {
       await window.zarya.fs.writeFile(f.path, f.content)
       set((s) => ({
-        files: s.files.map((x) => (x.id === id ? { ...x, savedContent: x.content, dirty: false } : x))
+        files: s.files.map((x) =>
+          x.id === id ? { ...x, savedContent: x.content, dirty: false } : x
+        )
       }))
       emitBus('editor:file-saved', { path: f.path })
       useUiStore.getState().toast(t('ed.saved', { name: f.name }), 'success')
@@ -257,7 +272,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       }
       try {
         const res = await window.zarya.fs.readFile(f.path)
-        if (res.binary) continue
+        if (res.binary) {
+          // Двоичное содержимое во вкладку не подставить — но и промолчать
+          // нельзя: на экране осталось то, чего на диске уже нет. Считаем такую
+          // вкладку неперечитанной, чтобы человек об этом узнал.
+          untouched.push(f.path)
+          continue
+        }
         set((s) => ({
           files: s.files.map((x) =>
             x.id === f.id ? { ...x, content: res.content, savedContent: res.content } : x

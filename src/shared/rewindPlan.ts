@@ -217,7 +217,17 @@ export interface SeenFile {
  */
 export function staleAgainst(seen: SeenFile[], fresh: SeenFile[]): string[] {
   const now = new Map(fresh.map((f) => [f.path, f]))
+  const был = new Set(seen.map((s) => s.path))
   const out: string[] = []
+  /*
+   * Сверяем В ОБЕ стороны.
+   *
+   * Пока человек читал карточку, агент в соседней панели мог тронуть ЕЩЁ один
+   * файл — движок вернёт его в списке, а согласие относилось к прежнему набору.
+   * Односторонняя сверка пропустила бы именно этот файл: он перезаписался бы
+   * молча, и о нём карточка не сказала ни слова.
+   */
+  for (const f of fresh) if (!был.has(f.path)) out.push(f.path)
   for (const s of seen) {
     const f = now.get(s.path)
     // Путь исчез из списка движка — это тоже другой мир, чем показанный.

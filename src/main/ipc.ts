@@ -137,9 +137,7 @@ export function registerIpc(ctx: IpcContext): void {
       noLink: true,
       title: tm('main.dlg.title'),
       message:
-        fresh.length === 1
-          ? tm('main.dlg.msgOne')
-          : tm('main.dlg.msgMany', { n: fresh.length }),
+        fresh.length === 1 ? tm('main.dlg.msgOne') : tm('main.dlg.msgMany', { n: fresh.length }),
       // Native dialogs don't scroll: show a handful and say how many more there
       // are, rather than emitting a wall of text whose tail is unreachable.
       detail:
@@ -328,7 +326,8 @@ export function registerIpc(ctx: IpcContext): void {
     // already far past dictation, and an unbounded buffer is an easy way to
     // exhaust memory in the main process.
     const MAX_SAMPLES = 48000 * 300
-    const rate = typeof sampleRate === 'number' && sampleRate >= 8000 && sampleRate <= 192000 ? sampleRate : 0
+    const rate =
+      typeof sampleRate === 'number' && sampleRate >= 8000 && sampleRate <= 192000 ? sampleRate : 0
     if (!rate) return { ok: false, error: tm('main.err.badRate') }
     if (!(samples instanceof Float32Array) || samples.length === 0)
       return { ok: false, error: tm('main.err.emptyRec') }
@@ -460,31 +459,48 @@ export function registerIpc(ctx: IpcContext): void {
    * иначе он убрал бы сообщение из ленты там, где агент его всё равно помнит.
    */
   ipcMain.handle(CH.agentRewind, (_e, engine: AgentEngine, requestId: string) => {
-    const d = driverFor(engine) as { rewindAfterInterrupt?: (id: string) => AgentRewind | null } | undefined
+    const d = driverFor(engine) as
+      { rewindAfterInterrupt?: (id: string) => AgentRewind | null } | undefined
     return d?.rewindAfterInterrupt?.(requestId) ?? null
   })
   ipcMain.on(
     CH.agentPermission,
-    (_e, engine: AgentEngine, requestId: string, toolUseId: string, decision: AgentPermissionDecision) => {
+    (
+      _e,
+      engine: AgentEngine,
+      requestId: string,
+      toolUseId: string,
+      decision: AgentPermissionDecision
+    ) => {
       driverFor(engine)?.resolvePermission(requestId, toolUseId, decision)
     }
   )
   ipcMain.on(
     CH.agentQuestion,
-    (_e, engine: AgentEngine, requestId: string, toolUseId: string, answer: AgentQuestionAnswer) => {
+    (
+      _e,
+      engine: AgentEngine,
+      requestId: string,
+      toolUseId: string,
+      answer: AgentQuestionAnswer
+    ) => {
       driverFor(engine)?.resolveQuestion?.(requestId, toolUseId, answer)
     }
   )
-  ipcMain.handle(CH.agentListSessions, (_e, engine: AgentEngine, cwd: string | undefined) =>
-    driverFor(engine)?.listSessions?.(cwd) ?? []
+  ipcMain.handle(
+    CH.agentListSessions,
+    (_e, engine: AgentEngine, cwd: string | undefined) =>
+      driverFor(engine)?.listSessions?.(cwd) ?? []
   )
   ipcMain.handle(
     CH.agentSessionMessages,
     (_e, engine: AgentEngine, sessionId: string, cwd: string | undefined) =>
       driverFor(engine)?.loadSessionMessages?.(sessionId, cwd) ?? []
   )
-  ipcMain.on(CH.agentSetModel, (_e, engine: AgentEngine, requestId: string, model: string | undefined) =>
-    driverFor(engine)?.setModel?.(requestId, model)
+  ipcMain.on(
+    CH.agentSetModel,
+    (_e, engine: AgentEngine, requestId: string, model: string | undefined) =>
+      driverFor(engine)?.setModel?.(requestId, model)
   )
   ipcMain.on(CH.agentSetBypass, (_e, engine: AgentEngine, requestId: string, bypass: boolean) =>
     driverFor(engine)?.setBypass?.(requestId, bypass)
@@ -499,15 +515,20 @@ export function registerIpc(ctx: IpcContext): void {
       driverFor(engine)?.setPermissionMode?.(requestId, mode)
     }
   )
-  ipcMain.on(CH.agentSetEffort, (_e, engine: AgentEngine, requestId: string, effort: string | undefined) =>
-    driverFor(engine)?.setEffort?.(requestId, effort)
+  ipcMain.on(
+    CH.agentSetEffort,
+    (_e, engine: AgentEngine, requestId: string, effort: string | undefined) =>
+      driverFor(engine)?.setEffort?.(requestId, effort)
   )
   ipcMain.on(
     CH.agentSetVendorFlag,
     (_e, engine: AgentEngine, requestId: string, key: string, value: unknown) =>
       driverFor(engine)?.setVendorFlag?.(requestId, key, value)
   )
-  ipcMain.handle(CH.agentListModels, (_e, engine: AgentEngine) => driverFor(engine)?.listModels?.() ?? [])
+  ipcMain.handle(
+    CH.agentListModels,
+    (_e, engine: AgentEngine) => driverFor(engine)?.listModels?.() ?? []
+  )
   /**
    * Команды движка для палитры «/».
    *
@@ -523,16 +544,13 @@ export function registerIpc(ctx: IpcContext): void {
    * поздно: человек как раз в этот момент ставит MCP-сервер и получает от
    * агента «перезапустите сессию».
    */
-  ipcMain.handle(
-    CH.agentReloadExtras,
-    async (_e, engine: AgentEngine, requestId?: string) => {
-      const driver = driverFor(engine)
-      if (!driver?.reloadExtras) return { ok: false, unsupported: true }
-      // Перечитываем ТУ беседу, из которой нажали: человек ставит сервер в
-      // одном проекте и ждёт, что подхватит его панель, а не соседняя.
-      return driver.reloadExtras(requestId)
-    }
-  )
+  ipcMain.handle(CH.agentReloadExtras, async (_e, engine: AgentEngine, requestId?: string) => {
+    const driver = driverFor(engine)
+    if (!driver?.reloadExtras) return { ok: false, unsupported: true }
+    // Перечитываем ТУ беседу, из которой нажали: человек ставит сервер в
+    // одном проекте и ждёт, что подхватит его панель, а не соседняя.
+    return driver.reloadExtras(requestId)
+  })
   /**
    * Состав инструментов ОДНОЙ беседы.
    *
@@ -648,8 +666,10 @@ export function registerIpc(ctx: IpcContext): void {
       }
     }
   })
-  ipcMain.handle(CH.agentDebugFlags, (_e, engine: AgentEngine, requestId?: string) =>
-    driverFor(engine)?.debugFlags?.(requestId) ?? {}
+  ipcMain.handle(
+    CH.agentDebugFlags,
+    (_e, engine: AgentEngine, requestId?: string) =>
+      driverFor(engine)?.debugFlags?.(requestId) ?? {}
   )
 
   // --------------------------------------------------------------- fs / git
@@ -713,8 +733,6 @@ export function registerIpc(ctx: IpcContext): void {
     if (/^https?:\/\//i.test(url)) void shell.openExternal(url)
   })
   ipcMain.on(CH.showItemInFolder, (_e, path: string) => shell.showItemInFolder(path))
-  // Настоящий размер чужой папки, а не наша оценка: цифру, которой человек
-  // меряет цену настройки, нельзя писать константой.
   ipcMain.handle(
     CH.agentRewindFiles,
     async (
@@ -745,6 +763,14 @@ export function registerIpc(ctx: IpcContext): void {
       if (!drv?.rewindFiles || drv.capabilities?.rewindFiles !== true) {
         return { canRewind: false, refused: 'unsupported' }
       }
+      // Та же граница, что и на старте хода: служебный подъём сессии не должен
+      // включать копии там, где прогон их не заслужил.
+      const allowCheckpoints = checkpointPolicy({
+        wanted: settingsStore.get().ai.fileCheckpoints === true,
+        isolated: !!process.env.ZARYA_USER_DATA,
+        configDirOverridden: !!process.env.CLAUDE_CONFIG_DIR,
+        liveOverride: process.env.ZARYA_QA_LIVE_CHECKPOINTS === '1'
+      }).on
       try {
         if (opts?.dryRun) {
           // Сухой прогон отдаём как есть, но дополняем тем, чего движок не
@@ -754,7 +780,8 @@ export function registerIpc(ctx: IpcContext): void {
           const dry = await drv.rewindFiles(requestId, userMessageId, {
             dryRun: true,
             resume: opts.resume,
-            cwd: opts.cwd
+            cwd: opts.cwd,
+            checkpoints: allowCheckpoints
           })
           const paths = dry.filesChanged ?? []
           if (!paths.length) return dry
@@ -784,9 +811,13 @@ export function registerIpc(ctx: IpcContext): void {
             ...dry,
             facts: facts.map((f) => {
               const pane = others.find((o) => agentFiles.note(o.id, f.path))
+              const note = agentFiles.note(requestId, f.path)
               return {
                 ...f,
-                ...compareNote(agentFiles.note(requestId, f.path), f.hash),
+                ...compareNote(note, f.hash, f.existsNow),
+                // Ход, на котором агент создал файл: по нему карточка поймёт,
+                // что откат его СОТРЁТ, а не вернёт.
+                ...(note?.createdTurnId ? { createdTurnId: note.createdTurnId } : {}),
                 ...(pane ? { heldByPane: pane.title || pane.id } : {})
               }
             })
@@ -805,7 +836,8 @@ export function registerIpc(ctx: IpcContext): void {
         const plan = await drv.rewindFiles(requestId, userMessageId, {
           dryRun: true,
           resume: opts?.resume,
-          cwd: opts?.cwd
+          cwd: opts?.cwd,
+          checkpoints: allowCheckpoints
         })
         const paths = plan.filesChanged ?? []
         const before = paths.length ? await diskFacts(paths, opts?.cwd ?? '') : []
@@ -840,15 +872,33 @@ export function registerIpc(ctx: IpcContext): void {
         const risky = before
           .filter((f) => {
             if (!f.existsNow || f.linkSkipped) return false
-            const cmp = compareNote(agentFiles.note(requestId, f.path), f.hash)
+            const cmp = compareNote(agentFiles.note(requestId, f.path), f.hash, f.existsNow)
             return cmp.changedAfterAgent || !cmp.observed
           })
           .map((f) => f.path)
         const backup = await backupBeforeRewind(requestId, risky)
+        /*
+         * Копию снять не удалось — откат НЕ выполняем.
+         *
+         * Страховка существует ровно для этих файлов: у движка есть «до
+         * агента», но нет «до отката». Выполнить откат, не сохранив то, что он
+         * сотрёт, значит уничтожить работу человека и сообщить об этом после.
+         * Причина у каждого файла своя (занят, нет прав, лимит) — и она решает,
+         * что человеку делать дальше.
+         */
+        if (backup.skipped.length) {
+          return {
+            canRewind: false,
+            refused: 'backup-failed',
+            backup,
+            filesChanged: paths
+          }
+        }
         const done = await drv.rewindFiles(requestId, userMessageId, {
           dryRun: false,
           resume: opts?.resume,
-          cwd: opts?.cwd
+          cwd: opts?.cwd,
+          checkpoints: allowCheckpoints
         })
         if (!before.length) return done
         return {
@@ -878,6 +928,8 @@ export function registerIpc(ctx: IpcContext): void {
     await clearBackups()
     return backupUsage()
   })
+  // Настоящий размер чужой папки, а не наша оценка: цифру, которой человек
+  // меряет цену настройки, нельзя писать константой.
   ipcMain.handle(CH.checkpointUsage, async () => ({
     dir: fileHistoryDir(),
     ...(await checkpointUsage())

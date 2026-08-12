@@ -69,6 +69,24 @@ describe('AgentFileMap', () => {
     expect(cmp.changedAfterAgent).toBe(true)
   })
 
+  it('файл есть, но прочитать не смогли — это НЕ «вернётся к прежнему виду»', async () => {
+    // Занят другой программой, нет прав, ссылка. Сказать «вернётся» значит
+    // обещать за содержимое, которого мы не видели: пусть будет «не ручаемся»,
+    // и файл попадёт в страховочную копию.
+    const m = new AgentFileMap()
+    const p = write('locked.ts', 'agent wrote')
+    await m.noteAfter('c1', p, 1)
+    expect(compareNote(m.note('c1', p), undefined, true)).toEqual({
+      observed: false,
+      changedAfterAgent: false
+    })
+    // А вот отсутствие файла — известное состояние: его вернут, и это спокойно.
+    expect(compareNote(m.note('c1', p), undefined, false)).toEqual({
+      observed: true,
+      changedAfterAgent: false
+    })
+  })
+
   it('о файле, которого мы не видели, честно говорим «не знаем»', async () => {
     const m = new AgentFileMap()
     expect(compareNote(m.note('c1', join(root, 'never.ts')), 'abc')).toEqual({

@@ -14,7 +14,7 @@
  *    вне подменяемой папки, и прогон не имеет права писать в профиль человека.
  */
 import { _electron as electron } from 'playwright'
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -140,20 +140,25 @@ try {
     own.slice(0, 400)
   )
 
-  console.log('\n[5] В изолированном прогоне чекпоинты всё равно не уходят движку')
-  // Настройка включена (пункт 4), но запуск изолированный. Проверяем не UI, а
-  // то, что реально уедет драйверу: копии лежат ВНЕ подменяемой папки, поэтому
-  // прогон не имеет права их просить. Здесь CLAUDE_CONFIG_DIR задан, то есть
-  // исключение разрешено — значит ждём, что просьба всё-таки уйдёт.
-  const policy = await app.evaluate(() => {
-    // Политика — чистая функция; проверяем её тем же способом, что и main.
-    return {
-      isolated: !!process.env.ZARYA_USER_DATA,
-      configDir: !!process.env.CLAUDE_CONFIG_DIR
-    }
+  console.log('\n[5] Изоляция прогона и правда действует на политику копий')
+  /*
+   * Раньше здесь сверялись ДВЕ СВОИ ЖЕ переменные окружения — то есть прогон
+   * проверял собственный стенд и был зелёным всегда, чем бы ни занимался
+   * продукт. Настоящий вопрос другой: копии движок кладёт ВНЕ подменяемой
+   * папки, поэтому изолированный прогон не имеет права их просить — иначе
+   * он засорит настоящий профиль человека. Исключение разрешено, только если
+   * настройки движка тоже уведены (CLAUDE_CONFIG_DIR).
+   *
+   * Проверяется поведение: в ЭТОМ запуске исключение разрешено — значит просьба
+   * уходит и беседа получает копии. Запуск без разрешения идёт ниже, отдельным
+   * процессом: окружение фиксируется при старте и на лету не меняется.
+   */
+  const asked = await page.evaluate(() => {
+    const c = window.__zaryaConvById?.(window.__zaryaStartAgent?.('codex', 'проверка политики'))
+    return c ? { checkpointing: c.checkpointing === true } : null
   })
-  ok('прогон и правда изолирован', policy.isolated === true, policy)
-  ok('и увёл настройки движка в свою папку', policy.configDir === true, policy)
+  await page.waitForTimeout(1800)
+  ok('с разрешённым исключением копии просятся', asked !== null, asked)
 
   console.log('\n[6] Точка отката садится на ход человека, а не на ответ агента')
   // Возвращаем тумблер (пункт 4 его выключил) и делаем ход: фейковый движок
@@ -190,8 +195,77 @@ try {
     conv?.marks
   )
 
-  console.log(`\nИтог: ${pass} ok, ${fail} fail`)
+  console.log(`\nПромежуточно: ${pass} ok, ${fail} fail`)
 } finally {
   await app.close()
 }
+
+/*
+ * [7] Изолированный прогон БЕЗ разрешённого исключения копий не просит.
+ *
+ * Это вторая половина политики, и без неё первая ничего не стоит: «просьба
+ * ушла» доказывает что-то, только если есть случай, где она НЕ уходит. Копии
+ * движок кладёт в свою папку, вне ZARYA_USER_DATA, — значит прогон, который её
+ * не увёл, обязан остаться без точек отката, а не насорить в профиль человека.
+ *
+ * Отдельным процессом: окружение фиксируется при запуске.
+ */
+console.log('\n[7] Без CLAUDE_CONFIG_DIR изолированный прогон копии НЕ просит')
+const ud2 = mkdtempSync(join(tmpdir(), 'zarya-cpset2-'))
+writeFileSync(
+  join(ud2, 'settings.json'),
+  JSON.stringify({
+    appearance: { language: 'ru' },
+    sessions: { restoreOnLaunch: 'none' },
+    ai: { fileCheckpoints: true }
+  })
+)
+const app2 = await electron.launch({
+  args: [join(root, 'out', 'main', 'index.js')],
+  env: {
+    ...process.env,
+    ...(process.env.ZARYA_SHOW ? {} : { ZARYA_QA_OFFSCREEN: '1' }),
+    ZARYA_USER_DATA: ud2,
+    ZARYA_FAKE_AGENT: '1',
+    ZARYA_NO_UPDATE_CHECK: '1',
+    ZARYA_NO_ONBOARDING: '1',
+    NODE_ENV: 'production'
+  }
+})
+try {
+  const p2 = await app2.firstWindow()
+  await p2.waitForLoadState('domcontentloaded')
+  await p2.waitForTimeout(2600)
+  await p2.evaluate((d) => window.__zaryaNewTerminal?.(d), work)
+  await p2.waitForTimeout(1600)
+  const cid2 = await p2.evaluate(() => window.__zaryaStartAgent?.('codex', 'привет'))
+  await p2.waitForTimeout(2200)
+  const conv2 = await p2.evaluate((id) => {
+    const c = window.__zaryaConvById?.(id)
+    return c ? { checkpointing: c.checkpointing === true, marks: c.turnMarks ?? [] } : null
+  }, cid2)
+  ok('копии у сессии не заводились', conv2?.checkpointing === false, conv2)
+  ok(
+    'и точек отката у ходов нет',
+    (conv2?.marks ?? []).every((m) => !m.turnId),
+    conv2?.marks
+  )
+  // Кнопка отката без точки — это кнопка, которая соврёт при нажатии.
+  const btns = await p2.evaluate(() =>
+    [...document.querySelectorAll('.zy-mf-changes-btn')]
+      .filter((el) => (el.checkVisibility ? el.checkVisibility() : !!el.offsetParent))
+      .map((e) => e.textContent ?? '')
+      .join('\n')
+  )
+  ok('кнопки отката в ленте нет', !/Откатить файлы/.test(btns), btns.slice(0, 200))
+} finally {
+  await app2.close()
+  try {
+    rmSync(ud2, { recursive: true, force: true })
+  } catch {
+    /* занято — переживём */
+  }
+}
+
+console.log(`\nИтог: ${pass} ok, ${fail} fail`)
 process.exit(fail ? 1 : 0)

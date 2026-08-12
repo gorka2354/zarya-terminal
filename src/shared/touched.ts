@@ -132,7 +132,13 @@ export function matchTouched(
       continue
     }
     if (knownSet.has(key(rel))) {
-      inRepo.add(rel)
+      /*
+       * Кладём путь в том виде, в каком его назвал GIT, а не агент: панель
+       * ищет в этом наборе свои строки, и при расхождении регистра (частое
+       * дело после переименования каталога на Windows) пометка «правил агент»
+       * не находилась бы.
+       */
+      inRepo.add(list.find((p) => key(p) === key(rel)) ?? rel)
       continue
     }
     const dir = dirs.find((d) => key(rel).startsWith(key(d)))

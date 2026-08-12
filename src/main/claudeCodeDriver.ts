@@ -258,8 +258,7 @@ function mapAssistantContent(content: unknown): AiContentPart[] {
         name: String(block.name ?? ''),
         input: block.input ?? {}
       })
-    }
-    else if (
+    } else if (
       (block.type === 'thinking' || block.type === 'redacted_thinking') &&
       typeof block.thinking === 'string' &&
       block.thinking.trim()
@@ -502,12 +501,13 @@ interface Session {
   /** toolUseID -> the AskUserQuestion questions, so resolveQuestion rebuilds the answer envelope. */
   pendingQuestions: Map<string, ClaudeCliQuestion[]>
   /**
-   * toolUseID -> путь, который правит этот вызов.
+   * toolUseID -> путь, который правит этот вызов, и существовал ли он до правки.
    *
-   * Нужен, чтобы снять отпечаток ПОСЛЕ исполнения: результат приходит отдельным
-   * сообщением и пути в себе не несёт.
+   * Нужен, чтобы снять отпечаток ПОСЛЕ исполнения (результат приходит отдельным
+   * сообщением и пути в себе не несёт) и чтобы отличить создание от изменения:
+   * созданный файл откат УДАЛИТ, а не вернёт.
    */
-  pendingEdits: Map<string, string>
+  pendingEdits: Map<string, { path: string; existed: boolean }>
   /** Bypass ('без спроса'): auto-approve ordinary tools in canUseTool (live-toggleable). */
   bypass: boolean
   /** «Правки без спроса»: авто-допуск ТОЛЬКО для правок файлов (live-toggleable). */
@@ -522,6 +522,8 @@ interface Session {
   interrupted?: boolean
   /** Ход ушёл с флагом чекпоинтов — значит падение на нём можно и нужно пережить. */
   checkpointFlag?: boolean
+  /** id ТЕКУЩЕГО хода человека — точка, к которой привязываются правки этого хода. */
+  turnId?: string
   /**
    * Сессия поднята ТОЛЬКО ради служебного запроса и снимается сразу после него.
    *
@@ -748,7 +750,18 @@ export class ClaudeCodeDriver implements AgentDriver {
     // истории отменённое уже лежит. Гасим её; куда продолжать, говорит рендерер
     // (opts.resume + opts.resumeAt), потому что это должно пережить и перезапуск
     // приложения — иначе отменённое тихо вернулось бы в контекст.
-    if (existing?.rewound) {
+    if (existing?.lease) {
+      /*
+       * АРЕНДА — не беседа.
+       *
+       * Её поднимают под служебный запрос (откат файлов) без хода, и её поток
+       * читается молча, в никуда. Продолжить ход в ней значит отправить
+       * сообщение в процесс, чей ответ никто не разбирает: промпт исчезнет
+       * без единого слова, а человек будет ждать ответа. Гасим и поднимаем
+       * настоящую сессию.
+       */
+      this.dropLease(requestId, existing)
+    } else if (existing?.rewound) {
       try {
         existing.abort.abort()
         existing.input.close()
@@ -899,7 +912,8 @@ export class ClaudeCodeDriver implements AgentDriver {
         if (!isQuestion && toolName.startsWith('mcp__') && !this.mcpMarks.get(requestId)) {
           void this.ensureMcpMarks(requestId).then((marks) => {
             const mark = marks?.[toolName]
-            if (mark) this.emit(requestId, { type: 'tool-mark', toolUseId: ctx.toolUseID, mcpMark: mark })
+            if (mark)
+              this.emit(requestId, { type: 'tool-mark', toolUseId: ctx.toolUseID, mcpMark: mark })
           })
         }
         ctx.signal.addEventListener('abort', () => {
@@ -922,9 +936,7 @@ export class ClaudeCodeDriver implements AgentDriver {
     const checkpoints = checkpointDecision({
       wanted: opts.fileCheckpoints === true,
       exeKnown: !!exePath,
-      flagSupported: exePath
-        ? await supportsFlag(exePath, REPLAY_FLAG, EXE_RECHECK_MS)
-        : false
+      flagSupported: exePath ? await supportsFlag(exePath, REPLAY_FLAG, EXE_RECHECK_MS) : false
     })
     const options: Options = {
       cwd: opts.cwd,
@@ -1017,7 +1029,7 @@ export class ClaudeCodeDriver implements AgentDriver {
       abort,
       perms,
       pendingQuestions,
-      pendingEdits: new Map<string, string>(),
+      pendingEdits: new Map<string, { path: string; existed: boolean }>(),
       // В какой папке эта беседа. Нужно не самой сессии, а наблюдателю за
       // скиллами и MCP: `.mcp.json` и `.claude/skills` лежат в проекте, и
       // следить надо за папками ПАНЕЛЕЙ, а не за папкой, из которой запустили
@@ -1187,7 +1199,11 @@ export class ClaudeCodeDriver implements AgentDriver {
                   json: '',
                   sent: ''
                 }
-                this.emit(requestId, { type: 'tool_typing', name: session.typingTool.name, preview: '' })
+                this.emit(requestId, {
+                  type: 'tool_typing',
+                  name: session.typingTool.name,
+                  preview: ''
+                })
               }
               break
             }
@@ -1241,9 +1257,11 @@ export class ClaudeCodeDriver implements AgentDriver {
               break
             }
             if (msg.subtype === 'compact_boundary') {
-              const m = (msg as unknown as {
-                compact_metadata?: { trigger?: string; pre_tokens?: number; post_tokens?: number }
-              }).compact_metadata
+              const m = (
+                msg as unknown as {
+                  compact_metadata?: { trigger?: string; pre_tokens?: number; post_tokens?: number }
+                }
+              ).compact_metadata
               this.emit(requestId, {
                 type: 'compact',
                 phase: 'done',
@@ -1258,7 +1276,10 @@ export class ClaudeCodeDriver implements AgentDriver {
              * без), баннеры и ответы хуков. Раньше всё это проваливалось в
              * пустой `break` — и отказ выглядел на экране как зависание.
              */
-            if (msg.subtype === 'model_refusal_fallback' || msg.subtype === 'model_refusal_no_fallback') {
+            if (
+              msg.subtype === 'model_refusal_fallback' ||
+              msg.subtype === 'model_refusal_no_fallback'
+            ) {
               // Слова движка лежат в `content` (не в `message` — на этом можно
               // молча потерять всю причину и показать общую заглушку вместо
               // объяснения). `api_refusal_explanation` — запасной источник:
@@ -1365,7 +1386,12 @@ export class ClaudeCodeDriver implements AgentDriver {
                 status?: string
                 summary?: string
                 skip_transcript?: boolean
-                patch?: { status?: string; description?: string; error?: string; is_backgrounded?: boolean }
+                patch?: {
+                  status?: string
+                  description?: string
+                  error?: string
+                  is_backgrounded?: boolean
+                }
                 usage?: { total_tokens?: number; tool_uses?: number; duration_ms?: number }
               }
               const taskId = t.task_id
@@ -1547,7 +1573,9 @@ export class ClaudeCodeDriver implements AgentDriver {
                    * относительно папки процесса Зари.
                    */
                   const abs = isAbsolute(path) ? path : join(session.cwd ?? '', path)
-                  session.pendingEdits.set(p.id, abs)
+                  // Существовал ли файл ДО правки — единственный момент, когда
+                  // это ещё можно узнать. Дальше он уже будет создан.
+                  session.pendingEdits.set(p.id, { path: abs, existed: existsSync(abs) })
                   void agentFiles.noteBefore(requestId, abs)
                 }
               }
@@ -1590,6 +1618,9 @@ export class ClaudeCodeDriver implements AgentDriver {
             }
             if (meta.isReplay) {
               if (meta.uuid && !meta.isSynthetic) {
+                // Тот же id нужен и нам: правки этого хода привязываются к нему,
+                // и по нему потом видно, что файл создан ПОСЛЕ выбранного хода.
+                session.turnId = meta.uuid
                 this.emit(requestId, { type: 'turn-id', uuid: meta.uuid })
               }
               break
@@ -1611,7 +1642,9 @@ export class ClaudeCodeDriver implements AgentDriver {
                * сообщении ровно один: тогда сомнений нет.
                */
               const parsed =
-                blocks.length === 1 ? (msg as unknown as { tool_use_result?: unknown }).tool_use_result : undefined
+                blocks.length === 1
+                  ? (msg as unknown as { tool_use_result?: unknown }).tool_use_result
+                  : undefined
               for (const b of blocks) {
                 const id = String(b.tool_use_id ?? '')
                 const pics = toolResultImages(b.content)
@@ -1632,11 +1665,15 @@ export class ClaudeCodeDriver implements AgentDriver {
                  * моменту уже отработали — снимок берётся после них, иначе
                  * тревога срабатывала бы на каждом файле без участия человека.
                  */
-                const editedPath = session.pendingEdits.get(id)
-                if (editedPath && !b.is_error) {
+                const edited = session.pendingEdits.get(id)
+                if (edited && !b.is_error) {
                   session.pendingEdits.delete(id)
                   void agentFiles
-                    .noteAfter(requestId, editedPath)
+                    .noteAfter(requestId, edited.path, {
+                      // Файла до правки не было — значит агент его создал на
+                      // ЭТОМ ходе, и откат к более раннему ходу его сотрёт.
+                      ...(edited.existed ? {} : { createdTurnId: session.turnId })
+                    })
                     // Карта нужна и завтра: без записи на диск она бесполезна
                     // ровно в самом частом случае — «открыл Зарю утром».
                     .then(() => agentFileStore.schedule(agentFiles, requestId))
@@ -1979,9 +2016,7 @@ export class ClaudeCodeDriver implements AgentDriver {
    * пустой query: список общих команд движка честнее случайного проектного.
    * Совсем ничего нет — тоже пустой query, общие команды полезнее пустоты.
    */
-  async listCommands(
-    requestId?: string
-  ): Promise<import('@shared/agentCommands').AgentCommand[]> {
+  async listCommands(requestId?: string): Promise<import('@shared/agentCommands').AgentCommand[]> {
     const live = requestId
       ? this.sessions.get(requestId)
       : this.sessions.size === 1
@@ -2075,10 +2110,7 @@ export class ClaudeCodeDriver implements AgentDriver {
    * проверка связи ЗАПУСКАЕТ серверы по-настоящему, а это чужие процессы
    * (`uvx`, `npx`, `uv run`) и секунды ожидания на ровном месте.
    */
-  async mcpStatus(
-    requestId: string | undefined,
-    opts?: { probe?: boolean }
-  ): Promise<McpSnapshot> {
+  async mcpStatus(requestId: string | undefined, opts?: { probe?: boolean }): Promise<McpSnapshot> {
     const live = requestId ? this.sessions.get(requestId) : undefined
     if (live) {
       const fresh = await this.mcpFromQuery(live.query, live.cwd)
@@ -2350,7 +2382,9 @@ export class ClaudeCodeDriver implements AgentDriver {
   }
 
   /** Спросить у одного query его команды и привести их к показываемому виду. */
-  private async commandsOf(query: unknown): Promise<import('@shared/agentCommands').AgentCommand[]> {
+  private async commandsOf(
+    query: unknown
+  ): Promise<import('@shared/agentCommands').AgentCommand[]> {
     try {
       const q = query as { supportedCommands?: () => Promise<unknown> }
       if (typeof q.supportedCommands !== 'function') return []
@@ -2605,7 +2639,6 @@ export class ClaudeCodeDriver implements AgentDriver {
     }
   }
 
-
   /**
    * Поднять сессию ТОЛЬКО ради служебного запроса — без хода.
    *
@@ -2627,7 +2660,7 @@ export class ClaudeCodeDriver implements AgentDriver {
    */
   private async leaseSession(
     requestId: string,
-    o: { resume: string; cwd?: string }
+    o: { resume: string; cwd?: string; checkpoints?: boolean }
   ): Promise<Session | null> {
     let sdk: typeof import('@anthropic-ai/claude-agent-sdk')
     try {
@@ -2638,9 +2671,14 @@ export class ClaudeCodeDriver implements AgentDriver {
     const pick = await claudeExe()
     const exePath = pick.path
     const checkpoints = checkpointDecision({
-      // Аренду поднимают РАДИ отката: без копий движок ответит «rewinding is
-      // not enabled», и подъём был бы напрасным.
-      wanted: true,
+      /*
+       * Аренду поднимают РАДИ отката: без копий движок ответит «rewinding is
+       * not enabled». Но граница прогонов сильнее: `wanted` приходит СНАРУЖИ,
+       * из того же решения, что и на старте хода. Иначе служебный подъём стал
+       * бы дырой, через которую изолированный прогон пишет копии в настоящий
+       * профиль человека.
+       */
+      wanted: o.checkpoints !== false,
       exeKnown: !!exePath,
       flagSupported: exePath ? await supportsFlag(exePath, REPLAY_FLAG, EXE_RECHECK_MS) : false
     })
@@ -2729,7 +2767,7 @@ export class ClaudeCodeDriver implements AgentDriver {
   async rewindFiles(
     requestId: string,
     userMessageId: string,
-    opts?: { dryRun?: boolean; resume?: string; cwd?: string }
+    opts?: { dryRun?: boolean; resume?: string; cwd?: string; checkpoints?: boolean }
   ): Promise<RewindFilesOutcome> {
     if (!userMessageId) return { canRewind: false, refused: 'no-turn-id' }
     let session = this.sessions.get(requestId)
@@ -2738,7 +2776,11 @@ export class ClaudeCodeDriver implements AgentDriver {
       // Беседа поднята с диска: живого процесса нет. Но откат ходом не
       // является и токенов не стоит — поднимаем сессию под него самого.
       if (!opts?.resume) return { canRewind: false, refused: 'no-session' }
-      const lease = await this.leaseSession(requestId, { resume: opts.resume, cwd: opts.cwd })
+      const lease = await this.leaseSession(requestId, {
+        resume: opts.resume,
+        cwd: opts.cwd,
+        checkpoints: opts.checkpoints
+      })
       if (!lease) return { canRewind: false, refused: 'no-session' }
       session = lease
       leased = true

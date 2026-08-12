@@ -115,12 +115,25 @@ describe('verifyRewind', () => {
     expect(v.untouchedPaths).toEqual([p])
   })
 
-  it('файл исчез — тоже изменение', async () => {
+  it('файл исчез — это УДАЛЕНИЕ, а не возврат', async () => {
     const p = join(root, 'v3.ts')
     writeFileSync(p, 'gone soon')
     const before = await diskFacts([p], root)
     rmSync(p)
-    expect((await verifyRewind(before, root)).restored).toBe(1)
+    const v = await verifyRewind(before, root)
+    // Для файла, созданного после выбранного хода, исчезновение и есть успех.
+    // Но назвать его «вернулось» — соврать: человек пойдёт искать файл, а его нет.
+    expect(v.deleted).toBe(1)
+    expect(v.restored).toBe(0)
+  })
+
+  it('файл появился — вот это возврат', async () => {
+    const p = join(root, 'v4.ts')
+    const before = await diskFacts([p], root)
+    writeFileSync(p, 'вернулся')
+    const v = await verifyRewind(before, root)
+    expect(v.restored).toBe(1)
+    expect(v.deleted).toBe(0)
   })
 
   it('файла не было и не появилось — откат обещал создать и не создал', async () => {

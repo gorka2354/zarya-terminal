@@ -1,5 +1,5 @@
 import { app } from 'electron'
-import { writeFileSync } from 'fs'
+import { readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { fileHash } from './rewindFacts'
 import { readJson, writeJsonAtomic } from './jsonStore'
@@ -33,6 +33,15 @@ export interface FileNote {
   hash?: string
   /** Номер хода, на котором это случилось. */
   turn?: number
+  /**
+   * Ход, на котором агент СОЗДАЛ этот файл (id хода человека).
+   *
+   * Ради одного значка — «БУДЕТ УДАЛЁН». Откат двунаправленный: файл,
+   * появившийся после выбранного хода, он не возвращает, а стирает. Без этой
+   * записи такой файл показывался бы спокойным «вернётся к прежнему виду» и
+   * исчезал бы вместе со всем, что человек в него дописал.
+   */
+  createdTurnId?: string
   /** Человек трогал этот файл в этой беседе — до конца сессии он спорный. */
   human?: boolean
 }
@@ -80,14 +89,29 @@ export class AgentFileMap {
     }
   }
 
-  /** После правки: запоминаем, что записал агент. */
-  async noteAfter(convId: string, path: string, turn?: number): Promise<void> {
+  /**
+   * После правки: запоминаем, что записал агент.
+   *
+   * `createdTurnId` ставится ровно один раз — на том ходе, где файла ДО правки
+   * не было. Перезаписывать его нельзя: файл создан однажды, и именно эта точка
+   * решает, удалит его откат или вернёт.
+   */
+  async noteAfter(
+    convId: string,
+    path: string,
+    o?: { turn?: number; createdTurnId?: string }
+  ): Promise<void> {
     const m = this.forConv(convId)
     const k = this.key(path)
     if (!m.has(k) && m.size >= MAX_PATHS) return
     const prev = m.get(k)
     const hash = await fileHash(path)
-    m.set(k, { ...prev, ...(hash ? { hash } : {}), ...(turn != null ? { turn } : {}) })
+    m.set(k, {
+      ...prev,
+      ...(hash ? { hash } : {}),
+      ...(o?.turn != null ? { turn: o.turn } : {}),
+      ...(o?.createdTurnId && !prev?.createdTurnId ? { createdTurnId: o.createdTurnId } : {})
+    })
   }
 
   /** Что мы знаем об этом пути. */
@@ -123,14 +147,23 @@ export class AgentFileMap {
  */
 export function compareNote(
   note: FileNote | undefined,
-  diskHash: string | undefined
+  diskHash: string | undefined,
+  /** Файл существует на диске. Нужен, чтобы отличить «нет файла» от «не прочли». */
+  existsNow = true
 ): { observed: boolean; changedAfterAgent: boolean } {
   if (!note?.hash) return { observed: false, changedAfterAgent: false }
   if (note.human) return { observed: true, changedAfterAgent: true }
-  if (!diskHash) return { observed: true, changedAfterAgent: false }
+  if (!diskHash) {
+    /*
+     * Файл есть, а прочитать его мы не смогли (занят, нет прав, ссылка).
+     * Сказать «вернётся к прежнему виду» тут нельзя: мы не знаем, что в нём.
+     * Возвращаем «не наблюдали» — карточка честно скажет «не ручаемся», и файл
+     * попадёт в страховочную копию.
+     */
+    return { observed: !existsNow, changedAfterAgent: false }
+  }
   return { observed: true, changedAfterAgent: diskHash !== note.hash }
 }
-
 
 /** Больше этого числа бесед не храним: файл не должен расти сам по себе. */
 const MAX_CONVS = 60
@@ -202,13 +235,33 @@ export class AgentFileStore {
       clearTimeout(this.timer)
       this.timer = undefined
     }
-    const all = this.cache ?? {}
+    /*
+     * Кеш может быть ПУСТ: если за этот запуск карту ни разу не читали, а
+     * правка была, `this.cache` остаётся null — и запись затёрла бы карты всех
+     * прочих бесед. Поэтому читаем файл синхронно и сливаем поверх.
+     */
+    let all: MapFile = this.cache ?? {}
+    if (!this.cache) {
+      try {
+        all = JSON.parse(readFileSync(this.file, 'utf8')) as MapFile
+      } catch {
+        all = {}
+      }
+    }
     for (const id of this.dirty) {
       const files = map.dump(id)
       if (Object.keys(files).length) all[id] = { at: Date.now(), files }
       else delete all[id]
     }
     this.dirty.clear()
+    // Тот же кап, что и на обычном пути: выход не повод растить файл без предела.
+    const ids = Object.keys(all)
+    if (ids.length > MAX_CONVS) {
+      ids
+        .sort((a, b) => (all[a]?.at ?? 0) - (all[b]?.at ?? 0))
+        .slice(0, ids.length - MAX_CONVS)
+        .forEach((id) => delete all[id])
+    }
     this.cache = all
     try {
       writeFileSync(this.file, JSON.stringify(all), 'utf8')
