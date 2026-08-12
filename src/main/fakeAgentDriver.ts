@@ -51,6 +51,19 @@ const FAKE_PNG =
  * Пишем только внутрь рабочей папки прогона либо во временную папку, которую
  * назвал сам сценарий: фейк живёт в тестах, но чужие файлы портить не должен.
  */
+/**
+ * Какой файл «правит» фейк.
+ *
+ * Задаётся сценарием: один и тот же прогон должен идти и на фейке, и на живом
+ * движке, а живому файл называет сам сценарий. Жёстко зашитый путь означал бы,
+ * что проверки на двух движках смотрят на разные файлы.
+ */
+function fakeEditPath(): string {
+  return (
+    process.env.ZARYA_FAKE_EDIT_PATH || process.env.ZARYA_FAKE_OUTSIDE || 'src/shared/fake.ts'
+  )
+}
+
 function fakeWrite(cwd: string, path: string, text: string): void {
   try {
     const abs = isAbsolute(path) ? path : join(cwd, path)
@@ -68,6 +81,8 @@ export class FakeAgentDriver implements AgentDriver {
   private getWindow: () => BrowserWindow | null
   private timers = new Map<string, ReturnType<typeof setTimeout>[]>()
   private started = new Set<string>()
+  /** Ходы, которые идут прямо сейчас: по ним откат отвечает «занято». */
+  private running = new Set<string>()
   /**
    * Состояние «сессии» — ровно то, что нужно отмотке: чем сессия себя назвала,
    * что последним сказал агент и от какой точки эта ветка началась. Живёт между
@@ -108,6 +123,15 @@ export class FakeAgentDriver implements AgentDriver {
   }
 
   private emit(requestId: string, ev: AgentStreamEvent): void {
+    /*
+     * Конец хода — тоже здесь, и по той же причине, что и гейты.
+     *
+     * Настоящий драйвер отказывает откату, пока ход идёт: файлы нельзя
+     * вытаскивать из-под работающего инструмента. Фейк обязан отказывать так
+     * же, иначе прогон проходит по короткому пути и этот отказ не проверяется
+     * вовсе.
+     */
+    if (ev.type === 'result') this.running.delete(requestId)
     // Учёт нерешённых гейтов — здесь, а не в каждой ветке сценария: веток
     // много, и забытая в одной сделала бы ответ про занятость случайным.
     if (ev.type === 'permission') {
@@ -127,6 +151,7 @@ export class FakeAgentDriver implements AgentDriver {
 
   async start(requestId: string, opts: AgentStartOpts): Promise<void> {
     this.started.add(requestId)
+    this.running.add(requestId)
     // Что драйвер получил на входе — для проверки отмотки: тест обязан видеть,
     // с каким resume/resumeAt ушёл СЛЕДУЮЩИЙ ход, иначе «сообщение пропало из
     // контекста» останется словами.
@@ -798,7 +823,7 @@ export class FakeAgentDriver implements AgentDriver {
       const viaEdit = /edit/i.test(opts.prompt)
       // Сценарий «агент пишет за пределы папки панели» задаётся окружением:
       // так прогон проверяет радиус шире репозитория, не выдумывая путь.
-      const editPath = process.env.ZARYA_FAKE_OUTSIDE || 'src/shared/fake.ts'
+      const editPath = fakeEditPath()
       this.schedule(requestId, 400, () => {
         if (opts.bypass && !stop && !viaMcp) {
           /*
@@ -847,6 +872,15 @@ export class FakeAgentDriver implements AgentDriver {
             content: 'fake: выполнено без подтверждения',
             isError: false
           })
+          /*
+           * Ход обязан ЗАКОНЧИТЬСЯ.
+           *
+           * Настоящий движок всегда шлёт `result`; фейк при автопилоте этого не
+           * делал — и снаружи это выглядело как вечно идущий ход: лента ждала,
+           * прогоны упирались в таймаут, а откат честно отказывал «идёт ход».
+           * Найдено, когда фейк научили сообщать о занятости.
+           */
+          this.emit(requestId, { type: 'result', isError: false, costUsd: 0.01 })
           return
         }
         this.emit(requestId, {
@@ -1258,7 +1292,7 @@ export class FakeAgentDriver implements AgentDriver {
     // Тот же гейт, что у настоящего драйвера: пока висит невыясненный вопрос
     // или идёт ход, файлы трогать нельзя. Без него прогон проходил бы по
     // короткому пути и ничего не проверял.
-    if ((this.pendingGates.get(requestId)?.size ?? 0) > 0) {
+    if (this.running.has(requestId) || (this.pendingGates.get(requestId)?.size ?? 0) > 0) {
       return { canRewind: false, refused: 'busy' }
     }
     const mode = process.env.ZARYA_FAKE_REWIND || 'ok'
@@ -1275,9 +1309,10 @@ export class FakeAgentDriver implements AgentDriver {
         : { canRewind: true, skippedLinks: 1 }
     }
     const cwd = this.cwds.get(requestId) ?? ''
+    const edited = fakeEditPath()
     return {
       canRewind: true,
-      filesChanged: [`${cwd}/src/shared/fake.ts`],
+      filesChanged: [isAbsolute(edited) ? edited : `${cwd}/${edited}`],
       insertions: 2,
       deletions: 1,
       ...(opts?.dryRun ? {} : { skippedLinks: 0 })

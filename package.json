@@ -68,7 +68,9 @@
     "qa:wave": "node scripts/agent-wave-test.mjs",
     "qa:plan-mode": "node scripts/plan-mode-test.mjs",
     "qa:find": "npm run build && node scripts/feed-search-test.mjs",
-    "qa:onboarding": "npm run build && node scripts/onboarding-test.mjs"
+    "qa:onboarding": "npm run build && node scripts/onboarding-test.mjs",
+    "qa:rewind": "npm run build && node scripts/live/rewind-basic.mjs && node scripts/live/rewind-deep.mjs",
+    "qa:rewind:live": "npm run build && node scripts/live/run-live.mjs"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.3.220",
