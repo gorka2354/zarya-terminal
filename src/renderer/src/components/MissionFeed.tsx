@@ -52,6 +52,8 @@ import { useContextMenu, type MenuItem } from './ContextMenu'
 import logoZarya from '@/assets/logo-zarya-64.png'
 import './missionfeed.css'
 import { ruleFor } from '@shared/allowRules'
+import { commandMissing, missingName } from '@shared/commandMissing'
+import { focusPane } from '@/terminal/paneFocus'
 import { pulseAlive, pulseSilence } from '@shared/toolPulse'
 import type { ToolImage } from '@shared/images'
 import type { ToolFact } from '@shared/toolFacts'
@@ -784,9 +786,74 @@ const ShellBlock = memo(function ShellBlock({
         </div>
       )}
       {output.trim() !== '' && <OutputLines text={output} failed={failed} />}
+      {commandMissing({ output, exitCode: block.exitCode }) && (
+        <MissingHint sessionId={block.sessionId} command={block.command} />
+      )}
     </div>
   )
 })
+
+/**
+ * «Команды нет» — и что с этим делать прямо здесь.
+ *
+ * Ровно тот случай, который поймал владелец: агент поставил Rust и предложил
+ * `cargo run`, а живая оболочка о новом PATH не знает — переменные окружения
+ * читаются при старте процесса и потом не меняются. Со стороны это выглядит
+ * как «не установилось», хотя всё установлено и в новой панели работает.
+ *
+ * Заря видит и падение, и его причину, и умеет перезапустить оболочку в ТОЙ ЖЕ
+ * папке. Поэтому здесь не жалоба, а выход: одна кнопка, которая перезапускает
+ * оболочку и повторяет команду.
+ *
+ * Обещание держится ровно на том, что мы знаем: PATH мог обновиться. Если дело
+ * в другом (программы нет вовсе, опечатка), перезапуск ничего не сломает — та
+ * же ошибка придёт снова, и это честнее, чем молчать.
+ */
+function MissingHint({
+  sessionId,
+  command
+}: {
+  sessionId: string
+  command: string
+}): React.JSX.Element {
+  useLang()
+  const [busy, setBusy] = useState(false)
+  const name = missingName(command)
+  return (
+    <div className="zy-mf-missing">
+      <span className="zy-mf-missing-text">
+        {name ? t('feed.missingNamed', { name }) : t('feed.missing')}
+      </span>
+      <button
+        type="button"
+        className="zy-mf-missing-btn"
+        disabled={busy}
+        onClick={() => {
+          setBusy(true)
+          void useSessionsStore
+            .getState()
+            .restartSession(sessionId)
+            .then(() => {
+              /*
+               * Команду повторяем ПОСЛЕ перезапуска и с задержкой: свежая
+               * оболочка ещё печатает приглашение, и ввод, отправленный в этот
+               * миг, теряется целиком или наполовину.
+               */
+              window.setTimeout(() => {
+                if (command.trim()) window.zarya.pty.write(sessionId, command.trim() + '\r')
+                focusPane(sessionId)
+                setBusy(false)
+              }, 900)
+            })
+            .catch(() => setBusy(false))
+        }}
+      >
+        <Icon name="refresh" size={11} />
+        {busy ? t('feed.missingBusy') : t('feed.missingBtn')}
+      </button>
+    </div>
+  )
+}
 
 /** Friendly per-tool verbs (not shell-hardcoded for Read/Edit/Write/etc). */
 function toolVerb(name: string): { want: string; run: string } {

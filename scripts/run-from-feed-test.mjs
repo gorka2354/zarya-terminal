@@ -203,6 +203,46 @@ try {
     плохо.some((b) => /этой-команды-нет/.test(b.cmd + b.out)),
     плохо.slice(-2)
   )
+  section('[4b] «Команда не найдена» — Заря предлагает выход, а не молчит')
+  /*
+   * Случай владельца целиком: агент поставил Rust и предложил `cargo run`, а
+   * живая оболочка о новом PATH не знает — переменные читаются при старте
+   * процесса. Со стороны это «не установилось», хотя всё на месте.
+   */
+  const подсказка = await page.evaluate(() => {
+    const vis = (el) => (el.checkVisibility ? el.checkVisibility() : !!el.offsetParent)
+    const el = [...document.querySelectorAll('.zy-mf-missing')].filter(vis).pop()
+    return el
+      ? {
+          текст: (el.querySelector('.zy-mf-missing-text')?.textContent ?? '').trim(),
+          кнопка: (el.querySelector('.zy-mf-missing-btn')?.textContent ?? '').trim()
+        }
+      : null
+  })
+  note('подсказка:', JSON.stringify(подсказка))
+  ok('подсказка показана', !!подсказка, подсказка)
+  ok('названа программа', /этой-команды-нет/.test(подсказка?.текст ?? ''), подсказка)
+  ok('сказано про PATH', /PATH/.test(подсказка?.текст ?? ''), подсказка)
+  ok('есть кнопка перезапуска', /Перезапустить/.test(подсказка?.кнопка ?? ''), подсказка)
+
+  section('[4c] Кнопка правда перезапускает оболочку и повторяет команду')
+  const доБлоков = (await blocks(page)).length
+  await page.evaluate(() => {
+    const vis = (el) => (el.checkVisibility ? el.checkVisibility() : !!el.offsetParent)
+    ;[...document.querySelectorAll('.zy-mf-missing-btn')].filter(vis).pop()?.click()
+  })
+  await page.waitForTimeout(7000)
+  const послеБлоков = await blocks(page)
+  note('блоков было/стало:', доБлоков, послеБлоков.length)
+  // Команда повторилась в свежей оболочке: блок добавился. Ошибка та же — её и
+  // ждём, программы-то нет; важно, что путь пройден до конца и виден.
+  ok('команда повторилась в новой оболочке', послеБлоков.length > доБлоков, {
+    было: доБлоков,
+    стало: послеБлоков.length
+  })
+  const живой = await page.evaluate((s) => window.__zaryaDumpSessions?.(), sid)
+  ok('панель жива после перезапуска', !!живой, живой?.activeSessionId)
+
   section('[5] Команда, запущенная ПОСЛЕ разговора, видна рядом с разговором')
   /*
    * Ровно случай владельца: длинная беседа с агентом, потом «запустить» у блока

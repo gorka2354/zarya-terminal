@@ -105,6 +105,17 @@ export const RU: Dict = {
   'close.queued': 'приписка в очереди: «{text}»',
 
   // --- лента
+  /*
+   * Подсказка про PATH. Обещаем ровно то, что знаем: программу могли поставить
+   * после запуска этой оболочки. Если дело в другом — та же ошибка вернётся, и
+   * это честнее, чем молчать.
+   */
+  'feed.missing':
+    'Команда не найдена. Её могли установить после запуска этой оболочки — новая подхватит PATH',
+  'feed.missingNamed':
+    '«{name}» не найдена. Программу могли установить после запуска этой оболочки — новая подхватит PATH',
+  'feed.missingBtn': 'Перезапустить и повторить',
+  'feed.missingBusy': 'Перезапускаю…',
   'feed.turnPrev': 'К предыдущему моему сообщению (Alt+↑)',
   'feed.turnNext': 'К следующему моему сообщению (Alt+↓)',
   'feed.turnNavHint': 'Прыжки по вашим сообщениям: оттуда же можно откатить файлы',
@@ -1708,6 +1719,12 @@ export const EN: Dict = {
   'close.images': 'attachments: {n}',
   'close.queued': 'queued message: “{text}”',
 
+  'feed.missing':
+    'Command not found. It may have been installed after this shell started — a new one picks up PATH',
+  'feed.missingNamed':
+    '“{name}” not found. It may have been installed after this shell started — a new one picks up PATH',
+  'feed.missingBtn': 'Restart and retry',
+  'feed.missingBusy': 'Restarting…',
   'feed.turnPrev': 'To my previous message (Alt+↑)',
   'feed.turnNext': 'To my next message (Alt+↓)',
   'feed.turnNavHint': 'Jump between your messages — files can be rewound from there too',

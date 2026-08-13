@@ -2055,3 +2055,41 @@
 .zy-mf-userturn--found .zy-mf-changes-btn {
   opacity: 1;
 }
+
+/* ── «Команда не найдена»: выход, а не жалоба ──────────────────────────────
+   Строка под выводом упавшей команды. Тон спокойный: это не ошибка Зари и не
+   вина человека — просто живая оболочка не знает про новый PATH. */
+.zy-mf-missing {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+  padding-left: 2px;
+}
+.zy-mf-missing-text {
+  font-size: 11px;
+  color: var(--fg-faint);
+}
+.zy-mf-missing-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg-dim);
+  font-family: var(--font-tech);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+.zy-mf-missing-btn:hover:not(:disabled) {
+  color: var(--fg);
+  border-color: var(--accent);
+}
+.zy-mf-missing-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
