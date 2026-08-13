@@ -258,6 +258,16 @@ export interface AiSettings {
    * писал.
    */
   enginePromptExtra: string
+  /**
+   * Просить агента запускать долгие команды в фоне.
+   *
+   * inc-35 показал живьём: увести УЖЕ идущую команду в фон движок не умеет
+   * (отвечает «увёл» и ждёт её до конца), а запустить в фоне сразу — умеет.
+   * Единственный рычаг человека — попросить об этом в системном промпте.
+   *
+   * ПРОСЬБА, А НЕ ГАРАНТИЯ: решает модель. Настройка называет себя так же.
+   */
+  backgroundLongCommands: boolean
   /** Claude Code model override ('' = account default from ~/.claude). */
   claudeModel: string
   /** Claude Code effort override ('' = account default). */

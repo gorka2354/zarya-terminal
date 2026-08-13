@@ -27,6 +27,7 @@ import { registerAiBridge } from './aiBridge'
 import { gateLabel } from './gates'
 import { applySubagentEvent, type SubagentRun } from './subagents'
 import type { BackgroundTask } from '@shared/agentTasks'
+import { enginePromptAppend } from '@shared/enginePrompt'
 import { sameModel } from './modelMatch'
 import { nativeGateOpts } from './startOpts'
 import { irreversible } from '@shared/irreversible'
@@ -927,8 +928,13 @@ export const useAiStore = create<AiState>((set, get) => {
       // Приписка к системному промпту движка. Едет каждым ходом, но действует с
       // ЗАПУСКА сессии — то есть в беседах, начатых после изменения. Так и
       // написано в настройке: обещать немедленность значило бы соврать.
-      ...(settings.ai.enginePromptExtra.trim()
-        ? { appendPrompt: settings.ai.enginePromptExtra.trim() }
+      ...(enginePromptAppend(settings.ai.enginePromptExtra, settings.ai.backgroundLongCommands)
+        ? {
+            appendPrompt: enginePromptAppend(
+              settings.ai.enginePromptExtra,
+              settings.ai.backgroundLongCommands
+            )
+          }
         : {}),
       // SECURITY: permissionMode is always 'default' and gate-weakening comes only
       // from АВТОПИЛОТ — see nativeGateOpts, which owns that invariant and is

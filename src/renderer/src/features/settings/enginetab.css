@@ -178,3 +178,23 @@
   font-size: 12.5px;
   color: var(--fg-dim);
 }
+
+/* Просьба про фоновые команды стоит НАД полем приписки: она про тот же
+   системный промпт, и разносить их по разным углам значило бы прятать связь. */
+.zy-eng-bgask {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 2px 0 10px;
+  cursor: pointer;
+}
+.zy-eng-bgask input {
+  margin-top: 2px;
+  flex: none;
+}
+.zy-eng-bgask-title {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: var(--fg);
+}

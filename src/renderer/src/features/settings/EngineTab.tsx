@@ -437,6 +437,35 @@ const UPDATE_CMD = 'claude update'
  * немедленность: состав промпта движку задаётся при запуске сессии, а сессия
  * живёт весь разговор.
  */
+/**
+ * Просить агента запускать долгие команды в фоне.
+ *
+ * ПОЧЕМУ ЭТО ЗДЕСЬ, А НЕ КНОПКОЙ У КОМАНДЫ. Увести УЖЕ идущую команду в фон
+ * движок не умеет: на просьбу отвечает «увёл» и всё равно ждёт её до конца
+ * (измерено живым прогоном inc-35). Запустить в фоне СРАЗУ он умеет, и решает
+ * это в момент вызова — то есть повлиять можно только промптом.
+ *
+ * НАЗВАНО ПРОСЬБОЙ НАРОЧНО. Выполнит модель или нет — её дело; тумблер с
+ * обещанием «все долгие команды уйдут в фон» врал бы о чужом поведении.
+ */
+function BackgroundLongToggle(): React.JSX.Element {
+  const on = useSettingsStore((s) => s.settings.ai.backgroundLongCommands)
+  const update = useSettingsStore((s) => s.update)
+  return (
+    <label className="zy-eng-bgask">
+      <input
+        type="checkbox"
+        checked={on}
+        onChange={(e) => void update({ ai: { backgroundLongCommands: e.target.checked } as never })}
+      />
+      <span>
+        <span className="zy-eng-bgask-title">{t('eng.bgLong')}</span>
+        <span className="zy-eng-note">{t('eng.bgLongWhy')}</span>
+      </span>
+    </label>
+  )
+}
+
 function AppendPrompt(): React.JSX.Element {
   const value = useSettingsStore((s) => s.settings.ai.enginePromptExtra)
   const update = useSettingsStore((s) => s.update)
@@ -446,6 +475,7 @@ function AppendPrompt(): React.JSX.Element {
     <>
       <div className="zy-section-label">{t('eng.append')}</div>
       <div className="zy-eng-note">{t('eng.appendWhen')}</div>
+      <BackgroundLongToggle />
       <textarea
         className="zy-input zy-textarea"
         rows={3}

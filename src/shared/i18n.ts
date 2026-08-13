@@ -1046,6 +1046,9 @@ export const RU: Dict = {
   'eng.append': 'Приписка к системному промпту',
   'eng.appendWhen':
     'Дополняет промпт движка, а не заменяет его. Действует в беседах, начатых после изменения.',
+  'eng.bgLong': 'Просить запускать долгие команды в фоне',
+  'eng.bgLongWhy':
+    'Сборку, тесты и dev-сервер агент запустит в фоне и продолжит разговор, а результат заберёт позже. Увести УЖЕ идущую команду в фон движок не умеет — поэтому это просьба на старте, а не кнопка. Выполнит её модель или нет, решает она.',
   'eng.appendPh': 'Например: отвечай кратко, без вступлений',
 
   // --- панель разрешений (inc-28)
@@ -3134,6 +3137,9 @@ export const EN: Dict = {
   'eng.append': 'Appended to the system prompt',
   'eng.appendWhen':
     'Adds to the engine prompt instead of replacing it. Applies to conversations started after the change.',
+  'eng.bgLong': 'Ask the agent to start long commands in the background',
+  'eng.bgLongWhy':
+    'Builds, test suites and dev servers get started in the background so the conversation keeps moving, with the result collected later. The engine cannot move an already-running command to the background — hence a request up front rather than a button. Whether the model honours it is up to the model.',
   'eng.appendPh': 'For example: answer briefly, no preamble',
 
   // --- permissions panel (inc-28)
