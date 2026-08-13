@@ -74,3 +74,64 @@ export function taskOutcome(
 export function taskDone(subtype: string, outcome: TaskOutcome | undefined): boolean {
   return subtype === 'task_notification' || !!outcome
 }
+
+/** Живая фоновая задача — как её называет уровневое сообщение движка. */
+export interface BackgroundTask {
+  taskId: string
+  /** Род: `local_bash`, `local_agent`, `local_workflow` и что появится дальше. */
+  taskType: string
+  description: string
+}
+
+/**
+ * Кто сейчас в фоне — из `background_tasks_changed`.
+ *
+ * ЭТО УРОВЕНЬ, А НЕ РЕБРО, и документация SDK настаивает на этом отдельно:
+ * набор надо ЗАМЕНЯТЬ целиком, а не собирать из пар «началось / кончилось».
+ * Собранное из рёбер множество однажды потеряет пару — и счётчик «в фоне 1»
+ * останется гореть навсегда над пустотой. Поэтому прежнее множество здесь не
+ * участвует вовсе: функция принимает только payload.
+ *
+ * РОД НЕ ФИЛЬТРУЕМ, в отличие от `taskHidden`. Там `local_bash` прячется
+ * потому, что у команды оболочки есть своя карточка в ленте. Здесь наоборот:
+ * ушедшая в фон `npm run build` — главное, что человек хочет видеть в счётчике.
+ */
+export function backgroundSet(
+  payload: { task_id?: string; task_type?: string; description?: string }[] | undefined
+): BackgroundTask[] {
+  if (!Array.isArray(payload)) return []
+  const seen = new Set<string>()
+  const out: BackgroundTask[] = []
+  for (const t of payload) {
+    const id = typeof t?.task_id === 'string' ? t.task_id.trim() : ''
+    if (!id || seen.has(id)) continue
+    seen.add(id)
+    out.push({
+      taskId: id,
+      taskType: typeof t.task_type === 'string' ? t.task_type : '',
+      description: typeof t.description === 'string' ? t.description.trim() : ''
+    })
+  }
+  return out
+}
+
+/**
+ * Показывать ли кнопку «В фон».
+ *
+ * Три отказа, и каждый — про то, что кнопка иначе соврёт:
+ *
+ * - задача уже кончилась: отправлять в фон нечего;
+ * - она уже в фоне: движок вернёт «ничего не сделал», а человек решит, что
+ *   сделал;
+ * - `tool_use` неизвестен: адресовать задачу движку нечем. Без него можно
+ *   только «всё в фон», а это другая кнопка и другое обещание.
+ */
+export function canBackground(task: {
+  phase?: 'started' | 'progress' | 'done'
+  backgrounded?: boolean
+  toolUseId?: string
+}): boolean {
+  if (task.phase === 'done') return false
+  if (task.backgrounded) return false
+  return !!task.toolUseId
+}

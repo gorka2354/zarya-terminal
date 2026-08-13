@@ -134,6 +134,12 @@ export const RU: Dict = {
   'feed.waveFailed': 'не смогли: {n}',
   'feed.waveHalted': 'остановлено: {n}',
   'feed.inBackground': 'в фоне',
+  'feed.bgRunning': 'В фоне работает: {n}',
+  'feed.bgNote': 'Фоновая работа живёт, пока открыта эта беседа: закроете Зарю — её не станет.',
+  'feed.toBackground': 'В фон',
+  'feed.toBackgroundAsked': 'ушла в фон…',
+  'feed.toBackgroundHint':
+    'Ход пойдёт дальше, а задача останется работать. Движок скажет, когда она кончится.',
   'feed.outcomeShow': 'показать весь вывод',
   'feed.outcomeHide': 'свернуть вывод',
   'feed.compacting': 'сворачиваю разговор в пересказ…',
@@ -1761,6 +1767,13 @@ export const EN: Dict = {
   'feed.waveFailed': "didn't make it: {n}",
   'feed.waveHalted': 'stopped: {n}',
   'feed.inBackground': 'in background',
+  'feed.bgRunning': 'Running in the background: {n}',
+  'feed.bgNote':
+    'Background work lives as long as this conversation does — close Zarya and it is gone.',
+  'feed.toBackground': 'To background',
+  'feed.toBackgroundAsked': 'going…',
+  'feed.toBackgroundHint':
+    'The turn moves on and the task keeps running. The engine reports when it settles.',
   'feed.outcomeShow': 'show the full output',
   'feed.outcomeHide': 'collapse the output',
   'feed.compacting': 'folding the conversation into a summary…',

@@ -69,7 +69,7 @@ import {
 } from '@shared/images'
 import { partialArg } from '@shared/partialJson'
 import { toolFacts } from '@shared/toolFacts'
-import { taskDone, taskHidden, taskOutcome } from '@shared/agentTasks'
+import { backgroundSet, taskDone, taskHidden, taskOutcome } from '@shared/agentTasks'
 import { foldContextParts } from '@shared/contextParts'
 import {
   foldMcpTokens,
@@ -643,6 +643,8 @@ export class ClaudeCodeDriver implements AgentDriver {
     mcp: true,
     // query.stopTask(taskId) — остановить одну задачу, не обрывая ход.
     stopTask: true,
+    // query.backgroundTasks(toolUseId?) — увести работу в фон, как Ctrl+B.
+    backgroundTasks: true,
     // permissionMode: 'plan' в опциях запуска + setPermissionMode на ходу.
     planMode: true,
     // additionalDirectories в опциях запуска: папку сверх рабочей можно выдать.
@@ -1075,6 +1077,16 @@ export class ClaudeCodeDriver implements AgentDriver {
         : {})
     }
     this.sessions.set(requestId, session)
+    /*
+     * СБРОС ФОНОВОГО НАБОРА при (пере)запуске процесса движка.
+     *
+     * `background_tasks_changed` — уровень «на эту минуту», и при старте движок
+     * НЕ шлёт ничего: документация SDK требует сбрасывать набор самим и ждать
+     * первого изменения состава. Без этого после перезапуска — а он случается
+     * при выдаче новой рабочей папки и при возобновлении беседы — на экране
+     * остался бы список задач прошлой жизни, которых уже нет ни одной.
+     */
+    this.emit(requestId, { type: 'background', tasks: [] })
     if (session.cwd) {
       this.lastCwd.set(requestId, session.cwd)
       // Столько же, сколько снимков: беседы за день копятся, а папка нужна
@@ -1385,6 +1397,20 @@ export class ClaudeCodeDriver implements AgentDriver {
              * показывай в ленте»), и обычные команды оболочки. Незнакомый род
              * задачи ПОКАЗЫВАЕТСЯ: молчание о новом — та же ошибка второй раз.
              */
+            /*
+             * КТО В ФОНЕ — уровнем от движка, а не нашим подсчётом.
+             *
+             * Единственный источник правды о составе фоновых задач. Свой счёт
+             * по рёбрам «началось / кончилось» однажды потеряет пару, и человек
+             * останется с горящим «в фоне 1» над пустотой.
+             */
+            if (msg.subtype === 'background_tasks_changed') {
+              const m = msg as unknown as {
+                tasks?: { task_id?: string; task_type?: string; description?: string }[]
+              }
+              this.emit(requestId, { type: 'background', tasks: backgroundSet(m.tasks) })
+              break
+            }
             if (
               msg.subtype === 'task_started' ||
               msg.subtype === 'task_progress' ||
@@ -2166,6 +2192,40 @@ export class ClaudeCodeDriver implements AgentDriver {
     try {
       await q.stopTask(taskId)
       return { ok: true }
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : String(e) }
+    }
+  }
+
+  /**
+   * Увести работу в фон: ход продолжится, а задача останется работать.
+   *
+   * `toolUseId` адресует ОДНУ задачу; без него уходит всё идущее — ровно то,
+   * что делает Ctrl+B в терминале.
+   *
+   * Возврат движка (`false`) значит буквально одно: адрес дали, а под ним
+   * ничего идущего не нашлось. Это НЕ ошибка вызова, и путать их нельзя — на
+   * экране это разные слова. Что задача действительно ушла в фон, скажет её
+   * собственное событие с `is_backgrounded`, а не успех этой просьбы.
+   */
+  async backgroundTasks(
+    requestId: string,
+    toolUseId?: string
+  ): Promise<{
+    ok: boolean
+    matched?: boolean
+    error?: string
+    reason?: 'no-session' | 'unsupported'
+  }> {
+    const live = this.sessions.get(requestId)
+    if (!live) return { ok: false, reason: 'no-session' }
+    const q = live.query as unknown as {
+      backgroundTasks?: (id?: string) => Promise<boolean>
+    }
+    if (typeof q.backgroundTasks !== 'function') return { ok: false, reason: 'unsupported' }
+    try {
+      const matched = await q.backgroundTasks(toolUseId)
+      return { ok: true, matched }
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : String(e) }
     }

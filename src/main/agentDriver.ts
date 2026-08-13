@@ -101,6 +101,25 @@ export interface AgentDriver {
     taskId: string
   ): Promise<{ ok: boolean; error?: string; reason?: 'no-session' | 'unsupported' }>
   /**
+   * Увести работу в фон (гейт: `capabilities.backgroundTasks`).
+   *
+   * `toolUseId` адресует ОДНУ задачу; без него уходит всё идущее — то же, что
+   * Ctrl+B в терминале.
+   *
+   * `matched: false` значит «адрес дали, а под ним ничего идущего нет». Это не
+   * ошибка вызова, и на экране это разные слова. Что задача действительно ушла,
+   * скажет её собственное событие, а не успех этой просьбы.
+   */
+  backgroundTasks?(
+    requestId: string,
+    toolUseId?: string
+  ): Promise<{
+    ok: boolean
+    matched?: boolean
+    error?: string
+    reason?: 'no-session' | 'unsupported'
+  }>
+  /**
    * Принять новый состав рабочих папок беседы (гейт: `capabilities.directories`).
    *
    * Папки — опция ЗАПУСКА, а живая сессия переживает все ходы беседы. Драйвер

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { taskDone, taskHidden, taskOutcome } from '@shared/agentTasks'
+import { backgroundSet, canBackground, taskDone, taskHidden, taskOutcome } from '@shared/agentTasks'
 
 /**
  * Классификация задач движка — тот самый код, где жила НАСТОЯЩАЯ ошибка:
@@ -89,5 +89,80 @@ describe('закончилась ли задача', () => {
     expect(taskDone('task_updated', undefined)).toBe(false)
     expect(taskDone('task_progress', undefined)).toBe(false)
     expect(taskDone('task_started', undefined)).toBe(false)
+  })
+})
+
+/**
+ * Уровневый набор фоновых задач. Документация SDK предупреждает прямо: это
+ * УРОВЕНЬ, а не рёбра, и собирать его из пар «началось / кончилось» нельзя —
+ * одна потерянная пара оставит счётчик гореть над пустотой навсегда.
+ */
+describe('backgroundSet — кто в фоне прямо сейчас', () => {
+  it('заменяет набор целиком, а не дополняет прежний', () => {
+    const было = backgroundSet([{ task_id: 'a', task_type: 'local_bash', description: 'сборка' }])
+    expect(было).toHaveLength(1)
+    // Прежнее множество в расчёте не участвует вовсе — на входе только payload.
+    expect(
+      backgroundSet([{ task_id: 'b', task_type: 'local_agent', description: 'поиск' }])
+    ).toEqual([{ taskId: 'b', taskType: 'local_agent', description: 'поиск' }])
+  })
+
+  it('пустой набор — значит в фоне никого', () => {
+    expect(backgroundSet([])).toEqual([])
+    expect(backgroundSet(undefined)).toEqual([])
+  })
+
+  it('незнакомый род сохраняется — глушить новое мы уже пробовали', () => {
+    expect(
+      backgroundSet([{ task_id: 'x', task_type: 'remote_agent', description: 'что-то' }])
+    ).toEqual([{ taskId: 'x', taskType: 'remote_agent', description: 'что-то' }])
+  })
+
+  it('команда оболочки в фоне НЕ прячется, в отличие от ленты', () => {
+    // taskHidden прячет local_bash: у команды есть своя карточка. В счётчике
+    // фона она, наоборот, главная — ради неё туда и уходят.
+    const set = backgroundSet([
+      { task_id: 'b1', task_type: 'local_bash', description: 'npm run build' }
+    ])
+    expect(set).toHaveLength(1)
+    expect(taskHidden('local_bash', undefined)).toBe(true)
+  })
+
+  it('повторы по идентификатору схлопываются', () => {
+    const set = backgroundSet([
+      { task_id: 'a', task_type: 'local_bash', description: 'раз' },
+      { task_id: 'a', task_type: 'local_bash', description: 'два' }
+    ])
+    expect(set).toHaveLength(1)
+    expect(set[0].description).toBe('раз')
+  })
+
+  it('мусор без идентификатора выбрасывается, а не роняет разбор', () => {
+    expect(backgroundSet([{ description: 'ничей' }, { task_id: '  ' }])).toEqual([])
+  })
+
+  it('недостающие поля не превращаются в undefined на экране', () => {
+    expect(backgroundSet([{ task_id: 'a' }])).toEqual([
+      { taskId: 'a', taskType: '', description: '' }
+    ])
+  })
+})
+
+describe('canBackground — когда кнопка «В фон» не соврёт', () => {
+  it('идущая задача с известным вызовом — можно', () => {
+    expect(canBackground({ phase: 'progress', toolUseId: 'tu_1' })).toBe(true)
+    expect(canBackground({ phase: 'started', toolUseId: 'tu_1' })).toBe(true)
+  })
+
+  it('законченную в фон не отправить', () => {
+    expect(canBackground({ phase: 'done', toolUseId: 'tu_1' })).toBe(false)
+  })
+
+  it('уже фоновую — тоже: движок ответит «ничего не сделал»', () => {
+    expect(canBackground({ phase: 'progress', backgrounded: true, toolUseId: 'tu_1' })).toBe(false)
+  })
+
+  it('без tool_use адресовать нечем — это уже «всё в фон», другое обещание', () => {
+    expect(canBackground({ phase: 'progress' })).toBe(false)
   })
 })

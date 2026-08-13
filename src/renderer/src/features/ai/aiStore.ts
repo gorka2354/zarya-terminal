@@ -26,6 +26,7 @@ import { addCost } from '@shared/cost'
 import { registerAiBridge } from './aiBridge'
 import { gateLabel } from './gates'
 import { applySubagentEvent, type SubagentRun } from './subagents'
+import type { BackgroundTask } from '@shared/agentTasks'
 import { sameModel } from './modelMatch'
 import { nativeGateOpts } from './startOpts'
 import { irreversible } from '@shared/irreversible'
@@ -180,6 +181,18 @@ export interface Conversation {
   interrupted?: number[]
   /** Live subagent wave, keyed by task id. Cleared when the turn ends. */
   subagents?: Record<string, SubagentRun>
+  /**
+   * КТО СЕЙЧАС В ФОНЕ — набор целиком, как его называет движок.
+   *
+   * Не считаем сами: движок шлёт полный состав при каждом изменении, и
+   * заменять его целиком — прямое требование SDK. Своя арифметика по рёбрам
+   * «началось / кончилось» однажды потеряет пару, и счётчик «в фоне 1»
+   * останется гореть над пустотой.
+   *
+   * Живёт в памяти и не сохраняется: фоновая задача умирает вместе с процессом
+   * движка, и поднимать её из файла значило бы показывать список мертвецов.
+   */
+  background?: BackgroundTask[]
   /** Working directory the conversation was opened in (folder the AI worked in). */
   cwd?: string
   /**
@@ -970,6 +983,15 @@ export const useAiStore = create<AiState>((set, get) => {
         const cur = useUiStore.getState().claudeStatus
         useUiStore.getState().set({ claudeStatus: { ...cur, usage: { ...cur.usage, ...u } } })
       }
+      return
+    }
+    if (ev.type === 'background') {
+      /*
+       * Набор ЗАМЕНЯЕТСЯ целиком — не сливается с прежним. Пустой список это
+       * законное «в фоне никого», в том числе после перезапуска движка.
+       */
+      const conv = get().conversations.find((c) => c.id === requestId)
+      if (conv) patchConversation(conv.id, (c) => ({ ...c, background: ev.tasks }))
       return
     }
     if (ev.type === 'subagent') {
@@ -2507,6 +2529,12 @@ function seedPatch(convId: string, fn: (c: Conversation) => Conversation): void 
          * ходу привязалась точка.
          */
         checkpointing: c.checkpointing === true,
+        /*
+         * Кто в фоне — наблюдаемое состояние: на нём держится счётчик и вся
+         * проверка inc-35. По экрану это не проверить — карточка уехавшей в фон
+         * задачи выглядит как обычная, задержавшаяся.
+         */
+        background: c.background ?? [],
         turnMarks: c.messages.map((m) => ({ role: m.role, turnId: m.turnId ?? null })),
         userTexts: c.messages
           .filter((m) => m.role === 'user')

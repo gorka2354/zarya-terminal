@@ -106,6 +106,8 @@ export const CH = {
   /** Переподключить сервер живой беседы. */
   agentMcpReconnect: 'agent:mcp-reconnect',
   agentStopTask: 'agent:stop-task',
+  /** Увести идущую работу в фон: одну задачу или всё сразу (Ctrl+B движка). */
+  agentBackgroundTasks: 'agent:background-tasks',
   agentApplyDirs: 'agent:apply-dirs',
   agentHealth: 'agent:health',
   /** main -> renderer: открыть папку, названную в командной строке. */

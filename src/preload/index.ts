@@ -165,6 +165,9 @@ const api = {
     /** Остановить ОДНУ задачу движка, не обрывая ход. */
     stopTask: (engine: AgentEngine, requestId: string, taskId: string) =>
       ipcRenderer.invoke(CH.agentStopTask, engine, requestId, taskId),
+    /** Увести работу в фон: с `toolUseId` — одну задачу, без него — всё идущее. */
+    backgroundTasks: (engine: AgentEngine, requestId: string, toolUseId?: string) =>
+      ipcRenderer.invoke(CH.agentBackgroundTasks, engine, requestId, toolUseId),
     /** Принять новый состав рабочих папок беседы (папки едут со следующим ходом). */
     applyDirs: (engine: AgentEngine, requestId: string) =>
       ipcRenderer.invoke(CH.agentApplyDirs, engine, requestId),

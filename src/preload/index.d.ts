@@ -195,6 +195,20 @@ export interface ZaryaApi {
       taskId: string
     ): Promise<{ ok: boolean; error?: string; reason?: 'no-session' | 'unsupported' }>
     /**
+     * Увести работу в фон. `toolUseId` — одна задача, без него всё идущее.
+     * `matched: false` — адрес дали, а идущего под ним нет; это не ошибка.
+     */
+    backgroundTasks(
+      engine: AgentEngine,
+      requestId: string,
+      toolUseId?: string
+    ): Promise<{
+      ok: boolean
+      matched?: boolean
+      error?: string
+      reason?: 'no-session' | 'unsupported'
+    }>
+    /**
      * Принять новый состав рабочих папок беседы. Сам список сюда не едет — он
      * придёт со следующим ходом; это просьба применить его к живой сессии.
      */

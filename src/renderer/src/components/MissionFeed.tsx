@@ -9,6 +9,7 @@ import {
   useState
 } from 'react'
 import type { AiContentPart, BlockRecord } from '@shared/types'
+import { canBackground } from '@shared/agentTasks'
 import { onBus } from '@/lib/bus'
 import { currentLang, t, useLang } from '@/lib/i18n'
 import { paneDraft } from '@/state/paneDrafts'
@@ -1000,6 +1001,7 @@ function AgentSection({
           заняты его помощники прямо сейчас. */}
       <PlanPanel plan={conv.plan} />
       <SubagentWave conv={conv} />
+      <BackgroundStrip conv={conv} />
       {conv.compacting && (
         <div className="zy-mf-typing zy-mf-typing-compact">
           <span className="zy-mf-spinner" />
@@ -1097,6 +1099,112 @@ function StopTaskButton({
 }
 
 /**
+ * Увести задачу в фон: ход пойдёт дальше, а она останется работать.
+ *
+ * Противоположное решение «Остановить», стоящей рядом: там работу прекращают,
+ * здесь — перестают её ЖДАТЬ. До этого выбор был из двух зол: ждать долгую
+ * сборку или убить её вместе с потраченным временем.
+ *
+ * Кнопки НЕТ, когда движок так не умеет, когда задача уже в фоне (движок
+ * ответил бы «ничего не сделал», а человек решил бы, что сделал) и когда у
+ * задачи неизвестен вызов — адресовать её нечем.
+ *
+ * Успех кнопки не рисует «в фоне»: он значит лишь, что просьба ушла. Пометку
+ * поставит сам движок, прислав задаче признак `is_backgrounded`.
+ */
+function BackgroundTaskButton({
+  conv,
+  run
+}: {
+  conv: Conversation
+  run: { taskId: string; toolUseId?: string; backgrounded?: boolean; done?: boolean }
+}): React.JSX.Element | null {
+  useLang()
+  const [asked, setAsked] = useState(false)
+  const caps = useUiStore((s) => s.agentCaps)
+  const engine = conv.engine
+  if (engine === 'builtin' || !caps?.[engine]?.backgroundTasks) return null
+  if (
+    !canBackground({
+      phase: run.done ? 'done' : 'progress',
+      backgrounded: run.backgrounded,
+      toolUseId: run.toolUseId
+    })
+  ) {
+    return null
+  }
+  return (
+    <button
+      type="button"
+      className="zy-mf-wave-bgbtn"
+      disabled={asked}
+      title={t('feed.toBackgroundHint')}
+      onClick={() => {
+        setAsked(true)
+        void window.zarya.agent.backgroundTasks(engine, conv.id, run.toolUseId)
+      }}
+    >
+      {asked ? t('feed.toBackgroundAsked') : t('feed.toBackground')}
+    </button>
+  )
+}
+
+/**
+ * ЧТО РАБОТАЕТ В ФОНЕ ПРЯМО СЕЙЧАС.
+ *
+ * Волна выше — про ТЕКУЩИЙ ход и исчезает вместе с ним. Фоновая задача этот
+ * ход переживает: в том и смысл, что её перестали ждать. Без отдельной строки
+ * она пропадала бы с экрана насовсем, и вопрос «что у меня ещё работает»
+ * оставался бы без ответа.
+ *
+ * Состав берём ЦЕЛИКОМ от движка (`background_tasks_changed`) и ничего не
+ * считаем сами: свой счёт по рёбрам однажды потеряет пару и оставит строку
+ * гореть над пустотой.
+ *
+ * Вывода фоновой задачи здесь нет и быть не может: `BashOutput` — инструмент
+ * САМОГО агента, движок отдаёт вывод ему, а не нам. Показывать пустое окно
+ * «вывод» значило бы обещать то, чего у нас нет.
+ */
+function BackgroundStrip({ conv }: { conv: Conversation }): React.JSX.Element | null {
+  useLang()
+  const caps = useUiStore((s) => s.agentCaps)
+  const tasks = conv.background ?? []
+  if (!tasks.length) return null
+  const engine = conv.engine
+  const canStop = engine !== 'builtin' && !!caps?.[engine]?.stopTask
+  return (
+    <div className="zy-mf-bg">
+      <div className="zy-mf-bg-head">
+        <span className="zy-mf-bg-dot" aria-hidden />
+        {t('feed.bgRunning', { n: tasks.length })}
+      </div>
+      {tasks.slice(0, 4).map((task) => (
+        <div key={task.taskId} className="zy-mf-bg-row">
+          <span className="zy-mf-bg-what">{task.description || task.taskId}</span>
+          {canStop && (
+            <button
+              type="button"
+              className="zy-mf-wave-stop"
+              title={t('feed.stopTaskHint')}
+              onClick={() => void window.zarya.agent.stopTask(engine, conv.id, task.taskId)}
+            >
+              {t('feed.stopTask')}
+            </button>
+          )}
+        </div>
+      ))}
+      {tasks.length > 4 && (
+        <div className="zy-mf-bg-row zy-mf-bg-row--more">
+          {t('feed.andMore', { n: tasks.length - 4 })}
+        </div>
+      )}
+      {/* Честная граница: фон живёт в процессе движка и умирает вместе с ним. */}
+      <div className="zy-mf-bg-note">{t('feed.bgNote')}</div>
+    </div>
+  )
+}
+
+/**
  * The subagent wave — one line instead of a stack of identical cards.
  *
  * Claude Code spawns these for research and parallel work, and reports each
@@ -1183,6 +1291,7 @@ function SubagentWave({ conv }: { conv: Conversation }): React.JSX.Element | nul
               Без пометки она читалась бы как обычная, задержавшаяся. */}
           {r.backgrounded && <span className="zy-mf-wave-bg">{t('feed.inBackground')}</span>}
           {r.lastTool && <span className="zy-mf-wave-tool">{r.lastTool}</span>}
+          <BackgroundTaskButton conv={conv} run={r} />
           <StopTaskButton conv={conv} taskId={r.taskId} />
         </div>
       ))}
@@ -2756,6 +2865,18 @@ const ToolCard = memo(function ToolCard({
             · {t('feed.pulseLost', { time: fmtElapsed(quiet) })}
           </span>
         )}
+        {/*
+          КНОПКИ «В ФОН» ЗДЕСЬ НЕТ, И ЭТО ПРОВЕРЕНО, А НЕ ЗАБЫТО.
+          Движок обещает `backgroundTasks` для «Bash commands and subagents»,
+          но на обычную команду оболочки отвечает `matched: true` и НЕ уводит
+          её: живой прогон против Claude Code 2.1.228 показал, что ход всё
+          равно ждёт команду до конца (73 с при команде на 60 с), тогда как
+          субагент отпускает ход за 6 с. Кнопка здесь была бы ровно тем
+          враньём, против которого весь проект: человек нажал, «ушло в фон», а
+          агент стоит.
+          Долгую команду в фон умеет запускать сам агент (`run_in_background`),
+          и такую задачу мы показываем в счётчике — см. `background`.
+        */}
         {/*
           Движок повторяет упавшую подзадачу. Без этой строки повтор выглядит
           как «всё ещё идёт», и человек ждёт результата первой попытки.

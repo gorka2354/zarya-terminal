@@ -65,7 +65,13 @@ export function compareVersions(a: string, b: string): number {
       const n = Number.parseInt(p, 10)
       return Number.isFinite(n) ? n : 0
     })
-    const pre = dash < 0 ? [] : clean.slice(dash + 1).split('.').filter(Boolean)
+    const pre =
+      dash < 0
+        ? []
+        : clean
+            .slice(dash + 1)
+            .split('.')
+            .filter(Boolean)
     return { core, pre }
   }
   const x = split(a)

@@ -589,6 +589,14 @@ export function registerIpc(ctx: IpcContext): void {
       return driver.stopTask(requestId, taskId)
     }
   )
+  ipcMain.handle(
+    CH.agentBackgroundTasks,
+    async (_e, engine: AgentEngine, requestId: string, toolUseId?: string) => {
+      const driver = driverFor(engine)
+      if (!driver?.backgroundTasks) return { ok: false, reason: 'unsupported' as const }
+      return driver.backgroundTasks(requestId, toolUseId)
+    }
+  )
   /*
    * Новый состав рабочих папок беседы. Сам список сюда не едет: он придёт со
    * следующим `start`, а это просьба принять его к сведению — иначе состав жил
