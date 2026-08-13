@@ -48,9 +48,9 @@ const app = await electron.launch({
   args: [join(root, 'out', 'main', 'index.js')],
   env: {
     ...process.env,
-      // Тихо: окно уезжает за край экрана, чтобы прогон не отбирал фокус
-      // посреди работы человека. ZARYA_SHOW=1 возвращает его на экран.
-      ...(process.env.ZARYA_SHOW ? {} : { ZARYA_QA_OFFSCREEN: '1' }),
+    // Тихо: окно уезжает за край экрана, чтобы прогон не отбирал фокус
+    // посреди работы человека. ZARYA_SHOW=1 возвращает его на экран.
+    ...(process.env.ZARYA_SHOW ? {} : { ZARYA_QA_OFFSCREEN: '1' }),
     ZARYA_USER_DATA: userData,
     ZARYA_FAKE_AGENT: '1',
     ZARYA_NO_UPDATE_CHECK: '1',
@@ -120,11 +120,19 @@ try {
   ok('содержимое центрируется', /center/.test(hero?.justify ?? ''), hero?.justify)
   // `safe` — не украшение: обычный center при нехватке высоты выносит ВЕРХ
   // содержимого за границу, и знак уезжает под шапку.
-  ok('и центрируется безопасно — верх не уедет под шапку', /safe/.test(hero?.justify ?? ''), hero?.justify)
+  ok(
+    'и центрируется безопасно — верх не уедет под шапку',
+    /safe/.test(hero?.justify ?? ''),
+    hero?.justify
+  )
   ok('знак не касается шапки', (hero?.gap ?? 0) > 4, hero?.gap)
   // Pixelify Sans рисует кириллический мягкий знак высотой с заглавную:
   // «начинатЬ». Заголовок берёт Handjet, где он строчный.
-  ok('заголовок не на шрифте с заглавным «ь»', !/Pixelify/.test(hero?.titleFont ?? ''), hero?.titleFont)
+  ok(
+    'заголовок не на шрифте с заглавным «ь»',
+    !/Pixelify/.test(hero?.titleFont ?? ''),
+    hero?.titleFont
+  )
 
   console.log('\n[3] «Ждёт» и «работает» — полосой сверху, а не рамкой')
   // Гейт: фейковый агент останавливается и ждёт решения человека.
@@ -194,7 +202,10 @@ try {
   // Ждущая панель, если она не активна, рамку НЕ красит: иначе снова два
   // одинаковых признака.
   const waitingIsFocused = await page.evaluate(
-    () => !![...document.querySelectorAll('.zy-pane--waiting')][0]?.classList.contains('zy-pane--focused')
+    () =>
+      !![...document.querySelectorAll('.zy-pane--waiting')][0]?.classList.contains(
+        'zy-pane--focused'
+      )
   )
   ok(
     'ждущая не притворяется активной рамкой',
@@ -282,13 +293,25 @@ try {
   // А теперь СМЕШАННАЯ лента: команды выше беседы. Здесь полоса — настоящая
   // граница, и убрать её значило бы потерять смысл, а не шум.
   const sid = await page.evaluate(() => {
-    const pane = [...document.querySelectorAll('.zy-pane')].find((p) => p.querySelector('.zy-mf-user'))
+    const pane = [...document.querySelectorAll('.zy-pane')].find((p) =>
+      p.querySelector('.zy-mf-user')
+    )
     return pane?.getAttribute('data-session')
   })
-  await page.evaluate((x) => window.__zaryaSeedBlocks?.(x, 2, 3), sid)
+  /*
+   * Блоки «запущены» ДЕСЯТЬ МИНУТ НАЗАД, а не сейчас.
+   *
+   * С тех пор как лента делит блоки по времени разговора, свежая команда
+   * ложится ПОД беседу — и полосы там быть не должно: отделять сверху нечего.
+   * Смешанная лента, ради которой полоса и существует, — это команды, набранные
+   * ДО разговора. Возраст и собирает ровно эту сцену.
+   */
+  await page.evaluate((x) => window.__zaryaSeedBlocks?.(x, 2, 3, 10 * 60_000), sid)
   await page.waitForTimeout(1200)
   const mixed = await page.evaluate(() => {
-    const pane = [...document.querySelectorAll('.zy-pane')].find((p) => p.querySelector('.zy-mf-user'))
+    const pane = [...document.querySelectorAll('.zy-pane')].find((p) =>
+      p.querySelector('.zy-mf-user')
+    )
     const d = pane?.querySelector('.zy-mf-divider')
     return {
       hasDivider: !!d,
@@ -320,7 +343,10 @@ try {
       if (r.width < 300 || r.height > 50 || r.height < 1) continue
       if (r.top - paneTop > 120) continue
       if (cs.borderBottomWidth !== '0px' && cs.borderBottomStyle !== 'none')
-        lines.push({ cls: String(el.className).slice(0, 24) || el.tagName, h: Math.round(r.height) })
+        lines.push({
+          cls: String(el.className).slice(0, 24) || el.tagName,
+          h: Math.round(r.height)
+        })
     }
     return {
       lines,
@@ -348,7 +374,11 @@ try {
     const b = [...document.querySelectorAll('.zy-agentbar-fuel-pult')][0]
     if (!b) return null
     const cs = getComputedStyle(b)
-    return { border: cs.borderTopWidth, color: cs.borderTopColor, w: Math.round(b.getBoundingClientRect().width) }
+    return {
+      border: cs.borderTopWidth,
+      color: cs.borderTopColor,
+      w: Math.round(b.getBoundingClientRect().width)
+    }
   })
   ok('у неё есть рамка', pult?.border === '1px', pult)
   ok(

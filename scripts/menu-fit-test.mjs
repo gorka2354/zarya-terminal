@@ -32,13 +32,17 @@ const ok = (name, cond, extra) => {
 
 const app = await electron.launch({
   args: [join(root, 'out', 'main', 'index.js')],
-  env: { ...process.env,
-      // Тихо: окно уезжает за край экрана, чтобы прогон не отбирал фокус
-      // посреди работы человека. ZARYA_SHOW=1 возвращает его на экран.
-      ...(process.env.ZARYA_SHOW ? {} : { ZARYA_QA_OFFSCREEN: '1' }), ZARYA_USER_DATA: userData,
-      // Первый экран в прогонах не нужен: он про нового человека, а здесь
-      // проверяется другое — и он вставал бы поверх проверяемого окна.
-      ZARYA_NO_ONBOARDING: '1', NODE_ENV: 'production' }
+  env: {
+    ...process.env,
+    // Тихо: окно уезжает за край экрана, чтобы прогон не отбирал фокус
+    // посреди работы человека. ZARYA_SHOW=1 возвращает его на экран.
+    ...(process.env.ZARYA_SHOW ? {} : { ZARYA_QA_OFFSCREEN: '1' }),
+    ZARYA_USER_DATA: userData,
+    // Первый экран в прогонах не нужен: он про нового человека, а здесь
+    // проверяется другое — и он вставал бы поверх проверяемого окна.
+    ZARYA_NO_ONBOARDING: '1',
+    NODE_ENV: 'production'
+  }
 })
 
 /** Геометрия меню относительно окна. */
@@ -123,17 +127,38 @@ try {
       truncated: s.scrollWidth > s.clientWidth + 1
     }))
   )
-  ok('у пункта есть подсказка с полным текстом', titles.every((t) => t.title === t.full), titles[0])
-  ok('длинный заголовок обрезан — значит подсказка и нужна', titles.some((t) => t.truncated), titles[0])
+  ok(
+    'у пункта есть подсказка с полным текстом',
+    titles.every((t) => t.title === t.full),
+    titles[0]
+  )
+  ok(
+    'длинный заголовок обрезан — значит подсказка и нужна',
+    titles.some((t) => t.truncated),
+    titles[0]
+  )
 
   console.log('\n[Escape при фокусе в терминале] меню всё равно закрывается')
   // xterm вешает свой keydown на textarea в фазе захвата и глушит Escape:
   // слушатель на window в фазе всплытия события не видел вовсе.
+  /*
+   * СНАЧАЛА СЫРОЙ РЕЖИМ, потом фокус.
+   *
+   * Под лентой терминал теперь погашен `visibility: hidden` (иначе он рисовал
+   * поверх неё полосу). Элемент в погашенном поддереве сфокусировать нельзя —
+   * `.focus()` тихо не делает ничего, и проверка ловила бы не то, что задумано:
+   * Escape закрывал бы меню просто потому, что xterm его не видел.
+   */
+  await page.evaluate(() => window.__zaryaSetUi?.({ rawTerminal: true }))
+  await page.waitForTimeout(300)
   await page.evaluate(() => document.querySelector('.xterm-helper-textarea')?.focus())
   await page.waitForTimeout(200)
-  ok('фокус действительно в терминале', await page.evaluate(() =>
-    document.activeElement?.classList.contains('xterm-helper-textarea') === true
-  ))
+  ok(
+    'фокус действительно в терминале',
+    await page.evaluate(
+      () => document.activeElement?.classList.contains('xterm-helper-textarea') === true
+    )
+  )
   ok('меню открыто', !!(await geom(page)))
   await page.keyboard.press('Escape')
   await page.waitForTimeout(350)

@@ -93,13 +93,37 @@ try {
     )[0]
     b?.click()
   })
-  await page.waitForTimeout(2500)
-  const during = await vis(page, '.zy-miccheck')
-  note('во время записи:', (during ?? '').replace(/\s+/g, ' ').slice(0, 120))
-  ok('сказано, что слышит речь', /Слышу речь|Слушаю/.test(during ?? ''), during)
-  const width = await page.evaluate(
-    () => document.querySelector('.zy-miccheck-fill')?.style.width ?? ''
-  )
+  /*
+   * Вердикт СЛЕДИМ, а не подсматриваем один раз.
+   *
+   * Он мгновенный: громкость живой речи гуляет, и между слогами человек
+   * действительно тихо. Снимок в случайный миг ловил то «слышу речь», то
+   * «тихо» — и зависело это от того, какой фразой озвучен файл прогона, а не
+   * от продукта. Вопрос, на который отвечает проверка, звучит иначе:
+   * услышала ли Заря речь ХОТЬ РАЗ, пока эта речь звучала.
+   */
+  let during = ''
+  let слышал = false
+  let width = ''
+  const t1 = Date.now()
+  while (Date.now() - t1 < 9000) {
+    await page.waitForTimeout(300)
+    during = (await vis(page, '.zy-miccheck')) ?? ''
+    const w = await page.evaluate(
+      () => document.querySelector('.zy-miccheck-fill')?.style.width ?? ''
+    )
+    if (w && w !== '0%') width = w
+    if (/Слышу речь/.test(during)) {
+      слышал = true
+      break
+    }
+    // Запись закрылась по тишине раньше, чем мы дождались, — дальше смотреть
+    // нечего, и это отдельная беда, а не «речи не было».
+    if (/Разобрано:|слов не разобрано/.test(during)) break
+  }
+  note('во время записи:', during.replace(/\s+/g, ' ').slice(0, 120))
+  note('ждали, с:', Math.round((Date.now() - t1) / 1000))
+  ok('сказано, что слышит речь', слышал, during)
   note('заполнение шкалы:', width)
   ok('шкала не стоит на нуле', width !== '' && width !== '0%', width)
   ok('порог показан числом', /порог речи: \d+/.test(during ?? ''), during)

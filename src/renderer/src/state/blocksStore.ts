@@ -69,13 +69,23 @@ if (typeof window !== 'undefined') {
    * Через настоящую оболочку сотня блоков набирается минуту, и мерили бы мы
    * скорость pty, а не скорость ленты. Здесь сцена собирается сразу и одинаково —
    * иначе цифры «до» и «после» не сравнить.
+   *
+   * `ageMs` — насколько РАНЬШЕ текущего момента блоки «запущены». Нужен с тех
+   * пор, как лента делит их по времени разговора: свежие блоки ложатся ПОД
+   * беседу, и прогону, которому нужна смешанная лента (команды выше разговора),
+   * иначе её не собрать. Ноль — прежнее поведение.
    */
   ;(
     window as unknown as {
-      __zaryaSeedBlocks?: (sessionId: string, count: number, lines: number) => number
+      __zaryaSeedBlocks?: (
+        sessionId: string,
+        count: number,
+        lines: number,
+        ageMs?: number
+      ) => number
     }
-  ).__zaryaSeedBlocks = (sessionId, count, lines) => {
-    const now = Date.now()
+  ).__zaryaSeedBlocks = (sessionId, count, lines, ageMs = 0) => {
+    const now = Date.now() - ageMs
     // Папка — та же, что у самой панели: в снимках для README путь в блоке не
     // должен спорить с путём в шапке.
     const cwd = useSessionsStore.getState().sessions[sessionId]?.cwd || '~/code/project'
