@@ -146,6 +146,10 @@ export const CH = {
   backupClear: 'rewind:backup-clear',
   /** Вернуть файлы к состоянию на ходе (или посмотреть, что будет). */
   agentRewindFiles: 'agent:rewind-files',
+  /** Команда `zarya` в системе: состояние, установка и снятие. */
+  cliStatus: 'cli:status',
+  cliInstall: 'cli:install',
+  cliRemove: 'cli:remove',
   pickDirectory: 'app:pick-directory',
   saveTextFile: 'app:save-text-file',
   setOpacity: 'app:set-opacity'

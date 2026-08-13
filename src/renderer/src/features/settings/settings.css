@@ -742,18 +742,25 @@
 }
 .zy-miccheck-verdict {
   font-size: 11px;
-  color: var(--text-dim);
+  color: var(--fg-dim);
 }
+/* Переменных --surface-2, --text и --text-dim в теме нет ВООБЩЕ. С ними
+   дорожка, заливка и черта порога были прозрачными: шкала показывала лишь
+   красное пятно речи, а порог — то единственное, ради чего её и рисуют, — не
+   показывала никогда. */
 .zy-miccheck-meter {
   position: relative;
   height: 6px;
   border-radius: 3px;
-  background: var(--surface-2);
-  overflow: hidden;
+  background: var(--bg-elev2);
+  /* Не hidden: черта порога нарочно выше дорожки, и hidden срезал бы ей ровно
+     то, ради чего она торчит. Скругление держит сама заливка. */
+  overflow: visible;
 }
 .zy-miccheck-fill {
   height: 100%;
-  background: var(--text-dim);
+  border-radius: 3px;
+  background: var(--fg-dim);
   transition: width 80ms linear;
 }
 /* Речь — цветом акцента: разницу «слышу/тихо» видно боковым зрением, не читая. */
@@ -768,17 +775,59 @@
   top: -3px;
   bottom: -3px;
   width: 2px;
-  background: var(--text);
+  background: var(--fg);
   box-shadow: 0 0 0 1px var(--bg);
 }
 .zy-miccheck-nums,
 .zy-miccheck-said {
   font-size: 11px;
-  color: var(--text-dim);
+  color: var(--fg-dim);
 }
 .zy-miccheck-said b {
-  color: var(--text);
+  color: var(--fg);
   font-weight: 500;
+}
+
+/* ── Команда `zarya` в чужом терминале ────────────────────────────────────
+   Блок, а не тумблер: состояний пять, и в трёх из них человеку нужен путь на
+   экране, а не одно слово. */
+.zy-cli-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+.zy-cli-state {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: var(--fg-dim);
+}
+.zy-cli-state--on {
+  color: var(--success);
+}
+.zy-cli-state--warn {
+  color: var(--warn);
+}
+/* Путь переносится по любому месту: он длинный, а обрезать его многоточием
+   значит спрятать как раз тот конец, по которому его и узнают. */
+.zy-cli-path {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg-dim);
+  overflow-wrap: anywhere;
+}
+.zy-cli-note {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--fg-faint);
+}
+.zy-cli-dir {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--fg-faint);
+  overflow-wrap: anywhere;
 }
 .zy-miccheck-err {
   font-size: 11px;

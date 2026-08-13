@@ -286,6 +286,10 @@ const api = {
     backupUsage: () => ipcRenderer.invoke(CH.backupUsage),
     backupClear: () => ipcRenderer.invoke(CH.backupClear),
     pickDirectory: () => ipcRenderer.invoke(CH.pickDirectory),
+    /** Команда `zarya` в чужом терминале: состояние, установка, снятие. */
+    cliStatus: () => ipcRenderer.invoke(CH.cliStatus),
+    cliInstall: () => ipcRenderer.invoke(CH.cliInstall),
+    cliRemove: () => ipcRenderer.invoke(CH.cliRemove),
     /** Папка из командной строки (`zarya .`) — от ВТОРОГО запуска, на лету. */
     onOpenFolderArg: (cb: (msg: { dir?: string; bad?: string }) => void) =>
       on(CH.openFolderArg, cb),

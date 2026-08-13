@@ -7,6 +7,7 @@ import { CH } from '@shared/ipc'
 import type { AgentEngine } from '@shared/types'
 import type { AgentDriver } from './agentDriver'
 import { AiProxy } from './aiProxy'
+import { cliRefresh } from './cliCommand'
 import { AcpDriver, ACP_CAPABILITIES, parseAcpArgs } from './acpDriver'
 import { ClaudeCodeDriver } from './claudeCodeDriver'
 import { CodexDriver } from './codexDriver'
@@ -451,6 +452,16 @@ if (!gotLock) {
      * раз». Тихо и в фоне: к запуску окна это отношения не имеет.
      */
     void cleanupOld().catch(() => undefined)
+
+    /*
+     * Шимы команды `zarya` — освежить путь к приложению, если он изменился.
+     *
+     * Обновление ставит Зарю заново, и записанный внутри шима путь может
+     * устареть: команда осталась бы в PATH, но отвечала бы «Заря не найдена».
+     * Сами шимы при этом НЕ заводятся: их нет — значит человек команду не
+     * ставил. Тихо и в фоне, к запуску окна отношения не имеет.
+     */
+    void cliRefresh().catch(() => undefined)
 
     registerIpc({
       getWindow: () => mainWindow,

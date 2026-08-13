@@ -27,6 +27,7 @@ import { ModelCatalogStore } from './modelCatalogStore'
 import { SkillUsageStore } from './skillUsageStore'
 import { ExtrasWatcher } from './extrasWatcher'
 import { withCustom } from '@shared/sttCustom'
+import { cliInstall, cliRemove, cliStatus } from './cliCommand'
 import type { AgentDriver } from './agentDriver'
 import * as fsService from './fsService'
 import * as gitService from './gitService'
@@ -965,6 +966,15 @@ export function registerIpc(ctx: IpcContext): void {
   }))
   // Папка из командной строки первого запуска — забирается один раз.
   ipcMain.handle(CH.takeFolderArg, () => ctx.takeFolderArgs())
+  /*
+   * Команда `zarya` в системе. Установка и снятие возвращают ПЕРЕПРОВЕРЕННОЕ
+   * состояние: экран показывает то, что в системе есть, а не то, что мы
+   * попытались сделать. Разница видна ровно тогда, когда всё пошло не так, —
+   * то есть тогда, когда она и нужна.
+   */
+  ipcMain.handle(CH.cliStatus, () => cliStatus())
+  ipcMain.handle(CH.cliInstall, () => cliInstall())
+  ipcMain.handle(CH.cliRemove, () => cliRemove())
   ipcMain.handle(CH.pickDirectory, async () => {
     /*
      * ZARYA_PICK_DIR — рубильник для прогонов, как и `ZARYA_STT_PICK_DIR` выше:

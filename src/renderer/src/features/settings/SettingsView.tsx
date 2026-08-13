@@ -6,7 +6,13 @@ import {
   OLLAMA_DEFAULT_URL,
   OPENAI_COMPAT_PRESETS
 } from '@shared/defaults'
-import type { AiEffort, AiProviderKind, AiProviderStatus, AppInfo } from '@shared/types'
+import type {
+  AiEffort,
+  AiProviderKind,
+  AiProviderStatus,
+  AppInfo,
+  CliCommandState
+} from '@shared/types'
 import { MANIFEST_SAMPLE } from '@shared/sttCustom'
 import { getAllActions, onActionsChanged } from '@/lib/actionRegistry'
 import { Icon, type IconName } from '@/components/Icon'
@@ -839,7 +845,144 @@ function TerminalTab(): React.JSX.Element {
           onChange={(v) => void update({ terminal: { confirmCloseRunning: v } as never })}
         />
       </Row>
+      <CliCommandRow />
     </section>
+  )
+}
+
+/**
+ * Команда `zarya` в чужом терминале.
+ *
+ * Заря умеет принимать папку из командной строки с inc-30, но набрать `zarya .`
+ * было негде: установщик PATH не трогает. Кнопка кладёт два шима в свою папку и
+ * дописывает её в пользовательский PATH.
+ *
+ * ЭКРАН ГОВОРИТ О СИСТЕМЕ, А НЕ О НАШЕЙ ПОПЫТКЕ. После нажатия главный процесс
+ * перечитывает реестр и сам разрешает имя `zarya` по PATH и PATHEXT — здесь
+ * показывается его ответ. Поэтому состояний пять, а не два: «файлы есть, а
+ * папки в PATH нет» и «на имя откликается чужая программа» — разные беды с
+ * разными действиями, и обе выглядели бы как «установлено», если верить факту
+ * записи.
+ */
+function CliCommandRow(): React.JSX.Element {
+  const [state, setState] = useState<CliCommandState | null>(null)
+  const [busy, setBusy] = useState(false)
+  // Показать «в открытых терминалах — после перезапуска» только тому, кто ТОЛЬКО
+  // ЧТО нажал: при следующем заходе в настройки это уже не новость.
+  const [justInstalled, setJustInstalled] = useState(false)
+
+  const load = useCallback(async (): Promise<void> => {
+    setState(await window.zarya.app.cliStatus())
+  }, [])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  const run = async (fn: () => Promise<CliCommandState>, installed: boolean): Promise<void> => {
+    setBusy(true)
+    try {
+      setState(await fn())
+      setJustInstalled(installed)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const s = state
+  // Команда есть и это МЫ. Всё остальное — не «установлено», даже когда файлы
+  // на месте: человеку важно, откликнется ли слово, а не лежит ли файл.
+  const working = !!s?.ours && s.onPath
+  const foreign = !!s?.resolved && !s.ours
+  const halfway = !!s && !working && (s.files !== 'none' || s.onPath)
+
+  return (
+    <Row title={t('set.cli')} sub="CLI COMMAND" desc={t('set.cliDesc')} stack>
+      <div className="zy-cli-box">
+        {!s && <div className="zy-cli-note">{t('set.cliChecking')}</div>}
+
+        {s && !s.supported && (
+          /*
+           * macOS и Linux мы выпускаем, но проверить там нечего и не на чем.
+           * Кнопка, которой не было на живой машине, — ровно то враньё, против
+           * которого весь проект: показываем путь и ручной способ.
+           */
+          <>
+            <div className="zy-cli-note">{t('set.cliWinOnly')}</div>
+            <code className="zy-cli-path">{`ln -s "${s.exe}" /usr/local/bin/zarya`}</code>
+          </>
+        )}
+
+        {s?.supported && (
+          <>
+            {s.resolved === undefined ? (
+              // Реестр не прочитался. Это «не знаю», и выглядеть оно должно не
+              // так, как «не установлено»: действия у них разные.
+              <div className="zy-cli-note">{t('set.cliUnknown')}</div>
+            ) : working ? (
+              <>
+                <div className="zy-cli-state zy-cli-state--on">{t('set.cliOn')}</div>
+                <code className="zy-cli-path">{s.resolved}</code>
+                {justInstalled && <div className="zy-cli-note">{t('set.cliNewTerm')}</div>}
+              </>
+            ) : (
+              <>
+                <div className="zy-cli-state">{t(halfway ? 'set.cliHalf' : 'set.cliOff')}</div>
+                {halfway && !s.onPath && <div className="zy-cli-note">{t('set.cliNotOnPath')}</div>}
+                {/* Что именно сделает кнопка — до нажатия, а не после: правка
+                    PATH это чужая система, и человек вправе знать заранее. */}
+                {!halfway && <div className="zy-cli-note">{t('set.cliWhat')}</div>}
+              </>
+            )}
+
+            {/* Чужая программа с тем же именем выигрывает — и наша не сработает,
+                сколько её ни ставь. Молчать об этом нельзя: человек нажмёт
+                «Установить», увидит «работает» и получит не Зарю. */}
+            {foreign && (
+              <>
+                <div className="zy-cli-state zy-cli-state--warn">{t('set.cliForeign')}</div>
+                <code className="zy-cli-path">{s.resolved}</code>
+              </>
+            )}
+
+            <div className="zy-inline-group zy-inline-group--wrap">
+              {!working && (
+                <button
+                  type="button"
+                  className="zy-btn zy-btn--sm"
+                  disabled={busy}
+                  onClick={() => void run(() => window.zarya.app.cliInstall(), true)}
+                >
+                  {busy ? '…' : t(halfway ? 'set.cliFix' : 'set.cliInstall')}
+                </button>
+              )}
+              {(working || halfway) && (
+                <button
+                  type="button"
+                  className="zy-btn zy-btn--sm"
+                  disabled={busy}
+                  onClick={() => void run(() => window.zarya.app.cliRemove(), false)}
+                >
+                  {busy ? '…' : t('set.cliRemove')}
+                </button>
+              )}
+              <button
+                type="button"
+                className="zy-btn zy-btn--sm"
+                disabled={busy}
+                onClick={() => void run(() => window.zarya.app.cliStatus(), false)}
+              >
+                {t('set.cliRecheck')}
+              </button>
+            </div>
+            {/* Пока не работает — папка отвечает на вопрос «куда оно положит».
+                Когда работает, путь к самому файлу уже показан выше, и вторая
+                строка про его же папку — шум. */}
+            {!working && <div className="zy-cli-dir">{s.dir}</div>}
+          </>
+        )}
+      </div>
+    </Row>
   )
 }
 

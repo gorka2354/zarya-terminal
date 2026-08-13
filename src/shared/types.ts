@@ -1525,6 +1525,32 @@ export interface AppInfo {
 
 export type WindowCommand = 'minimize' | 'maximize' | 'close' | 'devtools'
 
+/**
+ * Команда `zarya` в чужом терминале: что о ней известно СЕЙЧАС.
+ *
+ * Состояния разведены нарочно мелко, потому что «установлено» бывает четырёх
+ * разных сортов, и на экране они означают разные действия человека.
+ */
+export interface CliCommandState {
+  /** Система, где мы это умеем. Пока только Windows — проверить остальные не на чем. */
+  supported: boolean
+  /** Папка с шимами: её мы и дописываем в PATH. */
+  dir: string
+  /** Что запускает шим — путь к приложению. */
+  exe: string
+  /** `stale` — файлы есть, но ведут не туда: приложение обновилось или переехало. */
+  files: 'none' | 'stale' | 'ok'
+  /** Папка значится в пользовательском PATH. */
+  onPath: boolean
+  /**
+   * Файл, который на самом деле откликнется на слово `zarya`.
+   * `null` — никакой; `undefined` — узнать не удалось (реестр закрыт, PATH висит).
+   */
+  resolved?: string | null
+  /** Откликается ИМЕННО наш шим, а не чужая программа с тем же именем. */
+  ours: boolean
+}
+
 /** Payload sent by main when it wants renderer to snapshot everything before quit. */
 export interface PrepareQuitPayload {
   reason: 'quit' | 'close'

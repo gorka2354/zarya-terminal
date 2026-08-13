@@ -23,6 +23,7 @@ import type {
   ClaudeStartOpts,
   ClaudeStreamEvent,
   AppInfo,
+  CliCommandState,
   DirEntry,
   FileContent,
   GitDiff,
@@ -360,6 +361,15 @@ export interface ZaryaApi {
       partial?: boolean
     }>
     pickDirectory(): Promise<string | null>
+    /**
+     * Команда `zarya` в системе. `cliStatus` ничего не меняет; установка и
+     * снятие возвращают ПЕРЕПРОВЕРЕННОЕ состояние, а не «получилось»: экран
+     * должен показывать то, что есть в системе, а не то, что мы попытались
+     * сделать.
+     */
+    cliStatus(): Promise<CliCommandState>
+    cliInstall(): Promise<CliCommandState>
+    cliRemove(): Promise<CliCommandState>
     /**
      * Папка, названная в командной строке (`zarya .`). Приходит и при первом
      * запуске, и когда второй экземпляр отдал свою папку этому окну.
