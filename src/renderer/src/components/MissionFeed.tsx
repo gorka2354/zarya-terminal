@@ -1,4 +1,13 @@
-import { createContext, memo, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  createContext,
+  memo,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState
+} from 'react'
 import type { AiContentPart, BlockRecord } from '@shared/types'
 import { onBus } from '@/lib/bus'
 import { currentLang, t, useLang } from '@/lib/i18n'
@@ -490,9 +499,178 @@ export const MissionFeed = memo(function MissionFeed({
           </>
         )}
       </div>
+      <TurnNav scrollRef={scrollRef} />
     </div>
   )
 })
+
+/**
+ * Прыжки по СВОИМ сообщениям.
+ *
+ * Мысль владельца, и она лучше всего, что я предлагал: длинная сессия — это
+ * километр ленты, в котором человек ищет не ответ агента, а собственную
+ * реплику. «Что я вообще просил?» — вопрос, который возникает раз в полчаса, и
+ * до сих пор ответом было листать вверх и читать чужой текст по дороге.
+ *
+ * Две кнопки у правого края: к предыдущему ходу и к следующему, между ними
+ * счётчик — сразу видно, сколько ходов и где ты. Прыжок ПОДСВЕЧИВАЕТ ход на
+ * пару секунд и показывает его кнопки («что изменилось», «Откатить файлы») без
+ * наведения: попал в нужное место — и сразу можешь оттуда откатиться, ради чего
+ * всё и затевалось.
+ *
+ * Ходов меньше двух — кнопок нет: навигация по одному пункту это не навигация,
+ * а лишний значок на экране.
+ */
+function TurnNav({
+  scrollRef
+}: {
+  scrollRef: React.RefObject<HTMLDivElement | null>
+}): React.JSX.Element | null {
+  useLang()
+  const [at, setAt] = useState(-1)
+  const [count, setCount] = useState(0)
+  /** Когда мы САМИ прокручивали ленту: чужая прокрутка сбрасывает номер. */
+  const ourScrollRef = useRef(0)
+  /** Таймер подсветки: новый прыжок обязан отменить старый. */
+  const glowRef = useRef(0)
+
+  // Число ходов считаем по DOM, а не по беседе: на экране ровно те ходы, по
+  // которым и надо прыгать, — свёрнутые, отфильтрованные, любые.
+  const turns = useCallback(
+    (): HTMLElement[] => [
+      ...(scrollRef.current?.querySelectorAll<HTMLElement>('.zy-mf-userturn') ?? [])
+    ],
+    [scrollRef]
+  )
+
+  useEffect(() => {
+    const root = scrollRef.current
+    if (!root) return
+    const recount = (): void => setCount(turns().length)
+    recount()
+    // Лента растёт по ходу разговора — счётчик обязан расти вместе с ней.
+    const mo = new MutationObserver(recount)
+    mo.observe(root, { childList: true, subtree: true })
+    /*
+     * Человек прокрутил сам — «где мы» больше не наше дело.
+     *
+     * Иначе следующий прыжок увёл бы его от того места, которое он только что
+     * нашёл руками, к соседу запомненного номера. Своя прокрутка отличается по
+     * отметке времени: она всегда следует сразу за нажатием.
+     */
+    const onScroll = (): void => {
+      if (Date.now() - ourScrollRef.current > 900) setAt(-1)
+    }
+    root.addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      mo.disconnect()
+      root.removeEventListener('scroll', onScroll)
+    }
+  }, [scrollRef, turns])
+
+  const jump = useCallback(
+    (dir: -1 | 1): void => {
+      const list = turns()
+      if (!list.length) return
+      const root = scrollRef.current
+      /*
+       * Куда прыгать, решает ЭКРАН, а не запомненный номер.
+       *
+       * Правило простое и потому предсказуемое, как в поиске браузера: вверх —
+       * ближайший ход выше видимой области, вниз — ближайший ниже. Человек
+       * прокручивает ленту руками между нажатиями, и любая «память» о прошлом
+       * прыжке рано или поздно уводит его туда, откуда он только что ушёл.
+       */
+      const box = root?.getBoundingClientRect()
+      const центр = (box?.top ?? 0) + (box?.height ?? 0) / 2
+      const дистанция = (el: HTMLElement): number =>
+        Math.abs(el.getBoundingClientRect().top + el.offsetHeight / 2 - центр)
+      /*
+       * Первый клик ловит БЛИЖАЙШИЙ ход, дальше шагаем по одному.
+       *
+       * Номер держится, пока человек не тронул ленту сам (см. сброс по прокрутке
+       * ниже). Пробовал определять «мы всё ещё там» по координатам — не работает:
+       * прокрутка идёт плавно, следующий клик приходит раньше, чем лента доехала,
+       * и прыжок залипал на том же ходе.
+       */
+      const from =
+        at >= 0 && list[at]
+          ? at
+          : list.reduce(
+              (лучший, el, i) => (дистанция(el) < дистанция(list[лучший]) ? i : лучший),
+              0
+            )
+      const next = at >= 0 ? Math.min(list.length - 1, Math.max(0, from + dir)) : from
+      const el = list[next]
+      if (!el) return
+      // Наша прокрутка не должна выглядеть как «человек листает руками».
+      ourScrollRef.current = Date.now()
+      setAt(next)
+      el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      /*
+       * Подсветка живёт ровно столько, чтобы глаз успел найти место, и уходит
+       * сама: постоянная метка превратилась бы в мусор на ленте.
+       *
+       * Прошлый таймер ОТМЕНЯЕМ. Без этого быстрый переход туда-обратно гасил
+       * свежую подсветку: старый таймер срабатывал уже после нового прыжка и
+       * снимал класс с того же хода — человек оказывался в нужном месте, но без
+       * единой пометки, куда именно он попал.
+       */
+      if (glowRef.current) window.clearTimeout(glowRef.current)
+      for (const x of list) x.classList.remove('zy-mf-userturn--found')
+      el.classList.add('zy-mf-userturn--found')
+      glowRef.current = window.setTimeout(() => {
+        el.classList.remove('zy-mf-userturn--found')
+        glowRef.current = 0
+      }, 2200)
+    },
+    [at, scrollRef, turns]
+  )
+
+  // Клавиши для тех, кто не тянется к мыши. Alt — чтобы не спорить с обычным
+  // перемещением по тексту в строке ввода.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (!e.altKey || e.ctrlKey || e.metaKey) return
+      if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        jump(-1)
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        jump(1)
+      }
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [jump])
+
+  if (count < 2) return null
+  return (
+    <div className="zy-mf-turnnav" title={t('feed.turnNavHint')}>
+      <button
+        type="button"
+        className="zy-mf-turnnav-btn"
+        onClick={() => jump(-1)}
+        title={t('feed.turnPrev')}
+        aria-label={t('feed.turnPrev')}
+      >
+        <Icon name="chevron-up" size={12} />
+      </button>
+      <span className="zy-mf-turnnav-count">
+        {at >= 0 ? at + 1 : '·'}/{count}
+      </span>
+      <button
+        type="button"
+        className="zy-mf-turnnav-btn"
+        onClick={() => jump(1)}
+        title={t('feed.turnNext')}
+        aria-label={t('feed.turnNext')}
+      >
+        <Icon name="chevron-down" size={12} />
+      </button>
+    </div>
+  )
+}
 
 // ------------------------------------------------------------------- blocks
 

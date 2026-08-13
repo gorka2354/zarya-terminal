@@ -105,6 +105,9 @@ export const RU: Dict = {
   'close.queued': 'приписка в очереди: «{text}»',
 
   // --- лента
+  'feed.turnPrev': 'К предыдущему моему сообщению (Alt+↑)',
+  'feed.turnNext': 'К следующему моему сообщению (Alt+↓)',
+  'feed.turnNavHint': 'Прыжки по вашим сообщениям: оттуда же можно откатить файлы',
   'feed.ready': 'готов · введите запрос в строку ниже ↓',
   'plan.title': 'План агента',
   'plan.progress': '{done} из {total}',
@@ -1705,6 +1708,9 @@ export const EN: Dict = {
   'close.images': 'attachments: {n}',
   'close.queued': 'queued message: “{text}”',
 
+  'feed.turnPrev': 'To my previous message (Alt+↑)',
+  'feed.turnNext': 'To my next message (Alt+↓)',
+  'feed.turnNavHint': 'Jump between your messages — files can be rewound from there too',
   'feed.ready': 'ready · type a command or a request below ↓',
   'plan.title': 'Agent plan',
   'plan.progress': '{done} of {total}',

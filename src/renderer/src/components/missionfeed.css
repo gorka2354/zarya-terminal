@@ -2000,3 +2000,58 @@
 .zy-cqb-done-a {
   color: var(--fg);
 }
+
+/* ── Прыжки по своим сообщениям ────────────────────────────────────────────
+   Скромный столбик у правого края: две стрелки и счётчик. Приглушён, пока на
+   него не навели, — лента принадлежит разговору, а не органам управления. */
+.zy-mf-turnnav {
+  position: absolute;
+  right: 10px;
+  bottom: 14px;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--panel, var(--bg-elev1)) 88%, transparent);
+  border: 1px solid var(--border);
+  opacity: 0.5;
+  transition: opacity 0.14s ease;
+}
+.zy-mf-turnnav:hover {
+  opacity: 1;
+}
+.zy-mf-turnnav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--fg-dim);
+  cursor: pointer;
+}
+.zy-mf-turnnav-btn:hover {
+  background: var(--bg-elev2);
+  color: var(--fg);
+}
+.zy-mf-turnnav-count {
+  font-family: var(--font-tech);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--fg-faint);
+  user-select: none;
+}
+/* Куда прыгнули — видно, и кнопки хода показаны сразу: попал в место и можешь
+   отсюда откатиться, не разыскивая их наведением. */
+.zy-mf-userturn--found .zy-mf-user {
+  background: color-mix(in srgb, var(--accent-2) 12%, transparent);
+  border-radius: var(--radius-sm);
+}
+.zy-mf-userturn--found .zy-mf-changes-btn {
+  opacity: 1;
+}
