@@ -32,9 +32,23 @@ export function sendCodeToTerminal(
     if (lines > 1 && !window.confirm(t('ide.pasteAsk', { n: lines }))) return
     window.zarya.pty.write(sessionId, noTrailing)
   } else {
-    const lines = code.trim().split('\n').length
+    const текст = code.trim()
+    const lines = текст.split('\n').length
     if (lines > 1 && !window.confirm(t('ide.runAsk', { n: lines }))) return
-    window.zarya.pty.write(sessionId, code + '\r')
+    /*
+     * КАЖДАЯ СТРОКА — СВОЙ Enter.
+     *
+     * Раньше блок уходил одним куском, с переводами строк внутри. Оболочка
+     * принимала это за ОДИН ввод: в ленте получался один блок, где команды
+     * склеены и переставлены местами — «cargo run cd C:\…» вместо двух строк по
+     * порядку. Выполнялось при этом всё верно, но человек читал такое как
+     * поломку, и правильно делал: лента показывала не то, что произошло.
+     *
+     * Возврат каретки вместо перевода строки и ЕСТЬ «нажать Enter»: оболочка
+     * получает команды по одной, лента показывает их отдельными блоками, и у
+     * каждой свой код возврата.
+     */
+    window.zarya.pty.write(sessionId, текст.replace(/\r?\n/g, '\r') + '\r')
   }
   /*
    * Курсор возвращаем В ПАНЕЛЬ, а не в терминал.
