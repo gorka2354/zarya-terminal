@@ -56,6 +56,42 @@ describe('compareVersions', () => {
     expect(compareVersions('', '0.0.0')).toBe(0)
     expect(compareVersions('абв', '0.0.1')).toBe(-1)
   })
+
+  /*
+   * Пререлизный хвост раньше отбрасывался — с пометкой «свои релизы мы так не
+   * помечаем». А мы помечаем: владелец работает на бетах. В день выпуска 0.7.5
+   * установленная `0.7.5-beta.8` сказала «у вас последняя версия», потому что
+   * для отбрасывающего сравнения это одно и то же. Проверено на живой машине.
+   */
+  it('бета МЛАДШЕ такой же версии без хвоста — иначе выпуск до неё не доедет', () => {
+    expect(compareVersions('0.7.5-beta.8', '0.7.5')).toBe(-1)
+    expect(compareVersions('0.7.5', '0.7.5-beta.8')).toBe(1)
+    expect(isNewer('0.7.5-beta.8', '0.7.5')).toBe(true)
+  })
+
+  it('две беты сравниваются по номеру, а не по буквам', () => {
+    // По строкам «beta.10» оказалась бы МЕНЬШЕ «beta.9».
+    expect(compareVersions('0.7.5-beta.10', '0.7.5-beta.9')).toBe(1)
+    expect(compareVersions('0.7.5-beta.2', '0.7.5-beta.10')).toBe(-1)
+    expect(compareVersions('0.7.5-beta.3', '0.7.5-beta.3')).toBe(0)
+  })
+
+  it('следующая версия старше любой беты предыдущей — и наоборот', () => {
+    expect(isNewer('0.7.5-beta.1', '0.7.6')).toBe(true)
+    // Обратное направление важнее: беты 0.7.6 НЕ должны звать откатиться на 0.7.5.
+    expect(isNewer('0.7.6-beta.1', '0.7.5')).toBe(false)
+  })
+
+  it('короткий хвост младше длинного, число младше буквы', () => {
+    expect(compareVersions('1.0.0-beta', '1.0.0-beta.1')).toBe(-1)
+    expect(compareVersions('1.0.0-1', '1.0.0-alpha')).toBe(-1)
+    expect(compareVersions('1.0.0-alpha', '1.0.0-beta')).toBe(-1)
+  })
+
+  it('сборочный хвост не значит ничего', () => {
+    expect(compareVersions('1.0.0+build.5', '1.0.0')).toBe(0)
+    expect(compareVersions('1.0.0-beta.1+build', '1.0.0-beta.1')).toBe(0)
+  })
 })
 
 describe('isNewer', () => {

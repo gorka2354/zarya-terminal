@@ -40,28 +40,61 @@ export interface ReleaseInfo {
 }
 
 /**
- * Строгое сравнение semver по числам. Не `localeCompare` и не лексикографика:
- * «0.5.10» больше «0.5.9», а по строкам вышло бы наоборот, и человек не увидел
- * бы десятый патч.
+ * Строгое сравнение semver. Не `localeCompare` и не лексикографика: «0.5.10»
+ * больше «0.5.9», а по строкам вышло бы наоборот, и человек не увидел бы
+ * десятый патч.
+ *
+ * ПРЕРЕЛИЗНЫЙ ХВОСТ УЧАСТВУЕТ, и это не педантизм.
+ *
+ * Раньше `-beta.8` отбрасывался с пометкой «свои релизы мы так не помечаем» —
+ * а мы помечаем: владелец работает на бетах, и каждая проверка прошла через
+ * десяток `0.7.5-beta.N`. Для отбрасывающего сравнения `0.7.5-beta.8` и `0.7.5`
+ * — одно и то же, поэтому в день выпуска установленная бета сказала бы «у вас
+ * последняя версия». Ровно то враньё, против которого весь проект: человек
+ * остаётся на бете и не знает об этом.
+ *
+ * Правило semver: версия С хвостом МЛАДШЕ такой же без хвоста (`1.0.0-rc <
+ * 1.0.0`), а два хвоста сравниваются по частям — числовые части по числам,
+ * прочие по буквам, числовая младше буквенной. `+build` не значит ничего.
  */
 export function compareVersions(a: string, b: string): number {
-  const parse = (v: string): number[] =>
-    v
-      .trim()
-      .replace(/^v/, '')
-      // Пререлизный хвост (-rc.1, +build) в сравнении не участвует: свои релизы
-      // мы такими не помечаем, а гадать о порядке «rc» здесь не нужно.
-      .split(/[-+]/)[0]
-      .split('.')
-      .map((p) => {
-        const n = Number.parseInt(p, 10)
-        return Number.isFinite(n) ? n : 0
-      })
-  const x = parse(a)
-  const y = parse(b)
-  for (let i = 0; i < Math.max(x.length, y.length); i++) {
-    const d = (x[i] ?? 0) - (y[i] ?? 0)
+  const split = (v: string): { core: number[]; pre: string[] } => {
+    const clean = v.trim().replace(/^v/, '').split('+')[0]
+    const dash = clean.indexOf('-')
+    const core = (dash < 0 ? clean : clean.slice(0, dash)).split('.').map((p) => {
+      const n = Number.parseInt(p, 10)
+      return Number.isFinite(n) ? n : 0
+    })
+    const pre = dash < 0 ? [] : clean.slice(dash + 1).split('.').filter(Boolean)
+    return { core, pre }
+  }
+  const x = split(a)
+  const y = split(b)
+  for (let i = 0; i < Math.max(x.core.length, y.core.length); i++) {
+    const d = (x.core[i] ?? 0) - (y.core[i] ?? 0)
     if (d !== 0) return d > 0 ? 1 : -1
+  }
+  // Числа сошлись — решает хвост. Его отсутствие СТАРШЕ любого хвоста.
+  if (!x.pre.length && !y.pre.length) return 0
+  if (!x.pre.length) return 1
+  if (!y.pre.length) return -1
+  for (let i = 0; i < Math.max(x.pre.length, y.pre.length); i++) {
+    const p = x.pre[i]
+    const q = y.pre[i]
+    // Кончились части — этот хвост короче, а значит младше: `beta` < `beta.1`.
+    if (p === undefined) return -1
+    if (q === undefined) return 1
+    const pn = /^\d+$/.test(p)
+    const qn = /^\d+$/.test(q)
+    if (pn && qn) {
+      const d = Number.parseInt(p, 10) - Number.parseInt(q, 10)
+      if (d !== 0) return d > 0 ? 1 : -1
+    } else if (pn !== qn) {
+      // Числовая часть младше буквенной: `1.0.0-1` < `1.0.0-alpha`.
+      return pn ? -1 : 1
+    } else if (p !== q) {
+      return p > q ? 1 : -1
+    }
   }
   return 0
 }
