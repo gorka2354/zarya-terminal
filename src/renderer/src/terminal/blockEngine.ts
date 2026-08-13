@@ -1,5 +1,6 @@
 import type { IDisposable, IMarker, Terminal } from '@xterm/xterm'
 import type { BlockRecord } from '@shared/types'
+import { programTitle } from '@shared/programTitle'
 import { uid } from '@/lib/uid'
 import { emitBus } from '@/lib/bus'
 import { useBlocksStore } from '@/state/blocksStore'
@@ -19,27 +20,6 @@ type Phase = 'preamble' | 'prompt' | 'input' | 'running'
  * Protocols understood: OSC 133 (A/B/C/D), OSC 7 / 9;9 / 1337 (cwd),
  * OSC 6973;E (Zarya command line + nonce), OSC 633 (VS Code compat).
  */
-/**
- * Заголовок от программы — чужой текст, пришедший из вывода.
- *
- * Управляющие знаки в подписи вкладки превращаются в мусор, а слишком длинная
- * подпись выдавливает соседние вкладки с экрана. Ни то ни другое программа не
- * имела в виду: она называет себя, а не переверстывает окно.
- */
-function cleanTitle(raw: string): string {
-  /*
-   * Управляющие знаки выкидываем ПО КОДУ, а не регулярным выражением с
-   * литеральными байтами: такое выражение нечитаемо в исходнике и ломается
-   * от любой правки файла инструментом, который трогает кодировку.
-   */
-  let clean = ''
-  for (const ch of raw) {
-    const code = ch.codePointAt(0) ?? 0
-    if (code >= 0x20 && code !== 0x7f) clean += ch
-  }
-  clean = clean.trim()
-  return clean.length > 60 ? `${clean.slice(0, 60)}…` : clean
-}
 
 export class BlockEngine {
   readonly sessionId: string
@@ -105,7 +85,16 @@ export class BlockEngine {
      * подпись значило бы показать не то, что имела в виду программа.
      */
     const titleOsc = (data: string): boolean => {
-      useSessionsStore.getState().setProgramTitle(this.sessionId, cleanTitle(data))
+      /*
+       * `null` — программа подписалась путём к собственному exe (так делает
+       * Windows PowerShell при старте). Такое имя хуже прежнего: панель
+       * переставала называться папкой и становилась
+       * `C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe`.
+       * Событие всё равно СЪЕДАЕМ: xterm иначе поставит этот путь заголовком
+       * сам.
+       */
+      const t = programTitle(data)
+      if (t) useSessionsStore.getState().setProgramTitle(this.sessionId, t)
       return true
     }
     osc(0, titleOsc)

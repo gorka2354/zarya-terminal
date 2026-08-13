@@ -97,18 +97,34 @@ try {
   const cut = await titleOf(page, sid)
   ok('длинный заголовок обрезан, а не растянул вкладки', cut.length <= 61, cut.length)
 
-  console.log('\n[3] Имя, данное человеком, сильнее программы')
-  await page.evaluate(
-    ([id]) => window.__zaryaRenameSession?.(id, 'моё имя'),
-    [sid]
-  )
+  console.log('\n[3] Оболочка, подписавшаяся путём к себе, имя панели не отбирает')
+  /*
+   * Windows PowerShell при старте шлёт заголовком полный путь к своему exe. В
+   * списке сессий владельца из-за этого оказались четыре панели с именем
+   * `C:\WINDOWS\System32\Win…`: неотличимые и не говорящие ни о папке, ни о
+   * работе. Имя стало хуже, чем было до появления заголовков от программ.
+   */
+  const было = await titleOf(page, sid)
+  await emit(page, sid, ']0;C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe')
+  await page.waitForTimeout(700)
+  ok('самоподпись оболочки не принята', (await titleOf(page, sid)) === было, {
+    было,
+    стало: await titleOf(page, sid)
+  })
+
+  console.log('\n[4] Имя, данное человеком, сильнее программы')
+  await page.evaluate(([id]) => window.__zaryaRenameSession?.(id, 'моё имя'), [sid])
   await page.waitForTimeout(700)
   await emit(page, sid, ']2;ssh other')
   await page.waitForTimeout(700)
-  ok('программа не перебила имя человека', (await titleOf(page, sid)) === 'моё имя', await titleOf(page, sid))
+  ok(
+    'программа не перебила имя человека',
+    (await titleOf(page, sid)) === 'моё имя',
+    await titleOf(page, sid)
+  )
   if (shots) await page.screenshot({ path: join(shots, 'osc-title.png') })
 
-  console.log('\n[4] Тумблеры уведомлений разведены')
+  console.log('\n[5] Тумблеры уведомлений разведены')
   // Один гейт на оба означал бы, что выключение зова агента молча гасит и зов
   // о законченной команде.
   const s = await page.evaluate(() => window.__zaryaSettings?.()?.notifications ?? null)
