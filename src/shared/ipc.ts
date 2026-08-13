@@ -31,6 +31,8 @@ export const CH = {
 
   // shells
   shellsDetect: 'shells:detect',
+  /** Путь к системному `ssh` — профилю нужен абсолютный, а не имя из PATH. */
+  shellsSsh: 'shells:ssh-path',
 
   // ai clis
   aiClisDetect: 'ai-clis:detect',

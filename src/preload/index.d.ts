@@ -77,6 +77,8 @@ export interface ZaryaApi {
   }
   shells: {
     detect(): Promise<ShellProfile[]>
+    /** Путь к системному `ssh`; null — его на машине нет. */
+    sshPath(): Promise<string | null>
   }
   aiClis: {
     detect(): Promise<AiCli[]>

@@ -44,7 +44,7 @@ import type { SettingsStore } from './settingsStore'
 import type { SttService } from './sttService'
 import type { UpdateService } from './updateService'
 import { detectAiClis } from './aiClis'
-import { detectShells, resolveProfile } from './shellProfiles'
+import { detectShells, locateSsh, resolveProfile } from './shellProfiles'
 import {
   describeProfile,
   newlyExecutable,
@@ -138,6 +138,18 @@ export function registerIpc(ctx: IpcContext): void {
 
     const fresh = newlyExecutable(prev, next)
     if (fresh.length === 0) return withProfiles(next)
+
+    /*
+     * ZARYA_PROFILE_DIALOG — рубильник для прогонов, как `ZARYA_PICK_DIR` ниже.
+     * Системное окно подтверждения из Playwright не нажимается, а проверять
+     * надо обе ветки: согласие ЗАПИСЫВАЕТ программу в автозапуск панели, отказ
+     * обязан не записать ничего. Ставится только прогоном; в обычном запуске
+     * переменной нет, и окно показывается как всегда.
+     */
+    const forced = process.env.ZARYA_PROFILE_DIALOG
+    if (forced === 'accept' || forced === 'decline') {
+      return withProfiles(forced === 'accept' ? next : prev)
+    }
 
     const win = getWindow()
     const opts = {
@@ -352,6 +364,7 @@ export function registerIpc(ctx: IpcContext): void {
   })
 
   // ---------------------------------------------------------------- shells
+  ipcMain.handle(CH.shellsSsh, () => locateSsh())
   ipcMain.handle(CH.shellsDetect, async () => {
     const settings = settingsStore.get()
     return [...settings.terminal.customProfiles, ...(await detectShells())]

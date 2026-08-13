@@ -985,13 +985,16 @@ if (typeof window !== 'undefined') {
         status: x.status
       }))
     }
-  }
+  } // `profileId` нужен прогону сохранённых подключений: панель по SSH-профилю
 
   // QA hooks: drive terminals from the offscreen harness (create / run a shell
   // command / split / close) so a full-app QA sweep can exercise the real PTY.
+  // иначе не поднять, а весь смысл проверки в том, что запускается ИМЕННО он.
   ;(
-    window as unknown as { __zaryaNewTerminal?: (cwd?: string) => Promise<string> }
-  ).__zaryaNewTerminal = (cwd) => useSessionsStore.getState().newTab(undefined, cwd)
+    window as unknown as {
+      __zaryaNewTerminal?: (cwd?: string, profileId?: string) => Promise<string>
+    }
+  ).__zaryaNewTerminal = (cwd, profileId) => useSessionsStore.getState().newTab(profileId, cwd)
   ;(
     window as unknown as { __zaryaRunShell?: (cmd: string, sessionId?: string) => string | null }
   ).__zaryaRunShell = (cmd, sessionId) => {

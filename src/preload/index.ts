@@ -72,7 +72,9 @@ const api = {
     providerStatus: () => ipcRenderer.invoke(CH.settingsProviderStatus)
   },
   shells: {
-    detect: () => ipcRenderer.invoke(CH.shellsDetect)
+    detect: () => ipcRenderer.invoke(CH.shellsDetect),
+    /** Путь к системному `ssh`; null — его на машине нет. */
+    sshPath: () => ipcRenderer.invoke(CH.shellsSsh) as Promise<string | null>
   },
   aiClis: {
     detect: () => ipcRenderer.invoke(CH.aiClisDetect)

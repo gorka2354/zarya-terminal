@@ -16,6 +16,7 @@ import type {
 import { MANIFEST_SAMPLE } from '@shared/sttCustom'
 import { getAllActions, onActionsChanged } from '@/lib/actionRegistry'
 import { Icon, type IconName } from '@/components/Icon'
+import { sshArgs, sshLabel, sshValid } from '@shared/sshProfile'
 import { chordFromEvent, formatChord } from '@/features/palette/keybindings'
 import { getThemes } from '@/features/themes/themes'
 import { setIdeMode } from '@/features/ide/ideMode'
@@ -846,7 +847,181 @@ function TerminalTab(): React.JSX.Element {
         />
       </Row>
       <CliCommandRow />
+      <ConnectionsRow />
     </section>
+  )
+}
+
+/**
+ * ПОДКЛЮЧЕНИЯ: сохранённые SSH-хосты как обычные профили панели.
+ *
+ * До этого `terminal.customProfiles` существовал полностью — тип, значение по
+ * умолчанию, слияние с найденными оболочками, запуск pty и даже страж с
+ * подтверждением, — но добавить туда что-нибудь можно было ТОЛЬКО правкой
+ * `settings.json` руками. Половина инкремента лежала написанной и невидимой.
+ *
+ * Идём тем же путём, что и правка файла: `settings:set` и страж профилей в
+ * главном процессе, который показывает путь и аргументы и ждёт явного «да».
+ * Своя дверь мимо стража превратила бы удобный экран в способ обойти защиту от
+ * закрепления: профиль — это программа, которую приложение будет запускать.
+ */
+function ConnectionsRow(): React.JSX.Element {
+  useLang()
+  const custom = useSettingsStore((s) => s.settings.terminal.customProfiles)
+  const update = useSettingsStore((s) => s.update)
+  const reload = useSettingsStore((s) => s.refreshProfiles)
+  const [open, setOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const [f, setF] = useState({ name: '', host: '', user: '', port: '', keyPath: '' })
+
+  const valid = sshValid({ host: f.host, user: f.user, port: f.port, keyPath: f.keyPath })
+
+  const add = async (): Promise<void> => {
+    setErr(null)
+    setBusy(true)
+    try {
+      /*
+       * Абсолютный путь к `ssh` спрашиваем у главного процесса: страж коротких
+       * имён не принимает, и правильно — «ssh» из PATH зависит от того, что в
+       * PATH лежит в эту минуту.
+       */
+      const path = await window.zarya.shells.sshPath()
+      if (!path) {
+        setErr(t('set.connNoSsh'))
+        return
+      }
+      const label = sshLabel({ host: f.host, user: f.user, port: f.port })
+      const profile = {
+        id: `ssh-${Date.now().toString(36)}`,
+        name: f.name.trim() || label,
+        path,
+        args: sshArgs({ host: f.host, user: f.user, port: f.port, keyPath: f.keyPath }),
+        /*
+         * `none` — не упрощение, а факт: скрипт интеграции остаётся на ЭТОЙ
+         * машине, а команды пойдут на той. Обещать блоки, которых не будет, —
+         * то же враньё, что и кнопка, которая не работает.
+         */
+        integration: 'none' as const,
+        icon: 'SSH'
+      }
+      await update({ terminal: { customProfiles: [...custom, profile] } as never })
+      /*
+       * ПРОВЕРЯЕМ, А НЕ ВЕРИМ. Добавление профиля проходит через стража в
+       * главном процессе, и человек мог нажать «отклонить» — тогда на диске
+       * список прежний. Закрыть форму с видом «сохранено» значило бы соврать
+       * ровно в том месте, где защита сработала.
+       */
+      const saved = useSettingsStore
+        .getState()
+        .settings.terminal.customProfiles.some((x) => x.id === profile.id)
+      if (!saved) {
+        setErr(t('set.connDeclined'))
+        return
+      }
+      // Список панелей берёт профили отдельным запросом: без перечитывания
+      // новый профиль появился бы только после перезапуска.
+      await reload()
+      setOpen(false)
+      setF({ name: '', host: '', user: '', port: '', keyPath: '' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const remove = async (id: string): Promise<void> => {
+    await update({ terminal: { customProfiles: custom.filter((p) => p.id !== id) } as never })
+    await reload()
+  }
+
+  return (
+    <Row title={t('set.conn')} sub="CONNECTIONS" desc={t('set.connDesc')} stack>
+      <div className="zy-conn">
+        {custom.length === 0 && !open && <div className="zy-cli-note">{t('set.connEmpty')}</div>}
+        {custom.map((p) => (
+          <div key={p.id} className="zy-conn-row">
+            <span className="zy-conn-name">{p.name}</span>
+            {/* Что именно запустится — дословно. Профиль это программа с
+                аргументами, и прятать их за красивым именем нельзя. */}
+            <code className="zy-conn-cmd">{[p.path, ...p.args].join(' ')}</code>
+            <button type="button" className="zy-btn zy-btn--sm" onClick={() => void remove(p.id)}>
+              {t('set.connRemove')}
+            </button>
+          </div>
+        ))}
+        {open ? (
+          <div className="zy-conn-form">
+            <div className="zy-conn-fields">
+              <input
+                className="zy-input"
+                placeholder={t('set.connHost')}
+                value={f.host}
+                onChange={(e) => setF({ ...f, host: e.target.value })}
+              />
+              <input
+                className="zy-input"
+                placeholder={t('set.connUser')}
+                value={f.user}
+                onChange={(e) => setF({ ...f, user: e.target.value })}
+              />
+              <input
+                className="zy-input zy-conn-port"
+                placeholder={t('set.connPort')}
+                value={f.port}
+                onChange={(e) => setF({ ...f, port: e.target.value })}
+              />
+            </div>
+            <input
+              className="zy-input"
+              placeholder={t('set.connName')}
+              value={f.name}
+              onChange={(e) => setF({ ...f, name: e.target.value })}
+            />
+            <input
+              className="zy-input"
+              placeholder={t('set.connKey')}
+              value={f.keyPath}
+              onChange={(e) => setF({ ...f, keyPath: e.target.value })}
+            />
+            <div className="zy-cli-note">{t('set.connKeyWhy')}</div>
+            {/* Граница названа ДО нажатия, а не после первой пустой вкладки. */}
+            <div className="zy-cli-note">{t('set.connNoBlocks')}</div>
+            {err && <div className="zy-conn-err">{err}</div>}
+            <div className="zy-inline-group zy-inline-group--wrap">
+              <button
+                type="button"
+                className="zy-btn zy-btn--sm"
+                disabled={!valid || busy}
+                onClick={() => void add()}
+              >
+                {busy ? '…' : t('set.connSave')}
+              </button>
+              <button
+                type="button"
+                className="zy-btn zy-btn--sm"
+                onClick={() => {
+                  setOpen(false)
+                  setErr(null)
+                }}
+              >
+                {t('set.connCancel')}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="zy-btn zy-btn--sm"
+            onClick={() => {
+              setOpen(true)
+              setErr(null)
+            }}
+          >
+            {t('set.connAdd')}
+          </button>
+        )}
+      </div>
+    </Row>
   )
 }
 

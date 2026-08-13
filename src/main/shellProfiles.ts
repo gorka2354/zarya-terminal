@@ -152,6 +152,19 @@ async function detectUnix(): Promise<ShellProfile[]> {
   return profiles
 }
 
+/**
+ * Где системный `ssh`.
+ *
+ * Профилю нужен АБСОЛЮТНЫЙ путь: страж профилей коротких имён не принимает, и
+ * правильно делает — «ssh» из PATH зависит от того, что в PATH лежит сейчас.
+ *
+ * Ищем только `ssh` и ничего больше: канал открыт окну, и «найди мне любой
+ * исполняемый файл» превратило бы его в разведку по чужой файловой системе.
+ */
+export async function locateSsh(): Promise<string | null> {
+  return which('ssh')
+}
+
 export async function detectShells(): Promise<ShellProfile[]> {
   if (cache) return cache
   cache = process.platform === 'win32' ? await detectWindows() : await detectUnix()

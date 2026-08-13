@@ -46,14 +46,44 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
 
   update: async (patch) => {
+    // Показываем сразу — интерфейс не должен ждать диска ради галочки.
     set({ settings: mergeDeep(get().settings, patch) })
-    await window.zarya.settings.set(patch)
+    /*
+     * ОТВЕТ ГЛАВНОГО ПРОЦЕССА ПЕРЕВЕШИВАЕТ наше предположение.
+     *
+     * Он не просто пишет патч: профили проходят через стража (человек может
+     * ОТКЛОНИТЬ добавление) и через чистку — часть значений оттуда возвращается
+     * иной. Оставить на экране оптимистичный вариант значило бы показывать
+     * настройку, которой на диске нет: человек нажал «отклонить», а список
+     * профилей выглядит так, будто он согласился.
+     */
+    const applied = await window.zarya.settings.set(patch)
+    if (applied) set({ settings: applied })
   },
 
   refreshProfiles: async () => {
     set({ profiles: await window.zarya.shells.detect() })
   }
 }))
+
+/*
+ * QA-хук: какие профили видит выбор панели.
+ *
+ * Проверять по экрану нельзя — список живёт в выпадающем поле, и его содержимое
+ * зависит от того, открыто оно или нет. Вопрос же простой: доехал ли только что
+ * добавленный профиль до места, где человек его выберет.
+ */
+if (typeof window !== 'undefined') {
+  ;(window as unknown as { __zaryaDumpProfiles?: () => unknown }).__zaryaDumpProfiles = () =>
+    useSettingsStore.getState().profiles.map((p) => ({
+      id: p.id,
+      name: p.name,
+      path: p.path,
+      args: p.args,
+      integration: p.integration,
+      detected: p.detected === true
+    }))
+}
 
 /** Convenience non-hook accessor. */
 export function getSettings(): Settings {

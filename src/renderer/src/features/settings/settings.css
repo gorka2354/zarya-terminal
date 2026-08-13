@@ -833,3 +833,65 @@
   font-size: 11px;
   color: var(--danger);
 }
+
+/* ── Сохранённые подключения ──────────────────────────────────────────────
+   Профиль это программа с аргументами, и строка показывает их дословно: имя
+   придумывает человек, а запускается argv. */
+.zy-conn {
+  display: flex;
+  flex-direction: column;
+  /* По левому краю: колонка иначе растягивает кнопку во всю ширину строки, и
+     «Добавить SSH…» выглядит полосой, а не кнопкой — в остальных настройках
+     кнопки по содержимому. */
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+}
+.zy-conn > .zy-conn-row,
+.zy-conn > .zy-conn-form {
+  align-self: stretch;
+}
+.zy-conn-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+.zy-conn-name {
+  font-size: 12px;
+  color: var(--fg);
+  flex: none;
+}
+.zy-conn-cmd {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--fg-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.zy-conn-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.zy-conn-fields {
+  display: flex;
+  gap: 6px;
+}
+.zy-conn-fields .zy-input {
+  flex: 1;
+  min-width: 0;
+}
+/* Порт короткий: три-пять знаков, и растягивать его в треть строки незачем. */
+.zy-conn-port {
+  flex: 0 0 90px !important;
+}
+.zy-conn-err {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--danger);
+}
