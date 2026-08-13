@@ -266,11 +266,18 @@
   gap: 8px;
   margin-bottom: 8px;
   flex-wrap: nowrap;
-  /* Highlight the user's turn so it doesn't get lost in the feed (like the shell
-     echo in cmd) — a subtle gold-tinted band, not a heavy grey box. */
-  padding: 6px 10px;
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--accent-2) 7%, var(--bg-elev1));
+  /*
+   * Ход человека виден по МЕТКЕ СЛЕВА, а не по плашке во всю ширину.
+   *
+   * Плашка с фоном тянулась от края до края, и обе её кромки читались как
+   * горизонтальные черты. В верху панели их выстраивалось три подряд — граница
+   * шапки, верх плашки, низ плашки, — и полоса, которая должна была подсвечивать
+   * реплику, выглядела разделителем неизвестно чего. Вертикальная метка держит
+   * ту же роль (глаз находит свои слова мгновенно) и не рисует ни одной
+   * горизонтальной линии.
+   */
+  padding: 2px 10px 2px 8px;
+  border-left: 2px solid color-mix(in srgb, var(--accent-2) 55%, transparent);
 }
 .zy-mf-user-text {
   font-size: 0.97em;
@@ -1962,4 +1969,28 @@
    первой и по ней решает, стоит ли вообще нажимать. */
 .zy-rw-count--risky {
   color: var(--danger);
+}
+
+/* Уже отвеченное в панели вопросов: тише текущего вопроса, но читаемо — это
+   контекст решения, а не украшение. */
+.zy-cqb-done {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  padding: 4px 10px 0;
+  font-size: 11px;
+}
+.zy-cqb-done-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+}
+.zy-cqb-done-q {
+  color: var(--fg-faint);
+}
+.zy-cqb-done-q::after {
+  content: ' →';
+}
+.zy-cqb-done-a {
+  color: var(--fg);
 }

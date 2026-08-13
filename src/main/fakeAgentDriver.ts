@@ -928,22 +928,49 @@ export class FakeAgentDriver implements AgentDriver {
         })
       })
     } else if (/ask/i.test(opts.prompt) && this.capabilities.structuredQuestions) {
-      // Structured AskUserQuestion (only if the driver declares the capability).
+      /*
+       * Structured AskUserQuestion.
+       *
+       * «ask много» — вызов с НЕСКОЛЬКИМИ вопросами и следом ещё один вызов:
+       * так спрашивает настоящий движок, когда уточняет по шагам. Ровно на этом
+       * пути владелец увидел, что в ленте остаётся только последний ответ, —
+       * одним вопросом такой случай не воспроизводится вовсе.
+       */
+      const many = /много|multi/i.test(opts.prompt)
       this.schedule(requestId, 400, () =>
         this.emit(requestId, {
           type: 'permission',
           toolUseId: `${requestId}-q1`,
           toolName: 'AskUserQuestion',
           input: {},
-          questions: [
-            {
-              question: 'Цвет?',
-              header: 'Тема',
-              options: [{ label: 'Красный' }, { label: 'Синий' }]
-            }
-          ]
+          questions: many
+            ? [
+                {
+                  question: 'Чем заняться?',
+                  header: 'Задача',
+                  options: [{ label: 'TUI-тестер' }, { label: 'Другое' }]
+                },
+                {
+                  question: 'Где держать?',
+                  header: 'Хранение',
+                  options: [{ label: 'Пока локально' }, { label: 'В облаке' }]
+                },
+                {
+                  question: 'Когда начать?',
+                  header: 'Сроки',
+                  options: [{ label: 'Сегодня' }, { label: 'Позже' }]
+                }
+              ]
+            : [
+                {
+                  question: 'Цвет?',
+                  header: 'Тема',
+                  options: [{ label: 'Красный' }, { label: 'Синий' }]
+                }
+              ]
         })
       )
+      if (many) this.askAgain.add(requestId)
     } else if (/slow/i.test(opts.prompt)) {
       // Долгий ход без гейта — чтобы успеть проверить то, что делается ПОКА
       // агент работает: очередь, Esc, прерывание. На 500мс такие сценарии
@@ -1036,6 +1063,9 @@ export class FakeAgentDriver implements AgentDriver {
     else emitResult()
   }
 
+  /** Беседы, которым после первого ответа положен ВТОРОЙ вызов вопросов. */
+  private askAgain = new Set<string>()
+
   resolveQuestion(requestId: string, toolUseId: string, answer: AgentQuestionAnswer): void {
     this.emit(requestId, {
       type: 'tool_result',
@@ -1043,6 +1073,26 @@ export class FakeAgentDriver implements AgentDriver {
       content: `answered: ${Object.values(answer.answers).flat().join(', ')}`,
       isError: false
     })
+    if (this.askAgain.delete(requestId)) {
+      // Второй вызов подряд: настоящий движок так и уточняет — сначала одно,
+      // потом, узнав ответ, другое. Ход при этом НЕ заканчивается.
+      this.schedule(requestId, 300, () =>
+        this.emit(requestId, {
+          type: 'permission',
+          toolUseId: `${requestId}-q2`,
+          toolName: 'AskUserQuestion',
+          input: {},
+          questions: [
+            {
+              question: 'Проверять на чём?',
+              header: 'Проверка',
+              options: [{ label: 'На фейке' }, { label: 'На живом' }]
+            }
+          ]
+        })
+      )
+      return
+    }
     this.schedule(requestId, 120, () =>
       this.emit(requestId, {
         type: 'result',

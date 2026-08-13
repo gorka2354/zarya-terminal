@@ -153,6 +153,16 @@ export function ClaudeQuestionBar({
   const preview =
     active && 'preview' in active ? (active as { preview?: string }).preview : undefined
   const pickedSet = new Set(picked[qi] ?? [])
+  /** Что человек уже выбрал в этом же вызове — до текущего вопроса. */
+  const answered = questions
+    .slice(0, qi)
+    .map((qq, i) => ({
+      q: qq.header || qq.question,
+      a: (picked[i] ?? [])
+        .map((l) => (l === OTHER ? otherText[i]?.trim() || t('question.other') : l))
+        .join(', ')
+    }))
+    .filter((x) => x.a)
 
   return (
     <div className="zy-cqb" ref={rootRef} tabIndex={0} onKeyDown={onKeyDown}>
@@ -176,6 +186,27 @@ export function ClaudeQuestionBar({
           <Icon name="close" size={12} />
         </button>
       </div>
+
+      {/*
+        Уже выбранное — на экране, а не в памяти человека.
+        
+        Вопросов в одном вызове бывает три-четыре, показываются они по одному, и
+        до сих пор предыдущий выбор исчезал с глаз, едва человек переходил
+        дальше. Отвечая на «где хранить», он уже не видел, что выбрал в «что
+        строим», — а это один разговор и одно решение. Строка короткая и
+        появляется только начиная со второго вопроса: на первом ей нечего
+        сказать.
+      */}
+      {answered.length > 0 && (
+        <div className="zy-cqb-done">
+          {answered.map((a, i) => (
+            <span key={i} className="zy-cqb-done-item">
+              <span className="zy-cqb-done-q">{a.q}</span>
+              <span className="zy-cqb-done-a">{a.a}</span>
+            </span>
+          ))}
+        </div>
+      )}
 
       <div className="zy-cqb-body">
         <div className="zy-cqb-options">
