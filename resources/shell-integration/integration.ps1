@@ -13,6 +13,34 @@ $Global:__ZaryaState = @{
 # The nonce must not leak to child processes.
 Remove-Item Env:ZARYA_NONCE -ErrorAction SilentlyContinue
 
+# PATH перечитывается ИЗ РЕЕСТРА при каждом старте оболочки.
+#
+# Windows хранит PATH в реестре, а процесс получает его копию от родителя — и
+# больше не обновляет. Значит установщик (rustup, node, gh) дописал PATH в
+# реестр, а живая Заря о нём не знает: старый PATH достаётся и её оболочкам, и
+# новым панелям, и даже перезапущенным. Со стороны это выглядит как «программа
+# не установилась», хотя она на диске и в новом окне работает.
+#
+# Берём машинный и пользовательский PATH из реестра, а следом дописываем то, что
+# было унаследовано и в реестре не значится: так подхватывается новое и не
+# теряется то, что Заре дали при запуске (например, окружение из-под nvm).
+try {
+    $__zpath = @()
+    foreach ($scope in 'Machine', 'User') {
+        $v = [System.Environment]::GetEnvironmentVariable('Path', $scope)
+        if ($v) { $__zpath += $v.Split(';') }
+    }
+    if ($env:Path) { $__zpath += $env:Path.Split(';') }
+    $seen = New-Object System.Collections.Generic.HashSet[string]
+    $clean = foreach ($p in $__zpath) {
+        $t = $p.Trim()
+        if ($t -and $seen.Add($t.TrimEnd('').ToLowerInvariant())) { $t }
+    }
+    $env:Path = ($clean -join ';')
+} catch {
+    # Реестр недоступен (политика, урезанные права) — работаем с тем, что дали.
+}
+
 $Global:__ZaryaEsc = [char]0x1b
 $Global:__ZaryaBel = [char]0x07
 
