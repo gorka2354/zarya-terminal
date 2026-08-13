@@ -1,5 +1,5 @@
 import { t } from '@/lib/i18n'
-import { getTerminal } from '@/terminal/terminalRegistry'
+import { focusPane } from '@/terminal/paneFocus'
 
 /**
  * Отправка блока кода из ответа агента в терминал.
@@ -36,5 +36,17 @@ export function sendCodeToTerminal(
     if (lines > 1 && !window.confirm(t('ide.runAsk', { n: lines }))) return
     window.zarya.pty.write(sessionId, code + '\r')
   }
-  getTerminal(sessionId)?.focus()
+  /*
+   * Курсор возвращаем В ПАНЕЛЬ, а не в терминал.
+   *
+   * Здесь стоял `getTerminal(sessionId).focus()` — фокус уходил в скрытое поле
+   * xterm, которого в блочном режиме на экране нет. Снаружи это выглядело так:
+   * команда ушла, а печатать больше некуда — строка ввода не подсвечена, курсор
+   * не мигает, и лечится только переключением на другую панель и обратно.
+   * Владелец поймал это ровно после «запустить» у блока кода.
+   *
+   * `focusPane` знает, чем панель отвечает прямо сейчас: строкой ввода,
+   * карточкой вопроса или самим терминалом в сыром режиме.
+   */
+  focusPane(sessionId)
 }

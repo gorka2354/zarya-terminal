@@ -1,13 +1,31 @@
 import { app } from 'electron'
-import { promises as fs } from 'fs'
-import { join } from 'path'
+import { existsSync, promises as fs } from 'fs'
+import { dirname, join } from 'path'
 import { readJson, writeJsonAtomic } from './jsonStore'
 import type { WorkflowDef } from '@shared/types'
 
+/**
+ * Папка со встроенными ресурсами: скрипты разметки оболочки, готовые workflow.
+ *
+ * В упакованной сборке путь один и точный. В РАЗРАБОТКЕ его приходится искать:
+ * главный процесс собран в `out/main/index.js` и запускается напрямую, поэтому
+ * `getAppPath()` возвращает `out/main` — и `resources` искались там, где их
+ * никогда не было. Тихо, без единой жалобы: интеграция оболочки подключается
+ * «по возможности», и её отсутствие выглядит просто как терминал без блоков.
+ * Из-за этого ни один прогон не мог проверить блоки вообще — а именно блоками
+ * лента показывает, что команда запустилась.
+ *
+ * Ищем вверх по дереву от собранного файла: `out/main` → `out` → корень.
+ */
 export function builtinResourcesDir(): string {
-  return app.isPackaged
-    ? join(process.resourcesPath, 'app-resources')
-    : join(app.getAppPath(), 'resources')
+  if (app.isPackaged) return join(process.resourcesPath, 'app-resources')
+  let dir = app.getAppPath()
+  for (let up = 0; up < 4; up++) {
+    const guess = join(dir, 'resources')
+    if (existsSync(join(guess, 'shell-integration'))) return guess
+    dir = dirname(dir)
+  }
+  return join(app.getAppPath(), 'resources')
 }
 
 export class WorkflowStore {

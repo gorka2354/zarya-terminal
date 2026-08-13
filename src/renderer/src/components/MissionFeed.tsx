@@ -433,6 +433,24 @@ export const MissionFeed = memo(function MissionFeed({
   const cwdShort = shortenPath(cwd || '', 34)
 
   /*
+   * Блоки делятся по времени разговора: что было ДО него — сверху, что после —
+   * снизу. Граница — самая поздняя отметка времени в беседе; её нет только у
+   * бесед, поднятых со старого диска, и тогда всё остаётся как было.
+   */
+  const convAt = useMemo(() => {
+    let at = 0
+    for (const m of conv?.messages ?? []) if (m.ts && m.ts > at) at = m.ts
+    return at
+  }, [conv?.messages])
+  const [before, after] = useMemo(() => {
+    if (!convAt || !hasConv) return [blocks, [] as BlockRecord[]]
+    const a: BlockRecord[] = []
+    const b: BlockRecord[] = []
+    for (const x of blocks) (x.startedAt > convAt ? b : a).push(x)
+    return [a, b]
+  }, [blocks, convAt, hasConv])
+
+  /*
    * СВОЕЙ ШАПКИ У ЛЕНТЫ БОЛЬШЕ НЕТ.
    *
    * Она дублировала шапку панели: та же марка «CLI-АГЕНТ · ЗАРЯ», тот же путь.
@@ -457,7 +475,7 @@ export const MissionFeed = memo(function MissionFeed({
           <EmptyHero sessionId={sessionId} />
         ) : (
           <>
-            {blocks.map((b) => (
+            {before.map((b) => (
               <ShellBlock
                 key={b.id}
                 block={b}
@@ -470,9 +488,28 @@ export const MissionFeed = memo(function MissionFeed({
                 conv={conv}
                 cwd={cwdShort}
                 cwdFull={cwd}
-                afterBlocks={blocks.length > 0}
+                afterBlocks={before.length > 0}
               />
             )}
+            {/*
+              Команды, запущенные ПОСЛЕ разговора, — под ним.
+
+              Раньше все блоки оболочки рисовались выше беседы целиком. В
+              короткой ленте это незаметно, а в разговоре на полчаса команда,
+              запущенная только что, уезжала за километр вверх — человек
+              оставался внизу и делал единственно возможный вывод: «ничего не
+              произошло». Именно так владелец и потерял свой `cargo run`.
+
+              Лента читается сверху вниз как время: что случилось позже — ниже.
+            */}
+            {after.map((b) => (
+              <ShellBlock
+                key={b.id}
+                block={b}
+                branch={branch}
+                liveTail={b.id === runningId ? liveTail : undefined}
+              />
+            ))}
             {conv?.queued && (
               <div className="zy-mf-queued">
                 <Icon name="chevron-up" size={11} />
