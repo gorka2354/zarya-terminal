@@ -8,7 +8,7 @@
 exactly enough light to work by.*
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-ffb05c.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.7.4%20%22Stocktake%22-ffb05c.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.7.5%20%22Rewind%22-ffb05c.svg)](CHANGELOG.md)
 [![Languages](https://img.shields.io/badge/UI-English%20%7C%20%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9-4fd6d6.svg)](#language)
 [![Electron](https://img.shields.io/badge/Electron-43-4fd6d6.svg)](https://www.electronjs.org/)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-5fb88a.svg)](#install)
@@ -337,6 +337,18 @@ Grab `Zarya-Setup-<version>-win-x64.exe` from the GitHub Releases page and run i
 per-user installer, no admin required. `Zarya-Portable-<version>-win-x64.exe` is built
 alongside it if you would rather not install anything.
 
+### The `zarya` command (Windows)
+`zarya .` opens a project from any terminal — and if Zarya is already running, the
+folder arrives in the running window instead of starting a second one. The command is
+not installed behind your back: **Settings → Terminal → the `zarya` command → Install**
+drops two launcher scripts into `%LOCALAPPDATA%\Zarya\bin` and appends that one folder
+to your user `PATH`. The same screen removes it, and it reports what the system
+actually resolves the name to rather than what we tried to write. Terminals already
+open see the command after a restart; panes inside Zarya see it immediately.
+
+Without it, a project still opens by full path to the exe, by *Open with…* from the
+file manager, or by dropping a folder on the icon.
+
 ### From source
 
 ```bash
@@ -438,8 +450,8 @@ Details: [docs/shell-integration.md](docs/shell-integration.md).
 
 ## Tests
 
-Numbers as of 0.7.4: **567 unit checks** (plus 6 skipped on this platform) across
-45 files and **90 end-to-end runs**
+Numbers as of 0.7.5: **989 unit checks** (plus 6 skipped on this platform) across
+76 files and **111 end-to-end runs**
 that drive the real application.
 
 **Unit** (`tests/`, vitest) — the pure logic where a silent mistake costs the most:

@@ -51,6 +51,16 @@ single-maintainer project, not a company with an SLA.
 - **No account, no server component.** There is nothing to breach on Zarya's side
   beyond your own machine — session data, history, workflows and settings are all
   local files under the OS `userData` directory.
+- **One thing lives outside `userData`, and only if you ask for it.** Pressing
+  *Install* under **Settings → Terminal → the `zarya` command** writes two small
+  launcher scripts into `%LOCALAPPDATA%\Zarya\bin` and appends that one folder to
+  your **user** `PATH` (`HKCU\Environment`) — never the machine-wide one, so no
+  elevation is involved and nobody else's account is touched. The existing value
+  is read without expanding `%VARIABLES%` and written back as `REG_EXPAND_SZ`
+  with a single entry appended; nothing else in your `PATH` is rewritten. The
+  same screen removes both, and the screen reports what the system actually
+  resolves `zarya` to — including the case where a different program of that name
+  wins. Zarya never edits `PATH` on install or on update.
 - **Cleartext at rest (everything except API keys).** Only provider API keys are
   encrypted. Terminal scrollback (`sessions/<id>.json`), AI conversations
   (`ai-conversations.json`) and command history (`history.jsonl`) are stored as

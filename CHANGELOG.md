@@ -5,6 +5,149 @@ All notable changes to Zarya are documented here. This project uses
 
 Русская версия этого файла — [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## 0.7.5 — "Rewind" (2026-08-13)
+
+The theme: **you can go back — and you can see what is going on**. Zarya could
+already rewind the conversation, but the files on disk stayed where they were and
+you had to undo them through git. Now both come back.
+
+The other half of this release closes two rows of the terminal parity audit —
+some fifty places where the interface stayed silent or promised something it did
+not do. The comparison was an honest one: 380 items against the real Claude Code
+and against what people expect from a real terminal emulator.
+
+### Added
+
+- **Rewinding code, not just the conversation.** Every turn of yours carries a
+  button that returns the files to the state they were in at that turn. The
+  mechanism is the engine's own (`rewindFiles`), not a shadow git of ours.
+
+  The work turned out to be in the card, not the call. The native rewind silently
+  overwrites edits you made by hand, reaches outside the pane's folder, and its
+  "success" does not mean the files came back. So the card names **every file**
+  and tells your edits apart from the agent's; a file created AFTER the chosen
+  turn is marked "WILL BE DELETED" — rewinding runs both ways, and a calm "will
+  be restored" about such a file would be a lie.
+
+  A **safety copy** is taken first. If it fails, the rewind is CANCELLED and the
+  reason is named per file — otherwise your work would vanish the moment we
+  promised to keep it. Copies live in their own folder with a size cap and clean
+  up after themselves.
+
+  And one thing the engine's docs do not mention: **rewinding only goes
+  backwards**. Asked for a turn later than one already rewound to, Claude Code
+  answers "I can" and does nothing. The card says so plainly.
+
+- **Silence got a voice.** The engine was saying more than the feed showed: a
+  request retried after an API error, a tool denied by a rule, a worker being
+  shut down, the output of local slash commands, a hook that failed — all of it
+  fell into nothing, and the screen in those moments was indistinguishable from a
+  hang.
+
+- **You can see the agent think and see what a tool returned.** Reasoning
+  (`thinking`) appears folded and opens on click. The call card says what the
+  tool actually DID: "read 200 of 4000", "cut short on time", "moved to the
+  background". Call arguments type themselves out instead of three dots. An image
+  returned by an MCP server now reaches the screen.
+
+- **The turn's outcome names itself.** How long it ran, how long until the first
+  token, how it ended, how many calls were rejected without asking. But only when
+  there is something to say: a quiet success stays quiet, or the line stops being
+  read where it matters.
+
+- **The terminal obeys.** Ctrl+C from the input line interrupts the command in
+  the pane, not only when the terminal itself holds focus. The "confirm closing
+  while a process is running" toggle actually works — it was declared and read
+  nowhere. The multi-line paste warning is no longer bypassed by plain Ctrl+V. A
+  file dropped on a pane pastes its path instead of opening a tab.
+
+- **Gestures from the console.** Shift+Tab cycles the lock: ask about everything
+  → edits without asking → autopilot (there used to be nothing in between).
+  A rejected call can carry your explanation in one move. "@" mentions a file
+  with completion, "#" writes a line into project memory, "/copy" takes the whole
+  answer.
+
+- **Permissions: a screen, not just a gate.** Right-click the lock — "What is
+  allowed": the permission tier in words, the rules granted for this conversation
+  quoted in full with a revoke button, the working folders. One line says what
+  nobody says out loud: harmless commands (`echo`, `ls`) are allowed by the engine
+  itself and never reach Zarya, in any mode.
+
+- **The engine and its memory within reach.** An "Engine" tab: which `claude` is
+  running and why that one, who is signed in, what `doctor` says about it. When
+  the engine is broken, Zarya looks broken — now you can see that it is the
+  engine. Alongside it, editing `CLAUDE.md` at every level, right where its price
+  in tokens is already shown.
+
+- **The conversation can be taken with you.** The chat as Markdown, a full copy,
+  the terminal output to a file. The system picks the path, not us.
+
+- **`zarya .` opens a project** — from the file manager, from a script, from
+  another terminal. If Zarya is already running, the folder arrives there. The
+  `zarya` command itself is installed by one button: Settings → Terminal.
+
+- **A long command reports back.** A notification when it finishes, carrying the
+  exit code — "the build finished" and "the build failed" are two different
+  pieces of news. Programs title their own tab (`ssh prod`, `vim`, `htop`).
+
+- **Dictation in three modes.** Text as you speak (the default), a single phrase
+  with auto-stop, or push-to-hold. The speech threshold is measured against the
+  loudest moment of that recording rather than a constant: a quiet microphone no
+  longer leaves auto-stop mute. Next to it, a **microphone check**: a live meter,
+  the threshold drawn on it, a verdict in the same words auto-stop uses, and a
+  transcript through the same model.
+
+- **A navigator over your own messages.** A column at the right edge and Alt+↑/↓:
+  in a long session you are not looking for the agent's answer but for your own
+  line — "what did I actually ask for". A jump highlights the turn and reveals
+  its buttons, rewind included.
+
+### Fixed
+
+- **PATH came from a stale copy.** Windows keeps PATH in the registry, but a
+  process gets a copy from its parent. Zarya started before Rust was installed
+  handed the old PATH to every shell it owns — new panes and restarted ones
+  alike. From the outside it looked like the program had failed to install. Every
+  shell now re-reads PATH from the registry without losing what Zarya itself was
+  given.
+
+- **"Command not found" got an explanation and a button** — "the program may
+  have been installed after this shell started", and "restart and retry".
+
+- **Command blocks ignored the conversation's timeline.** A command launched from
+  the feed ended up a mile above; in a conversation a few minutes long you simply
+  could not see it. Two commands from one code block merged into a single block
+  back to front. After launching from the feed there was nowhere to type.
+
+- **A stripe across the feed.** The live xterm underneath kept painting frames,
+  and where the text should have been the terminal's background of the same
+  colour showed through. The terminal is now hidden under the feed, and the feed
+  has a layer of its own.
+
+- **Dictation stopped ending by itself.** The "key is held" flag could stay
+  raised forever if the window lost focus between the press and the release.
+
+- **Editing the memory file could destroy someone else's work** — the file was
+  written whole. Same place: CRLF was silently turned into LF, so a one-line edit
+  would have shown up as a whole-file diff.
+
+- **The microphone meter was invisible.** Its track, its fill and the threshold
+  mark were painted with theme variables that do not exist in the theme — that
+  is, the meter failed to show the one thing it is drawn for.
+
+- Plus some fifty findings from three Opus reviews and the sceptics that followed
+  them: a card claiming "the agent wants to run" under autopilot; a green "done"
+  above a line saying "cut short on time"; `claude doctor` running in Zarya's own
+  folder; the folder from a second launch disappearing while the window loads.
+
+### Tested
+
+- 989 unit checks across 76 files (was 567 across 45).
+- Around a hundred runs against the live app; twenty of them in CI.
+- Separately, live scenarios against the real Claude Code: rewind (six
+  scenarios), permissions, tool signals, engine health. CI does not run these at
+  all.
+
 ## 0.7.4 — "Stocktake" (2026-08-04)
 
 The theme of this release: **what you have and what it costs you**. With dozens of
