@@ -47,10 +47,12 @@ export function paneToolServer(sdk: SdkToolApi, fromConvId: string): unknown {
     tools: [
       sdk.tool(
         'list_panes',
-        'List the other Zarya panes open on this machine right now: their name, ' +
-          'working folder, engine and whether they are busy. Use it before ' +
-          'send_to_pane when you are unsure of the exact name. Returns no ' +
-          'conversation history and no files — only what a person sees in the tab strip.',
+        'List the other Zarya panes open on this machine right now: name, working ' +
+          'folder, engine, whether it is busy and what it is doing at this moment. ' +
+          'Use it when a question belongs to another project or another part of the ' +
+          'work — a pane whose folder matches is usually the one that knows. ' +
+          'Returns no conversation history and no files: only what a person can see ' +
+          'on that pane right now.',
         {},
         async () => {
           const panes = paneRegistry.list(fromConvId)
@@ -59,7 +61,7 @@ export function paneToolServer(sdk: SdkToolApi, fromConvId: string): unknown {
             panes
               .map(
                 (p) =>
-                  `- ${p.title} (id=${p.convId}) — folder: ${p.cwd ?? 'unknown'}; engine: ${p.engine}; ${p.busy ? 'busy' : 'idle'}`
+                  `- ${p.title} (id=${p.convId}) — folder: ${p.cwd ?? 'unknown'}; engine: ${p.engine}; ${p.busy ? 'busy' : 'idle'}${p.doing ? `; doing: ${p.doing}` : ''}`
               )
               .join('\n')
           )
@@ -68,11 +70,16 @@ export function paneToolServer(sdk: SdkToolApi, fromConvId: string): unknown {
       sdk.tool(
         'send_to_pane',
         'Deliver a short plain-text note to another Zarya pane on this machine — ' +
-          'a finding, a status, or an answer that pane is blocked on. The note ' +
-          'arrives in that conversation labelled as coming from another pane, ' +
-          'never as the person speaking. It cannot approve permissions, change ' +
-          'settings, or run commands there: slash commands arrive as plain text. ' +
-          'Keep it to a couple of sentences; this is a note, not a transfer of context.',
+          'a finding, a status, a question, or an answer that pane is blocked on. ' +
+          'The note arrives in that conversation labelled as coming from another ' +
+          'pane, never as the person speaking. It cannot approve permissions, ' +
+          'change settings, or run commands there: slash commands arrive as plain ' +
+          'text, and anything that pane then does still passes its own gate. ' +
+          'You may ASK another pane and wait for its note back — say plainly that ' +
+          "you expect a reply. When a question is outside this pane's folder or " +
+          'subject, prefer telling the person which pane knows and offering to ask ' +
+          'it, rather than guessing. Keep it to a couple of sentences: this is a ' +
+          'note, not a transfer of context.',
         {
           pane: z
             .string()

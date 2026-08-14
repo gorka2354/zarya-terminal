@@ -30,14 +30,40 @@ const BACKGROUND_HINT = [
 ].join(' ')
 
 /**
- * Итоговая приписка: наша просьба плюс текст человека.
+ * СОСЕДНИЕ ПАНЕЛИ — про них надо НАПОМНИТЬ, а не только дать инструмент.
+ *
+ * Живой прогон показал ровно это: на вопрос про чужой проект агент искал в
+ * своей папке, не нашёл и попросил путь — про соседнюю панель не вспомнил ни
+ * разу. Описание инструмента модель читает, когда УЖЕ решила им
+ * воспользоваться; чтобы она вспомнила о соседях сама, сказать надо в промпте.
+ *
+ * Едет только при включённых записках: платить за эту строку в каждом запросе
+ * там, где инструментов нет вовсе, было бы враньём о цене.
+ */
+const PANES_HINT = [
+  'Other Zarya panes may be open on this machine, each working in its own folder',
+  'and on its own task. When a question is about another project, or clearly',
+  "outside this pane's folder, do not guess and do not go hunting elsewhere on",
+  'disk: call mcp__zarya__list_panes, see which pane that work belongs to, and',
+  'tell the person which pane knows — offering to ask it for them. Ask it',
+  'directly when they say so.'
+].join(' ')
+
+/**
+ * Итоговая приписка: наши просьбы плюс текст человека.
  *
  * Порядок такой: сначала наше, потом его. Приписка человека идёт последней
  * намеренно — при споре двух указаний ближе к концу промпта то, что он написал
  * сам, и оно должно перевешивать нашу заготовку.
  */
-export function enginePromptAppend(userText: string, backgroundLongCommands: boolean): string {
-  const mine = backgroundLongCommands ? BACKGROUND_HINT : ''
+export function enginePromptAppend(
+  userText: string,
+  backgroundLongCommands: boolean,
+  paneMessages = false
+): string {
+  const mine = [backgroundLongCommands ? BACKGROUND_HINT : '', paneMessages ? PANES_HINT : '']
+    .filter(Boolean)
+    .join('\n\n')
   const theirs = (userText ?? '').trim()
   if (!mine) return theirs
   if (!theirs) return mine

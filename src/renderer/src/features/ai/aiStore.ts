@@ -28,7 +28,6 @@ import { gateLabel } from './gates'
 import { applySubagentEvent, type SubagentRun } from './subagents'
 import type { BackgroundTask } from '@shared/agentTasks'
 import { enginePromptAppend } from '@shared/enginePrompt'
-import { inboundDecision } from '@shared/paneMessage'
 import { sameModel } from './modelMatch'
 import { nativeGateOpts } from './startOpts'
 import { irreversible } from '@shared/irreversible'
@@ -803,12 +802,24 @@ function publishPanes(state: { conversations: Conversation[] }): void {
     .filter((c) => !!c.sessionId && !!sessions[c.sessionId])
     .map((c) => {
       const s = c.sessionId ? sessions[c.sessionId] : undefined
+      /*
+       * ЧЕМ ЗАНЯТА — то же, что человек видит на её экране: текущий вызов или
+       * задача из волны. Ни истории, ни текста разговора: сосед должен понять,
+       * к кому идти с вопросом, а не читать чужую переписку.
+       */
+      const run = Object.values(c.subagents ?? {}).find((r) => !r.done)
+      const doing =
+        c.pendingTools.find((t) => !t.settled)?.name ||
+        run?.description ||
+        run?.lastTool ||
+        undefined
       return {
         convId: c.id,
         title: s?.title || c.title,
         cwd: s?.cwd || c.cwd,
         engine: c.engine,
-        busy: c.streaming === true
+        busy: c.streaming === true,
+        doing
       }
     })
   const sig = JSON.stringify(panes)
@@ -828,7 +839,7 @@ function publishPanes(state: { conversations: Conversation[] }): void {
  *    человека — тот же довод, только со стороны модели.
  * 3. У панели на АВТОПИЛОТЕ она придерживается. Там указание со стороны стало
  *    бы действиями без единого вопроса, а согласия человека на них никто не
- *    давал (см. inboundDecision).
+ *    давал (см. inboundPlan).
  */
 function receivePaneNote(m: {
   noteId?: string
@@ -862,19 +873,19 @@ function receivePaneNote(m: {
   const fromName = from?.title || 'другая панель'
 
   /*
-   * Две причины придержать, и они разные по смыслу.
+   * ПРИДЕРЖИВАЕМ ТОЛЬКО ПО ЗАНЯТОСТИ: вклиниться между вызовом инструмента и
+   * его результатом нельзя, разговор бы испортился. Записка при этом ВИДНА
+   * человеку — молча потерять её мы не можем.
    *
-   * `autopilot` — решение о безопасности: там чужой текст стал бы действиями
-   * без единого вопроса. `busy` — про момент: вклиниться между вызовом
-   * инструмента и его результатом нельзя, разговор бы испортился. В обоих
-   * случаях записка ВИДНА человеку — молча придержать значило бы потерять её.
+   * Молчаливый режим (автопилот или «правки без спроса») больше НЕ повод
+   * придерживать. Прежнее правило было верным по букве и убивало замысел:
+   * диалог упирался в модальную кнопку ровно там, где человек включил
+   * автоматизацию, то есть где он её и ждал. Вместо кнопки — ход с вопросами
+   * (см. ниже и `inboundPlan`).
    */
   const busy = to.streaming === true || to.pendingTools.length > 0
-  // Молчаливый режим — и автопилот, и «правки без спроса»: во втором вопросов
-  // нет ровно про то, что дороже всего, про изменение файлов.
   const silent = to.bypass === true || to.editsAuto === true
-  const held: 'autopilot' | 'busy' | undefined =
-    inboundDecision('accept', silent) !== 'accept' ? 'autopilot' : busy ? 'busy' : undefined
+  const held: 'busy' | undefined = busy ? 'busy' : undefined
 
   if (held) {
     useAiStore.setState((s) => ({
@@ -898,6 +909,67 @@ function receivePaneNote(m: {
   }
 
   ack({ ok: true })
+
+  /*
+   * ХОД ПО ЧУЖОЙ ЗАПИСКЕ ИДЁТ С ВОПРОСАМИ.
+   *
+   * Панель работает без спроса — на время этого хода снимаем автопилот и
+   * «правки без спроса», а после возвращаем. Согласие «делай молча» человек
+   * давал СВОИМ словам; чужая записка им не покрыта. Сосед по-прежнему может
+   * рассказать факт, спросить и получить ответ — но не может чужими руками
+   * молча переписать файлы.
+   *
+   * Возвращаем только то, что сами сняли: если человек тем временем передвинул
+   * тумблер руками, его выбор важнее нашего восстановления.
+   */
+  if (silent) {
+    const prevBypass = to.bypass === true
+    const prevEdits = to.editsAuto === true
+    if (prevBypass) useAiStore.getState().setBypass(m.toConvId, false)
+    if (prevEdits) useAiStore.getState().setEditsAuto(m.toConvId, false)
+
+    /*
+     * ЖДЁМ СНАЧАЛА НАЧАЛА ХОДА, потом конца.
+     *
+     * Подписка срабатывает уже на снятие тумблера — то есть ДО того, как ход
+     * пошёл. Без флага «начался» она видела «не стримит, решений не ждёт»,
+     * считала ход законченным и возвращала автопилот в ту же миллисекунду: чужая
+     * записка снова работала бы без вопросов.
+     */
+    let started = false
+    const restore = (): void => {
+      const cur = useAiStore.getState().conversations.find((x) => x.id === m.toConvId)
+      if (!cur) return
+      if (prevBypass && cur.bypass !== true) useAiStore.getState().setBypass(m.toConvId, true)
+      if (prevEdits && cur.editsAuto !== true) useAiStore.getState().setEditsAuto(m.toConvId, true)
+    }
+    const unsub = useAiStore.subscribe((s) => {
+      const c = s.conversations.find((x) => x.id === m.toConvId)
+      if (!c) {
+        unsub()
+        return
+      }
+      const busyNow = c.streaming || c.pendingTools.some((t) => !t.settled)
+      if (busyNow) {
+        started = true
+        return
+      }
+      if (!started) return
+      unsub()
+      restore()
+    })
+    /*
+     * Страховка: ход мог не начаться вовсе (движок не ответил, беседа занята
+     * чем-то ещё). Оставить человека без его же автопилота навсегда нельзя —
+     * он его включал сам и о нашей подмене не знает.
+     */
+    setTimeout(() => {
+      if (started) return
+      unsub()
+      restore()
+    }, 30_000)
+  }
+
   // Обычный путь: одна дорога и в ленту, и агенту — см. `send({ paneNote })`.
   void useAiStore
     .getState()
@@ -1121,11 +1193,16 @@ export const useAiStore = create<AiState>((set, get) => {
       // написано в настройке: обещать немедленность значило бы соврать.
       // Инструменты «увидеть соседа» и «написать соседу» — по явной настройке.
       ...(settings.ai.paneMessages ? { paneMessages: true } : {}),
-      ...(enginePromptAppend(settings.ai.enginePromptExtra, settings.ai.backgroundLongCommands)
+      ...(enginePromptAppend(
+        settings.ai.enginePromptExtra,
+        settings.ai.backgroundLongCommands,
+        settings.ai.paneMessages
+      )
         ? {
             appendPrompt: enginePromptAppend(
               settings.ai.enginePromptExtra,
-              settings.ai.backgroundLongCommands
+              settings.ai.backgroundLongCommands,
+              settings.ai.paneMessages
             )
           }
         : {}),

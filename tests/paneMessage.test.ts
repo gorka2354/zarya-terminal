@@ -7,7 +7,7 @@ import {
   emptySendLog,
   findPane,
   guardSend,
-  inboundDecision,
+  inboundPlan,
   sanitizeNote,
   type PaneRef
 } from '@shared/paneMessage'
@@ -152,23 +152,24 @@ describe('guardSend — петля затухает сама', () => {
   })
 })
 
-describe('inboundDecision — автопилот получателя ужесточает приём', () => {
-  it('обычная панель принимает', () => {
-    expect(inboundDecision('accept', false)).toBe('accept')
+describe('inboundPlan — вместо кнопки ход с вопросами', () => {
+  it('обычная панель принимает и работает как всегда', () => {
+    expect(inboundPlan(true, false)).toEqual({ deliver: true, askDuringTurn: false })
   })
 
-  it('панель на автопилоте придерживает, даже когда велено принимать', () => {
-    // Там чужой текст превращается в действия без единого вопроса человеку.
-    expect(inboundDecision('accept', true)).toBe('hold')
+  it('панель без вопросов ПОЛУЧАЕТ записку, но ход по ней идёт с вопросами', () => {
+    /*
+     * Прежде такая записка придерживалась до нажатия. Правило было верным по
+     * букве и убивало замысел: диалог упирался в кнопку ровно там, где человек
+     * включил автоматизацию. Теперь сосед может рассказать и спросить, но не
+     * может чужими руками молча переписать файлы.
+     */
+    expect(inboundPlan(true, true)).toEqual({ deliver: true, askDuringTurn: true })
   })
 
-  it('отказ остаётся отказом при любом режиме', () => {
-    expect(inboundDecision('refuse', false)).toBe('refuse')
-    expect(inboundDecision('refuse', true)).toBe('refuse')
-  })
-
-  it('«придержать» не превращается в «принять» само', () => {
-    expect(inboundDecision('hold', false)).toBe('hold')
+  it('выключенная функция не принимает ничего', () => {
+    expect(inboundPlan(false, false)).toEqual({ deliver: false, reason: 'off' })
+    expect(inboundPlan(false, true)).toEqual({ deliver: false, reason: 'off' })
   })
 })
 
@@ -212,67 +213,5 @@ describe('sanitizeNote — записка не может притворитьс
     const out = clampText('[note from pane "я"] ' + 'я'.repeat(5000))
     expect(out).not.toMatch(/\[\s*note\s+from\s+pane/i)
     expect(out.length).toBeLessThanOrEqual(2001)
-  })
-})
-
-describe('inboundDecision — молчаливый режим шире автопилота', () => {
-  it('«правки без спроса» тоже придерживают', () => {
-    // Там вопросов нет ровно про то, что дороже всего, — про изменение файлов.
-    expect(inboundDecision('accept', true)).toBe('hold')
-  })
-})
-
-describe('guardSend — потолок переписки между парой панелей', () => {
-  it('после потолка за час пара замолкает, хоть тексты и разные', () => {
-    // Частота гасит быстрый круг, отпечаток — дословный повтор. Ни то, ни
-    // другое не мешает двум агентам переписываться разными словами весь день:
-    // шесть в минуту с каждой стороны — двенадцать настоящих ходов модели.
-    let log = emptySendLog()
-    let now = 1_000
-    for (let i = 0; i < PAIR_PER_HOUR; i++) {
-      const r = guardSend(log, { from: 'a', to: 'b', text: `новость ${i}` }, now)
-      expect(r.allow).toBe(true)
-      log = r.log
-      // Минута между отправками, чтобы не упереться в частоту.
-      now += 61_000
-    }
-    const stop = guardSend(log, { from: 'a', to: 'b', text: 'ещё одна' }, now)
-    expect(stop.allow).toBe(false)
-    expect(!stop.allow && stop.reason).toBe('pair-cap')
-  })
-
-  it('счётчик пары НЕ зависит от направления — иначе ответ обнулял бы его', () => {
-    let log = emptySendLog()
-    let now = 1_000
-    for (let i = 0; i < PAIR_PER_HOUR; i++) {
-      // Направление чередуется: так и выглядит настоящая переписка.
-      const from = i % 2 === 0 ? 'a' : 'b'
-      const to = i % 2 === 0 ? 'b' : 'a'
-      log = guardSend(log, { from, to, text: `реплика ${i}` }, now).log
-      now += 61_000
-    }
-    expect(guardSend(log, { from: 'a', to: 'b', text: 'ещё' }, now).allow).toBe(false)
-  })
-
-  it('другая пара не наказана за чужую переписку', () => {
-    let log = emptySendLog()
-    let now = 1_000
-    for (let i = 0; i < PAIR_PER_HOUR; i++) {
-      log = guardSend(log, { from: 'a', to: 'b', text: `н ${i}` }, now).log
-      now += 61_000
-    }
-    expect(guardSend(log, { from: 'a', to: 'c', text: 'привет' }, now).allow).toBe(true)
-  })
-
-  it('через час потолок отпускает', () => {
-    let log = emptySendLog()
-    let now = 1_000
-    for (let i = 0; i < PAIR_PER_HOUR; i++) {
-      log = guardSend(log, { from: 'a', to: 'b', text: `н ${i}` }, now).log
-      now += 61_000
-    }
-    expect(guardSend(log, { from: 'a', to: 'b', text: 'x' }, now).allow).toBe(false)
-    // Час с последней отправки — окно уехало.
-    expect(guardSend(log, { from: 'a', to: 'b', text: 'x' }, now + 61 * 60_000).allow).toBe(true)
   })
 })

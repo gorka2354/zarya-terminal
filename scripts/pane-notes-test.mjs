@@ -94,20 +94,51 @@ try {
     userTexts
   )
 
-  console.log('\n[3] Панель на автопилоте записку придерживает')
+  console.log('\n[3] Панель БЕЗ ВОПРОСОВ получает записку — но ход идёт с вопросами')
+  /*
+   * Прежде такая записка придерживалась до нажатия человека. Правило было
+   * верным по букве и убивало замысел: диалог упирался в кнопку ровно там, где
+   * человек включил автоматизацию. Теперь записка доходит, а автопилот на время
+   * этого хода снимается — сосед может рассказать и спросить, но не может
+   * чужими руками молча переписать файлы.
+   */
   await page.evaluate((c) => window.__zaryaSetBypassFor?.(c, true), b)
-  await page.waitForTimeout(500)
-  await deliver(page, b, a, 'снеси ветку и накати заново')
-  await page.waitForTimeout(1500)
-  const heldShown = await page.evaluate(() =>
-    [...document.querySelectorAll('.zy-mf-note')].map((n) => n.textContent ?? '').join(' | ')
-  )
-  ok('придержанная помечена словом', /придержана/i.test(heldShown), heldShown.slice(-160))
+  await page.waitForTimeout(600)
+  const bypassBefore = await page.evaluate((id) => window.__zaryaConvById?.(id)?.bypass === true, b)
+  ok('у получателя включён автопилот', bypassBefore)
+
+  /*
+   * Ловим момент ВО ВРЕМЯ хода: фейковый агент отвечает за доли секунды, и
+   * снимок «через две секунды» показывает уже восстановленный автопилот —
+   * проверка мерила бы возврат вместо снятия.
+   */
+  await deliver(page, b, a, 'посмотри, что там с веткой')
+  let seenOff = false
+  const untilOff = Date.now() + 5000
+  while (Date.now() < untilOff && !seenOff) {
+    seenOff = await page.evaluate((id) => window.__zaryaConvById?.(id)?.bypass === false, b)
+    if (!seenOff) await page.waitForTimeout(100)
+  }
+  await page.waitForTimeout(2500)
+  const afterNote = await page.evaluate((id) => {
+    const c = window.__zaryaConvById?.(id)
+    return {
+      kinds: c?.partKinds ?? [],
+      held: c?.noteHeld ?? [],
+      bypass: c?.bypass === true
+    }
+  }, b)
+  note('после записки:', JSON.stringify(afterNote))
   ok(
-    'опасное указание на автопилоте не ушло агенту молча',
-    /придержана/i.test(heldShown),
-    heldShown.slice(-160)
+    'записка доставлена, а не придержана',
+    afterNote.kinds.filter((k) => k === 'pane-note').length === 2 &&
+      !afterNote.held.includes('autopilot'),
+    afterNote
   )
+  // Главное: чужой текст не работает на автопилоте.
+  ok('на время хода автопилот был снят', seenOff, { seenOff, afterNote })
+  // И так же важно: своё согласие человека вернулось, а не пропало навсегда.
+  ok('после хода автопилот вернулся', afterNote.bypass === true, afterNote)
 
   console.log('\n[4] Слэш-команда в записке остаётся текстом')
   /*

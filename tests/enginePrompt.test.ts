@@ -45,3 +45,24 @@ describe('enginePromptAppend', () => {
     expect(enginePromptAppend('', true)).toMatch(/[Ss]hort commands/)
   })
 })
+
+describe('enginePromptAppend — напоминание про соседние панели', () => {
+  it('без записок про панели не говорим — строка платная', () => {
+    expect(enginePromptAppend('', true, false)).not.toMatch(/list_panes/)
+  })
+
+  it('с записками агенту напоминают спросить соседа, а не гадать', () => {
+    // Живой прогон: на вопрос про чужой проект агент искал в своей папке и
+    // просил путь — про соседнюю панель не вспомнил ни разу.
+    const out = enginePromptAppend('', false, true)
+    expect(out).toMatch(/list_panes/)
+    expect(out).toMatch(/which pane knows/i)
+  })
+
+  it('обе просьбы уживаются, и текст человека остаётся последним', () => {
+    const out = enginePromptAppend('Отвечай кратко.', true, true)
+    expect(out).toMatch(/run_in_background/)
+    expect(out).toMatch(/list_panes/)
+    expect(out.indexOf('list_panes')).toBeLessThan(out.indexOf('Отвечай кратко.'))
+  })
+})
