@@ -2980,6 +2980,17 @@ function seedPatch(convId: string, fn: (c: Conversation) => Conversation): void 
     if (c) useAiStore.getState().setBypass(c.id, bypass)
   }
 }
+/*
+ * QA-хук: одобрить карточку в КОНКРЕТНОЙ беседе.
+ *
+ * `__zaryaApproveFirst` жмёт в активной — а прогонам про две панели нужна
+ * адресная: карточка висит у соседа, пока фокус стоит на отправителе.
+ */
+;(window as unknown as { __zaryaApproveIn?: (id: string) => void }).__zaryaApproveIn = (id) => {
+  const c = useAiStore.getState().conversations.find((x) => x.id === id)
+  const t = c?.pendingTools.find((x) => !x.settled)
+  if (c && t) void useAiStore.getState().approveTool(c.id, t.id)
+}
 ;(window as unknown as { __zaryaApproveFirst?: () => void }).__zaryaApproveFirst = () => {
   const c = useAiStore.getState().activeConversation()
   const t = c?.pendingTools.find((x) => !x.settled)
