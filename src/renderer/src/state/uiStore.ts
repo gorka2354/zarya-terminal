@@ -413,5 +413,12 @@ export function forgetSessionUi(sessionId: string): void {
 ).__zaryaSetPaneBarMode = (sid, mode) => setPaneBarMode(sid, mode as UiState['barMode'])
 ;(window as unknown as { __zaryaDumpUi?: () => unknown }).__zaryaDumpUi = () => ({
   barMode: useUiStore.getState().barMode,
-  barModeBySession: useUiStore.getState().barModeBySession
+  barModeBySession: useUiStore.getState().barModeBySession,
+  /*
+   * Заполнение контекста — наблюдаемое состояние: только по нему видно, во
+   * сколько обходится включённая функция. Считать цену «на глаз по длине
+   * описаний» значит гадать: движок добавляет к ним схему параметров и свою
+   * обвязку.
+   */
+  agentContext: useUiStore.getState().agentContext
 })
