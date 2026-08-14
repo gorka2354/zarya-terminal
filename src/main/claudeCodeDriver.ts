@@ -70,6 +70,7 @@ import {
 import { partialArg } from '@shared/partialJson'
 import { toolFacts } from '@shared/toolFacts'
 import { backgroundSet, taskDone, taskHidden, taskOutcome } from '@shared/agentTasks'
+import { paneToolServer } from './paneTools'
 import { foldContextParts } from '@shared/contextParts'
 import {
   foldMcpTokens,
@@ -984,6 +985,29 @@ export class ClaudeCodeDriver implements AgentDriver {
               preset: 'claude_code' as const,
               append: opts.appendPrompt.trim()
             }
+          }
+        : {}),
+      /*
+       * ИНСТРУМЕНТЫ «УВИДЕТЬ СОСЕДА» И «НАПИСАТЬ СОСЕДУ».
+       *
+       * Только по явному включению: их описания лежат в контексте КАЖДОГО
+       * запроса и стоят токенов — ровно то, за что Заря считает цену скиллов.
+       * Тихо добавить себе платный сервер было бы лицемерием.
+       *
+       * Сервер создаётся ПЕР-СЕССИЮ: обработчик обязан знать отправителя, а
+       * взять его из аргументов инструмента нельзя — агент назвал бы там что
+       * угодно, и одна панель писала бы от имени другой. Ключ `zarya` не
+       * заслоняет пользовательские серверы: те приезжают из конфигурации
+       * движка отдельно.
+       */
+      ...(opts.paneMessages
+        ? {
+            mcpServers: {
+              zarya: paneToolServer(
+                sdk as unknown as Parameters<typeof paneToolServer>[0],
+                requestId
+              )
+            } as Options['mcpServers']
           }
         : {}),
       abortController: abort,

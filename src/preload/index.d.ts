@@ -75,6 +75,16 @@ export interface ZaryaApi {
     setSecret(provider: AiProviderKind, key: string): Promise<void>
     providerStatus(): Promise<AiProviderStatus[]>
   }
+  panes: {
+    /** Состав панелей для инструментов агента. Уровневый: список целиком. */
+    publish(panes: unknown[]): void
+    /** Записка от соседней панели: доставляется главным процессом. */
+    onMessage(
+      cb: (m: { noteId?: string; toConvId: string; fromConvId: string; text: string }) => void
+    ): Unsub
+    /** Отчитаться главному процессу, что стало с запиской. */
+    ack(noteId: string, result: unknown): void
+  }
   shells: {
     detect(): Promise<ShellProfile[]>
     /** Путь к системному `ssh`; null — его на машине нет. */

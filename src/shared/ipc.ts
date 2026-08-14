@@ -110,6 +110,12 @@ export const CH = {
   agentStopTask: 'agent:stop-task',
   /** Увести идущую работу в фон: одну задачу или всё сразу (Ctrl+B движка). */
   agentBackgroundTasks: 'agent:background-tasks',
+  /** Окно сообщает главному процессу состав панелей (для инструментов агента). */
+  panesRegistry: 'panes:registry',
+  /** main -> renderer: записка от соседней панели. */
+  paneMessage: 'panes:message',
+  /** renderer -> main: что на самом деле стало с запиской. */
+  paneMessageAck: 'panes:message-ack',
   agentApplyDirs: 'agent:apply-dirs',
   agentHealth: 'agent:health',
   /** main -> renderer: открыть папку, названную в командной строке. */

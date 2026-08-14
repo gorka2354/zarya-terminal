@@ -252,6 +252,30 @@ export default function AiPanel(): React.JSX.Element {
               const toolResultsOnly =
                 m.content.length > 0 && m.content.every((p) => p.type === 'tool_result')
               if (toolResultsOnly) return null
+              /*
+               * ЗАПИСКА СОСЕДНЕЙ ПАНЕЛИ живёт в ходе роли `user` — так её видит
+               * модель. Здесь она была НЕВИДИМА: панель показывает только
+               * текстовые части, и агент отвечал на то, чего человек не видел.
+               */
+              const note = m.content.find(
+                (p): p is Extract<AiContentPart, { type: 'pane-note' }> => p.type === 'pane-note'
+              )
+              if (note) {
+                return (
+                  <div key={mi} className="zy-ai-round">
+                    <div className="zy-ai-note">
+                      <span className="zy-ai-note-from">
+                        {t('feed.noteFrom', { name: note.from })}
+                        {note.held
+                          ? ` · ${t(note.held === 'busy' ? 'feed.noteHeldBusy' : 'feed.noteHeld')}`
+                          : ''}
+                      </span>
+                      <span className="zy-ai-note-text">{note.text}</span>
+                    </div>
+                  </div>
+                )
+              }
+
               const text = m.content
                 .filter((p): p is Extract<AiContentPart, { type: 'text' }> => p.type === 'text')
                 .map((p) => p.text)

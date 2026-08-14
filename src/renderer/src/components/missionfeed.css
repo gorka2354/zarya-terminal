@@ -2180,3 +2180,56 @@
   margin-top: 5px;
   line-height: 1.4;
 }
+
+/* ── Записка от соседней панели ───────────────────────────────────────────
+   Своя рамка и своё имя отправителя: нарисовать её репликой человека значило
+   бы заставить его поверить, что он сам это написал. Цвет — второй акцент, как
+   у фоновых задач: и то и другое про работу, пришедшую со стороны. */
+.zy-mf-note {
+  margin: 0 0 12px 16px;
+  max-width: 560px;
+  padding: 7px 10px;
+  border: 1px solid color-mix(in srgb, var(--accent-2) 30%, var(--border));
+  border-left-width: 2px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--accent-2) 5%, var(--bg-elev1));
+}
+/* Придержанная — приглушённее и с прямым словом: агенту её не отдали. */
+.zy-mf-note--held {
+  border-color: var(--border);
+  background: var(--bg-elev1);
+}
+.zy-mf-note-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-tech);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--fg-dim);
+}
+.zy-mf-note-from {
+  color: var(--accent-2);
+  /* Имя беседы бывает длинным — это её первая фраза. Без обрезки подпись
+     выдавливала бы пометку «придержана» за край строки. */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.zy-mf-note--held .zy-mf-note-from {
+  color: var(--fg-faint);
+}
+.zy-mf-note-held {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--warn);
+}
+.zy-mf-note-text {
+  margin-top: 4px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--fg);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

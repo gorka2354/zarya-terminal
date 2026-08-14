@@ -466,6 +466,36 @@ function BackgroundLongToggle(): React.JSX.Element {
   )
 }
 
+/**
+ * Дать агенту видеть соседние панели и писать им записки.
+ *
+ * ВЫКЛЮЧЕНО ПО УМОЛЧАНИЮ, и подпись говорит почему: описания двух инструментов
+ * лежат в контексте КАЖДОГО запроса и стоят токенов. Заря считает эту цену для
+ * чужих скиллов (0.7.4) — тихо добавить себе платный сервер и промолчать было
+ * бы лицемерием.
+ *
+ * Тумблер один на обе стороны: он и даёт инструменты этой панели, и разрешает
+ * ей ПРИНИМАТЬ записки. Разделить их значило бы завести состояние, где панель
+ * пишет, но не слышит ответа, — а объяснить это человеку нечем.
+ */
+function PaneMessagesToggle(): React.JSX.Element {
+  const on = useSettingsStore((s) => s.settings.ai.paneMessages)
+  const update = useSettingsStore((s) => s.update)
+  return (
+    <label className="zy-eng-bgask">
+      <input
+        type="checkbox"
+        checked={on}
+        onChange={(e) => void update({ ai: { paneMessages: e.target.checked } as never })}
+      />
+      <span>
+        <span className="zy-eng-bgask-title">{t('eng.panes')}</span>
+        <span className="zy-eng-note">{t('eng.panesWhy')}</span>
+      </span>
+    </label>
+  )
+}
+
 function AppendPrompt(): React.JSX.Element {
   const value = useSettingsStore((s) => s.settings.ai.enginePromptExtra)
   const update = useSettingsStore((s) => s.update)
@@ -476,6 +506,7 @@ function AppendPrompt(): React.JSX.Element {
       <div className="zy-section-label">{t('eng.append')}</div>
       <div className="zy-eng-note">{t('eng.appendWhen')}</div>
       <BackgroundLongToggle />
+      <PaneMessagesToggle />
       <textarea
         className="zy-input zy-textarea"
         rows={3}

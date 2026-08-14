@@ -94,6 +94,8 @@ export const DEFAULT_SETTINGS: Settings = {
      * решает сам, а короткие команды остаются на переднем плане.
      */
     backgroundLongCommands: true,
+    // Выключено: инструменты платные в каждом запросе (см. types.ts).
+    paneMessages: false,
     claudeModel: '',
     claudeEffort: ''
   },

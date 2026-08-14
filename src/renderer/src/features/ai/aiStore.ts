@@ -28,6 +28,7 @@ import { gateLabel } from './gates'
 import { applySubagentEvent, type SubagentRun } from './subagents'
 import type { BackgroundTask } from '@shared/agentTasks'
 import { enginePromptAppend } from '@shared/enginePrompt'
+import { inboundDecision } from '@shared/paneMessage'
 import { sameModel } from './modelMatch'
 import { nativeGateOpts } from './startOpts'
 import { irreversible } from '@shared/irreversible'
@@ -412,7 +413,17 @@ interface AiState {
   deleteConversation: (id: string) => void
   activeConversation: () => Conversation | undefined
 
-  send: (text: string, opts?: { conversationId?: string }) => Promise<void>
+  send: (
+    text: string,
+    opts?: {
+      conversationId?: string
+      /**
+       * Отправить как ЗАПИСКУ соседней панели: в ленте она получит свой вид с
+       * именем отправителя, а не пузырь человека.
+       */
+      paneNote?: { from: string }
+    }
+  ) => Promise<void>
   abort: (conversationId?: string) => void
   /**
    * Отменить ОТПРАВЛЕННОЕ сообщение, на которое агент ещё не ответил: убрать его
@@ -764,10 +775,174 @@ function persistConversations(state: AiState): Promise<void> {
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | undefined
+/**
+ * Состав панелей — главному процессу, для инструментов агента.
+ *
+ * Публикуем УРОВНЕМ (список целиком) и только когда он реально изменился:
+ * сравниваем подпись из полей, которые видит сосед. Слать на каждый кусок
+ * потока значило бы гнать десятки сообщений в секунду ради строки, которая не
+ * поменялась.
+ *
+ * Сам факт публикации ничего не открывает: инструменты появляются у агента
+ * только при включённой настройке, а без них этот список никто не спросит.
+ */
+let lastPanesSig = ''
+
+function publishPanes(state: { conversations: Conversation[] }): void {
+  /*
+   * ТОЛЬКО ОТКРЫТЫЕ ПАНЕЛИ. Беседа переживает панель: закрыл вкладку — разговор
+   * остался в истории. Публиковать их все значило бы показать агенту «панели»,
+   * которых нет на экране, и записка в такую будила бы ПЛАТНЫЙ ход в окне,
+   * которого человек не видит.
+   *
+   * Имя и папку берём у ПАНЕЛИ, а не у беседы: человек обращается к тому, что
+   * написано на вкладке, и переименование вкладки должно менять адрес.
+   */
+  const sessions = useSessionsStore.getState().sessions
+  const panes = state.conversations
+    .filter((c) => !!c.sessionId && !!sessions[c.sessionId])
+    .map((c) => {
+      const s = c.sessionId ? sessions[c.sessionId] : undefined
+      return {
+        convId: c.id,
+        title: s?.title || c.title,
+        cwd: s?.cwd || c.cwd,
+        engine: c.engine,
+        busy: c.streaming === true
+      }
+    })
+  const sig = JSON.stringify(panes)
+  if (sig === lastPanesSig) return
+  lastPanesSig = sig
+  window.zarya.panes?.publish(panes)
+}
+
+/**
+ * Записка от соседней панели приехала.
+ *
+ * ТРИ ПРАВИЛА, каждое из которых иначе превращает удобство в дыру:
+ *
+ * 1. Она ложится в ленту СВОИМ видом, с именем отправителя. Не репликой
+ *    человека: иначе он поверит, что написал это сам.
+ * 2. Агенту она уходит помеченной («записка от панели X»), а не как слова
+ *    человека — тот же довод, только со стороны модели.
+ * 3. У панели на АВТОПИЛОТЕ она придерживается. Там указание со стороны стало
+ *    бы действиями без единого вопроса, а согласия человека на них никто не
+ *    давал (см. inboundDecision).
+ */
+function receivePaneNote(m: {
+  noteId?: string
+  toConvId: string
+  fromConvId: string
+  text: string
+}): void {
+  /*
+   * ОТЧИТЫВАЕМСЯ ПЕРЕД ОТПРАВИТЕЛЕМ во всех ветках, включая отказные. Наш
+   * список панелей в главном процессе — копия, и она отстаёт: панель могли
+   * закрыть секунду назад. Без ответа отправитель услышал бы «доставлено» про
+   * записку, которой никто не получил.
+   */
+  const ack = (result: unknown): void => {
+    if (m.noteId) window.zarya.panes?.ack(m.noteId, result)
+  }
+  const st = useAiStore.getState()
+  const to = st.conversations.find((c) => c.id === m.toConvId)
+  if (!to) {
+    ack({ ok: false, reason: 'gone' })
+    return
+  }
+  // Выключено целиком — значит и принимать нечего: иначе настройка выключала бы
+  // только половину, а вторая продолжала бы работать молча.
+  if (!getSettings().ai.paneMessages) {
+    ack({ ok: false, reason: 'off' })
+    return
+  }
+
+  const from = st.conversations.find((c) => c.id === m.fromConvId)
+  const fromName = from?.title || 'другая панель'
+
+  /*
+   * Две причины придержать, и они разные по смыслу.
+   *
+   * `autopilot` — решение о безопасности: там чужой текст стал бы действиями
+   * без единого вопроса. `busy` — про момент: вклиниться между вызовом
+   * инструмента и его результатом нельзя, разговор бы испортился. В обоих
+   * случаях записка ВИДНА человеку — молча придержать значило бы потерять её.
+   */
+  const busy = to.streaming === true || to.pendingTools.length > 0
+  // Молчаливый режим — и автопилот, и «правки без спроса»: во втором вопросов
+  // нет ровно про то, что дороже всего, про изменение файлов.
+  const silent = to.bypass === true || to.editsAuto === true
+  const held: 'autopilot' | 'busy' | undefined =
+    inboundDecision('accept', silent) !== 'accept' ? 'autopilot' : busy ? 'busy' : undefined
+
+  if (held) {
+    useAiStore.setState((s) => ({
+      conversations: s.conversations.map((c) =>
+        c.id !== m.toConvId
+          ? c
+          : {
+              ...c,
+              messages: [
+                ...c.messages,
+                {
+                  role: 'assistant' as const,
+                  content: [{ type: 'pane-note' as const, from: fromName, text: m.text, held }]
+                }
+              ]
+            }
+      )
+    }))
+    ack({ ok: true, held })
+    return
+  }
+
+  ack({ ok: true })
+  // Обычный путь: одна дорога и в ленту, и агенту — см. `send({ paneNote })`.
+  void useAiStore
+    .getState()
+    .send(m.text, { conversationId: m.toConvId, paneNote: { from: fromName } })
+}
+
+if (typeof window !== 'undefined') {
+  /*
+   * Состав панелей зависит и от СЕССИЙ: человек переименовал вкладку или сделал
+   * `cd` — адрес и папка изменились, а подписка на беседы этого не заметит.
+   * Без этого агент обращался бы к панели по имени, которого на экране уже нет.
+   *
+   * ПОДПИСЫВАЕМСЯ ОТЛОЖЕННО, и это не осторожность впрок: модули ссылаются друг
+   * на друга по кругу (сессии знают про беседы и наоборот), и обращение к
+   * чужому store прямо при загрузке роняло его инициализацию целиком — вместе с
+   * половиной приложения. Микрозадача выполняется, когда оба модуля готовы.
+   */
+  queueMicrotask(() => {
+    try {
+      useSessionsStore.subscribe(() => publishPanes(useAiStore.getState()))
+    } catch {
+      // Реестр переиздастся при следующем изменении беседы — это не повод
+      // ронять окно.
+    }
+  })
+  window.zarya.panes?.onMessage(receivePaneNote)
+  /*
+   * QA-хук: доставить записку ТЕМ ЖЕ путём, каким её доставляет главный
+   * процесс. Не обход, а тот же вход: иначе прогон проверял бы собственную
+   * выдумку, а не поведение продукта.
+   */
+  ;(
+    window as unknown as {
+      __zaryaPaneNote?: (m: { toConvId: string; fromConvId: string; text: string }) => void
+    }
+  ).__zaryaPaneNote = receivePaneNote
+}
+
 function scheduleSave(): void {
   if (!hydrated) return
   clearTimeout(saveTimer)
   saveTimer = setTimeout(() => void persistConversations(useAiStore.getState()), 800)
+  // Состав панелей — сразу: агент соседней панели спрашивает его в момент хода,
+  // и задержка в секунду означала бы список, которого уже нет.
+  publishPanes(useAiStore.getState())
 }
 
 export const useAiStore = create<AiState>((set, get) => {
@@ -877,9 +1052,25 @@ export const useAiStore = create<AiState>((set, get) => {
     if (!conv || conv.engine === 'builtin') return
     const engine = conv.engine
     const lastUser = [...conv.messages].reverse().find((m) => m.role === 'user')
+    /*
+     * Записка соседней панели — ОДНА часть, и она же кормит промпт.
+     *
+     * Держать её текст ещё и отдельной частью `text` нельзя: лента нарисовала
+     * бы рядом обычный пузырь, то есть выдала бы чужую записку за слова
+     * человека — ровно то, ради чего у неё вообще заведён свой вид.
+     *
+     * Пометка «откуда» уходит модели дословно: без неё она прочитает записку
+     * как слова человека и может решить, что получила его согласие.
+     */
     const prompt = (lastUser?.content ?? [])
-      .filter((p): p is Extract<AiContentPart, { type: 'text' }> => p.type === 'text')
-      .map((p) => p.text)
+      .map((p) =>
+        p.type === 'text'
+          ? p.text
+          : p.type === 'pane-note' && !p.held
+            ? `[note from pane "${p.from}"] ${p.text}`
+            : null
+      )
+      .filter((x): x is string => typeof x === 'string')
       .join('\n')
       .trim()
     const hasImages = (lastUser?.content ?? []).some((p) => p.type === 'image')
@@ -928,6 +1119,8 @@ export const useAiStore = create<AiState>((set, get) => {
       // Приписка к системному промпту движка. Едет каждым ходом, но действует с
       // ЗАПУСКА сессии — то есть в беседах, начатых после изменения. Так и
       // написано в настройке: обещать немедленность значило бы соврать.
+      // Инструменты «увидеть соседа» и «написать соседу» — по явной настройке.
+      ...(settings.ai.paneMessages ? { paneMessages: true } : {}),
       ...(enginePromptAppend(settings.ai.enginePromptExtra, settings.ai.backgroundLongCommands)
         ? {
             appendPrompt: enginePromptAppend(
@@ -1715,6 +1908,13 @@ export const useAiStore = create<AiState>((set, get) => {
           s.activeId === id ? (conversations[conversations.length - 1]?.id ?? null) : s.activeId
         return { conversations, activeId }
       })
+      /*
+       * Панель закрыли — состав обязан уехать НЕМЕДЛЕННО. Иначе агент соседней
+       * панели увидит в списке закрытую и напишет ей: доставка окажется в
+       * никуда, а он услышит «доставлено». Сохранение сюда не звали вовсе, и
+       * реестр устаревал молча.
+       */
+      scheduleSave()
     },
 
     activeConversation: () => {
@@ -1734,6 +1934,41 @@ export const useAiStore = create<AiState>((set, get) => {
       const images = (conv.sessionId ? get().pendingImages[conv.sessionId] : undefined) ?? []
       // Сообщение из одних картинок — законное: «что тут не так?» со скриншотом.
       if (!trimmed && !conv.pendingContext.length && !images.length) return
+
+      /*
+       * Записка соседней панели идёт ОДНОЙ частью своего вида. Ни контекста, ни
+       * картинок к ней не цепляем: это чужая записка, а вложения — то, что
+       * человек положил в СВОЮ строку ввода.
+       */
+      if (opts?.paneNote) {
+        patchConversation(conv.id, (c) => ({
+          ...c,
+          messages: [
+            ...c.messages,
+            {
+              role: 'user' as const,
+              content: [{ type: 'pane-note' as const, from: opts.paneNote!.from, text: trimmed }],
+              ts: Date.now()
+            }
+          ],
+          error: undefined
+        }))
+        /*
+         * Панель показывает АКТИВНУЮ беседу. Записка, пришедшая в неактивную,
+         * оставалась невидимой: агент на неё отвечает, а человек не видит ни
+         * записки, ни ответа. Тот же перевод фокуса делает обычная отправка.
+         */
+        if (conv.sessionId) {
+          const sid = conv.sessionId
+          set((s) => ({
+            activeBySession: { ...s.activeBySession, [sid]: conv.id },
+            activeId: conv.id
+          }))
+        }
+        if (conv.engine !== 'builtin') dispatchAgent(conv.id)
+        else await dispatchChat(conv.id)
+        return
+      }
 
       const parts: AiContentPart[] = conv.pendingContext.map((ctx) => ({
         type: 'text',
@@ -1803,7 +2038,11 @@ export const useAiStore = create<AiState>((set, get) => {
       const isVisibleUserTurn = (m: AiMessage): boolean =>
         m.role === 'user' &&
         m.content.some(
-          (p) => p.type === 'text' && !p.text.startsWith('[Контекст:') && !!p.text.trim()
+          (p) =>
+            // Записка соседней панели — такой же ход: агент её обрабатывает, и
+            // пометка «прервано» должна лечь на неё, а не на предыдущий ход.
+            p.type === 'pane-note' ||
+            (p.type === 'text' && !p.text.startsWith('[Контекст:') && !!p.text.trim())
         )
       // Помечать есть что, только если ход и правда шёл. Esc по уже законченной
       // беседе прерывать нечего — а метку бы поставил: второй Esc сразу после
@@ -2541,6 +2780,32 @@ function seedPatch(convId: string, fn: (c: Conversation) => Conversation): void 
          * задачи выглядит как обычная, задержавшаяся.
          */
         background: c.background ?? [],
+        /*
+         * Виды частей ленты. По экрану записку от соседней панели не отличить
+         * от обычного текста наверняка — а весь вопрос inc-41 именно в том, что
+         * она НЕ текст человека и не ответ агента.
+         */
+        partKinds: c.messages.flatMap((m) => m.content.map((p) => p.type)),
+        /*
+         * Записки — отдельным полем, и это не удобство прогона, а следствие
+         * главного решения инкремента: в `text` они НЕ попадают, потому что не
+         * являются ни словами человека, ни ответом агента.
+         */
+        noteTexts: c.messages.flatMap((m) =>
+          m.content.filter((p) => p.type === 'pane-note').map((p) => p.text)
+        ),
+        /*
+         * Придержана ли записка и почему. Без этого «агент не ответил» читается
+         * как поломка доставки, хотя может быть законной задержкой: автопилот
+         * или занятая панель.
+         */
+        noteHeld: c.messages.flatMap((m) =>
+          m.content
+            .filter(
+              (p): p is Extract<AiContentPart, { type: 'pane-note' }> => p.type === 'pane-note'
+            )
+            .map((p) => p.held ?? 'no')
+        ),
         turnMarks: c.messages.map((m) => ({ role: m.role, turnId: m.turnId ?? null })),
         userTexts: c.messages
           .filter((m) => m.role === 'user')
@@ -2607,6 +2872,29 @@ function seedPatch(convId: string, fn: (c: Conversation) => Conversation): void 
   const sid = useSessionsStore.getState().activeSessionId()
   const c = convForSession(useAiStore.getState(), sid) ?? useAiStore.getState().activeConversation()
   if (c) void useAiStore.getState().send(text, { conversationId: c.id })
+}
+/*
+ * QA-хук: отправить в КОНКРЕТНУЮ беседу, а не в активную.
+ *
+ * `__zaryaFollowUp` пишет туда, где стоит фокус, — а прогону записок нужны две
+ * панели разом: одна пишет, вторая слушает. Без адресной отправки оба хода
+ * уходили бы в одну и ту же беседу.
+ */
+/* QA-хук: закрыть беседу — тем же путём, что и крестик на панели. */
+;(window as unknown as { __zaryaDeleteConv?: (id: string) => void }).__zaryaDeleteConv = (id) => {
+  useAiStore.getState().deleteConversation(id)
+}
+/* QA-хук: встать в другую беседу — так же, как это делает щелчок человека. */
+;(window as unknown as { __zaryaSetActiveConv?: (id: string) => void }).__zaryaSetActiveConv = (
+  id
+) => {
+  useAiStore.getState().setActiveConversation(id)
+}
+;(window as unknown as { __zaryaSendTo?: (convId: string, text: string) => void }).__zaryaSendTo = (
+  convId,
+  text
+) => {
+  void useAiStore.getState().send(text, { conversationId: convId })
 }
 ;(window as unknown as { __zaryaDumpConv?: () => unknown }).__zaryaDumpConv = () => {
   const c = useAiStore.getState().activeConversation()

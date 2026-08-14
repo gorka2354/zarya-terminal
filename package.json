@@ -56,6 +56,7 @@
     "qa:long": "npm run build && node scripts/long-command-test.mjs",
     "qa:cli": "npm run build && node scripts/cli-open-test.mjs && node scripts/cli-command-test.mjs",
     "qa:conn": "npm run build && node scripts/connections-test.mjs",
+    "qa:notes": "npm run build && node scripts/pane-notes-test.mjs",
     "qa:engine": "npm run build && node scripts/engine-tab-test.mjs",
     "qa:engine-live": "npm run build && node scripts/engine-live.mjs",
     "qa:perms": "npm run build && node scripts/permissions-test.mjs",

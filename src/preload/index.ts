@@ -71,6 +71,16 @@ const api = {
       ipcRenderer.invoke(CH.settingsSetSecret, provider, key),
     providerStatus: () => ipcRenderer.invoke(CH.settingsProviderStatus)
   },
+  panes: {
+    /** Состав панелей для инструментов агента: имя, папка, движок, занятость. */
+    publish: (panes: unknown[]) => ipcRenderer.send(CH.panesRegistry, panes),
+    /** Записка от соседней панели. */
+    onMessage: (
+      cb: (m: { noteId?: string; toConvId: string; fromConvId: string; text: string }) => void
+    ): Unsub => on(CH.paneMessage, cb),
+    /** Отчитаться, что стало с запиской: без этого отправителю сказать нечего. */
+    ack: (noteId: string, result: unknown) => ipcRenderer.send(CH.paneMessageAck, noteId, result)
+  },
   shells: {
     detect: () => ipcRenderer.invoke(CH.shellsDetect),
     /** Путь к системному `ssh`; null — его на машине нет. */

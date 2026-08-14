@@ -784,3 +784,26 @@
   color: var(--danger);
   background: color-mix(in srgb, var(--danger) 10%, transparent);
 }
+
+/* Записка соседней панели в узкой IDE-панели: та же роль, что и в ленте, но в
+   одну строку — здесь нет места на рамку с шапкой. */
+.zy-ai-note {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  border-left: 2px solid var(--accent-2);
+  background: color-mix(in srgb, var(--accent-2) 5%, transparent);
+}
+.zy-ai-note-from {
+  font-family: var(--font-tech);
+  font-size: 11px;
+  color: var(--accent-2);
+}
+.zy-ai-note-text {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--fg);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

@@ -1099,6 +1099,45 @@ function StopTaskButton({
 }
 
 /**
+ * Записка от СОСЕДНЕЙ ПАНЕЛИ.
+ *
+ * Главное решение inc-41 — вид. Нарисовать её репликой человека значило бы
+ * заставить его поверить, что он сам это написал: он листает длинный разговор,
+ * видит своё сообщение, которого не отправлял, и делает выводы о собственной
+ * памяти. Поэтому у записки своя рамка, имя отправителя и, когда её придержали,
+ * прямое слово об этом.
+ *
+ * Придержанную агенту НЕ отдаём молча: панель на автопилоте выполняет указания
+ * без вопросов, и чужой текст там стал бы действиями, на которые человек
+ * согласия не давал.
+ */
+function PaneNote({
+  from,
+  text,
+  held
+}: {
+  from: string
+  text: string
+  held?: 'autopilot' | 'busy'
+}): React.JSX.Element {
+  useLang()
+  return (
+    <div className={`zy-mf-note${held ? ' zy-mf-note--held' : ''}`}>
+      <div className="zy-mf-note-head">
+        <Icon name="split-h" size={11} />
+        <span className="zy-mf-note-from">{t('feed.noteFrom', { name: from })}</span>
+        {held && (
+          <span className="zy-mf-note-held">
+            {t(held === 'busy' ? 'feed.noteHeldBusy' : 'feed.noteHeld')}
+          </span>
+        )}
+      </div>
+      <div className="zy-mf-note-text">{text}</div>
+    </div>
+  )
+}
+
+/**
  * Увести задачу в фон: ход пойдёт дальше, а она останется работать.
  *
  * Противоположное решение «Остановить», стоящей рядом: там работу прекращают,
@@ -1407,6 +1446,17 @@ const AgentMessage = memo(function AgentMessage({
   useLang()
 
   if (msg.role === 'user') {
+    /*
+     * ЗАПИСКА СОСЕДНЕЙ ПАНЕЛИ ЖИВЁТ В ХОДЕ РОЛИ `user` — так её видит модель,
+     * и иначе она не попала бы в промпт вовсе. Но человеку она НЕ его слова, и
+     * рисовать её пузырём с его подписью значит заставить его поверить, что он
+     * сам это написал. Поэтому ход, состоящий из записки, рисуется её видом.
+     */
+    const note = msg.content.find(
+      (p): p is Extract<AiContentPart, { type: 'pane-note' }> => p.type === 'pane-note'
+    )
+    if (note) return <PaneNote from={note.from} text={note.text} held={note.held} />
+
     const text = msg.content
       .filter((p): p is Extract<AiContentPart, { type: 'text' }> => p.type === 'text')
       .map((p) => p.text)
@@ -1444,6 +1494,9 @@ const AgentMessage = memo(function AgentMessage({
         }
         if (p.type === 'notice') {
           return <NoticeLine key={i} level={p.level} text={p.text} />
+        }
+        if (p.type === 'pane-note') {
+          return <PaneNote key={i} from={p.from} text={p.text} held={p.held} />
         }
         if (p.type === 'compact') {
           return <CompactMark key={i} before={p.before} after={p.after} auto={p.auto} />

@@ -78,7 +78,7 @@ export class AiProxy {
       temperature: req.temperature,
       system: req.system || undefined,
       stream: true,
-      messages: req.messages.map((m) => ({
+      messages: flattenForProvider(req.messages).map((m) => ({
         role: m.role,
         content: m.content.map((p) => {
           if (p.type === 'tool_result') {
@@ -305,11 +305,34 @@ export class AiProxy {
   }
 }
 
+/**
+ * Записка соседней панели — НАШ вид части, и наружу он ехать не должен.
+ *
+ * Anthropic на неизвестный блок отвечает 400, и сообщение остаётся в истории:
+ * беседа ломается НАВСЕГДА, каждый следующий ход упирается в ту же ошибку. У
+ * OpenAI и Ollama мягче и хуже: часть просто отфильтровывается, текст записки
+ * пропадает, и модель отвечает на то, чего не видела.
+ *
+ * Поэтому на границе с провайдером записка становится обычным текстом с
+ * пометкой — той же, что уходит движкам агентов. Пометка обязательна: без неё
+ * модель прочитает чужую записку как слова человека.
+ */
+function flattenForProvider(messages: AiMessage[]): AiMessage[] {
+  return messages.map((m) => ({
+    ...m,
+    content: m.content.map((p) =>
+      p.type === 'pane-note'
+        ? ({ type: 'text', text: `[note from pane "${p.from}"] ${p.text}` } as const)
+        : p
+    )
+  }))
+}
+
 /** Convert internal messages to OpenAI chat format (tool calls included). */
 function toOpenAiMessages(system: string | undefined, messages: AiMessage[]): unknown[] {
   const out: unknown[] = []
   if (system) out.push({ role: 'system', content: system })
-  for (const m of messages) {
+  for (const m of flattenForProvider(messages)) {
     const texts = m.content.filter((p) => p.type === 'text')
     const toolUses = m.content.filter((p) => p.type === 'tool_use')
     const toolResults = m.content.filter((p) => p.type === 'tool_result')

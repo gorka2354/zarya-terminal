@@ -1049,6 +1049,12 @@ export const RU: Dict = {
   'eng.bgLong': 'Просить запускать долгие команды в фоне',
   'eng.bgLongWhy':
     'Сборку, тесты и dev-сервер агент запустит в фоне и продолжит разговор, а результат заберёт позже. Увести УЖЕ идущую команду в фон движок не умеет — поэтому это просьба на старте, а не кнопка. Выполнит её модель или нет, решает она.',
+  'eng.panes': 'Разрешить агенту писать соседним панелям',
+  'eng.panesWhy':
+    'Агент увидит другие панели и сможет передать им короткую записку — например, что миграция прошла. Записка приходит отдельным видом, а не вашими словами: одобрить разрешение или поменять настройки она не может. Стоит токенов в каждом запросе, поэтому по умолчанию выключено. Инструменты появляются у бесед, начатых ПОСЛЕ изменения: состав объявляется движку при запуске сессии.',
+  'feed.noteFrom': 'записка от панели «{name}»',
+  'feed.noteHeld': 'придержана: автопилот',
+  'feed.noteHeldBusy': 'придержана: панель занята',
   'eng.appendPh': 'Например: отвечай кратко, без вступлений',
 
   // --- панель разрешений (inc-28)
@@ -3176,6 +3182,12 @@ export const EN: Dict = {
   'eng.bgLong': 'Ask the agent to start long commands in the background',
   'eng.bgLongWhy':
     'Builds, test suites and dev servers get started in the background so the conversation keeps moving, with the result collected later. The engine cannot move an already-running command to the background — hence a request up front rather than a button. Whether the model honours it is up to the model.',
+  'eng.panes': 'Let the agent message other panes',
+  'eng.panesWhy':
+    'The agent sees your other panes and can hand one a short note — that the migration landed, say. The note arrives in its own form, never as your words, and it cannot approve a permission or change settings. It costs tokens in every request, so it is off by default. The tools reach conversations started AFTER the change: the tool set is declared to the engine when a session starts.',
+  'feed.noteFrom': 'note from pane “{name}”',
+  'feed.noteHeld': 'held: autopilot',
+  'feed.noteHeldBusy': 'held: pane is busy',
   'eng.appendPh': 'For example: answer briefly, no preamble',
 
   // --- permissions panel (inc-28)

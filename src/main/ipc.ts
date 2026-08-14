@@ -28,6 +28,8 @@ import { SkillUsageStore } from './skillUsageStore'
 import { ExtrasWatcher } from './extrasWatcher'
 import { withCustom } from '@shared/sttCustom'
 import { cliInstall, cliRemove, cliStatus } from './cliCommand'
+import { paneRegistry, type NoteAck } from './paneRegistry'
+import type { PaneRef } from '@shared/paneMessage'
 import type { AgentDriver } from './agentDriver'
 import * as fsService from './fsService'
 import * as gitService from './gitService'
@@ -364,6 +366,24 @@ export function registerIpc(ctx: IpcContext): void {
   })
 
   // ---------------------------------------------------------------- shells
+  /*
+   * Состав панелей — от окна в главный процесс.
+   *
+   * Инструменты агента исполняются здесь, а знает состав окно; синхронно
+   * спросить его посреди хода нечем. Поэтому окно присылает список само, а
+   * главный процесс держит копию (см. paneRegistry).
+   */
+  /*
+   * Окно, в которое реестр доставляет записки. Без этой строки доставка честно
+   * отвечала «окна нет» — и живой прогон поймал ровно это: инструмент сработал,
+   * адрес нашёлся, а нести записку оказалось некуда.
+   */
+  paneRegistry.bind(getWindow)
+  ipcMain.on(CH.panesRegistry, (_e, panes: PaneRef[]) => paneRegistry.setPanes(panes))
+  // Что окно сделало с запиской: доставило, придержало или не нашло беседу.
+  ipcMain.on(CH.paneMessageAck, (_e, noteId: string, result: NoteAck) =>
+    paneRegistry.ack(noteId, result)
+  )
   ipcMain.handle(CH.shellsSsh, () => locateSsh())
   ipcMain.handle(CH.shellsDetect, async () => {
     const settings = settingsStore.get()
