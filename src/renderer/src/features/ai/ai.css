@@ -807,3 +807,16 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+/* Видимый след консоли в узкой панели: одна приглушённая строка. Список команд
+   разворачивать негде, поэтому он живёт в подсказке при наведении. */
+.zy-ai-tail {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  font-family: var(--font-tech);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--fg-faint);
+}

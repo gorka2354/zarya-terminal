@@ -276,6 +276,15 @@ export default function AiPanel(): React.JSX.Element {
                 )
               }
 
+              /*
+               * ХВОСТ КОНСОЛИ — тот же случай, что и записка выше: своя часть,
+               * которую эта панель показывает отдельно от текста. Не нарисовать
+               * его здесь значило бы отдать команды человека агенту молча в
+               * ровно том режиме, где он их и набирал.
+               */
+              const tail = m.content.find(
+                (p): p is Extract<AiContentPart, { type: 'shell-tail' }> => p.type === 'shell-tail'
+              )
               const text = m.content
                 .filter((p): p is Extract<AiContentPart, { type: 'text' }> => p.type === 'text')
                 .map((p) => p.text)
@@ -291,6 +300,15 @@ export default function AiPanel(): React.JSX.Element {
                     </span>
                     <span className="zy-ai-divider-line" />
                   </div>
+                  {/* Порядок тот же, что в большой ленте: разделитель, потом
+                      прочитанная консоль, потом вопрос человека. Разошедшийся
+                      порядок читается как разные фичи в двух режимах. */}
+                  {tail && (
+                    <div className="zy-ai-tail" title={tail.used.map((u) => u.command).join('\n')}>
+                      <Icon name="terminal" size={11} />
+                      <span>{t('feed.shellTail', { n: tail.used.length })}</span>
+                    </div>
+                  )}
                   <div className="zy-ai-echo">
                     <span className="zy-ai-echo-star">✦</span>
                     <span className="zy-ai-echo-cwd">{echoCwdDisplay}</span>

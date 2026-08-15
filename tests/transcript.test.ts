@@ -80,6 +80,46 @@ describe('toMarkdown', () => {
     expect(md).not.toMatch(/## Агент/)
   })
 
+  it('прочитанная агентом консоль отмечена — иначе ответ по файлу не объяснить', () => {
+    const md = toMarkdown([
+      msg('user', [
+        {
+          type: 'shell-tail',
+          text: 'полный вывод, который на диск не едет',
+          used: [{ command: 'npm test', exitCode: 1 }, { command: 'git status' }]
+        },
+        { type: 'text', text: 'почему упало?' }
+      ])
+    ])
+    expect(md).toMatch(/прочитал консоль/)
+    expect(md).toMatch(/npm test/)
+    expect(md).toMatch(/git status/)
+    // Слова человека остаются словами человека — отметка их не подменяет.
+    expect(md).toMatch(/## Человек/)
+    expect(md).toMatch(/почему упало\?/)
+  })
+
+  it('в файл едет список команд, а не мегабайты чужого вывода', () => {
+    const md = toMarkdown([
+      msg('user', [
+        { type: 'shell-tail', text: 'x'.repeat(5000), used: [{ command: 'cat big' }] },
+        { type: 'text', text: 'что там?' }
+      ])
+    ])
+    expect(md).not.toContain('x'.repeat(100))
+    expect(md.length).toBeLessThan(1000)
+  })
+
+  it('не поместившиеся команды названы числом, а не забыты', () => {
+    const md = toMarkdown([
+      msg('user', [
+        { type: 'shell-tail', text: 'вывод', used: [{ command: 'ls' }], dropped: 4 },
+        { type: 'text', text: 'ну?' }
+      ])
+    ])
+    expect(md).toMatch(/не поместилось: 4/)
+  })
+
   it('шапка называет движок и папку, когда они известны', () => {
     const md = toMarkdown([msg('user', [{ type: 'text', text: 'привет' }])], {
       title: 'Разбор сборки',

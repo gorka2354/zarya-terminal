@@ -973,6 +973,8 @@ function AgentSection({
           key={i}
           msg={m}
           index={i}
+          convId={conv.id}
+          tailOff={conv.shellTailOff}
           cwd={cwd}
           cwdFull={cwdFull}
           covered={covered}
@@ -1133,6 +1135,83 @@ function PaneNote({
         )}
       </div>
       <div className="zy-mf-note-text">{text}</div>
+    </div>
+  )
+}
+
+/**
+ * ВИДИМЫЙ СЛЕД: какие команды человека уехали агенту вместе с этим ходом.
+ *
+ * Вторая половина inc-42, и без неё первая была бы непрозрачной ровно там, где
+ * человек рассчитывает на приватность своей консоли: подать вывод его команд в
+ * чужую модель молча — не мелочь, а решение, принятое за него.
+ *
+ * Свёрнута по умолчанию: строка про три команды не должна перебивать его
+ * собственный вопрос. Развёрнутая показывает, ЧТО именно уехало, — иначе
+ * пометка сообщала бы только факт, а факт без содержания не проверить.
+ */
+function ShellTailMark({
+  used,
+  dropped,
+  off,
+  onToggle
+}: {
+  used: Array<{ command: string; exitCode?: number }>
+  dropped?: number
+  /** Панель сейчас консоль не подаёт — тогда та же кнопка возвращает подачу. */
+  off?: boolean
+  onToggle?: () => void
+}): React.JSX.Element {
+  useLang()
+  const [open, setOpen] = useState(false)
+  return (
+    <div className={`zy-mf-tail${open ? ' zy-mf-tail--open' : ''}`}>
+      <div className="zy-mf-tail-head">
+        <button
+          type="button"
+          className="zy-mf-tail-toggle"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+        >
+          <Icon name="terminal" size={11} />
+          <span>{t('feed.shellTail', { n: used.length })}</span>
+          {/* Молча потерять команды нельзя: человек видит «3 команды» и вправе
+              знать, что четвёртая не поместилась, а не что её не было. */}
+          {dropped ? (
+            <span className="zy-mf-tail-dropped">{t('feed.shellTailDropped', { n: dropped })}</span>
+          ) : null}
+          <Icon name={open ? 'chevron-up' : 'chevron-down'} size={11} />
+        </button>
+        {/*
+          ТА ЖЕ КНОПКА ВОЗВРАЩАЕТ ПОДАЧУ.
+          Отдельная кнопка «включить» жила бы там, где её никто не найдёт: при
+          отказе новых плашек не появляется, и единственное место, где о нём
+          вообще написано, — вот эта строка. Кнопка, у которой нет обратного
+          хода, — тупик, а тупик в интерфейсе это то же враньё.
+        */}
+        {onToggle && (
+          <button
+            type="button"
+            className={`zy-mf-tail-off${off ? ' zy-mf-tail-off--on' : ''}`}
+            onClick={onToggle}
+            title={t(off ? 'feed.shellTailOnWhy' : 'feed.shellTailOffWhy')}
+          >
+            {t(off ? 'feed.shellTailOn' : 'feed.shellTailOff')}
+          </button>
+        )}
+      </div>
+      {open && (
+        <ul className="zy-mf-tail-list">
+          {used.map((u, i) => (
+            <li key={i}>
+              <span className="zy-mf-tail-cmd">{u.command || t('ai.unknownCmd')}</span>
+              <span
+                className={`zy-mf-tail-code${u.exitCode ? ' zy-mf-tail-code--bad' : ''}`}
+              >{`exit ${u.exitCode ?? '—'}`}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }
@@ -1422,6 +1501,8 @@ function PlanPanel({
 const AgentMessage = memo(function AgentMessage({
   msg,
   index,
+  convId,
+  tailOff,
   cwd,
   cwdFull,
   covered,
@@ -1431,6 +1512,10 @@ const AgentMessage = memo(function AgentMessage({
   msg: Conversation['messages'][number]
   /** Место сообщения в беседе: от него считается «что тронуто с этого хода». */
   index: number
+  /** Беседа, которой принадлежит ход, — по ней выключают подачу консоли. */
+  convId: string
+  /** Панель сейчас консоль не подаёт: та же кнопка на плашке вернёт подачу. */
+  tailOff?: boolean
   cwd: string
   /** Настоящая папка панели — для git. `cwd` обрезан и годится только для показа. */
   cwdFull: string
@@ -1466,18 +1551,49 @@ const AgentMessage = memo(function AgentMessage({
     const images = msg.content.filter(
       (p): p is Extract<AiContentPart, { type: 'image' }> => p.type === 'image'
     )
-    // Ход из одних картинок — законный: «что тут не так?» со скриншотом.
-    if (!text && !images.length) return null
+    /*
+     * Хвост консоли — НАД пузырём человека, в том же порядке, в каком он уехал
+     * модели: сперва обстановка, потом вопрос. И он рисуется даже у хода, где
+     * человек не написал ни слова (отправил один скриншот): уехали его команды
+     * или нет — вопрос не о том, много ли он печатал.
+     */
+    const tail = msg.content.find(
+      (p): p is Extract<AiContentPart, { type: 'shell-tail' }> => p.type === 'shell-tail'
+    )
+    /*
+     * Ход из одних картинок — законный: «что тут не так?» со скриншотом.
+     *
+     * Хвост в условии тоже: ход, собранный из одного прикреплённого контекста,
+     * текста после фильтра `[Контекст:` не имеет — и вся плашка про уехавшую
+     * консоль исчезала вместе с ним. Видимый след не может зависеть от того,
+     * набрал ли человек при этом хоть слово.
+     */
+    if (!text && !images.length && !tail) return null
     return (
-      <UserTurn
-        text={text}
-        images={images}
-        index={index}
-        cwd={cwd}
-        cwdFull={cwdFull}
-        ts={msg.ts}
-        interrupted={interrupted}
-      />
+      <>
+        {tail && (
+          <ShellTailMark
+            used={tail.used}
+            dropped={tail.dropped}
+            off={tailOff}
+            onToggle={() => useAiStore.getState().setShellTailOff(convId, !tailOff)}
+          />
+        )}
+        {/* Пузырь — только когда человеку есть что показать своими словами или
+            картинкой. Ход из одного контекста и хвоста рисуется плашкой: пустой
+            пузырь под ней читался бы как «он отправил ничего». */}
+        {(text || images.length > 0) && (
+          <UserTurn
+            text={text}
+            images={images}
+            index={index}
+            cwd={cwd}
+            cwdFull={cwdFull}
+            ts={msg.ts}
+            interrupted={interrupted}
+          />
+        )}
+      </>
     )
   }
   return (

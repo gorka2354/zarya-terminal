@@ -1055,6 +1055,19 @@ export const RU: Dict = {
   'feed.noteFrom': 'записка от панели «{name}»',
   'feed.noteHeld': 'придержана: автопилот',
   'feed.noteHeldBusy': 'придержана: панель занята',
+  'feed.shellTail': 'агент прочитал вашу консоль: команд — {n}',
+  'feed.shellTailDropped': 'не поместилось: {n}',
+  'feed.shellTailOff': 'не читать здесь',
+  'feed.shellTailOffWhy':
+    'Перестать подавать команды вашей консоли агенту в этой панели. Соседних панелей и настройки на всё приложение это не касается.',
+  'feed.shellTailOn': 'вернуть чтение',
+  'feed.shellTailOnWhy':
+    'Снова подавать команды вашей консоли агенту в этой панели — со следующего сообщения.',
+  'eng.tailBlocks': 'Команд консоли агенту',
+  'eng.tailBlocksNoBlocks':
+    'Блоки команд выключены в настройках терминала — подавать агенту нечего. Включите их, чтобы эта настройка заработала.',
+  'eng.tailBlocksWhy':
+    'Сколько ваших последних команд (сама команда, код возврата и хвост вывода) уезжает агенту вместе с сообщением — чтобы не пересказывать, что вы только что запускали и почему это упало. Едет в каждом ходе и стоит токенов; ноль выключает подачу совсем. Вывод передаётся с пометкой «недоверенные данные», а что именно уехало, видно строкой над вашим ходом.',
   'eng.appendPh': 'Например: отвечай кратко, без вступлений',
 
   // --- панель разрешений (inc-28)
@@ -3188,6 +3201,19 @@ export const EN: Dict = {
   'feed.noteFrom': 'note from pane “{name}”',
   'feed.noteHeld': 'held: autopilot',
   'feed.noteHeldBusy': 'held: pane is busy',
+  'feed.shellTail': 'the agent read your console: {n} command(s)',
+  'feed.shellTailDropped': 'did not fit: {n}',
+  'feed.shellTailOff': 'not here',
+  'feed.shellTailOffWhy':
+    'Stop handing your console commands to the agent in this pane. Other panes and the app-wide setting are untouched.',
+  'feed.shellTailOn': 'resume here',
+  'feed.shellTailOnWhy':
+    'Hand your console commands to the agent in this pane again, starting with your next message.',
+  'eng.tailBlocks': 'Console commands to the agent',
+  'eng.tailBlocksNoBlocks':
+    'Command blocks are off in the terminal settings, so there is nothing to hand over. Turn them on for this setting to do anything.',
+  'eng.tailBlocksWhy':
+    'How many of your recent commands (the command, its exit code and the tail of its output) ride along with your message, so you never have to retell what you just ran and why it failed. It rides in every turn and costs tokens; zero switches it off entirely. Output is passed marked as untrusted data, and a line above your turn shows exactly what went.',
   'eng.appendPh': 'For example: answer briefly, no preamble',
 
   // --- permissions panel (inc-28)

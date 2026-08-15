@@ -28,6 +28,7 @@ import { gateLabel } from './gates'
 import { applySubagentEvent, type SubagentRun } from './subagents'
 import type { BackgroundTask } from '@shared/agentTasks'
 import { enginePromptAppend } from '@shared/enginePrompt'
+import { shellTail, type ShellTail } from '@shared/shellTail'
 import { sameModel } from './modelMatch'
 import { nativeGateOpts } from './startOpts'
 import { irreversible } from '@shared/irreversible'
@@ -180,6 +181,18 @@ export interface Conversation {
    * still sees them on resume, so the feed says so out loud.
    */
   interrupted?: number[]
+  /**
+   * ЭТА панель консоль человека агенту не подаёт.
+   *
+   * Пер-панельно, а не глобально: сколько команд подавать — вопрос настройки
+   * на всё приложение, а «сюда не подавай» — решение про КОНКРЕТНЫЙ разговор,
+   * и принимается оно ровно там, где человек увидел, что именно уехало.
+   *
+   * Хранится в беседе и переживает перезапуск: отказ подавать свою консоль —
+   * не настроение на один ход, и молча вернуть подачу назавтра было бы
+   * ровно тем враньём, ради которого плашка и заведена.
+   */
+  shellTailOff?: boolean
   /** Live subagent wave, keyed by task id. Cleared when the turn ends. */
   subagents?: Record<string, SubagentRun>
   /**
@@ -391,6 +404,19 @@ interface AiState {
   editsAutoBySession: Record<string, boolean>
   planBySession: Record<string, boolean>
   /**
+   * «Не читать здесь» — по ПАНЕЛИ, потому что так и написано в подписи.
+   *
+   * Сначала отказ жил только в беседе, и ревью поймало расхождение: человек
+   * читал «в этой панели», а новый разговор в той же панели снова забирал его
+   * консоль. Обещание было шире правды — то самое, чего проект себе не
+   * позволяет.
+   *
+   * В отличие от соседних карт, ПЕРЕЖИВАЕТ перезапуск: восстанавливается из
+   * бесед, поднятых с диска. Автопилот наоборот обязан спрашивать заново —
+   * там перезапуск ослабляет, здесь усиливает, и это разные решения.
+   */
+  shellTailOffBySession: Record<string, boolean>
+  /**
    * Вложенные картинки, ждущие отправки, — по ПАНЕЛИ, а не по беседе. В момент
    * вставки беседы у панели может ещё не быть, а курсор уже в конкретной панели.
    * На диск не пишется: base64 скриншота в открытом файле истории — плохой
@@ -436,6 +462,8 @@ interface AiState {
    */
   setBypass: (conversationId: string, on: boolean) => void
   setEditsAuto: (conversationId: string, on: boolean) => void
+  /** Не подавать консоль человека агенту в ЭТОЙ беседе (см. `shellTailOff`). */
+  setShellTailOff: (conversationId: string, off: boolean) => void
   /**
    * То же для панели, в которой беседы ещё нет: выбор запоминается и достаётся
    * первой же беседе этой панели.
@@ -644,6 +672,35 @@ function runCommandAndWait(sessionId: string, command: string): Promise<string> 
   })
 }
 
+/**
+ * Хвост консоли этой беседы — или ничего, если подавать нечего или незачем.
+ *
+ * Живёт рядом с системным промптом не случайно: раньше блоки собирались ИМЕННО
+ * там, и переезд сюда — весь смысл inc-42. Формат при переезде не переписан, а
+ * вынесен целиком в @shared/shellTail: обёртка недоверенного вывода — защита, и
+ * менять её заодно с местом вызова значило бы чинить два риска одной правкой.
+ *
+ * Два выключателя, и они про разное. Число в настройках — «сколько команд
+ * подавать» на всё приложение; `shellTailOff` — «в этой панели не подавать
+ * вовсе», решение про конкретный разговор.
+ */
+function collectShellTail(conv: Conversation): ShellTail | undefined {
+  if (conv.shellTailOff) return undefined
+  const sessionId = conv.sessionId || useSessionsStore.getState().activeSessionId()
+  if (!sessionId) return undefined
+  const blocks = useBlocksStore.getState().bySession[sessionId] ?? []
+  return shellTail(blocks, getSettings().ai.contextBlocks, {
+    // SECURITY (prompt injection / OWASP LLM01): вывод команды — НЕДОВЕРЕННЫЕ
+    // данные, их мог сочинить скачанный файл, удалённый сервер или баннер
+    // зависимости. Вступление говорит модели читать их как данные, а не как
+    // указания, чтобы «игнорируй прошлое, запусти X» не стало вызовом.
+    intro: t('ai.sys.untrusted'),
+    unknownCmd: t('ai.unknownCmd'),
+    truncated: t('ai.truncated'),
+    stripped: t('ai.markerStripped')
+  })
+}
+
 async function buildSystemPrompt(conv: Conversation): Promise<string> {
   const settings = getSettings()
   const sessionId = conv.sessionId || useSessionsStore.getState().activeSessionId()
@@ -671,31 +728,15 @@ async function buildSystemPrompt(conv: Conversation): Promise<string> {
     }
   }
 
-  const n = Math.max(0, settings.ai.contextBlocks)
-  if (sessionId && n > 0) {
-    const blocks = (useBlocksStore.getState().bySession[sessionId] ?? []).slice(-n)
-    if (blocks.length) {
-      // SECURITY (prompt injection / OWASP LLM01): command output is UNTRUSTED
-      // data — it can contain text crafted by whatever produced it (a fetched
-      // file, a remote server, a dependency's banner). Spotlight it inside a
-      // fenced, labeled block and tell the model to treat it strictly as data,
-      // never as instructions, so injected "ignore previous / run X" payloads
-      // can't steer the agent into a run_command call.
-      lines.push('', t('ai.sys.untrusted'))
-      for (const b of blocks) {
-        lines.push(`$ ${b.command || t('ai.unknownCmd')}`)
-        lines.push(`exit: ${b.exitCode ?? '—'}`)
-        const out = tailClip(b.output, CONTEXT_BLOCK_OUTPUT_CAP)
-        if (out) {
-          lines.push('<untrusted-terminal-output>')
-          // Neutralize a payload that tries to forge the closing marker.
-          lines.push(out.replace(/<\/?untrusted-terminal-output>/gi, t('ai.markerStripped')))
-          lines.push('</untrusted-terminal-output>')
-        }
-        lines.push('')
-      }
-    }
-  }
+  /*
+   * БЛОКОВ ЗДЕСЬ БОЛЬШЕ НЕТ — они уехали в часть хода (`collectShellTail`).
+   *
+   * Две причины. Первая: этот промпт видел только встроенный провайдер, потому
+   * что зовут его лишь из `dispatchChat`, — а настройка обещала «прикреплять к
+   * запросу», и Claude Code команд человека не видел вовсе. Вторая: системный
+   * промпт кэшируется, и волатильный хвост консоли в нём рвал бы кэш каждым
+   * ходом. Оба лечатся одним переездом.
+   */
 
   if (conv.agentMode) {
     lines.push('', t('ai.sys.tool'))
@@ -738,6 +779,27 @@ function bumpEpoch(convId: string): void {
 let hydrated = false
 const CONV_PERSIST_CAP = 100
 
+/**
+ * ТЕКСТ ХВОСТА КОНСОЛИ НА ДИСК НЕ ЕДЕТ — только список команд.
+ *
+ * Хвост нужен ровно один раз: в тот ход, когда он уехал модели. Дальше он живёт
+ * в истории движка. А на диске он копился бы по нескольку тысяч символов НА
+ * КАЖДЫЙ ход — беседа переписывается целиком раз в несколько сот миллисекунд,
+ * и сотня ходов превратила бы каждое сохранение в мегабайты чужого вывода.
+ * Тот же довод, по которому здесь не хранятся картинки инструментов.
+ *
+ * Плашка в ленте от этого не страдает: она рисуется по `used`, а он остаётся.
+ * Пустой текст на отправке отфильтрован — см. `dispatchAgent` и
+ * `flattenForProvider`: восстановленный ход не отправит пустую часть.
+ */
+function stripTailText(m: AiMessage): AiMessage {
+  if (!m.content.some((p) => p.type === 'shell-tail' && p.text)) return m
+  return {
+    ...m,
+    content: m.content.map((p) => (p.type === 'shell-tail' ? { ...p, text: '' } : p))
+  }
+}
+
 function persistConversations(state: AiState): Promise<void> {
   // Never write before hydrate ran: a quit during the async startup load would
   // otherwise overwrite the on-disk conversations AND cached catalog with the
@@ -756,7 +818,8 @@ function persistConversations(state: AiState): Promise<void> {
       resumeAt: c.resumeAt,
       interrupted: c.interrupted,
       cwd: c.cwd,
-      messages: c.messages,
+      messages: c.messages.map(stripTailText),
+      shellTailOff: c.shellTailOff,
       createdAt: c.createdAt
     }))
   const keptIds = new Set(conversations.map((c) => c.id))
@@ -1140,7 +1203,17 @@ export const useAiStore = create<AiState>((set, get) => {
           ? p.text
           : p.type === 'pane-note' && !p.held
             ? `[note from pane "${p.from}"] ${p.text}`
-            : null
+            : // Хвост консоли уже собран и обёрнут при отправке — здесь только
+              // сериализуем. Пропустить эту ветку значит молча выбросить то,
+              // о чём плашка в ленте уже сказала человеку «уехало».
+              //
+              // Пустой текст — это ход, поднятый с диска: там от хвоста остался
+              // только список команд (см. `stripTailText`). Слать пустую строку
+              // незачем, а рисовать плашку по-прежнему честно: команды тогда
+              // действительно уехали.
+              p.type === 'shell-tail' && p.text
+              ? p.text
+              : null
       )
       .filter((x): x is string => typeof x === 'string')
       .join('\n')
@@ -1886,6 +1959,7 @@ export const useAiStore = create<AiState>((set, get) => {
     bypassBySession: {},
     editsAutoBySession: {},
     planBySession: {},
+    shellTailOffBySession: {},
     pendingImages: {},
 
     hydrate: async () => {
@@ -1908,6 +1982,15 @@ export const useAiStore = create<AiState>((set, get) => {
         claudeSessionId: p.claudeSessionId,
         resumeAt: p.resumeAt,
         interrupted: p.interrupted,
+        /*
+         * Отказ отдавать консоль поднимается с диска ОБЯЗАТЕЛЬНО.
+         *
+         * Ревью поймало ровно этот пропуск: флаг писался, но не читался, и
+         * после перезапуска подача возвращалась молча — а плашка показывала
+         * кнопку «не читать здесь», то есть человек и узнать бы не смог. Хуже
+         * несделанной фичи только фича, которая сама себя отменяет.
+         */
+        shellTailOff: p.shellTailOff,
         cwd: p.cwd,
         // Any non-builtin engine drives its own agentic tool loop. A conv written
         // by a newer build with an unknown engine still lands here as an agent
@@ -1919,9 +2002,22 @@ export const useAiStore = create<AiState>((set, get) => {
         pendingContext: [],
         createdAt: p.createdAt
       }))
+      /*
+       * Карта отказов восстанавливается из поднятых бесед.
+       *
+       * Иначе перезапуск чинил бы старые разговоры и ломал новые: беседа со
+       * своим флагом консоль не отдаёт, а первая же новая в той же панели —
+       * отдаёт, потому что карта пуста. Отказ бы «наполовину пережил»
+       * перезапуск, и объяснить человеку эту половину было бы нечем.
+       */
+      const shellTailOffBySession: Record<string, boolean> = {}
+      for (const c of conversations) {
+        if (c.sessionId && c.shellTailOff) shellTailOffBySession[c.sessionId] = true
+      }
       set({
         conversations,
         activeBySession: saved.activeBySession ?? {},
+        shellTailOffBySession,
         activeId: conversations[conversations.length - 1]?.id ?? null
       })
     },
@@ -1951,6 +2047,9 @@ export const useAiStore = create<AiState>((set, get) => {
         // а первый же ход уходил бы обычным: человек видел бы обещание
         // осторожности, которого никто не давал драйверу.
         planMode: opts?.sessionId ? get().planBySession[opts.sessionId] : undefined,
+        // Отказ отдавать консоль — тоже намерение ПАНЕЛИ: человек сказал «не
+        // читать здесь» про своё окно терминала, а не про один разговор в нём.
+        shellTailOff: opts?.sessionId ? get().shellTailOffBySession[opts.sessionId] : undefined,
         streaming: false,
         pendingTools: [],
         toolStartedAt: {},
@@ -2051,6 +2150,26 @@ export const useAiStore = create<AiState>((set, get) => {
         type: 'text',
         text: `[Контекст: ${ctx.label}]\n${ctx.content}`
       }))
+      /*
+       * ХВОСТ КОНСОЛИ — между чужим контекстом и словами человека.
+       *
+       * Порядок не случаен: последним в ходе идёт то, что человек написал сам.
+       * Так же устроена и приписка к системному промпту — при споре двух
+       * указаний ближе к концу должно быть его слово, а не наша заготовка.
+       *
+       * Собираем ЗДЕСЬ, а не в момент отправки движку: хвост обязан описывать
+       * консоль на момент этого хода. Пересобранный позже, он показал бы под
+       * старым вопросом сегодняшние команды.
+       */
+      const tail = collectShellTail(conv)
+      if (tail) {
+        parts.push({
+          type: 'shell-tail',
+          text: tail.text,
+          used: tail.used,
+          ...(tail.dropped ? { dropped: tail.dropped } : {})
+        })
+      }
       // Плейсхолдер в тексте, блоки следом и в том же порядке — так это делает
       // настоящий CLI: модель видит ссылку на картинку там, где её вставили.
       const marks = images.map((_, i) => imagePlaceholder(i)).join(' ')
@@ -2299,6 +2418,31 @@ export const useAiStore = create<AiState>((set, get) => {
       // следующего хода незачем.
       if (conv.engine !== 'builtin')
         void window.zarya.agent.setPermissionMode(conv.engine, conv.id, on ? 'plan' : 'default')
+    },
+
+    setShellTailOff: (conversationId, off) => {
+      const conv = get().conversations.find((c) => c.id === conversationId)
+      if (!conv) return
+      patchConversation(conv.id, (c) => ({ ...c, shellTailOff: off }))
+      /*
+       * Запомнить за ПАНЕЛЬЮ — так написано в подписи кнопки. Без этого
+       * следующий разговор в том же окне снова забирал бы консоль, о которой
+       * человек уже сказал «не читать».
+       *
+       * Помечаем и УЖЕ ОТКРЫТЫЕ беседы этой панели: человек видит одно окно и
+       * решение принимает про него, а не про ту из вкладок разговора, что
+       * оказалась активной в момент нажатия.
+       */
+      if (conv.sessionId) {
+        const sid = conv.sessionId
+        set((s) => ({
+          shellTailOffBySession: { ...s.shellTailOffBySession, [sid]: off },
+          conversations: s.conversations.map((c) =>
+            c.sessionId === sid ? { ...c, shellTailOff: off } : c
+          )
+        }))
+        scheduleSave()
+      }
     },
 
     setEditsAuto: (conversationId, on) => {
@@ -2717,6 +2861,17 @@ onBus('terminal:focus', ({ sessionId }) => {
 // Второй ход В ТОЙ ЖЕ беседе. Правила «до конца сессии» — свойство беседы, и
 // проверять их новым запуском бессмысленно: у новой беседы своих правил нет,
 // как и должно быть.
+/*
+ * Отказ читать консоль — ПО ПАНЕЛИ, а не только по беседе.
+ *
+ * Наблюдаемое состояние: от карты зависит, унаследует ли отказ новый разговор,
+ * открытый в том же окне. По беседам этого не видно — они уже помечены, — а
+ * ревью поймало ровно случай, где карта терялась и отказ переживал перезапуск
+ * наполовину.
+ */
+;(window as unknown as { __zaryaTailOffFor?: (sessionId: string) => boolean }).__zaryaTailOffFor = (
+  sessionId
+) => useAiStore.getState().shellTailOffBySession[sessionId] === true
 ;(window as unknown as { __zaryaSendIn?: (convId: string, text: string) => void }).__zaryaSendIn = (
   convId,
   text
@@ -2882,6 +3037,33 @@ function seedPatch(convId: string, fn: (c: Conversation) => Conversation): void 
               (p): p is Extract<AiContentPart, { type: 'pane-note' }> => p.type === 'pane-note'
             )
             .map((p) => p.held ?? 'no')
+        ),
+        /*
+         * ХВОСТ КОНСОЛИ — наблюдаемое состояние, и без него inc-42 не проверить.
+         *
+         * Спор идёт ровно о том, чего на экране не видно: попали ли команды
+         * человека в ТЕКСТ, уехавший модели, и совпадает ли он с тем, о чём
+         * плашка отчиталась человеку. Плашка может быть права, а промпт пуст —
+         * и наоборот, и это разные поломки.
+         */
+        shellTailOff: c.shellTailOff === true,
+        // Панель, которой принадлежит беседа. Не путать с `sessionId` выше —
+        // там id сессии ДВИЖКА; прогону же нужно окно терминала, потому что
+        // отказ читать консоль живёт именно на нём.
+        paneId: c.sessionId ?? null,
+        shellTails: c.messages.flatMap((m) =>
+          m.content
+            .filter(
+              (p): p is Extract<AiContentPart, { type: 'shell-tail' }> => p.type === 'shell-tail'
+            )
+            .map((p) => ({
+              used: p.used.map((u) => u.command),
+              dropped: p.dropped ?? 0,
+              // Длина, а не текст: сам вывод бывает в тысячи символов, и тащить
+              // его через мост ради проверки «доехал ли» незачем.
+              chars: p.text.length,
+              wrapped: p.text.includes('<untrusted-terminal-output>')
+            }))
         ),
         turnMarks: c.messages.map((m) => ({ role: m.role, turnId: m.turnId ?? null })),
         userTexts: c.messages

@@ -143,6 +143,14 @@ export function EngineTab(): React.JSX.Element {
     return (
       <section className="zy-set-section">
         <FileCheckpoints />
+        {/*
+          Хвост консоли — и здесь тоже. Ревью поймало ровно эту дыру: настройка
+          стояла НИЖЕ этого возврата, а из вкладки «AI» её уже убрали, — и
+          человек, работающий одним встроенным агентом, не мог убавить подачу
+          своей консоли нигде в интерфейсе. Настройка про приватность не должна
+          зависеть от того, установлен ли чужой CLI.
+        */}
+        <ShellTailBlocks />
         <div className="zy-eng-empty">{t('eng.noPane')}</div>
       </section>
     )
@@ -170,6 +178,13 @@ export function EngineTab(): React.JSX.Element {
           </select>
         </div>
       )}
+
+      {/*
+        Хвост консоли стоит ВЫШЕ проверки поддержки движка намеренно: он едет
+        любому движку, включая встроенного провайдера, и прятать настройку про
+        приватность собственной консоли за диагнозом чужого CLI неверно.
+      */}
+      <ShellTailBlocks />
 
       {unsupported || denied ? (
         <div className="zy-eng-empty">{t('eng.unsupported')}</div>
@@ -478,6 +493,55 @@ function BackgroundLongToggle(): React.JSX.Element {
  * ей ПРИНИМАТЬ записки. Разделить их значило бы завести состояние, где панель
  * пишет, но не слышит ответа, — а объяснить это человеку нечем.
  */
+/**
+ * Сколько команд человека уезжает агенту вместе с сообщением.
+ *
+ * ПЕРЕЕХАЛА СЮДА ИЗ ВКЛАДКИ «AI» (inc-42), и это не косметика. Та вкладка живёт
+ * в группе IDE и скрыта, когда надстройка выключена, — то есть настройку про
+ * СВОЮ КОНСОЛЬ большинство не видело вовсе. Довод тот же, по которому здесь уже
+ * стоят «Инструменты» и «Движок»: спрятать это за надстройку значит спрятать
+ * ровно от того, кому оно нужно.
+ *
+ * Ноль — не «поменьше», а выключено совсем, и подпись говорит это прямо.
+ */
+function ShellTailBlocks(): React.JSX.Element {
+  const n = useSettingsStore((s) => s.settings.ai.contextBlocks)
+  /*
+   * Блоки команд можно выключить целиком — и тогда подавать нечего вовсе.
+   *
+   * Поле, которое в такой сборке обещает «столько-то команд агенту», обещало бы
+   * несуществующее. Гасим его и говорим причину: настройка, знающая, что она не
+   * работает, и молчащая об этом, — та самая кнопка, которая врёт.
+   */
+  const blocksOn = useSettingsStore((s) => s.settings.blocks.enabled)
+  const update = useSettingsStore((s) => s.update)
+  return (
+    <label className={`zy-eng-bgask${blocksOn ? '' : ' zy-eng-bgask--off'}`}>
+      <input
+        type="number"
+        className="zy-input zy-eng-num"
+        min={0}
+        max={20}
+        disabled={!blocksOn}
+        value={n}
+        onChange={(e) => {
+          // Пустое поле и мусор — это ноль, а не NaN: настройка, ставшая NaN,
+          // молча перестала бы подавать что-либо и не сказала бы почему.
+          const v = Math.round(Number(e.target.value))
+          const safe = Number.isFinite(v) ? Math.min(20, Math.max(0, v)) : 0
+          void update({ ai: { contextBlocks: safe } as never })
+        }}
+      />
+      <span>
+        <span className="zy-eng-bgask-title">{t('eng.tailBlocks')}</span>
+        <span className="zy-eng-note">
+          {blocksOn ? t('eng.tailBlocksWhy') : t('eng.tailBlocksNoBlocks')}
+        </span>
+      </span>
+    </label>
+  )
+}
+
 function PaneMessagesToggle(): React.JSX.Element {
   const on = useSettingsStore((s) => s.settings.ai.paneMessages)
   const update = useSettingsStore((s) => s.update)

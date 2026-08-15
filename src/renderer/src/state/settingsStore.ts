@@ -100,6 +100,15 @@ if (typeof window !== 'undefined') {
     useSettingsStore.getState().settings
   ;(window as unknown as { __zaryaSetFontSize?: (v: number) => void }).__zaryaSetFontSize = (v) =>
     void useSettingsStore.getState().update({ appearance: { fontSize: v } as never })
+  /*
+   * Сколько команд консоли уезжает агенту (inc-42) — прогону нужно менять это
+   * НА ХОДУ: вся суть проверки в том, что ноль выключает подачу совсем, а
+   * перезапуск приложения ради одной цифры сделал бы прогон вдвое длиннее и
+   * спрятал бы разницу между «выключено» и «ещё не запускалось».
+   */
+  ;(window as unknown as { __zaryaSetTailBlocks?: (n: number) => void }).__zaryaSetTailBlocks = (
+    n
+  ) => void useSettingsStore.getState().update({ ai: { contextBlocks: n } as never })
   // Проект в закладки — прогону, который проверяет проекты в шапке: настоящий
   // выбор папки открывает системное окно, и нажать его прогон не может.
   ;(window as unknown as { __zaryaAddProject?: (dir: string) => void }).__zaryaAddProject = (

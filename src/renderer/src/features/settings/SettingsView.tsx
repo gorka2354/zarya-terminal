@@ -1321,14 +1321,15 @@ function AiTab(): React.JSX.Element {
             onCommit={(v) => void update({ ai: { maxTokens: v } as never })}
           />
         </Row>
-        <Row title={t('set.ctxBlocks')} sub="CONTEXT BLOCKS" desc={t('set.ctxBlocksDesc')}>
-          <NumberField
-            value={ai.contextBlocks}
-            min={0}
-            max={20}
-            onCommit={(v) => void update({ ai: { contextBlocks: v } as never })}
-          />
-        </Row>
+        {/*
+          «Блоков контекста» уехали отсюда во вкладку «Движок» (inc-42).
+          Настройка перестала быть про встроенного провайдера: команды человека
+          теперь едут любому движку. А эта вкладка живёт в группе IDE и скрыта,
+          когда надстройка выключена, — то есть настройку про собственную
+          консоль большинство здесь и не видело. Двух витрин у одной настройки
+          быть не должно: человек правил бы одну и не понимал, почему вторая
+          показывает другое.
+        */}
         <Row
           title={t('set.autoApprove')}
           sub={t('set.autoApproveSub')}
