@@ -517,9 +517,14 @@
   color: var(--fg);
   border-color: var(--border-strong);
 }
+/* Включённый режим плана различается не только цветом, но и ФОРМОЙ рамки:
+   пунктир против сплошной. Иконка у обоих состояний одна и та же, и цвет был
+   единственным признаком — то есть для человека с дальтонизмом чип молчал о
+   том, включена осторожность или нет. Пунктир читается и в оттенках серого. */
 .zy-agentbar-plan--on {
   color: var(--accent);
   border-color: var(--accent);
+  border-style: dashed;
   background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 

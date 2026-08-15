@@ -1171,7 +1171,24 @@ body {
  * выключают. Движение здесь важнее яркости — оно и ловится боковым зрением.
  */
 .zy-pane--waiting::before {
-  background: var(--accent);
+  /*
+   * ПРЕРЫВИСТАЯ, А РАБОЧАЯ — СПЛОШНАЯ.
+   *
+   * Раньше состояния различались только цветом (accent против success) плюс
+   * типом движения. Это ровно пара «красный/зелёный», хуже всего различимая
+   * при самом частом дальтонизме, а при `prefers-reduced-motion` движение
+   * отключается у обоих — и не остаётся вообще ничего, кроме оттенка.
+   *
+   * Теперь у них разная ФОРМА, и она читается в оттенках серого и без
+   * анимации. Смысл совпадает с видом: прерывистое ждёт, сплошное идёт.
+   */
+  background: repeating-linear-gradient(
+    90deg,
+    var(--accent) 0,
+    var(--accent) 10px,
+    transparent 10px,
+    transparent 16px
+  );
   animation: zy-wait-pulse 2.4s ease-in-out infinite;
 }
 @keyframes zy-wait-pulse {
@@ -1227,6 +1244,8 @@ body {
   }
 }
 @media (prefers-reduced-motion: reduce) {
+  /* Движения нет — форма остаётся: прерывистая полоса против сплошной. Это и
+     есть тот признак, ради которого она заведена. */
   .zy-pane--waiting::before {
     animation: none;
     opacity: 0.9;
@@ -1480,6 +1499,9 @@ body {
   gap: 8px;
 }
 .zy-toast {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
   padding: 10px 14px;
   border-radius: var(--radius);
   background: var(--bg-elev2);
@@ -1489,11 +1511,34 @@ body {
   max-width: 360px;
   animation: zy-toast-in 0.18s ease;
 }
+/* Глиф уровня — тот же, что у строк уведомлений в ленте. Цвет рамки остаётся,
+   но он больше не единственный носитель смысла: ✓ и ✗ различимы и в оттенках
+   серого, и человеком, который не различает красный с зелёным. */
+.zy-toast-glyph {
+  flex: none;
+  font-family: var(--font-mono);
+  color: var(--fg-dim);
+}
+.zy-toast-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 .zy-toast--success {
   border-color: color-mix(in srgb, var(--success) 45%, transparent);
 }
+.zy-toast--success .zy-toast-glyph {
+  color: var(--success);
+}
 .zy-toast--error {
   border-color: color-mix(in srgb, var(--danger) 55%, transparent);
+}
+.zy-toast--error .zy-toast-glyph {
+  color: var(--danger);
+}
+/* У спокойной новости своего стиля не было вовсе — она выглядела как карточка
+   без признака уровня. Теперь у неё есть свой знак, как и у двух остальных. */
+.zy-toast--info .zy-toast-glyph {
+  color: var(--fg-faint);
 }
 @keyframes zy-toast-in {
   from {
