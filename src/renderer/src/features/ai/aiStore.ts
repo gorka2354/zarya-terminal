@@ -193,6 +193,16 @@ export interface Conversation {
    * ровно тем враньём, ради которого плашка и заведена.
    */
   shellTailOff?: boolean
+  /**
+   * Куда вернуть беседу, когда боковой вопрос отвечен.
+   *
+   * Ставится ПЕРЕД отправкой бокового вопроса (позже точку взять неоткуда:
+   * «последний ответ» к тому моменту — ответ на сам вопрос) и срабатывает,
+   * когда ход кончился. На диск не пишется: точка живёт в памяти процесса
+   * движка, и после перезапуска указывала бы в никуда — а обещание, которое
+   * молча указывает мимо, хуже отсутствующего.
+   */
+  sideBack?: { sessionId: string; at: string }
   /** Live subagent wave, keyed by task id. Cleared when the turn ends. */
   subagents?: Record<string, SubagentRun>
   /**
@@ -447,6 +457,15 @@ interface AiState {
        * именем отправителя, а не пузырь человека.
        */
       paneNote?: { from: string }
+      /**
+       * БОКОВОЙ ВОПРОС: спросить и не потащить это дальше.
+       *
+       * Пара «вопрос — ответ» останется в ленте с явной пометкой, а следующий
+       * настоящий ход пойдёт веткой от точки ДО вопроса. Держится на форке
+       * сессии, поэтому работает не у всех движков — и там, где не работает,
+       * пометка честно скажет, что вопрос остался в контексте.
+       */
+      side?: boolean
     }
   ) => Promise<void>
   abort: (conversationId?: string) => void
@@ -1619,6 +1638,9 @@ export const useAiStore = create<AiState>((set, get) => {
             ]
           }))
         }
+        // Снимок ДО патча: ниже `sideBack` снимается, а знать надо, был ли
+        // этот ход боковым.
+        const convBefore = get().conversations.find((c) => c.id === convId)
         patchConversation(convId, (c) => ({
           ...c,
           streaming: false,
@@ -1640,7 +1662,36 @@ export const useAiStore = create<AiState>((set, get) => {
           // спрашивает про разговор, а не про приложение. Что именно означает
           // сумма на подписке — говорит подпись в баре: там она расчётная, а
           // не списанная.
-          costUsd: addCost(c.costUsd, ev.costUsd)
+          costUsd: addCost(c.costUsd, ev.costUsd),
+          /*
+           * БОКОВОЙ ВОПРОС ОТВЕЧЕН — возвращаем беседу туда, где она была.
+           *
+           * Следующий ход уйдёт веткой от точки ДО вопроса, то есть ни вопрос,
+           * ни ответ на него в контекст не поедут. В ленте они остаются: они
+           * были, человек их читал, и стирать их значило бы соврать иначе.
+           *
+           * `claudeSessionId` тоже возвращаем: точка `at` осмысленна только
+           * внутри своей сессии, и разъехавшаяся пара увела бы ветку не туда.
+           *
+           * Сработает один раз — поле снимается здесь же. Иначе КАЖДЫЙ
+           * следующий ход возвращался бы в ту же точку, и беседа перестала бы
+           * накапливаться вовсе.
+           */
+          ...(c.sideBack
+            ? {
+                resumeAt: c.sideBack.at,
+                claudeSessionId: c.sideBack.sessionId,
+                sideBack: undefined
+              }
+            : {})
+          /*
+           * Одной точки МАЛО — это показал живой прогон: агент помнил то, что
+           * обещано было забыть. `resumeSessionAt`/`forkSession` читаются при
+           * СПАВНЕ, а пока сессия жива, следующий ход просто дописывается в её
+           * очередь, и опции возобновления не смотрит никто. Поэтому ниже мы
+           * ещё и просим драйвер закрыть живую сессию — тогда следующий ход
+           * поднимет её заново и уже веткой.
+           */
           /*
            * Волна ОСТАЁТСЯ на экране. Раньше здесь стояло `subagents:
            * undefined` — «законченный счётчик выглядел бы как работа». Но
@@ -1655,6 +1706,14 @@ export const useAiStore = create<AiState>((set, get) => {
            * ход, а не про два сложенных вместе.
            */
         }))
+        /*
+         * Просим драйвер закрыть живую сессию — вторая половина обещания.
+         * Читаем состояние ДО патча выше: там `sideBack` уже снят, а знать надо
+         * именно то, был ли этот ход боковым.
+         */
+        if (convBefore?.sideBack && convBefore.engine !== 'builtin') {
+          window.zarya.agent.forkNext(convBefore.engine, convId)
+        }
         // Correct the fuel readout to the model that actually ran this turn.
         // Only when a single model ran (subagents would add extra keys → keep config).
         const ran = ev.models ?? []
@@ -2188,11 +2247,35 @@ export const useAiStore = create<AiState>((set, get) => {
       }
       if (conv.sessionId && images.length) get().clearImages(conv.sessionId)
 
+      /*
+       * БОКОВОЙ ВОПРОС: снимаем точку ДО отправки.
+       *
+       * Позже её взять неоткуда: «последняя точка» после ответа — это и есть
+       * ответ на боковой вопрос. Спрашиваем движок здесь, ничего не прерывая.
+       *
+       * Точки может не быть законно: первый ход в свежей сессии (агент ещё не
+       * отвечал, возвращаться некуда) или движок без форка. Тогда обещание
+       * «мимо контекста» не сбудется, и пометка в ленте скажет это прямо —
+       * молча выдать обычный ход за боковой было бы худшим исходом.
+       */
+      let sideBack: { sessionId: string; at: string } | undefined
+      if (opts?.side && conv.engine !== 'builtin') {
+        const point = await window.zarya.agent.forkPoint(conv.engine, conv.id).catch(() => null)
+        if (point?.kind === 'fork') sideBack = { sessionId: point.sessionId, at: point.at }
+      }
+      if (opts?.side) parts.push({ type: 'side-mark', kept: !!sideBack })
+
       patchConversation(conv.id, (c) => ({
         ...c,
         messages: [...c.messages, { role: 'user', content: parts, ts: Date.now() }],
         pendingContext: [],
         error: undefined,
+        /*
+         * Куда вернуться после ответа. Держим в беседе, а не в замыкании: ход
+         * может кончиться перезапуском или отменой, и «висящая» переменная в
+         * этих случаях молча потеряла бы обещание.
+         */
+        sideBack,
         title:
           c.messages.length === 0 && c.title === t('ai.newConv')
             ? deriveTitle(trimmed || conv.pendingContext[0]?.label || '')
@@ -2872,6 +2955,15 @@ onBus('terminal:focus', ({ sessionId }) => {
 ;(window as unknown as { __zaryaTailOffFor?: (sessionId: string) => boolean }).__zaryaTailOffFor = (
   sessionId
 ) => useAiStore.getState().shellTailOffBySession[sessionId] === true
+/*
+ * Отправить вопрос СБОКУ — тем же путём, что и кнопка в баре.
+ *
+ * Живому прогону нужен именно этот путь: обещание «дальше не поедет» держится
+ * на точке ветки, снятой перед отправкой, и проверять его в обход `send` значит
+ * проверять не ту дорогу.
+ */
+;(window as unknown as { __zaryaSendSide?: (convId: string, text: string) => void }).__zaryaSendSide =
+  (convId, text) => void useAiStore.getState().send(text, { conversationId: convId, side: true })
 ;(window as unknown as { __zaryaSendIn?: (convId: string, text: string) => void }).__zaryaSendIn = (
   convId,
   text
@@ -3046,6 +3138,33 @@ function seedPatch(convId: string, fn: (c: Conversation) => Conversation): void 
          * плашка отчиталась человеку. Плашка может быть права, а промпт пуст —
          * и наоборот, и это разные поломки.
          */
+        /*
+         * Пометки боковых вопросов: сбылось ли обещание «дальше не поедет».
+         * По экрану видно только надпись, а спор идёт о том, совпала ли она с
+         * тем, что реально произошло с контекстом.
+         */
+        sideMarks: c.messages.flatMap((m) =>
+          m.content
+            .filter((p): p is Extract<AiContentPart, { type: 'side-mark' }> => p.type === 'side-mark')
+            .map((p) => p.kept)
+        ),
+        /*
+         * ПОСЛЕДНИЙ ОТВЕТ АГЕНТА отдельно от всей ленты.
+         *
+         * Прогон бокового вопроса спрашивает «что ты помнишь?», и искать ответ
+         * во всём тексте беседы нельзя: там же лежит и реплика человека, где
+         * это слово было названо. Прогон падал именно на этом, хотя агент
+         * честно забыл — вопрос был к прибору, а не к коду.
+         */
+        lastAnswer: (() => {
+          const last = [...c.messages].reverse().find((m) => m.role === 'assistant')
+          return (last?.content ?? [])
+            .filter((p) => p.type === 'text')
+            .map((p) => (p as { text: string }).text)
+            .join('\n')
+        })(),
+        /** Куда беседа вернётся, когда боковой ход кончится (пусто — некуда). */
+        sideBack: c.sideBack ? { at: c.sideBack.at } : null,
         shellTailOff: c.shellTailOff === true,
         // Панель, которой принадлежит беседа. Не путать с `sessionId` выше —
         // там id сессии ДВИЖКА; прогону же нужно окно терминала, потому что

@@ -52,6 +52,10 @@ export const CH = {
   agentInterrupt: 'agent:interrupt',
   /** Отмена отправленного сообщения: убрать его и из контекста агента. */
   agentRewind: 'agent:rewind',
+  /** Снимок точки ветки БЕЗ прерывания хода — для бокового вопроса. */
+  agentForkPoint: 'agent:fork-point',
+  /** Следующий ход начать веткой: закрыть живую сессию, ничего не прерывая. */
+  agentForkNext: 'agent:fork-next',
   agentPermission: 'agent:permission',
   agentQuestion: 'agent:question', // resolve a structured AskUserQuestion-style prompt
   agentStream: 'agent:stream', // main -> renderer, payload carries `engine`

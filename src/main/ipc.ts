@@ -507,6 +507,27 @@ export function registerIpc(ctx: IpcContext): void {
       { rewindAfterInterrupt?: (id: string) => AgentRewind | null } | undefined
     return d?.rewindAfterInterrupt?.(requestId) ?? null
   })
+  /**
+   * Точка ветки, снятая НА ХОДУ: где мы сейчас, без отмены и без обрыва.
+   *
+   * Нужна боковому вопросу — он должен знать, куда вернуться ПОСЛЕ ответа.
+   * Как и откат, умеет только Claude Code: у остальных драйверов метода нет, и
+   * `null` здесь — честный ответ «здесь так не получится», а не поломка.
+   */
+  ipcMain.handle(CH.agentForkPoint, (_e, engine: AgentEngine, requestId: string) => {
+    const d = driverFor(engine) as
+      { forkPoint?: (id: string) => AgentRewind | null } | undefined
+    return d?.forkPoint?.(requestId) ?? null
+  })
+  /*
+   * «Следующий ход — веткой». Односторонний, как interrupt: ответа тут нет, а
+   * ошибка молчания была бы виднее любого результата — следующий ход просто
+   * пошёл бы обычным, и живой прогон это ловит.
+   */
+  ipcMain.on(CH.agentForkNext, (_e, engine: AgentEngine, requestId: string) => {
+    const d = driverFor(engine) as { forkNext?: (id: string) => void } | undefined
+    d?.forkNext?.(requestId)
+  })
   ipcMain.on(
     CH.agentPermission,
     (

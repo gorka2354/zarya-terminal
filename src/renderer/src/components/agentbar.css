@@ -528,6 +528,26 @@
   background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
+/* Спросить мимо контекста. Тот же размер, что у соседних чипов режима: это
+   такой же переключатель того, КАК уйдёт ход, а не действие над текстом. */
+.zy-agentbar-side {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--fg-faint);
+  cursor: pointer;
+}
+.zy-agentbar-side:hover {
+  color: var(--accent-2);
+  border-color: var(--accent-2);
+}
+
 .zy-agentbar-mic {
   flex-shrink: 0;
   width: 34px;

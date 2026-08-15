@@ -1140,6 +1140,26 @@ function PaneNote({
 }
 
 /**
+ * БОКОВОЙ ВОПРОС: граница, за которую этот разговор не поедет.
+ *
+ * Обещание «спросил и не потащил дальше» проверить нечем, если его не видно.
+ * Поэтому пара «вопрос — ответ» помечена явно, и пометка говорит правду о том,
+ * СБЫЛОСЬ ли обещание: точки ветки могло не найтись (первый ход в сессии,
+ * движок без форка), и тогда вопрос остался в контексте как обычный. Нарисовать
+ * в этом случае «мимо контекста» значило бы соврать ровно о том, ради чего
+ * человек и нажимал.
+ */
+function SideMark({ kept }: { kept: boolean }): React.JSX.Element {
+  useLang()
+  return (
+    <div className={`zy-mf-side${kept ? '' : ' zy-mf-side--stuck'}`}>
+      <Icon name="branch" size={11} />
+      <span>{t(kept ? 'feed.sideKept' : 'feed.sideStuck')}</span>
+    </div>
+  )
+}
+
+/**
  * ВИДИМЫЙ СЛЕД: какие команды человека уехали агенту вместе с этим ходом.
  *
  * Вторая половина inc-42, и без неё первая была бы непрозрачной ровно там, где
@@ -1569,8 +1589,12 @@ const AgentMessage = memo(function AgentMessage({
      * набрал ли человек при этом хоть слово.
      */
     if (!text && !images.length && !tail) return null
+    const side = msg.content.find(
+      (p): p is Extract<AiContentPart, { type: 'side-mark' }> => p.type === 'side-mark'
+    )
     return (
       <>
+        {side && <SideMark kept={side.kept} />}
         {tail && (
           <ShellTailMark
             used={tail.used}

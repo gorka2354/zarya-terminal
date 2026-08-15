@@ -609,7 +609,7 @@ ${prev}`
     window.zarya.pty.write(activeSessionId, cmd + '\r')
   }
 
-  const askAgent = (agentEngine: 'builtin' | AgentEngine): void => {
+  const askAgent = (agentEngine: 'builtin' | AgentEngine, side = false): void => {
     const q = text.trim()
     if (!q) return
     pushPaneHistory(activeSessionId, q)
@@ -625,8 +625,10 @@ ${prev}`
       ? conv!.id
       : store.newConversation({ sessionId: activeSessionId ?? undefined, engine: agentEngine })
     if (store.activeConversation()?.id !== convId) store.setActiveConversation(convId)
-    void store.send(q, { conversationId: convId })
+    void store.send(q, { conversationId: convId, ...(side ? { side: true } : {}) })
   }
+
+
 
   // Only "busy" (queue instead of send) when the active conversation's engine
   // matches what THIS bar mode targets — not e.g. a background Zarya chat while
@@ -1578,6 +1580,21 @@ ${prev}`
   // driver was auto-allowing — the exact lie it exists to prevent. Lock it only
   // on an explicit bypass:false.
   const isBuiltinMode = mode === 'zarya'
+
+  /*
+   * БОКОВОЙ ВОПРОС. Отдельная кнопка, а не модификатор Enter: обещание «это не
+   * поедет дальше» слишком дорогое, чтобы прятать его в сочетание клавиш,
+   * которое человек нажмёт по ошибке и не заметит.
+   *
+   * Появляется ТОЛЬКО там, где движок правда умеет ветку — по тому же правилу,
+   * что и чип режима плана. Кнопка, обещающая «мимо контекста» там, где мимо не
+   * получится, врёт ровно о том, ради чего её нажимают.
+   */
+  const canAskSide = !!activeEngine && caps?.sideAsk === true && !!text.trim()
+  const askSide = (): void => {
+    if (!canAskSide || !activeEngine) return
+    askAgent(activeEngine, true)
+  }
   // В режиме плана агент не выполняет ничего — спрашивать не о чем, и замок
   // здесь не переключатель, а состояние. Оставить его живым значило бы предлагать
   // ослабить гейт, который сейчас и так закрыт наглухо.
@@ -1836,6 +1853,22 @@ ${prev}`
           Чипа НЕТ там, где движок так не умеет: переключатель, который движок
           пропустит мимо ушей, обещает осторожность, которой не будет.
         */}
+        {/*
+          Спросить мимо контекста. Кнопка живёт рядом с режимом плана — оба про
+          то, КАК уйдёт этот ход, а не про то, что в нём написано. Появляется
+          только с непустой строкой: пустая кнопка обещала бы действие, которого
+          не будет.
+        */}
+        {canAskSide && (
+          <button
+            className="zy-agentbar-side"
+            title={`${t('feed.side')}\n${t('feed.sideHint')}`}
+            aria-label={t('feed.side')}
+            onClick={askSide}
+          >
+            <Icon name="branch" size={13} />
+          </button>
+        )}
         {!isShell && !isBuiltinMode && caps?.planMode === true && (
           <button
             className={`zy-agentbar-plan${planMode ? ' zy-agentbar-plan--on' : ''}`}

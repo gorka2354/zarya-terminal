@@ -121,6 +121,10 @@ export interface ZaryaApi {
      * убирать его из ленты нельзя.
      */
     rewind(engine: AgentEngine, requestId: string): Promise<AgentRewind | null>
+    /** Точка ветки БЕЗ прерывания хода — боковому вопросу, чтобы знать, куда вернуться. */
+    forkPoint(engine: AgentEngine, requestId: string): Promise<AgentRewind | null>
+    /** Следующий ход — веткой от снятой точки (боковой вопрос). */
+    forkNext(engine: AgentEngine, requestId: string): void
     interrupt(engine: AgentEngine, requestId: string): void
     permission(
       engine: AgentEngine,

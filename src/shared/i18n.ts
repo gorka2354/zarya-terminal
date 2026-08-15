@@ -1055,6 +1055,11 @@ export const RU: Dict = {
   'feed.noteFrom': 'записка от панели «{name}»',
   'feed.noteHeld': 'придержана: автопилот',
   'feed.noteHeldBusy': 'придержана: панель занята',
+  'feed.side': 'спросить мимо контекста',
+  'feed.sideHint':
+    'Вопрос и ответ на него останутся в ленте, но в следующий ход не поедут — он продолжится от того места, где вы были до вопроса. Стоит токенов один раз, в момент ответа.',
+  'feed.sideKept': 'вопрос сбоку — дальше не поедет',
+  'feed.sideStuck': 'вопрос сбоку не получился — остался в контексте',
   'feed.shellTail': 'агент прочитал вашу консоль: команд — {n}',
   'feed.shellTailDropped': 'не поместилось: {n}',
   'feed.shellTailOff': 'не читать здесь',
@@ -3201,6 +3206,11 @@ export const EN: Dict = {
   'feed.noteFrom': 'note from pane “{name}”',
   'feed.noteHeld': 'held: autopilot',
   'feed.noteHeldBusy': 'held: pane is busy',
+  'feed.side': 'ask on the side',
+  'feed.sideHint':
+    'The question and its answer stay in the feed but do not ride into your next turn — that one continues from where you were before you asked. Costs tokens once, when answered.',
+  'feed.sideKept': 'asked on the side — goes no further',
+  'feed.sideStuck': 'the side question did not work out — it stayed in context',
   'feed.shellTail': 'the agent read your console: {n} command(s)',
   'feed.shellTailDropped': 'did not fit: {n}',
   'feed.shellTailOff': 'not here',

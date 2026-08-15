@@ -106,6 +106,12 @@ const api = {
       ipcRenderer.send(CH.agentInput, engine, requestId, text),
     rewind: (engine: AgentEngine, requestId: string) =>
       ipcRenderer.invoke(CH.agentRewind, engine, requestId) as Promise<AgentRewind | null>,
+    /** Точка ветки без прерывания — боковому вопросу, чтобы знать, куда вернуться. */
+    forkPoint: (engine: AgentEngine, requestId: string) =>
+      ipcRenderer.invoke(CH.agentForkPoint, engine, requestId) as Promise<AgentRewind | null>,
+    /** Следующий ход — веткой от снятой точки (боковой вопрос). */
+    forkNext: (engine: AgentEngine, requestId: string) =>
+      ipcRenderer.send(CH.agentForkNext, engine, requestId),
     /** Откат ФАЙЛОВ (не разговора): `rewind` выше — про сообщение. */
     rewindFiles: (
       engine: AgentEngine,

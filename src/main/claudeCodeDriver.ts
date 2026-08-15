@@ -636,6 +636,13 @@ export class ClaudeCodeDriver implements AgentDriver {
     structuredQuestions: true,
     // resumeSessionAt + forkSession — см. rewindAfterInterrupt.
     rewind: true,
+    /*
+     * Боковой вопрос держится на том же forkSession. Флаг отдельный, потому что
+     * это РАЗНЫЕ обещания человеку: откат убирает отправленное, боковой вопрос
+     * оставляет его на виду и не пускает дальше. Движок, умеющий одно, не
+     * обязан уметь другое, и чип не должен появляться там, где не сработает.
+     */
+    sideAsk: true,
     // Откат ФАЙЛОВ — другое умение и другой флаг: см. AgentCapabilities.
     rewindFiles: true,
     // Родной формат SDK: изображение уходит блоком в том же сообщении.
@@ -2726,6 +2733,52 @@ export class ClaudeCodeDriver implements AgentDriver {
     session.rewound = true
     this.interrupt(requestId)
     return at
+  }
+
+  /**
+   * ТОЧКА ВЕТКИ, СНЯТАЯ НА ХОДУ, — без прерывания и без последствий.
+   *
+   * Отличие от {@link rewindAfterInterrupt} принципиальное, хотя точку обе
+   * считают одинаково. Тот метод — про ОТМЕНУ: он обрывает идущий ход и метит
+   * сессию отмотанной. Здесь ничего не отменяется: мы просто спрашиваем «где
+   * мы сейчас», чтобы потом было куда вернуться.
+   *
+   * Нужно для бокового вопроса. Спросить «а что такое X?» и не тащить это в
+   * контекст дальше можно только так: запомнить точку ДО вопроса, задать его,
+   * а следующий настоящий ход пустить веткой от запомненного. Позвать
+   * `rewindAfterInterrupt` после ответа нельзя — «последний ответ агента» к
+   * тому моменту это и есть ответ на боковой вопрос.
+   */
+  forkPoint(requestId: string): AgentRewind | null {
+    const session = this.sessions.get(requestId)
+    if (!session) return null
+    return rewindPoint({
+      lastAssistantUuid: session.lastAssistantUuid,
+      sessionId: session.claudeSessionId,
+      forkBase: session.forkBase,
+      resumed: session.resumed
+    })
+  }
+
+  /**
+   * СЛЕДУЮЩИЙ ХОД — ВЕТКОЙ. Закрывает живую сессию, ничего не прерывая.
+   *
+   * Без этого боковой вопрос не работал, и живой прогон это показал: агент
+   * помнил то, что обещано было забыть. Причина в том, что `resumeSessionAt` и
+   * `forkSession` — опции СПАВНА. Пока сессия жива, следующий ход просто
+   * дописывается в её очередь ввода, и опции возобновления никто не читает.
+   *
+   * Отмена (`rewindAfterInterrupt`) от этого не страдала случайно: она обрывает
+   * ход и ставит тот же флаг заодно. Здесь обрывать нечего — ход уже отвечен, —
+   * поэтому флаг ставится отдельно и сам по себе.
+   *
+   * Сессию не гасим прямо тут: это делает старт следующего хода (см. ветку
+   * `existing?.rewound`), и делать это дважды из разных мест значило бы
+   * заводить второй путь к тому же состоянию.
+   */
+  forkNext(requestId: string): void {
+    const session = this.sessions.get(requestId)
+    if (session) session.rewound = true
   }
 
   interrupt(requestId: string): void {
