@@ -1025,6 +1025,16 @@ ${prev}`
       useUiStore.getState().toast(t('bar.autopilotToastOn'), 'error')
       return
     }
+    /*
+     * Мимо середины там, где движок её не понимает: у Codex и ACP «правок без
+     * спроса» нет вовсе, и остановка на этой ступени оставляла бы человека с
+     * чипом, который обещает ослабление, до движка не доезжающее.
+     */
+    if (caps?.editsAuto !== true) {
+      apply(false, true)
+      useUiStore.getState().toast(t('bar.autopilotToastOn'), 'error')
+      return
+    }
     apply(true, false)
     useUiStore.getState().toast(t('bar.gateToastEdits'), 'success')
   }
@@ -1590,7 +1600,28 @@ ${prev}`
    * что и чип режима плана. Кнопка, обещающая «мимо контекста» там, где мимо не
    * получится, врёт ровно о том, ради чего её нажимают.
    */
-  const canAskSide = !!activeEngine && caps?.sideAsk === true && !!text.trim()
+  /*
+   * ТОЛЬКО В СВОЮ, СВОБОДНУЮ БЕСЕДУ. Ревью поймало здесь две беды сразу.
+   *
+   * Кнопка не смотрела на занятость, а `askAgent` при занятой беседе заводит
+   * НОВУЮ и делает её активной для панели. То есть нажатие посреди хода уводило
+   * ленту на пустую беседу: работа продолжалась вне глаз, а если агент в этот
+   * момент ждал разрешения — карточка «разрешить?» уезжала с экрана, и ответить
+   * на неё было нечем.
+   *
+   * Поэтому боковой вопрос возможен ровно тогда, когда беседа панели уже есть,
+   * она того же движка и свободна. Место кнопки при этом сохраняется всегда
+   * (см. `zy-agentbar-side--off`): исчезающая кнопка дёргала соседние чипы.
+   */
+  const sideConv = convForSession(useAiStore.getState(), activeSessionId)
+  const sideReady =
+    !!activeEngine &&
+    caps?.sideAsk === true &&
+    !!sideConv &&
+    sideConv.engine === activeEngine &&
+    !sideConv.streaming &&
+    sideConv.pendingTools.length === 0
+  const canAskSide = sideReady && !!text.trim()
   const askSide = (): void => {
     if (!canAskSide || !activeEngine) return
     askAgent(activeEngine, true)
@@ -1602,7 +1633,17 @@ ${prev}`
   const gateOff = !planMode && (isBuiltinMode ? autoApprove : bypass && caps?.bypass !== false)
   // Средняя ступень видна отдельно: «правки молча, команды со спросом» — не то
   // же самое, что «спрашивать всё», и уж точно не автопилот.
-  const gateEdits = !planMode && !isBuiltinMode && editsAuto && !gateOff
+  /*
+   * Средняя ступень — только там, где движок про неё знает.
+   *
+   * Значение наследуется от ПАНЕЛИ, а панель может до этого работать с другим
+   * движком: у Codex и ACP «правок без спроса» нет вовсе, и унаследованный флаг
+   * рисовал им ступень, которой не существует. Цвет чипа врал об этом и раньше;
+   * собственный глиф сделал ложь читаемой без наведения — тем более её надо
+   * убрать, а не оформить.
+   */
+  const gateEdits =
+    !planMode && !isBuiltinMode && editsAuto && !gateOff && caps?.editsAuto === true
   const gateTitle = isBuiltinMode
     ? gateOff
       ? t('bar.gateBuiltinOn')
@@ -1859,11 +1900,19 @@ ${prev}`
           только с непустой строкой: пустая кнопка обещала бы действие, которого
           не будет.
         */}
-        {canAskSide && (
+        {/*
+          Место кнопки держим постоянным: прежде она появлялась на первом
+          набранном символе и сдвигала соседние чипы на 42 пикселя — замок
+          допуска оказывался ровно там, где мгновение назад был чип плана.
+          Пустую строку кнопка не обещает выполнить: она погашена и говорит
+          почему.
+        */}
+        {sideReady && (
           <button
-            className="zy-agentbar-side"
+            className={`zy-agentbar-side${text.trim() ? '' : ' zy-agentbar-side--off'}`}
             title={`${t('feed.side')}\n${t('feed.sideHint')}`}
             aria-label={t('feed.side')}
+            disabled={!canAskSide}
             onClick={askSide}
           >
             <Icon name="branch" size={13} />

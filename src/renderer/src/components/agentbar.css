@@ -543,9 +543,16 @@
   color: var(--fg-faint);
   cursor: pointer;
 }
-.zy-agentbar-side:hover {
+.zy-agentbar-side:hover:not(:disabled) {
   color: var(--accent-2);
   border-color: var(--accent-2);
+}
+/* Погашена, но НА МЕСТЕ: исчезающая кнопка сдвигала соседние чипы на 42 пикселя
+   при первом же набранном символе — замок допуска оказывался там, где мгновение
+   назад был чип плана. */
+.zy-agentbar-side--off {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .zy-agentbar-mic {

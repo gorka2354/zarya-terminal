@@ -198,9 +198,12 @@ export interface Conversation {
    *
    * Ставится ПЕРЕД отправкой бокового вопроса (позже точку взять неоткуда:
    * «последний ответ» к тому моменту — ответ на сам вопрос) и срабатывает,
-   * когда ход кончился. На диск не пишется: точка живёт в памяти процесса
-   * движка, и после перезапуска указывала бы в никуда — а обещание, которое
-   * молча указывает мимо, хуже отсутствующего.
+   * когда ход кончился.
+   *
+   * ПЕРЕЖИВАЕТ ПЕРЕЗАПУСК. Сперва я решил обратное — «точка живёт в памяти
+   * движка». Ревью возразило фактом: соседняя точка отмены (`resumeAt`)
+   * персистится ровно так же и работает, потому что указывает на запись в
+   * транскрипте на диске, а не на состояние процесса.
    */
   sideBack?: { sessionId: string; at: string }
   /** Live subagent wave, keyed by task id. Cleared when the turn ends. */
@@ -838,6 +841,15 @@ function persistConversations(state: AiState): Promise<void> {
       interrupted: c.interrupted,
       cwd: c.cwd,
       messages: c.messages.map(stripTailText),
+      /*
+       * Точка возврата бокового вопроса переживает перезапуск.
+       *
+       * Сначала я решил обратное — «точка живёт в памяти движка». Ревью
+       * возразило фактом: соседняя точка отмены (`resumeAt`) персистится
+       * ровно так же и работает. Без этого перезапуск посреди бокового хода
+       * молча оставлял бы вопрос в контексте под пометкой «не поедет».
+       */
+      sideBack: c.sideBack,
       shellTailOff: c.shellTailOff,
       createdAt: c.createdAt
     }))
@@ -1813,7 +1825,18 @@ export const useAiStore = create<AiState>((set, get) => {
           activeRequestId: undefined,
           pendingTools: [],
           toolPulses: undefined,
-          error: ev.message
+          error: ev.message,
+          /*
+           * Боковой вопрос, оборвавшийся ошибкой, всё равно возвращает беседу.
+           *
+           * Ревью поймало: здесь точка не применялась и не снималась, а
+           * следующая отправка её затирала — вопрос и обрывок ответа тихо
+           * оставались в контексте, пока пометка над ними обещала обратное.
+           * Ход не удался, но сказанное уже сказано, и вернуться надо тем более.
+           */
+          ...(c.sideBack
+            ? { resumeAt: c.sideBack.at, claudeSessionId: c.sideBack.sessionId, sideBack: undefined }
+            : {})
         }))
         break
     }
@@ -2050,6 +2073,9 @@ export const useAiStore = create<AiState>((set, get) => {
          * несделанной фичи только фича, которая сама себя отменяет.
          */
         shellTailOff: p.shellTailOff,
+        // Точка возврата бокового вопроса — иначе перезапуск посреди хода
+        // оставил бы вопрос в контексте под пометкой «не поедет».
+        sideBack: p.sideBack,
         cwd: p.cwd,
         // Any non-builtin engine drives its own agentic tool loop. A conv written
         // by a newer build with an unknown engine still lands here as an agent
@@ -2260,8 +2286,27 @@ export const useAiStore = create<AiState>((set, get) => {
        */
       let sideBack: { sessionId: string; at: string } | undefined
       if (opts?.side && conv.engine !== 'builtin') {
-        const point = await window.zarya.agent.forkPoint(conv.engine, conv.id).catch(() => null)
-        if (point?.kind === 'fork') sideBack = { sessionId: point.sessionId, at: point.at }
+        /*
+         * УЖЕ СТОЯЩАЯ ТОЧКА ВАЖНЕЕ СВЕЖЕЙ.
+         *
+         * Ревью поймало: на втором боковом вопросе подряд движок отдаёт точку
+         * ПОСЛЕ первой боковой пары — и первая пара тихо оставалась в контексте,
+         * пока пометка над ней обещала «дальше не поедет». То же и после отмены
+         * отправленного: там точка тоже уже выставлена, и возвращаться надо
+         * туда же, а не в место, куда беседу успело унести.
+         *
+         * Правило одно: если беседа уже помнит, куда возвращаться, — держимся
+         * этого. Спрашиваем движок только когда возвращаться пока некуда.
+         */
+        const held =
+          conv.resumeAt && conv.claudeSessionId
+            ? { sessionId: conv.claudeSessionId, at: conv.resumeAt }
+            : undefined
+        if (held) sideBack = held
+        else {
+          const point = await window.zarya.agent.forkPoint(conv.engine, conv.id).catch(() => null)
+          if (point?.kind === 'fork') sideBack = { sessionId: point.sessionId, at: point.at }
+        }
       }
       if (opts?.side) parts.push({ type: 'side-mark', kept: !!sideBack })
 

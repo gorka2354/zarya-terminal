@@ -615,6 +615,17 @@ interface Session {
    * гасит и стартует заново (веткой — по opts.resumeAt от рендерера).
    */
   rewound?: boolean
+  /**
+   * Следующий ход спавнить ЗАНОВО — но поток этой сессии читать до конца.
+   *
+   * Отличие от `rewound` важное, и ревью показало, почему. Отмена глушит поток
+   * намеренно: там всё, что придёт, относится к сообщению, которого в беседе
+   * больше нет. У бокового вопроса наоборот — ход честно отвечен, и всё
+   * остальное живое: состав фоновых задач, их остановка, уведомления. Пометив
+   * такую сессию как отменённую, мы замораживали строку фона на последнем
+   * виденном составе, а кнопка «стоп» отвечала «сделано» и не меняла ничего.
+   */
+  forkNextTurn?: boolean
 }
 
 /**
@@ -634,6 +645,8 @@ export class ClaudeCodeDriver implements AgentDriver {
     resumableSessions: true,
     usage: true,
     structuredQuestions: true,
+    // Средняя ступень допуска: setVendorFlag('editsAuto') реализован здесь.
+    editsAuto: true,
     // resumeSessionAt + forkSession — см. rewindAfterInterrupt.
     rewind: true,
     /*
@@ -788,7 +801,7 @@ export class ClaudeCodeDriver implements AgentDriver {
        * настоящую сессию.
        */
       this.dropLease(requestId, existing)
-    } else if (existing?.rewound) {
+    } else if (existing?.rewound || existing?.forkNextTurn) {
       try {
         existing.abort.abort()
         existing.input.close()
@@ -2773,12 +2786,17 @@ export class ClaudeCodeDriver implements AgentDriver {
    * поэтому флаг ставится отдельно и сам по себе.
    *
    * Сессию не гасим прямо тут: это делает старт следующего хода (см. ветку
-   * `existing?.rewound`), и делать это дважды из разных мест значило бы
-   * заводить второй путь к тому же состоянию.
+   * `existing?.rewound || existing?.forkNextTurn`), и делать это дважды из
+   * разных мест значило бы заводить второй путь к тому же состоянию.
+   *
+   * Флаг СВОЙ, а не `rewound`: у отмены поток глушится намеренно, а здесь ход
+   * честно отвечен, и всё остальное живое — состав фоновых задач, их остановка,
+   * уведомления. Ревью поймало это на первой версии: строка фона замерзала, а
+   * кнопка «стоп» отвечала «сделано», не меняя ничего.
    */
   forkNext(requestId: string): void {
     const session = this.sessions.get(requestId)
-    if (session) session.rewound = true
+    if (session) session.forkNextTurn = true
   }
 
   interrupt(requestId: string): void {

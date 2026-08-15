@@ -188,6 +188,10 @@ if (process.env.ZARYA_FAKE_AGENT) {
         modelsWithoutSession: true,
         effort: true,
         bypass: true,
+        // Среднюю ступень допуска умеет ЭТОТ фейк, а соседний (gemini) — нет:
+        // прогон обязан увидеть и три ступени, и честные две там, где движок
+        // «правок без спроса» не понимает.
+        editsAuto: true,
         resumableSessions: true,
         usage: false,
         structuredQuestions: false,
