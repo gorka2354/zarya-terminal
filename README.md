@@ -8,7 +8,7 @@
 exactly enough light to work by.*
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-ffb05c.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.7.5%20%22Rewind%22-ffb05c.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.7.6%20%22Roll%20Call%22-ffb05c.svg)](CHANGELOG.md)
 [![Languages](https://img.shields.io/badge/UI-English%20%7C%20%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9-4fd6d6.svg)](#language)
 [![Electron](https://img.shields.io/badge/Electron-43-4fd6d6.svg)](https://www.electronjs.org/)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-5fb88a.svg)](#install)
@@ -450,8 +450,8 @@ Details: [docs/shell-integration.md](docs/shell-integration.md).
 
 ## Tests
 
-Numbers as of 0.7.5: **989 unit checks** (plus 6 skipped on this platform) across
-76 files and **111 end-to-end runs**
+Numbers as of 0.7.6: **1104 unit checks** (plus 6 skipped on this platform) across
+82 files and **120 end-to-end runs**
 that drive the real application.
 
 **Unit** (`tests/`, vitest) — the pure logic where a silent mistake costs the most:

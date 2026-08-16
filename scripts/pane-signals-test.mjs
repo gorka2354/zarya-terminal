@@ -171,16 +171,32 @@ try {
   ok('панель, которая работает, нашлась', !!working, marks)
   ok('у ждущей есть полоса сверху', waiting?.barH === '4px' && waiting?.barTop === '0px', waiting)
   ok('у работающей тоже', working?.barH === '4px' && working?.barTop === '0px', working)
-  // Разные цвета — главное различие: одна зовёт, вторая просто занята.
+  /*
+   * РАЗНАЯ ФОРМА, А НЕ ТОЛЬКО РАЗНЫЙ ЦВЕТ.
+   *
+   * Прежде здесь проверялось обратное: «ждущая красится акцентом, а не
+   * градиентом» — то есть тест закреплял решение, где состояния различал ТОЛЬКО
+   * оттенок. Оттенки были accent и success, красный против зелёного: худшая
+   * пара для самого частого дальтонизма. А при `prefers-reduced-motion`
+   * движение отключается у обеих, и не остаётся даже разницы в анимации.
+   *
+   * Новое правило строже старого: полосы обязаны различаться признаком, который
+   * виден в оттенках серого. Ждущая — прерывистая, работающая — сплошная.
+   */
   ok(
-    'ждущая красится акцентом, а не градиентом',
-    waiting?.barImg === 'none' && !!waiting?.barColor && waiting.barColor !== 'rgba(0, 0, 0, 0)',
-    waiting
+    'ждущая полоса прерывистая — различима без цвета',
+    (waiting?.barImg ?? '').startsWith('repeating-linear-gradient'),
+    waiting?.barImg
   )
   ok(
     'работающая — бегущим бликом, а не ровным акцентом',
     (working?.barImg ?? '').startsWith('linear-gradient'),
     working?.barImg
+  )
+  ok(
+    'и рисунок у них РАЗНЫЙ, а не только оттенок',
+    !!waiting?.barImg && waiting.barImg !== working?.barImg,
+    { waiting: waiting?.barImg?.slice(0, 40), working: working?.barImg?.slice(0, 40) }
   )
   ok('и она движется', working?.barAnim === 'zy-work-run', working?.barAnim)
   ok('ждущая пульсирует', waiting?.barAnim === 'zy-wait-pulse', waiting?.barAnim)

@@ -4,6 +4,7 @@ import { type BrowserWindow } from 'electron'
 import { CH } from '@shared/ipc'
 import { noticeFor } from './systemNotices'
 import { endReasonText } from './turnOutcome'
+import { withoutShellTail } from '@shared/shellTail'
 import type {
   AgentCapabilities,
   RewindFilesOutcome,
@@ -150,6 +151,21 @@ export class FakeAgentDriver implements AgentDriver {
   }
 
   async start(requestId: string, opts: AgentStartOpts): Promise<void> {
+    /*
+     * РАЗБИРАЕМ СЛОВА ЧЕЛОВЕКА, А НЕ ВЕСЬ ХОД.
+     *
+     * Этот драйвер выбирает поведение по ключевым словам в промпте, и полный
+     * прогон поймал, чем это кончается: вместе с ходом теперь едет хвост
+     * консоли, внутри него маркер `untrusted-terminal-output`, и слово «output»
+     * увело разбор в ветку вывода за три условия до ветки инструмента. Ход был
+     * правильным — неправильным был разбор.
+     *
+     * Отрезаем хвост здесь, один раз: тридцать с лишним мест ниже читают
+     * `opts.prompt`, и чинить их поштучно значило бы оставить тридцать первое.
+     * Настоящему движку хвост по-прежнему уходит целиком — режем только вход
+     * подставного.
+     */
+    opts = { ...opts, prompt: withoutShellTail(opts.prompt) }
     this.started.add(requestId)
     this.running.add(requestId)
     // Что драйвер получил на входе — для проверки отмотки: тест обязан видеть,

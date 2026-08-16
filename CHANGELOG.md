@@ -5,6 +5,108 @@ All notable changes to Zarya are documented here. This project uses
 
 Русская версия этого файла — [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## 0.7.6 — "Roll Call" (2026-08-16)
+
+The theme: **panes stopped being loners**. Each one used to live on its own — the
+agent had no idea others were working next to it, never saw the commands you
+typed by hand in that same pane, and held the conversation hostage while a long
+build ran. Now panes see each other, hand over notes, let work go background, and
+read your console — and all of it is visible to you.
+
+### Added
+
+- **Panes see each other and can talk.** The agent knows which other panes are
+  open, which folders they work in, and what each is doing right now. Asked about
+  another project, it no longer guesses or hunts across the disk: it names the
+  pane that knows and offers to ask it for you.
+
+  A note reaches your neighbour **in its own form**, never as your words: drawing
+  it as your reply would make you believe you wrote it yourself. It cannot
+  approve a permission or change settings, and a slash command inside it stays
+  plain text. Loops are throttled — rate, duplicates, a cap per pair of panes —
+  and the sender always gets the truth back: delivered, held and why, the pane is
+  gone, notes are off.
+
+  A turn started by someone else's note runs **with questions**, even when the
+  pane is on autopilot: you gave "act without asking" to your own words, not to a
+  neighbour's.
+
+- **Work can go background.** A long task no longer holds the conversation: the
+  card carries a button, and a strip below says what is still running.
+
+  An honest boundary: the engine cannot move an **already running** shell command
+  to the background — it answers "moved" and keeps waiting. So the button appears
+  only where it works, and for commands there is a separate request asking the
+  agent to start long ones in the background from the outset. The setting says so:
+  a request, not a guarantee.
+
+- **Saved connections.** An SSH host opens as an ordinary pane, without retyping
+  the connection line every time.
+
+- **The agent sees the commands you ran.** Your recent commands, their exit codes
+  and the tail of their output ride along with your message — no more retelling
+  what you just ran and why it failed.
+
+  The setting promised this before but only reached the built-in agent: Claude
+  Code never saw your commands at all. Now it reaches every engine — and rides
+  with your turn rather than in the system prompt, because the tail has to be
+  fresh on every turn.
+
+  The second half is not optional: a line above your question names how many of
+  your commands went, expands to the exact list, and the same button switches the
+  hand-off off and back on, per pane. Feeding your console into someone else's
+  model with no visible trace would be opaque exactly where you expect privacy.
+
+  Output is passed marked as untrusted data, and a forged marker is neutralised —
+  including an attempt to forge it inside the command line itself.
+
+- **Ask on the side.** A button next to plan mode: the question and its answer
+  stay in the feed but do not ride into your next turn — that one continues from
+  where you were before you asked. Ask "what is this?" without dragging it
+  through the rest of the conversation.
+
+  It works where the engine can fork a session — today that is Claude Code.
+  Elsewhere the button is absent entirely. And if a question does go out with no
+  fork point available, the mark says so plainly: it stayed in context.
+
+### Changed
+
+- **Meaning no longer relies on colour alone.** The three permission steps got
+  three distinct glyphs: a lock, a pencil, a bolt. There used to be two — the same
+  lock stood for both "ask about everything" and "edits without asking", and only
+  the chip's colour told them apart. That is the most expensive promise the
+  interface makes: will I be asked before files are touched.
+
+  The pane status strip now differs in shape: waiting is dashed, working is
+  solid. It used to be red against green — the worst pair for the most common
+  colour blindness — and with animations reduced, even the difference in motion
+  was gone. Plan mode gained a dashed frame, and toasts gained level glyphs and a
+  screen-reader announcement.
+
+- The "context blocks" setting moved to the Engine tab. The old tab is hidden when
+  the IDE layer is off — meaning most people never saw a setting about their own
+  console.
+
+### Fixed
+
+- **A beta could not see the release that shipped.** Version comparison dropped
+  the `-beta.8` tail, so an outdated build reported "you are up to date".
+- **A pane named itself after the path to `powershell.exe`.** Windows PowerShell
+  sends its own path as the title, and the pane took it literally.
+- A turn from a neighbour's note never runs on autopilot; "not here" survives a
+  restart and applies to the pane rather than to a single conversation.
+
+### Numbers
+
+**1104 unit checks across 82 files** (up from 989 in 76) and **120 end-to-end
+runs** against the real application (up from 111). The live scenarios against a
+real Claude Code — rewind, notes, console tail, side questions — are not run in
+CI at all: they spend the owner's tokens.
+
+Both of the last two increments went through an Opus review with adversarial
+verification: 6 and 8 confirmed defects respectively, all closed and covered by
+runs.
+
 ## 0.7.5 — "Rewind" (2026-08-13)
 
 The theme: **you can go back — and you can see what is going on**. Zarya could
