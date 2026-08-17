@@ -230,8 +230,28 @@ export class FakeAgentDriver implements AgentDriver {
       session.turnId = `fake-turn-${this.seq}`
       this.emit(requestId, { type: 'turn-id', uuid: session.turnId })
     }
+    /*
+     * ЗАПОЛНЕНИЕ КОНТЕКСТА — У ЛЮБОГО ДВИЖКА, лимиты подписки — только у того,
+     * кто их умеет.
+     *
+     * Это два разных умения, и `capabilities.usage` про второе: пятичасовое и
+     * недельное окна есть у Claude, а сколько занято в разговоре, сообщает
+     * каждый. Пока фейк слал их одним событием под общим условием, движок без
+     * лимитов молчал и о контексте — и постоянный показатель в строке панели
+     * проверять было нечем.
+     *
+     * Числа нарочно не круглые и не пороговые: так видно, что они пришли от
+     * движка, а не выдуманы интерфейсом.
+     */
+    this.emit(requestId, {
+      type: 'usage',
+      usage: { contextPct: 37, contextTokens: 74_000, contextWindow: 200_000 }
+    })
     if (this.capabilities.usage)
-      this.emit(requestId, { type: 'usage', usage: { subscriptionType: 'fake', fiveHourPct: 10 } })
+      this.emit(requestId, {
+        type: 'usage',
+        usage: { subscriptionType: 'fake', fiveHourPct: 10 }
+      })
     if (this.capabilities.models)
       this.emit(requestId, {
         type: 'models',

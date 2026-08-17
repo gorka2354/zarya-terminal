@@ -205,6 +205,15 @@ export interface Conversation {
    * персистится ровно так же и работает, потому что указывает на запись в
    * транскрипте на диске, а не на состояние процесса.
    */
+  /**
+   * Чем заполнено контекстное окно ЭТОЙ беседы — по счёту самого движка.
+   *
+   * Своей арифметики здесь нет и быть не может: сколько занято, знает только
+   * движок, и он это присылает. Живёт в беседе, а не в общем состоянии окна,
+   * потому что у четырёх панелей четыре разных разговора — а общее значение
+   * перезаписывал бы кто угодно, и строка показывала бы соседское.
+   */
+  context?: { pct?: number; tokens?: number; window?: number }
   sideBack?: { sessionId: string; at: string }
   /** Live subagent wave, keyed by task id. Cleared when the turn ends. */
   subagents?: Record<string, SubagentRun>
@@ -1350,6 +1359,26 @@ export const useAiStore = create<AiState>((set, get) => {
             engine
           }
         })
+        /*
+         * И В САМУ БЕСЕДУ — иначе показатель врёт при нескольких панелях.
+         *
+         * Значение выше глобальное: его перезаписывает ЛЮБОЙ движок в любой
+         * панели. Пока заполнение показывали по нажатию, это сходило с рук —
+         * человек открывал панель сразу после своего хода. Постоянный
+         * показатель в строке панели так работать не может: он висел бы над
+         * одним разговором, а числа приносил из соседнего.
+         *
+         * Комментарий в нижней полосе давно утверждал, что «заполнение у каждой
+         * панели своё». Теперь это правда и в коде, а не только в словах.
+         */
+        patchConversation(requestId, (c) => ({
+          ...c,
+          context: {
+            ...(u.contextPct == null ? {} : { pct: u.contextPct }),
+            ...(u.contextTokens == null ? {} : { tokens: u.contextTokens }),
+            ...(u.contextWindow == null ? {} : { window: u.contextWindow })
+          }
+        }))
       }
       // Subscription fuel (5h/7d windows) is Claude-only.
       if (
@@ -3007,6 +3036,21 @@ onBus('terminal:focus', ({ sessionId }) => {
  * на точке ветки, снятой перед отправкой, и проверять его в обход `send` значит
  * проверять не ту дорогу.
  */
+/*
+ * Подменить заполнение контекста беседы — прогону порогов.
+ *
+ * Настоящее число приходит от движка, и дождаться от него ровно 88%% нельзя:
+ * оно зависит от длины разговора. Проверяется не арифметика движка, а наш
+ * порог «почти полно» и то, что показатель принадлежит своей беседе.
+ */
+;(
+  window as unknown as {
+    __zaryaSeedContext?: (convId: string, ctx: { pct?: number; tokens?: number; window?: number }) => void
+  }
+).__zaryaSeedContext = (convId, ctx) =>
+  useAiStore.setState((s) => ({
+    conversations: s.conversations.map((c) => (c.id === convId ? { ...c, context: ctx } : c))
+  }))
 ;(window as unknown as { __zaryaSendSide?: (convId: string, text: string) => void }).__zaryaSendSide =
   (convId, text) => void useAiStore.getState().send(text, { conversationId: convId, side: true })
 ;(window as unknown as { __zaryaSendIn?: (convId: string, text: string) => void }).__zaryaSendIn = (
@@ -3210,6 +3254,9 @@ function seedPatch(convId: string, fn: (c: Conversation) => Conversation): void 
         })(),
         /** Куда беседа вернётся, когда боковой ход кончится (пусто — некуда). */
         sideBack: c.sideBack ? { at: c.sideBack.at } : null,
+        /* Заполнение контекста ЭТОЙ беседы: постоянный показатель обязан
+           показывать её число, а не последнего ответившего движка. */
+        context: c.context ?? null,
         shellTailOff: c.shellTailOff === true,
         // Панель, которой принадлежит беседа. Не путать с `sessionId` выше —
         // там id сессии ДВИЖКА; прогону же нужно окно терминала, потому что

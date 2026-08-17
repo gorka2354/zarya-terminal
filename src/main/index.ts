@@ -19,6 +19,7 @@ import { SessionStore } from './sessionStore'
 import { SttService } from './sttService'
 import { UpdateService } from './updateService'
 import { hardenDir } from './filePerms'
+import { sweepStaleTemps } from './jsonStore'
 import { APP_VERSION } from './appVersion'
 import { bindLang } from './lang'
 import { SettingsStore } from './settingsStore'
@@ -520,6 +521,20 @@ if (!gotLock) {
     // история команд и переписки с агентом. На Windows это почти no-op (там
     // ACL), смысл в Linux и macOS.
     void hardenDir(app.getPath('userData'))
+
+    /*
+     * Брошенные временные файлы записи — за собой.
+     *
+     * Атомарная запись создаёт `<имя>.<pid>.tmp` и переименовывает его в цель;
+     * процесс, не доживший до переименования, оставляет файл навсегда. В
+     * рабочем профиле владельца так накопилось 48 штук за три недели.
+     *
+     * Не ждём и не жалуемся: уборка чужого мусора не повод задерживать старт
+     * или пугать человека сообщением о том, что его не касается.
+     */
+    void sweepStaleTemps(app.getPath('userData')).then((n) => {
+      if (n) console.log(`[jsonStore] убрано брошенных временных файлов: ${n}`)
+    })
 
     // Проверка обновлений — один анонимный запрос при запуске, и только если
     // это разрешено настройкой. Ошибка сети сюда не всплывает: сервис держит её

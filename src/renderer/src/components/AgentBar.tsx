@@ -429,6 +429,15 @@ export const AgentBar = memo(function AgentBar({
    * смыслу, поэтому подпись выбирается здесь, а не «где-нибудь потом».
    */
   const costLabel = formatCost(activeConv?.costUsd)
+  /*
+   * ЗАПОЛНЕНИЕ КОНТЕКСТА — ЭТОЙ БЕСЕДЫ.
+   *
+   * Пока беседа не начата (или движок ещё не отчитался), берём общее значение:
+   * оно про последний ход в окне и в единственной панели совпадает с этим. Как
+   * только у беседы появляется своё число, оно и главное — иначе строка висела
+   * бы над одним разговором, а числа приносила из соседнего.
+   */
+  const convContext = activeConv?.context?.pct != null ? activeConv.context : agentContext
   const onPlan = !!claudeStatus.usage?.subscriptionType
   // АВТОПИЛОТ показывается по СВОЕЙ беседе: общий переключатель с несколькими
   // панелями врал бы о том, спросят ли вас.
@@ -1702,7 +1711,9 @@ ${prev}`
       {usageOpen && (
         <UsagePanel
           usage={showFuel ? claudeStatus.usage : undefined}
-          context={agentContext}
+          /* Контекст ЭТОЙ беседы, а не последнего ответившего движка: при
+             четырёх панелях общее значение показывало бы соседское. */
+          context={convContext}
           onClose={() => setUsageOpen(false)}
           anchor={fuelBtnRef.current}
         />
@@ -1917,6 +1928,44 @@ ${prev}`
           >
             <Icon name="branch" size={13} />
           </button>
+        )}
+        {/*
+          ЗАПОЛНЕНИЕ КОНТЕКСТА — ПОСТОЯННО И В САМОЙ ПАНЕЛИ.
+
+          У родного CLI этого нет из коробки: там либо зовёшь `/usage` руками,
+          либо собираешь себе статусную строку. Показатель был и здесь, но
+          26.07 его убрали вместе с перегруженной полосой лимитов — надпись
+          «· контекст 47%» рядом с ними читалась как каша.
+
+          Место другое не для красоты: полоса лимитов принадлежит ОКНУ (расход
+          подписки один на аккаунт) и живёт внизу, а заполнение контекста своё у
+          каждого разговора. Показывать его там значило бы приносить в панель
+          чужое число.
+
+          Число показываем ВСЕГДА. Сперва я включал его с половины окна, экономя
+          место, — но просьба была именно «видеть», а шкала без числа отвечает
+          «сколько-то». Рядом с ней три символа, и они стоят своего места.
+        */}
+        {convContext?.pct != null && (
+          <span
+            className={`zy-agentbar-ctx${convContext.pct >= 80 ? ' zy-agentbar-ctx--full' : ''}`}
+            title={
+              convContext.tokens != null && convContext.window != null
+                ? `${t('usage.context')}: ${t('usage.tokensOf', {
+                    used: fmtTokens(convContext.tokens),
+                    total: fmtTokens(convContext.window)
+                  })}`
+                : t('usage.context')
+            }
+          >
+            <span className="zy-agentbar-ctx-track">
+              <span
+                className="zy-agentbar-ctx-fill"
+                style={{ width: `${Math.min(100, Math.max(0, convContext.pct))}%` }}
+              />
+            </span>
+            <span className="zy-agentbar-ctx-val">{Math.round(convContext.pct)}%</span>
+          </span>
         )}
         {!isShell && !isBuiltinMode && caps?.planMode === true && (
           <button
