@@ -62,7 +62,10 @@ export function BottomStrip(): React.JSX.Element {
       {usageOpen && (
         <UsagePanel
           usage={showFuel ? claudeStatus.usage : undefined}
-          context={agentContext}
+          /* Контекст АКТИВНОЙ панели, а не последнего отчитавшегося движка:
+             общее значение перезаписывает кто угодно, и панель показывала бы
+             число соседа — прямо вопреки тому, что написано в шапке файла. */
+          context={activeConv?.context}
           onClose={() => setUsageOpen(false)}
           anchor={fuelBtnRef.current}
         />

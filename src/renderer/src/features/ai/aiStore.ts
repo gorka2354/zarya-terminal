@@ -1336,6 +1336,17 @@ export const useAiStore = create<AiState>((set, get) => {
     })
   }
 
+  /*
+   * Прогону — доставить событие движка тем же путём, каким его приносит
+   * драйвер. Нужно там, где событие со стороны не вызвать: «движок забыл
+   * разговор» приходит от /clear, а подставной драйвер его не шлёт. Хук живёт
+   * ЗДЕСЬ, а не на уровне модуля: обработчик — часть замыкания стора.
+   */
+  ;(
+    window as unknown as { __zaryaAgentEvent?: (convId: string, ev: unknown) => void }
+  ).__zaryaAgentEvent = (convId, ev) =>
+    handleAgentEvent(convId, 'claude-code', ev as AgentStreamEvent)
+
   /** Map a native agent driver event onto the shared Conversation shape. */
   function handleAgentEvent(requestId: string, engine: AgentEngine, ev: AgentStreamEvent): void {
     // The fuel-gauge / model-catalog UI slots are Claude-specific until per-engine
@@ -1722,7 +1733,10 @@ export const useAiStore = create<AiState>((set, get) => {
             ? {
                 resumeAt: c.sideBack.at,
                 claudeSessionId: c.sideBack.sessionId,
-                sideBack: undefined
+                sideBack: undefined,
+                // Ветка отбросит боковую пару — занятое станет меньше, а нового
+                // числа до следующего хода не будет. Старое соврало бы.
+                context: undefined
               }
             : {})
           /*
@@ -1841,6 +1855,18 @@ export const useAiStore = create<AiState>((set, get) => {
           claudeSessionId: ev.sessionId,
           // Отматывать больше некуда: прежней ветки у движка не осталось.
           resumeAt: undefined,
+          /*
+           * И ЗАПОЛНЕНИЕ КОНТЕКСТА — ТОЖЕ.
+           *
+           * Ход «забыл разговор» токенов не тратит: движок присылает нулевую
+           * `usage`, свежего числа не приходит вовсе. Без сброса чип продолжал
+           * бы показывать прежние проценты рядом с чертой «дальше агент не
+           * помнит» — два соседних утверждения, из которых одно ложь.
+           *
+           * Пустое место честнее старой цифры: она появится снова после
+           * первого же настоящего хода.
+           */
+          context: undefined,
           messages: [...c.messages, { role: 'assistant', content: [{ type: 'reset' }] }]
         }))
         break
@@ -1864,7 +1890,12 @@ export const useAiStore = create<AiState>((set, get) => {
            * Ход не удался, но сказанное уже сказано, и вернуться надо тем более.
            */
           ...(c.sideBack
-            ? { resumeAt: c.sideBack.at, claudeSessionId: c.sideBack.sessionId, sideBack: undefined }
+            ? {
+                resumeAt: c.sideBack.at,
+                claudeSessionId: c.sideBack.sessionId,
+                sideBack: undefined,
+                context: undefined
+              }
             : {})
         }))
         break
@@ -2466,6 +2497,9 @@ export const useAiStore = create<AiState>((set, get) => {
         // обратно. Оба поля переживают перезапуск (см. PersistedConversation).
         claudeSessionId: rewind.kind === 'fork' ? rewind.sessionId : undefined,
         resumeAt: rewind.kind === 'fork' ? rewind.at : undefined,
+        // Отменённый ход уходит из контекста — значит и число про него больше
+        // не про этот разговор. Появится снова после следующего хода.
+        context: undefined,
         // Пометка «прервано» указывает на индексы ходов; после удаления
         // последнего она бы поехала. Ход исчез — помечать нечего.
         interrupted: (c.interrupted ?? []).filter((i) => i < c.messages.length - 1)

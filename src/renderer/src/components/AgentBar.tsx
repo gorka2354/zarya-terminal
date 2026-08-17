@@ -247,7 +247,8 @@ export function UsagePanel({
   anchor
 }: {
   usage?: AgentUsage
-  context: { pct?: number; tokens?: number; window?: number }
+  /** Заполнение окна ЭТОЙ беседы. Пусто — беседа ещё не отчиталась, и строки не будет. */
+  context?: { pct?: number; tokens?: number; window?: number }
   onClose: () => void
   /**
    * Кнопка, которой панель открывают. Нажатие по ней не считается «щелчком
@@ -307,7 +308,7 @@ export function UsagePanel({
         }
       />
     )
-  if (context.pct != null)
+  if (context?.pct != null)
     rows.push(
       <UsageRow
         key="ctx"
@@ -1967,6 +1968,14 @@ ${prev}`
                 style={{ width: `${Math.min(100, Math.max(0, convContext.pct))}%` }}
               />
             </span>
+            {/* Знак, а не только цвет: предупреждение о почти полном окне
+                обязано доходить и в оттенках серого — тем же правилом, что и
+                три глифа допуска. */}
+            {convContext.pct >= 80 && (
+              <span className="zy-agentbar-ctx-warn" aria-hidden="true">
+                !
+              </span>
+            )}
             <span className="zy-agentbar-ctx-val">{Math.round(convContext.pct)}%</span>
           </span>
         )}

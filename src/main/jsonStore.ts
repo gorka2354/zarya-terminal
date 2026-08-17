@@ -87,11 +87,41 @@ const STALE_TEMP_MS = 60 * 60 * 1000
  * Возвращает число убранных файлов — чтобы прогон мог проверить, а не поверить.
  */
 export async function sweepStaleTemps(dir: string, now = Date.now()): Promise<number> {
+  let subdirs: string[]
+  try {
+    subdirs = (await fs.readdir(dir, { withFileTypes: true }))
+      .filter((e) => e.isDirectory())
+      .map((e) => `${dir}/${e.name}`)
+  } catch {
+    // Папки нет — убирать нечего. Это не ошибка: первый запуск выглядит так же.
+    return 0
+  }
+  /*
+   * ОДИН УРОВЕНЬ ВГЛУБЬ. Ревью поймало: уборка смотрела только в корень, а
+   * снимки сессий пишутся в подкаталог `sessions/` — то есть туда, куда пишут
+   * чаще всего и где лежит скроллбэк с перепиской. Брошенный файл там не убрал
+   * бы никто и никогда.
+   *
+   * Глубже одного уровня не идём намеренно: своих файлов там нет, а гулять по
+   * чужому дереву — не то, за чем нас звали.
+   */
+  let removed = await sweepOne(dir, now)
+  for (const sub of subdirs) removed += await sweepOne(sub, now)
+  return removed
+}
+
+/**
+ * Один каталог, без спуска.
+ *
+ * Правило отбора живёт ЗДЕСЬ и только здесь: сперва я написал его дважды — в
+ * корне и в обходе подпапок, — и это ровно тот случай, когда две копии однажды
+ * разъедутся, а разойдётся в них решение об удалении чужих файлов.
+ */
+async function sweepOne(dir: string, now: number): Promise<number> {
   let names: string[]
   try {
     names = await fs.readdir(dir)
   } catch {
-    // Папки нет — убирать нечего. Это не ошибка: первый запуск выглядит так же.
     return 0
   }
   const mine = `.${process.pid}.tmp`

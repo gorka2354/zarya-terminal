@@ -60,6 +60,48 @@ describe('sweepStaleTemps — убирает брошенное', () => {
   it('папки нет — не падаем: первый запуск выглядит так же', async () => {
     expect(await sweepStaleTemps(join(dir, 'нет-такой'))).toBe(0)
   })
+
+  it('ПОДКАТАЛОГ тоже убирается — там лежат снимки сессий', async () => {
+    /*
+     * Поймано ревью: уборка смотрела только в корень, а снимки сессий пишутся
+     * в `sessions/` — туда, куда пишут чаще всего и где лежит скроллбэк с
+     * перепиской. Брошенный файл там не убрал бы никто и никогда.
+     */
+    const sub = join(dir, 'sessions')
+    await fs.mkdir(sub)
+    const f = join(sub, 'abc.json.4242.tmp')
+    await fs.writeFile(f, '{}')
+    await older(f, 2 * HOUR)
+    expect(await sweepStaleTemps(dir)).toBe(1)
+    await expect(fs.stat(f)).rejects.toThrow()
+  })
+
+  it('в подкаталоге действуют ТЕ ЖЕ правила — свежее и чужое не трогаем', async () => {
+    const sub = join(dir, 'sessions')
+    await fs.mkdir(sub)
+    const fresh = join(sub, 'a.json.4242.tmp')
+    const alien = join(sub, 'чужое.tmp')
+    const real = join(sub, 'a.json')
+    await fs.writeFile(fresh, '{}')
+    await fs.writeFile(alien, 'x')
+    await fs.writeFile(real, '{}')
+    await older(alien, 5 * HOUR)
+    await older(real, 5 * HOUR)
+    expect(await sweepStaleTemps(dir)).toBe(0)
+    await expect(fs.stat(fresh)).resolves.toBeTruthy()
+    await expect(fs.stat(alien)).resolves.toBeTruthy()
+    await expect(fs.stat(real)).resolves.toBeTruthy()
+  })
+
+  it('глубже одного уровня не ходим — чужое дерево не наше дело', async () => {
+    const deep = join(dir, 'a', 'b')
+    await fs.mkdir(deep, { recursive: true })
+    const f = join(deep, 'x.json.777.tmp')
+    await fs.writeFile(f, '{}')
+    await older(f, 5 * HOUR)
+    expect(await sweepStaleTemps(dir)).toBe(0)
+    await expect(fs.stat(f)).resolves.toBeTruthy()
+  })
 })
 
 describe('sweepStaleTemps — чужого не трогает', () => {

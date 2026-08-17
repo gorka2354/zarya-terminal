@@ -130,6 +130,33 @@ try {
   note('на 88%:', JSON.stringify(g2))
   ok('число обновилось', /88%/.test(g2?.text ?? ''), g2?.text)
   ok('и отмечено как заполненное', g2?.full === true, g2)
+  /*
+   * Признак обязан читаться БЕЗ цвета: ревью справедливо поймало первую версию,
+   * где порог держался на одном оттенке — ровно то, что мы чинили инкрементом
+   * раньше. Сравниваем разметку двух состояний, стили не смотрим.
+   */
+  ok('у порога есть знак, а не только оттенок', /!/.test(g2?.text ?? ''), g2?.text)
+  await page.evaluate((id) => window.__zaryaSeedContext?.(id, { pct: 40, tokens: 80000, window: 200000 }), a)
+  await page.waitForTimeout(500)
+  const g3 = await gauge(page)
+  ok('ниже порога знака нет — разметка РАЗНАЯ', !/!/.test(g3?.text ?? ''), g3?.text)
+
+  console.log('\n[5] «Агент забыл разговор» — число уходит вместе с памятью')
+  /*
+   * Ход `/clear` токенов не тратит: движок присылает нулевую usage, свежего
+   * числа не приходит вовсе. Без сброса чип показывал бы прежние проценты
+   * рядом с чертой «дальше агент не помнит» — два соседних утверждения, из
+   * которых одно ложь.
+   */
+  const before = await conv(page, a)
+  note('до сброса контекст:', JSON.stringify(before?.context))
+  // Событие «движок забыл разговор» доставляем тем же путём, каким его
+  // приносит драйвер, — иначе проверялась бы не та дорога.
+  await page.evaluate((id) => window.__zaryaAgentEvent?.(id, { type: 'reset', sessionId: 'new-sid' }), a)
+  await page.waitForTimeout(600)
+  const afterReset = await conv(page, a)
+  note('после сброса:', JSON.stringify(afterReset?.context))
+  ok('заполнение сброшено вместе с памятью агента', !afterReset?.context, afterReset?.context)
   if (process.env.ZARYA_SHOT) await page.screenshot({ path: process.env.ZARYA_SHOT })
 } catch (e) {
   fail++

@@ -1850,14 +1850,54 @@ export class ClaudeCodeDriver implements AgentDriver {
                 }
               }
             ).usage
+            /*
+             * ЗАПОЛНЕНИЕ КОНТЕКСТА СПРАШИВАЕМ У ДВИЖКА, А НЕ СЧИТАЕМ САМИ.
+             *
+             * Здесь стояла своя арифметика: `input + cache_read +
+             * cache_creation` из итоговой `usage` хода, делённое на наибольшее
+             * окно среди моделей. Ревью прогнало живой ход и показало цену:
+             * на четырёх шагах сумма дала 150K там, где занято было 38K, —
+             * чип показал бы 75% вместо 19%. Причина в том, что итог хода
+             * складывает ВСЕ его обращения, а контекст — это не сумма
+             * обращений, а то, что лежит в окне сейчас.
+             *
+             * На длинном ходе сумма перевалила бы окно, и подсказка сказала бы
+             * «480K из 200K» — занято больше, чем всего. Цифра, за которую
+             * никто не отвечает, хуже отсутствующей.
+             *
+             * Правильное число движок присылает сам, в том же сообщении:
+             * `usage.iterations` — разбивка по обращениям хода, и ПОСЛЕДНЕЕ из
+             * них несло весь контекст. Замер на живом ходе: сумма дала 75 495,
+             * последняя итерация — 37 906 при окне в миллион.
+             *
+             * Пробовал спросить `getContextUsage()` (им питается вкладка
+             * «Инструменты») — в момент `result` он не отвечает: запрос к тому
+             * времени уже закрыт. Здесь же всё нужное лежит под рукой.
+             *
+             * Нет `iterations` — молчим. Показателя не будет вовсе, и это
+             * честнее вдвое завышенного процента.
+             */
+            const iters = (
+              msg as {
+                usage?: {
+                  iterations?: Array<{
+                    input_tokens?: number
+                    cache_read_input_tokens?: number
+                    cache_creation_input_tokens?: number
+                  }>
+                }
+              }
+            ).usage?.iterations
+            const last = Array.isArray(iters) && iters.length ? iters[iters.length - 1] : undefined
             const ctxWindow = Math.max(
               0,
               ...Object.values(modelUsage).map((m) => m?.contextWindow ?? 0)
             )
-            const ctxTokens =
-              (u?.input_tokens ?? 0) +
-              (u?.cache_read_input_tokens ?? 0) +
-              (u?.cache_creation_input_tokens ?? 0)
+            const ctxTokens = last
+              ? (last.input_tokens ?? 0) +
+                (last.cache_read_input_tokens ?? 0) +
+                (last.cache_creation_input_tokens ?? 0)
+              : 0
             if (ctxWindow > 0 && ctxTokens > 0) {
               this.emit(requestId, {
                 type: 'usage',
