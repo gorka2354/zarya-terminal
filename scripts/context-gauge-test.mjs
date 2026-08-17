@@ -96,6 +96,30 @@ try {
   ok('у второй панели свой контекст', c2?.context?.pct === 37, c2?.context)
   ok('и у первой он не пропал', (await conv(page, a))?.context?.pct === 37, c1?.context)
 
+  console.log('\n[3a] Панель БЕЗ своего хода не показывает чужое число')
+  /*
+   * Запасной вариант «нет своего — покажем общее по окну» я сперва написал и
+   * выбросил: общее значение перезаписывает любая панель, и свежая показывала
+   * бы соседское число как своё. Пустое место честнее чужой цифры.
+   */
+  const sid3 = await page.evaluate(() => window.__zaryaNewTerminal?.())
+  await page.waitForTimeout(2000)
+  // Фокус переводим ЯВНО: создание панели его не переносит, и без этого строка
+  // продолжает показывать прежнюю панель — её число там законно.
+  await page.evaluate((s) => window.__zaryaFocusPane?.(s), sid3)
+  await page.waitForTimeout(1200)
+  const active = await page.evaluate(() => window.__zaryaDumpSessions?.()?.activeSessionId)
+  ok('фокус действительно на свежей панели', active === sid3, { active, sid3 })
+  /*
+   * Считаем чипы, а не смотрим на первый попавшийся: панелей на экране
+   * несколько, у каждой свой бар, и `querySelector` возвращал чип соседа. Ходы
+   * были в двух панелях из трёх — значит и чипов должно быть ровно два.
+   */
+  const chips = await page.evaluate(() => document.querySelectorAll('.zy-agentbar-ctx').length)
+  const panes = await page.evaluate(() => document.querySelectorAll('.zy-agentbar').length)
+  note('панелей на экране:', panes, '· чипов контекста:', chips)
+  ok('чип есть только у панелей со своим ходом', chips === 2 && panes >= 3, { chips, panes })
+
   console.log('\n[4] Порог «почти полно» помечен, но не только цветом')
   await page.evaluate(
     (id) => window.__zaryaSeedContext?.(id, { pct: 88, tokens: 176000, window: 200000 }),
