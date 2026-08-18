@@ -104,6 +104,34 @@ try {
   const t3 = await answer(page, a)
   note('ответ:', JSON.stringify(t3.slice(-200)))
   ok('видит только свою панель, а не соседнюю', !/6|шест/i.test(t3), t3.slice(-200))
+  section('[5] Сказал «консоль не давать» — инструментов нет вовсе')
+  /*
+   * Ноль в настройке подачи значит «мою консоль агенту не давать». Оставить
+   * инструмент и спрашивать разрешение на каждый вызов значило бы уговаривать
+   * после отказа — и платить за него токенами в каждом запросе.
+   */
+  await page.evaluate(() => window.__zaryaSetTailBlocks?.(0))
+  await page.waitForTimeout(600)
+  const sid3 = await page.evaluate((d) => window.__zaryaNewTerminal?.(d), stand)
+  await page.waitForTimeout(2500)
+  await page.evaluate((s) => window.__zaryaSeedBlocks?.(s, 3, 3), sid3)
+  await page.evaluate((s) => window.__zaryaFocusPane?.(s), sid3)
+  await page.waitForTimeout(500)
+  await page.evaluate(() => window.__zaryaBypassLive?.(true))
+  const d = await page.evaluate(
+    ([s]) =>
+      window.__zaryaStartAgentIn?.(
+        'claude-code',
+        'Есть ли у тебя инструмент mcp__zarya__list_blocks? Ответь «да» или «нет» и ничего не вызывай.',
+        s
+      ),
+    [sid3]
+  )
+  await waitIdle(page, d, 300_000)
+  await page.waitForTimeout(2500)
+  const t4 = await answer(page, d)
+  note('ответ:', JSON.stringify(t4.slice(-220)))
+  ok('инструмента у агента нет', /нет|no\b|отсут/i.test(t4), t4.slice(-220))
 } catch (e) {
   ok('ПРОГОН УПАЛ', false, e?.message || String(e))
 } finally {

@@ -1048,12 +1048,21 @@ export class ClaudeCodeDriver implements AgentDriver {
        * заслоняет пользовательские серверы: те приезжают из конфигурации
        * движка отдельно.
        */
-      ...(opts.paneMessages
+      /*
+       * Состав нашего сервера — по согласиям, а не по одному тумблеру.
+       *
+       * Записки и чтение консоли человек разрешает разными настройками, и
+       * сервер поднимается, если разрешено хоть что-то. Инструмент, за который
+       * платят в каждом запросе, не должен ехать туда, где на него ответили
+       * «нет».
+       */
+      ...(opts.paneMessages || opts.blockTools
         ? {
             mcpServers: {
               zarya: paneToolServer(
                 sdk as unknown as Parameters<typeof paneToolServer>[0],
-                requestId
+                requestId,
+                { panes: !!opts.paneMessages, blocks: !!opts.blockTools }
               )
             } as Options['mcpServers']
           }

@@ -53,10 +53,23 @@ const say = (text: string): { content: { type: 'text'; text: string }[] } => ({
  * @param sdk загруженный модуль SDK
  * @param fromConvId кто отправитель — замыкается здесь и не берётся из аргументов
  */
-export function paneToolServer(sdk: SdkToolApi, fromConvId: string): unknown {
-  return sdk.createSdkMcpServer({
-    name: 'zarya',
-    tools: [
+export function paneToolServer(
+  sdk: SdkToolApi,
+  fromConvId: string,
+  opts: { panes: boolean; blocks: boolean }
+): unknown {
+  /*
+   * СОСТАВ ЗАВИСИТ ОТ СОГЛАСИЯ, а не от одного тумблера на всё.
+   *
+   * Записки и чтение консоли — разное согласие. Человек, поставивший подачу
+   * команд в ноль, сказал «мою консоль агенту не давать»; оставить ему
+   * инструмент и спрашивать разрешение на каждый вызов значило бы уговаривать
+   * после отказа. Каждый инструмент ещё и стоит токенов в каждом запросе —
+   * платить за отклонённое вдвойне неправильно.
+   */
+  const tools: unknown[] = []
+  if (opts.panes)
+    tools.push(
       sdk.tool(
         'list_panes',
         'List the other Zarya panes open on this machine right now: name, working ' +
@@ -123,7 +136,10 @@ export function paneToolServer(sdk: SdkToolApi, fromConvId: string): unknown {
           )
           return say(res.message)
         }
-      ),
+      )
+    )
+  if (opts.blocks)
+    tools.push(
       /*
        * КОМАНДЫ ЧЕЛОВЕКА — ПО ЗАПРОСУ, А НЕ ТОЛЬКО ХВОСТОМ.
        *
@@ -201,8 +217,8 @@ export function paneToolServer(sdk: SdkToolApi, fromConvId: string): unknown {
           )
         }
       )
-    ]
-  })
+    )
+  return sdk.createSdkMcpServer({ name: 'zarya', tools })
 }
 
 /**

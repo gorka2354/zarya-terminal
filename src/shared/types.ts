@@ -849,6 +849,16 @@ export interface AgentStartOpts {
   appendPrompt?: string
   /** Дать агенту инструменты «увидеть соседние панели» и «написать соседу». */
   paneMessages?: boolean
+  /**
+   * Дать агенту инструменты «посмотреть команды человека» и «прочитать вывод».
+   *
+   * Отдельно от `paneMessages`, потому что это разное согласие. Записка ничего
+   * человеку не открывает; здесь читается вывод его собственной консоли, и
+   * ответ на вопрос «делиться ли ею» он даёт настройкой хвоста. Поставил ноль —
+   * значит инструментов нет вовсе: спрашивать разрешение на то, чего он уже
+   * запретил, значит уговаривать.
+   */
+  blockTools?: boolean
   /** Model id override; omit to use the driver's configured default. */
   model?: string
   /** Reasoning effort override (vendor vocabulary); omit for the account default. */
