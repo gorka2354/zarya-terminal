@@ -29,6 +29,7 @@ import { applySubagentEvent, type SubagentRun } from './subagents'
 import type { BackgroundTask } from '@shared/agentTasks'
 import { enginePromptAppend } from '@shared/enginePrompt'
 import { shellTail, type ShellTail } from '@shared/shellTail'
+import { clampText } from '@shared/paneMessage'
 import { sameModel } from './modelMatch'
 import { nativeGateOpts } from './startOpts'
 import { irreversible } from '@shared/irreversible'
@@ -950,6 +951,18 @@ function receivePaneNote(m: {
   fromConvId: string
   text: string
 }): void {
+  /*
+   * ЧИСТИМ НА ПРИЁМЕ ТОЖЕ, а не только у отправителя.
+   *
+   * Записку обезвреживает главный процесс перед отправкой — и до сих пор эта
+   * сторона ему просто верила. Прогон показал, чем это плохо: доставка в обход
+   * той единственной точки приносит текст сырым. Защита, стоящая в одном месте
+   * пути, — это защита ровно от одного пути.
+   *
+   * Дважды обезвреженный текст не портится: правило заменяет форму, а не
+   * содержание, и повторное применение ничего не меняет.
+   */
+  m = { ...m, text: clampText(m.text ?? '') }
   /*
    * ОТЧИТЫВАЕМСЯ ПЕРЕД ОТПРАВИТЕЛЕМ во всех ветках, включая отказные. Наш
    * список панелей в главном процессе — копия, и она отстаёт: панель могли

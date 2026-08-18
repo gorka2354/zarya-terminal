@@ -1,5 +1,16 @@
 import { z } from 'zod'
 import { paneRegistry } from './paneRegistry'
+import { defuseLine } from '@shared/untrusted'
+
+/**
+ * Пределы полей в ответе `list_panes`.
+ *
+ * Это подписи, а не место для рассказа: имя панели человек читает в шапке, путь
+ * — в строке приглашения. Без предела сюда влезал бы любой текст, который
+ * соседняя панель написала себе в заголовок, — и платил бы за него получатель.
+ */
+const FIELD_CAP = 120
+const PATH_CAP = 200
 
 /**
  * Два инструмента, которыми агент видит соседние панели и пишет им.
@@ -57,12 +68,28 @@ export function paneToolServer(sdk: SdkToolApi, fromConvId: string): unknown {
         async () => {
           const panes = paneRegistry.list(fromConvId)
           if (!panes.length) return say('No other panes are open right now.')
+          /*
+           * ЭТО ТОЖЕ ЧУЖОЙ ТЕКСТ, И ОН ТОЖЕ ИДЁТ МИМО ЧЕЛОВЕКА.
+           *
+           * Записку мы чистили с самого начала, а список панелей — нет, хотя
+           * дорога та же и карточки разрешения у неё тоже нет. Хуже: поле
+           * «чем занят» берётся из описания задачи, которое сочинила МОДЕЛЬ
+           * соседней панели, а заголовок — из того, чем панель назвала себя
+           * сама (его ставит программа последовательностью в терминале).
+           *
+           * То есть уже подменённая панель могла подсунуть соседу поддельную
+           * системную пометку прямо в ответе инструмента. Чистим тем же
+           * правилом, что и записку, и теми же пределами: это подпись поля, а
+           * не место для рассказа.
+           */
           return say(
             panes
-              .map(
-                (p) =>
-                  `- ${p.title} (id=${p.convId}) — folder: ${p.cwd ?? 'unknown'}; engine: ${p.engine}; ${p.busy ? 'busy' : 'idle'}${p.doing ? `; doing: ${p.doing}` : ''}`
-              )
+              .map((p) => {
+                const title = defuseLine(p.title ?? '', FIELD_CAP) || 'pane'
+                const cwd = defuseLine(p.cwd ?? '', PATH_CAP) || 'unknown'
+                const doing = p.doing ? defuseLine(p.doing, FIELD_CAP) : ''
+                return `- ${title} (id=${p.convId}) — folder: ${cwd}; engine: ${p.engine}; ${p.busy ? 'busy' : 'idle'}${doing ? `; doing: ${doing}` : ''}`
+              })
               .join('\n')
           )
         }

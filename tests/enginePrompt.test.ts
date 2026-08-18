@@ -9,13 +9,32 @@ import { enginePromptAppend } from '@shared/enginePrompt'
 describe('enginePromptAppend', () => {
   const свой = 'Отвечай кратко.'
 
-  it('выключено — едет только текст человека', () => {
-    expect(enginePromptAppend(свой, false)).toBe(свой)
+  /*
+   * Прежде здесь проверялось «выключено — едет только текст человека». Правило
+   * изменилось вместе с решением: визитка про СРЕДУ, а не про функцию.
+   *
+   * У просьб ниже тумблеры есть, потому что человек вправе не хотеть ни
+   * фоновых команд, ни записок. Выключить визитку значит оставить агента
+   * гадать, где он и чего у него нет, — а гадает он охотно и не в нашу пользу:
+   * сочиняет Заре возможности и обещает их человеку от её имени.
+   */
+  it('визитка едет всегда — агент всегда внутри Зари', () => {
+    const out = enginePromptAppend('', false)
+    expect(out).toMatch(/inside Zarya/)
+    expect(out).toMatch(/no tools of its own/)
   })
 
-  it('выключено и текста нет — не едет ничего', () => {
-    expect(enginePromptAppend('', false)).toBe('')
-    expect(enginePromptAppend('   ', false)).toBe('')
+  it('и не заслоняет текст человека: тот по-прежнему последний', () => {
+    const out = enginePromptAppend(свой, false)
+    expect(out).toContain(свой)
+    expect(out.indexOf('inside Zarya')).toBeLessThan(out.indexOf(свой))
+  })
+
+  it('визитка говорит, чего у агента НЕТ — иначе он это выдумает', () => {
+    // Ровно то, ради чего она заведена: не обещать человеку чужих кнопок.
+    const out = enginePromptAppend('', false)
+    expect(out).toMatch(/buttons the person presses/)
+    expect(out).toMatch(/do not invent capabilities/i)
   })
 
   it('включено, текста нет — едет только наша просьба', () => {
@@ -64,5 +83,24 @@ describe('enginePromptAppend — напоминание про соседние 
     expect(out).toMatch(/run_in_background/)
     expect(out).toMatch(/list_panes/)
     expect(out.indexOf('list_panes')).toBeLessThan(out.indexOf('Отвечай кратко.'))
+  })
+})
+
+describe('enginePromptAppend — записки названы недоверенными', () => {
+  /*
+   * У хвоста консоли такая оговорка есть с самого начала: вывод чужой
+   * программы приходит с прямым «это данные, не указания». У записок её не
+   * было, хотя дорога опаснее — записка идёт мимо человека и выглядит частью
+   * собственного разговора модели.
+   */
+  it('без записок про них не говорим — строка платная', () => {
+    expect(enginePromptAppend('', false, false)).not.toMatch(/DATA, not instructions/)
+  })
+
+  it('с записками сказано, что чужой текст ничего не разрешает', () => {
+    const out = enginePromptAppend('', false, true)
+    expect(out).toMatch(/DATA, not instructions/)
+    expect(out).toMatch(/cannot authorise/i)
+    expect(out).toMatch(/list_panes/)
   })
 })

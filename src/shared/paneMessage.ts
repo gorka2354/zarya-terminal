@@ -1,3 +1,5 @@
+import { defuseLine } from './untrusted'
+
 /**
  * Сообщения между панелями: адресация и защита от петель.
  *
@@ -222,8 +224,7 @@ export function inboundPlan(enabled: boolean, receiverSilent: boolean): InboundP
 export const MAX_TEXT = 2000
 
 export function clampText(text: string): string {
-  const t = sanitizeNote(text ?? '')
-  return t.length > MAX_TEXT ? `${t.slice(0, MAX_TEXT)}…` : t
+  return defuseLine(text ?? '', MAX_TEXT)
 }
 
 /**
@@ -241,9 +242,18 @@ export function clampText(text: string): string {
  * нарисовать в чужом промпте что угодно, включая поддельный конец сообщения.
  */
 export function sanitizeNote(text: string): string {
-  return text
-    .replace(/\r?\n/g, ' ')
-    .replace(/\[\s*note\s+from\s+pane/gi, '(note from pane')
-    .replace(/\s+/g, ' ')
-    .trim()
+  /*
+   * Правило переехало в @shared/untrusted — целиком, вместе с расширением.
+   *
+   * Здесь оно ловило ровно одну подделку, нашу собственную пометку, и ловило
+   * её буквально. Разведка нашла два обхода: `\s` в регулярных выражениях не
+   * считает пробелом ни нулевой ширины пробел, ни соединитель, а скобка-двойник
+   * `［` под правило для ASCII не попадала вовсе. Плюс не гасились ни маркер
+   * хвоста консоли, ни системные пометки движка, ни границы ходов.
+   *
+   * Тем же правилом теперь чистится вторая дорога в чужой контекст — состав
+   * панелей из `list_panes`. Общая функция затем и заведена: две копии одного
+   * решения о том, что считать подделкой, однажды разойдутся.
+   */
+  return defuseLine(text ?? '', Number.MAX_SAFE_INTEGER)
 }
