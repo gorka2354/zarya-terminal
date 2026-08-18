@@ -19,7 +19,13 @@ export interface BlockBrief {
   id: string
   command: string
   exitCode?: number
-  /** Сколько символов вывода лежит целиком — чтобы агент знал, есть ли смысл читать. */
+  /**
+   * Сколько символов вывода ХРАНИТСЯ — чтобы агент знал, есть ли смысл читать.
+   *
+   * Именно хранится, а не было напечатано: длинный вывод терминал режет ещё
+   * при записи. Называть это число полным размером значило бы обещать агенту
+   * то, чего в памяти нет.
+   */
   chars: number
   /** Когда закончилась, мс от эпохи. Незавершённая — без него. */
   endedAt?: number
@@ -28,7 +34,10 @@ export interface BlockBrief {
 export type BlocksAnswer =
   | { ok: true; kind: 'list'; blocks: BlockBrief[] }
   | { ok: true; kind: 'one'; block: BlockBrief; output: string; truncated: boolean }
-  | { ok: false; reason: 'no-window' | 'silent' | 'no-pane' | 'not-found' | 'off' }
+  | {
+      ok: false
+      reason: 'no-window' | 'silent' | 'no-pane' | 'not-found' | 'off' | 'refused' | 'no-integration'
+    }
 
 /** Сколько ждать ответ окна. Чтение из памяти мгновенно; запас — на занятое окно. */
 const REPLY_TIMEOUT_MS = 4000

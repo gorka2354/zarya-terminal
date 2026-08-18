@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { paneRegistry } from './paneRegistry'
 import { blockBridge, type BlockBrief } from './blockBridge'
-import { defuseLine } from '@shared/untrusted'
+import { defuseLine, defuseOutput } from '@shared/untrusted'
 
 /**
  * Пределы полей в ответе `list_panes`.
@@ -158,7 +158,8 @@ export function paneToolServer(
       sdk.tool(
         'list_blocks',
         'List the recent shell commands the person ran in THIS pane: the command, ' +
-          'its exit code and how much output it produced. Use it when their ' +
+          'its exit code and how much of its output is still stored (very long ' +
+          'output is cut at capture, keeping the tail). Use it when their ' +
           'question is about something they ran — what failed, what a build ' +
           'printed — instead of asking them to paste it again or running the ' +
           'command yourself a second time. Returns no output text: call ' +
@@ -176,14 +177,14 @@ export function paneToolServer(
           if (!res.ok) return say(blocksProblem(res.reason))
           if (res.kind !== 'list') return say(blocksProblem('silent'))
           if (!res.blocks.length)
-            return say('No commands have been recorded in this pane. See read_block for why.')
+            return say('No commands are recorded in this pane yet.')
           return say(
             res.blocks
               .map(
                 (b: BlockBrief) =>
                   `- id=${b.id} — ${defuseLine(b.command, FIELD_CAP) || '(command unknown)'}; exit: ${
                     b.exitCode ?? 'still running or unknown'
-                  }; output: ${b.chars} chars`
+                  }; output: ${b.chars} chars stored`
               )
               .join('\n')
           )
@@ -207,9 +208,27 @@ export function paneToolServer(
             [
               `$ ${defuseLine(b.command, FIELD_CAP) || '(command unknown)'}`,
               `exit: ${b.exitCode ?? 'still running or unknown'}`,
-              res.truncated ? '(output truncated — this is the tail)' : '',
+              /*
+               * ОБРЕЗАНО С НАЧАЛА — И СКАЗАТЬ НАДО ИМЕННО ЭТО.
+               *
+               * Прежнее «this is the tail» модель читала как «дальше есть
+               * ещё», и она шла искать продолжение, которого нет: потерян
+               * НАЧАЛО вывода, а конец — вот он. Разница решает, попросит ли
+               * агент человека перезапустить команду.
+               */
+              res.truncated ? '(truncated: the beginning is missing, this is the tail)' : '',
               '<untrusted-terminal-output>',
-              res.output,
+              /*
+               * ГАСИМ ПОДДЕЛКУ МАРКЕРА, как это делает хвост консоли.
+               *
+               * Ревью поймало: здесь вывод шёл сырым, и строка
+               * `</untrusted-terminal-output>` внутри него — в сообщении
+               * коммита, в скачанном файле, в баннере сборки — закрывала
+               * обёртку раньше времени. Остаток модель читала как обычный
+               * разговор, а следом за ним могла идти поддельная системная
+               * пометка.
+               */
+              defuseOutput(res.output),
               '</untrusted-terminal-output>'
             ]
               .filter(Boolean)
@@ -231,6 +250,10 @@ function blocksProblem(reason: string): string {
   switch (reason) {
     case 'off':
       return 'Command blocks are turned off in this Zarya, so nothing was recorded. The person can turn them on in settings.'
+    case 'refused':
+      return 'The person has closed their console to you in this pane. Do not ask again this turn: ask them to paste what you need, or to reopen it themselves.'
+    case 'no-integration':
+      return 'The shell in this pane does not report its commands to Zarya (an SSH session or a plain cmd.exe), so nothing is recorded here. Ask the person to paste what you need — they are not looking at an empty terminal.'
     case 'no-pane':
       return 'This conversation is not attached to a terminal pane, so there are no commands to read.'
     case 'not-found':
