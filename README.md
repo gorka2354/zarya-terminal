@@ -450,8 +450,8 @@ Details: [docs/shell-integration.md](docs/shell-integration.md).
 
 ## Tests
 
-Numbers as of 0.7.6: **1104 unit checks** (plus 6 skipped on this platform) across
-82 files and **120 end-to-end runs**
+Numbers on today's main (0.7.6 plus the increments since): **1166 unit checks**
+(plus 6 skipped on this platform) across 85 files and **120 end-to-end runs**
 that drive the real application.
 
 **Unit** (`tests/`, vitest) — the pure logic where a silent mistake costs the most:
