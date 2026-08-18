@@ -84,6 +84,10 @@ export interface ZaryaApi {
     ): Unsub
     /** Отчитаться главному процессу, что стало с запиской. */
     ack(noteId: string, result: unknown): void
+    /** Агент спрашивает блоки команд своей панели: запрос из главного процесса. */
+    onBlocksQuery(cb: (q: Record<string, unknown>) => void): Unsub
+    /** Ответ на такой запрос. Молчание главный процесс считает неизвестностью. */
+    blocksReply(queryId: string, answer: unknown): void
   }
   shells: {
     detect(): Promise<ShellProfile[]>

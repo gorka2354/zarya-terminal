@@ -120,6 +120,16 @@ export const CH = {
   paneMessage: 'panes:message',
   /** renderer -> main: что на самом деле стало с запиской. */
   paneMessageAck: 'panes:message-ack',
+  /**
+   * main -> renderer: агент спрашивает блоки команд СВОЕЙ панели.
+   *
+   * Блоки живут в окне и там же остаются: копировать их в главный процесс ради
+   * инструмента значило бы держать вторую копию всего вывода терминала. Вместо
+   * этого спрашиваем окно и ждём ответ — тем же способом, что и записку.
+   */
+  blocksQuery: 'blocks:query',
+  /** renderer -> main: ответ на запрос блоков. */
+  blocksReply: 'blocks:reply',
   agentApplyDirs: 'agent:apply-dirs',
   agentHealth: 'agent:health',
   /** main -> renderer: открыть папку, названную в командной строке. */

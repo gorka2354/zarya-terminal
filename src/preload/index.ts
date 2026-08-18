@@ -79,7 +79,16 @@ const api = {
       cb: (m: { noteId?: string; toConvId: string; fromConvId: string; text: string }) => void
     ): Unsub => on(CH.paneMessage, cb),
     /** Отчитаться, что стало с запиской: без этого отправителю сказать нечего. */
-    ack: (noteId: string, result: unknown) => ipcRenderer.send(CH.paneMessageAck, noteId, result)
+    ack: (noteId: string, result: unknown) => ipcRenderer.send(CH.paneMessageAck, noteId, result),
+    /**
+     * Агент спрашивает блоки команд СВОЕЙ панели.
+     *
+     * Блоки живут здесь, в окне, и здесь остаются: держать их вторую копию в
+     * главном процессе значило бы дублировать весь вывод терминала.
+     */
+    onBlocksQuery: (cb: (q: Record<string, unknown>) => void): Unsub => on(CH.blocksQuery, cb),
+    blocksReply: (queryId: string, answer: unknown) =>
+      ipcRenderer.send(CH.blocksReply, queryId, answer)
   },
   shells: {
     detect: () => ipcRenderer.invoke(CH.shellsDetect),

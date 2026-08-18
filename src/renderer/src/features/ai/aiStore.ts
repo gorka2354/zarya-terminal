@@ -945,6 +945,68 @@ function publishPanes(state: { conversations: Conversation[] }): void {
  *    бы действиями без единого вопроса, а согласия человека на них никто не
  *    давал (см. inboundPlan).
  */
+/**
+ * Ответить главному процессу про блоки команд ЭТОЙ панели.
+ *
+ * Блоки живут здесь и здесь остаются: держать их копию в главном процессе
+ * значило бы дублировать весь вывод терминала. Он спрашивает — мы отвечаем.
+ *
+ * ЧУЖИХ ПАНЕЛЕЙ ЗДЕСЬ НЕТ. Инструмент читает консоль той беседы, из которой
+ * его позвали: агент видит команды человека, с которым работает, и ничьи
+ * больше. Иначе получился бы новый способ заглянуть в соседний проект в обход
+ * всего, что для этого заведено.
+ */
+function answerBlocksQuery(q: Record<string, unknown>): void {
+  const queryId = String(q.queryId ?? '')
+  const reply = (a: unknown): void => window.zarya.panes?.blocksReply?.(queryId, a)
+  if (!queryId) return
+
+  // Блоки собираются только при включённой настройке; молчать об этом нельзя,
+  // иначе агент прочитает пустоту как «человек ничего не запускал».
+  if (!getSettings().blocks.enabled) return reply({ ok: false, reason: 'off' })
+
+  const conv = useAiStore.getState().conversations.find((c) => c.id === String(q.convId ?? ''))
+  const sid = conv?.sessionId
+  if (!sid) return reply({ ok: false, reason: 'no-pane' })
+  const all = useBlocksStore.getState().bySession[sid] ?? []
+
+  if (q.kind === 'list') {
+    const limit = Math.min(50, Math.max(1, Number(q.limit) || 10))
+    return reply({
+      ok: true,
+      kind: 'list',
+      blocks: all.slice(-limit).map((b) => ({
+        id: b.id,
+        command: b.command,
+        ...(b.exitCode === undefined ? {} : { exitCode: b.exitCode }),
+        chars: (b.output ?? '').length,
+        ...(b.endedAt === undefined ? {} : { endedAt: b.endedAt })
+      }))
+    })
+  }
+
+  const found = all.find((b) => b.id === String(q.blockId ?? ''))
+  if (!found) return reply({ ok: false, reason: 'not-found' })
+  /*
+   * Предел тот же, что у ручного приложения блока к сообщению: читая по своей
+   * воле, агент не должен получать больше, чем получил бы по воле человека.
+   */
+  const full = found.output ?? ''
+  const truncated = full.length > TOOL_OUTPUT_CAP
+  reply({
+    ok: true,
+    kind: 'one',
+    block: {
+      id: found.id,
+      command: found.command,
+      ...(found.exitCode === undefined ? {} : { exitCode: found.exitCode }),
+      chars: full.length
+    },
+    output: truncated ? full.slice(-TOOL_OUTPUT_CAP) : full,
+    truncated
+  })
+}
+
 function receivePaneNote(m: {
   noteId?: string
   toConvId: string
@@ -1112,6 +1174,7 @@ if (typeof window !== 'undefined') {
     }
   })
   window.zarya.panes?.onMessage(receivePaneNote)
+  window.zarya.panes?.onBlocksQuery?.(answerBlocksQuery)
   /*
    * QA-хук: доставить записку ТЕМ ЖЕ путём, каким её доставляет главный
    * процесс. Не обход, а тот же вход: иначе прогон проверял бы собственную
@@ -3293,7 +3356,21 @@ function seedPatch(convId: string, fn: (c: Conversation) => Conversation): void 
          * честно забыл — вопрос был к прибору, а не к коду.
          */
         lastAnswer: (() => {
-          const last = [...c.messages].reverse().find((m) => m.role === 'assistant')
+          /*
+           * Последнее сообщение агента СО СЛОВАМИ, а не просто последнее.
+           *
+           * Итог хода приезжает отдельным сообщением той же роли и текста не
+           * содержит вовсе. Пока хук брал «последнее assistant», прогон читал
+           * пустоту и винил проверяемую фичу — так и случилось с инструментами
+           * блоков: агент всё сделал верно, а прибор показал ничего.
+           */
+          const last = [...c.messages]
+            .reverse()
+            .find(
+              (m) =>
+                m.role === 'assistant' &&
+                m.content.some((p) => p.type === 'text' && (p as { text: string }).text.trim())
+            )
           return (last?.content ?? [])
             .filter((p) => p.type === 'text')
             .map((p) => (p as { text: string }).text)

@@ -29,6 +29,7 @@ import { ExtrasWatcher } from './extrasWatcher'
 import { withCustom } from '@shared/sttCustom'
 import { cliInstall, cliRemove, cliStatus } from './cliCommand'
 import { paneRegistry, type NoteAck } from './paneRegistry'
+import { blockBridge, type BlocksAnswer } from './blockBridge'
 import type { PaneRef } from '@shared/paneMessage'
 import type { AgentDriver } from './agentDriver'
 import * as fsService from './fsService'
@@ -379,8 +380,13 @@ export function registerIpc(ctx: IpcContext): void {
    * адрес нашёлся, а нести записку оказалось некуда.
    */
   paneRegistry.bind(getWindow)
+  blockBridge.bind(getWindow)
   ipcMain.on(CH.panesRegistry, (_e, panes: PaneRef[]) => paneRegistry.setPanes(panes))
   // Что окно сделало с запиской: доставило, придержало или не нашло беседу.
+  // Окно ответило на запрос блоков — см. blockBridge.
+  ipcMain.on(CH.blocksReply, (_e, queryId: string, answer: BlocksAnswer) =>
+    blockBridge.reply(queryId, answer)
+  )
   ipcMain.on(CH.paneMessageAck, (_e, noteId: string, result: NoteAck) =>
     paneRegistry.ack(noteId, result)
   )
