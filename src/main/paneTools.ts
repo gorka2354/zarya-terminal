@@ -39,8 +39,48 @@ interface SdkToolApi {
     name: string,
     description: string,
     schema: Record<string, unknown>,
-    handler: (args: never, extra: unknown) => Promise<{ content: { type: 'text'; text: string }[] }>
+    handler: (args: never, extra: unknown) => Promise<{ content: { type: 'text'; text: string }[] }>,
+    extras?: {
+      annotations?: {
+        title?: string
+        readOnlyHint?: boolean
+        destructiveHint?: boolean
+        idempotentHint?: boolean
+        openWorldHint?: boolean
+      }
+      searchHint?: string
+    }
   ) => unknown
+}
+
+/**
+ * ПОМЕТКИ О СВОИХ ИНСТРУМЕНТАХ — ТО ЖЕ, ЧТО МЫ СПРАШИВАЕМ У ЧУЖИХ.
+ *
+ * У сторонних MCP-серверов Заря пометки читает и пускает в гейт: помеченное
+ * разрушающим не проскакивает автопилот (см. `mark.destructive` в
+ * claudeCodeDriver). О себе же мы молчали вовсе — при том что в описании
+ * соседнего файла сами объясняем, почему эти пометки важны.
+ *
+ * Пометка — ЗАЯВЛЕНИЕ, а не доказательство: чужому серверу мы за неё не
+ * ручаемся и в тексте так и пишем. Тем больше причин заполнить свою честно.
+ *
+ * `openWorldHint: false` у всех четырёх намеренно: наружу, в сеть, не ходит ни
+ * один — они читают то, что уже открыто на этой машине.
+ */
+const READS_ONLY = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false
+}
+const WRITES_NOTE = {
+  readOnlyHint: false,
+  // Записка ничего не портит и не удаляет: она появляется в ленте соседа
+  // помеченной как чужая речь и никаких его прав не меняет.
+  destructiveHint: false,
+  // Дважды отправленная записка — это две записки, а не одна.
+  idempotentHint: false,
+  openWorldHint: false
 }
 
 const say = (text: string): { content: { type: 'text'; text: string }[] } => ({
@@ -106,6 +146,10 @@ export function paneToolServer(
               })
               .join('\n')
           )
+        },
+        {
+          annotations: { title: 'Other Zarya panes', ...READS_ONLY },
+          searchHint: 'other pane, another project, which pane is working, who is busy'
         }
       ),
       sdk.tool(
@@ -135,6 +179,10 @@ export function paneToolServer(
             String(a.text ?? '')
           )
           return say(res.message)
+        },
+        {
+          annotations: { title: 'Note to another pane', ...WRITES_NOTE },
+          searchHint: 'tell another pane, ask a neighbouring pane, hand over a finding'
         }
       )
     )
@@ -188,6 +236,10 @@ export function paneToolServer(
               )
               .join('\n')
           )
+        },
+        {
+          annotations: { title: "This pane's recent commands", ...READS_ONLY },
+          searchHint: 'what did the person run, recent commands, exit code, failed build'
         }
       ),
       sdk.tool(
@@ -234,6 +286,10 @@ export function paneToolServer(
               .filter(Boolean)
               .join('\n')
           )
+        },
+        {
+          annotations: { title: 'Output of one command', ...READS_ONLY },
+          searchHint: 'read the output, full log of a command, what the build printed'
         }
       )
     )

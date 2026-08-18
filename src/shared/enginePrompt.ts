@@ -76,6 +76,29 @@ const PANES_HINT = [
 ].join(' ')
 
 /**
+ * КОМАНДЫ ЧЕЛОВЕКА — НАПОМНИТЬ, ЧТО ИХ МОЖНО ПОСМОТРЕТЬ.
+ *
+ * Ровно та же беда, что была с соседними панелями: описание инструмента модель
+ * читает, когда УЖЕ решила им воспользоваться, а при поиске по инструментам в
+ * старте лежит вообще только имя. Живой повод inc-46: агент видел короткий
+ * хвост консоли и просил человека переслать лог, который лежит в этой же
+ * панели.
+ *
+ * ЧЕГО ЗДЕСЬ НЕТ И БЫТЬ НЕ МОЖЕТ — обещания, что команды доступны. Приписка
+ * применяется при ЗАПУСКЕ сессии и не перечитывается, а человек закрывает
+ * консоль кнопкой посреди работы, и в панели по SSH её не было вовсе. Поэтому
+ * сказано «попробуй и верь отказу», а не «у тебя есть».
+ */
+const BLOCKS_HINT = [
+  'When the person asks about something they ran in this pane — what failed,',
+  'what a build printed — look at it yourself with mcp__zarya__list_blocks and',
+  'mcp__zarya__read_block instead of asking them to paste it again or running',
+  'the command a second time. These may refuse in words (their console can be',
+  'closed to you, or the shell here may not report its commands at all):',
+  'believe the refusal, tell them plainly, and ask for what you need.'
+].join(' ')
+
+/**
  * ГДЕ ТЫ РАБОТАЕШЬ. Короткая визитка Зари.
  *
  * ПОВОД. Живая проверка: агент описывал себя обобщённо — «терминальный агент в
@@ -116,9 +139,23 @@ const ZARYA_HINT = [
   'off — they approve or deny each one. Work you hand to subagents is summarised',
   'rather than shown call by call. They also have a shell in this same pane, and',
   'their own commands there may be handed to you with your next message.',
-  'Zarya gives you no tools of its own beyond those named in this prompt; its',
-  'other features — rewinding files to an earlier turn, permission modes, saved',
-  'connections — are buttons the person presses, not calls you can make. Do not',
+  /*
+   * ЗДЕСЬ ВИЗИТКА ВРАЛА, И ВРАЛА ДОРОГО.
+   *
+   * Стояло «no tools of its own beyond those named in this prompt» — а
+   * `list_blocks` и `read_block` в промпте не названы НИГДЕ: приписка про
+   * панели называет только записки. При настройках по умолчанию оба
+   * инструмента объявлены и оплачены, и модель, поверив этой фразе, отвечает
+   * человеку «у меня нет доступа к вашей консоли», имея его.
+   *
+   * Считать инструменты в промпте поимённо нельзя: состав зависит от настроек
+   * и от отказа панели, а приписка применяется один раз при запуске сессии.
+   * Поэтому ссылаемся на то, что модель видит у себя, а не на этот текст.
+   */
+  'Zarya gives you no tools of its own beyond the mcp__zarya__ ones that appear',
+  'in your own tool list; its other features — rewinding files to an earlier',
+  'turn, permission modes, saved connections — are buttons the person presses,',
+  'not calls you can make. Do not',
   'promise them on its behalf, and do not invent capabilities it may not have:',
   'if you are unsure whether Zarya can do something, say so plainly.'
 ].join(' ')
@@ -133,7 +170,8 @@ const ZARYA_HINT = [
 export function enginePromptAppend(
   userText: string,
   backgroundLongCommands: boolean,
-  paneMessages = false
+  paneMessages = false,
+  blockTools = false
 ): string {
   /*
    * Визитка идёт ПЕРВОЙ и без тумблера, в отличие от просьб ниже.
@@ -151,7 +189,8 @@ export function enginePromptAppend(
   const mine = [
     ZARYA_HINT,
     backgroundLongCommands ? BACKGROUND_HINT : '',
-    paneMessages ? PANES_HINT : ''
+    paneMessages ? PANES_HINT : '',
+    blockTools ? BLOCKS_HINT : ''
   ]
     .filter(Boolean)
     .join('\n\n')

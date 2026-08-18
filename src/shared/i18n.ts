@@ -375,6 +375,11 @@ export const RU: Dict = {
   'eng.cpBackupWhat':
     'Это НАШИ копии: перед откатом Заря сохраняет то, что рискует пропасть. Копии самого движка живут отдельно и удаляются им же.',
   'eng.cpQa': 'В изолированном прогоне выключено принудительно: копии лежат вне подменяемой папки.',
+  'drv.elicitForm':
+    'Сервер MCP «{name}» просит у вас ввод: {what}. Показать эту форму Заря пока не умеет, поэтому запрос отклонён — сервер об этом знает. Сделать это можно в терминале: {how}',
+  'drv.elicitUrl':
+    'Сервер MCP «{name}» просит вход через браузер ({host}). Заря этого пока не показывает, поэтому запрос отклонён — сервер об этом знает. Войти можно в терминале: {how}',
+  'drv.elicitNoCmd': 'там, где вы настраивали этот сервер',
   'drv.ccNoRewindFlag':
     'Этот Claude Code не понимает флаг для отката кода — ход повторён без него. Чекпоинты файлов недоступны на этой версии CLI.',
   'rw.btn': 'Откатить файлы',
@@ -545,7 +550,9 @@ export const RU: Dict = {
   'tools.scope.claudeai': 'claude.ai',
   'tools.scope.managed': 'от организации',
   'tools.count': '{n} инстр.',
-  'tools.tokens': '~{n} токенов в запросе',
+  'tools.tokens': '~{n} токенов описаний',
+  'tools.deferred': 'отложены',
+  'tools.loadedNow': '~{n} в окне сейчас',
   'ctx.whatFills': 'Чем занято окно',
   'ctx.memoryFiles': 'Файлы памяти',
   'mem.edit': 'править',
@@ -582,7 +589,9 @@ export const RU: Dict = {
   'tools.unsafeName':
     'В имени есть символы, которые оболочка примет за команды. Готовую строку Заря не даёт — наберите «claude mcp login» сами и вставьте имя:',
   'tools.copyName': 'Копировать имя',
-  'tools.mcpTotal': 'Инструменты MCP занимают ~{n} токенов в каждом запросе',
+  'tools.mcpTotal': 'Описания инструментов MCP — ~{n} токенов',
+  'tools.mcpLoaded': 'В окне сейчас ~{n}: движок держит описания наготове и подгружает, когда они понадобятся',
+  'tools.mcpAllDeferred': 'В окне сейчас ничего из этого не лежит: движок держит описания наготове и подгружает, когда они понадобятся',
   'skills.title': 'Скиллы',
   'skills.total': '{n} шт. · ~{tok} токенов в каждом запросе',
   'skills.someHidden': 'в контекст попали {n} из {total}',
@@ -1051,7 +1060,7 @@ export const RU: Dict = {
     'Сборку, тесты и dev-сервер агент запустит в фоне и продолжит разговор, а результат заберёт позже. Увести УЖЕ идущую команду в фон движок не умеет — поэтому это просьба на старте, а не кнопка. Выполнит её модель или нет, решает она.',
   'eng.panes': 'Разрешить агенту писать соседним панелям',
   'eng.panesWhy':
-    'Агент увидит другие панели и сможет передать им короткую записку — например, что миграция прошла. Записка приходит отдельным видом, а не вашими словами: одобрить разрешение или поменять настройки она не может. Стоит токенов в каждом запросе, поэтому по умолчанию выключено. Инструменты появляются у бесед, начатых ПОСЛЕ изменения: состав объявляется движку при запуске сессии. Пока умеет только Claude Code — у остальных движков этих инструментов не будет.',
+    'Агент увидит другие панели и сможет передать им короткую записку — например, что миграция прошла. Записка приходит отдельным видом, а не вашими словами: одобрить разрешение или поменять настройки она не может. По умолчанию выключено: это доступ к соседним панелям, и включать его стоит осознанно. Цена невелика — имена инструментов лежат в контексте всегда, а описания движок держит наготове и подгружает по надобности. Инструменты появляются у бесед, начатых ПОСЛЕ изменения: состав объявляется движку при запуске сессии. Пока умеет только Claude Code — у остальных движков этих инструментов не будет.',
   'feed.noteFrom': 'записка от панели «{name}»',
   'feed.noteHeld': 'придержана: автопилот',
   'feed.noteHeldBusy': 'придержана: панель занята',
@@ -2047,6 +2056,11 @@ export const EN: Dict = {
   'eng.cpBackupWhat':
     'These are OUR copies: before a rewind Zarya saves what is at risk. The engine keeps its own copies separately and removes them itself.',
   'eng.cpQa': 'Force-disabled in an isolated run: the copies live outside the overridden folder.',
+  'drv.elicitForm':
+    'MCP server “{name}” is asking you for input: {what}. Zarya cannot show that form yet, so the request was declined — the server knows. You can do it in a terminal: {how}',
+  'drv.elicitUrl':
+    'MCP server “{name}” wants a browser sign-in ({host}). Zarya does not show that yet, so the request was declined — the server knows. You can sign in from a terminal: {how}',
+  'drv.elicitNoCmd': 'wherever you configured this server',
   'drv.ccNoRewindFlag':
     'This Claude Code does not understand the code-rewind flag — the turn was retried without it. File checkpoints are unavailable on this CLI version.',
   'rw.btn': 'Rewind files',
@@ -2170,7 +2184,9 @@ export const EN: Dict = {
   'tools.scope.claudeai': 'claude.ai',
   'tools.scope.managed': 'from your org',
   'tools.count': '{n} tools',
-  'tools.tokens': '~{n} tokens per request',
+  'tools.tokens': '~{n} tokens of descriptions',
+  'tools.deferred': 'deferred',
+  'tools.loadedNow': '~{n} in the window now',
   'ctx.whatFills': 'What fills the window',
   'ctx.memoryFiles': 'Memory files',
   'mem.edit': 'edit',
@@ -2207,7 +2223,9 @@ export const EN: Dict = {
   'tools.unsafeName':
     'This name contains characters a shell would treat as commands. Zarya will not hand you a ready line — type «claude mcp login» yourself and paste the name:',
   'tools.copyName': 'Copy name',
-  'tools.mcpTotal': 'MCP tools take ~{n} tokens out of every request',
+  'tools.mcpTotal': 'MCP tool descriptions — ~{n} tokens',
+  'tools.mcpLoaded': '~{n} of that is in the window right now: the engine keeps the descriptions ready and loads them when they are needed',
+  'tools.mcpAllDeferred': 'None of it is in the window right now: the engine keeps the descriptions ready and loads them when they are needed',
   'skills.title': 'Skills',
   'skills.total': '{n} of them · ~{tok} tokens in every request',
   'skills.someHidden': '{n} of {total} made it into the context',
@@ -3202,7 +3220,7 @@ export const EN: Dict = {
     'Builds, test suites and dev servers get started in the background so the conversation keeps moving, with the result collected later. The engine cannot move an already-running command to the background — hence a request up front rather than a button. Whether the model honours it is up to the model.',
   'eng.panes': 'Let the agent message other panes',
   'eng.panesWhy':
-    'The agent sees your other panes and can hand one a short note — that the migration landed, say. The note arrives in its own form, never as your words, and it cannot approve a permission or change settings. It costs tokens in every request, so it is off by default. The tools reach conversations started AFTER the change: the tool set is declared to the engine when a session starts. Claude Code only for now — the other engines get no such tools.',
+    'The agent sees your other panes and can hand one a short note — that the migration landed, say. The note arrives in its own form, never as your words, and it cannot approve a permission or change settings. Off by default because it opens your other panes to it, which is worth deciding on purpose. The price is small: tool names sit in the context always, while their descriptions are kept ready and loaded only when needed. The tools reach conversations started AFTER the change: the tool set is declared to the engine when a session starts. Claude Code only for now — the other engines get no such tools.',
   'feed.noteFrom': 'note from pane “{name}”',
   'feed.noteHeld': 'held: autopilot',
   'feed.noteHeldBusy': 'held: pane is busy',

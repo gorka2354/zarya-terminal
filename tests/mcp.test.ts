@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   commandOf,
+  foldMcpLoaded,
   foldMcpTokens,
   hostOf,
   markIndex,
@@ -129,6 +130,38 @@ describe('цена контекста складывается по сервер
         { name: 'd', serverName: 'ok', tokens: 7 }
       ])
     ).toEqual({ ok: 7 })
+  })
+})
+
+describe('«стоит» и «занято» — разные числа', () => {
+  /*
+   * Живой замер (scripts/live/mcp-self-cost.mjs) показал разрыв в лицо: 25 966
+   * токенов описаний инструментов при 42 165 занятого окна, и движок называет
+   * их отложенными. Вкладка при этом говорила «занимают в каждом запросе».
+   */
+  it('лежащее считается отдельно от полной цены', () => {
+    const tools = [
+      { name: 'a', serverName: 'zarya', tokens: 300, isLoaded: true },
+      { name: 'b', serverName: 'zarya', tokens: 761, isLoaded: false },
+      { name: 'c', serverName: 'blender', tokens: 7999, isLoaded: false }
+    ]
+    expect(foldMcpTokens(tools)).toEqual({ zarya: 1061, blender: 7999 })
+    expect(foldMcpLoaded(tools)).toEqual({ zarya: 300, blender: 0 })
+  })
+
+  it('сервер, про который движок не сказал, в «лежащее» не попадает вовсе', () => {
+    // Ноль читается как «отложены целиком» — это ответ. Молчание движка так
+    // читать нельзя, поэтому отсутствие поля остаётся отсутствием.
+    expect(foldMcpLoaded([{ name: 'a', serverName: 'old', tokens: 400 }])).toEqual({})
+    expect(foldMcpLoaded(undefined)).toEqual({})
+  })
+
+  it('в строке сервера ноль сохраняется, а цена — нет', () => {
+    const raw = { name: 'x', status: 'connected' as const, tools: [{}] }
+    // Цена без числа — «не считали». Занятое без числа — «всё отложено».
+    expect(mcpRowFrom(raw, 1061, 0).loadedTokens).toBe(0)
+    expect(mcpRowFrom(raw, 1061, 300).loadedTokens).toBe(300)
+    expect(mcpRowFrom(raw, 1061).loadedTokens).toBeUndefined()
   })
 })
 

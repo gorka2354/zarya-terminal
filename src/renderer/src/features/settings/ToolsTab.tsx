@@ -471,6 +471,20 @@ export function ToolsTab(): React.JSX.Element {
   const rows = snap?.servers ?? []
   const stale = !!snap?.stale
   const mcpTotal = rows.reduce((sum, s) => sum + (s.tokens ?? 0), 0)
+  /*
+   * ЦЕНА И ЗАНЯТОЕ — РАЗНЫЕ ЧИСЛА, и до сегодняшнего дня здесь было одно,
+   * названное именем другого: «занимают ~N токенов в каждом запросе».
+   *
+   * Движок описания инструментов ОТКЛАДЫВАЕТ: в старте едут имена, полное
+   * описание подгружается, когда модель за ним потянется. Живой замер
+   * (scripts/live/mcp-self-cost.mjs) показал разрыв в лицо — 25 966 токенов
+   * инструментов при 42 165 занятого окна, и движок называет их отложенными.
+   *
+   * `undefined` значит «движок не сказал», и это не ноль: показывать в таком
+   * случае нечего, а догадываться — снова врать.
+   */
+  const loadedKnown = rows.some((s) => s.loadedTokens !== undefined)
+  const mcpLoaded = rows.reduce((sum, s) => sum + (s.loadedTokens ?? 0), 0)
 
   return (
     <section className="zy-set-section">
@@ -539,7 +553,13 @@ export function ToolsTab(): React.JSX.Element {
                     s.scope && scopeLabel(s.scope),
                     s.version && `v${s.version}`,
                     s.tools !== undefined && t('tools.count', { n: s.tools }),
-                    s.tokens !== undefined && t('tools.tokens', { n: num(s.tokens) })
+                    s.tokens !== undefined && t('tools.tokens', { n: num(s.tokens) }),
+                    // Отложенное называем словом, а не нулём: «0 токенов» рядом
+                    // с ценой читается как поломка счётчика, а не как ответ.
+                    s.loadedTokens !== undefined &&
+                      (s.loadedTokens > 0
+                        ? t('tools.loadedNow', { n: num(s.loadedTokens) })
+                        : t('tools.deferred'))
                   ]
                     .filter(Boolean)
                     .join(' · ')}
@@ -599,7 +619,21 @@ export function ToolsTab(): React.JSX.Element {
             разойдётся с /context, и веры не будет ни одной из цифр.
           */}
           {mcpTotal > 0 && (
-            <div className="zy-tools-total">{t('tools.mcpTotal', { n: num(mcpTotal) })}</div>
+            <div className="zy-tools-total">
+              {t('tools.mcpTotal', { n: num(mcpTotal) })}
+              {/*
+                Вторая строка — про то, сколько из этого лежит в окне СЕЙЧАС.
+                Без неё первое число человек читает как расход на каждый запрос
+                и выключает серверы, которые ему ничего не стоят.
+              */}
+              {loadedKnown && (
+                <div className="zy-tools-total-sub">
+                  {mcpLoaded > 0
+                    ? t('tools.mcpLoaded', { n: num(mcpLoaded) })
+                    : t('tools.mcpAllDeferred')}
+                </div>
+              )}
+            </div>
           )}
           {snap?.contextTokens !== undefined && snap?.contextMax !== undefined && (
             <div className="zy-tools-context">

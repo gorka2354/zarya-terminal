@@ -1421,6 +1421,27 @@ export const useAiStore = create<AiState>((set, get) => {
     const images = (lastUser?.content ?? [])
       .filter((p): p is Extract<AiContentPart, { type: 'image' }> => p.type === 'image')
       .map((p) => ({ mediaType: p.mediaType, data: p.data }))
+    /*
+     * ОДНО ВЫЧИСЛЕНИЕ НА ДВА РЕШЕНИЯ — иначе промпт разойдётся с составом.
+     *
+     * Этим же флагом объявляются инструменты блоков И едет приписка про них.
+     * Посчитай мы его дважды, однажды одно условие поправят, а второе забудут
+     * — и приписка начнёт рассказывать модели про инструменты, которых ей не
+     * дали. Ровно этим визитка и врала до сегодняшнего дня.
+     *
+     * Ноль в настройке подачи значит «мою консоль агенту не давать». Оставить
+     * при этом инструмент и спрашивать разрешение на каждый вызов значило бы
+     * уговаривать после отказа. Отказ панели (`shellTailOff`) и выключенные
+     * блоки действуют так же: собирать их некому.
+     */
+    const blockTools =
+      settings.blocks.enabled && settings.ai.contextBlocks > 0 && !conv.shellTailOff
+    const appendPrompt = enginePromptAppend(
+      settings.ai.enginePromptExtra,
+      settings.ai.backgroundLongCommands,
+      settings.ai.paneMessages,
+      blockTools
+    )
     window.zarya.agent.start(engine, convId, {
       prompt,
       ...(images.length ? { images } : {}),
@@ -1434,36 +1455,10 @@ export const useAiStore = create<AiState>((set, get) => {
       // написано в настройке: обещать немедленность значило бы соврать.
       // Инструменты «увидеть соседа» и «написать соседу» — по явной настройке.
       ...(settings.ai.paneMessages ? { paneMessages: true } : {}),
-      /*
-       * Инструменты «посмотреть команды человека» и «прочитать вывод» — по той
-       * же настройке, что и автоматическая подача консоли.
-       *
-       * Ноль в ней значит «мою консоль агенту не давать». Оставить при этом
-       * инструмент и спрашивать разрешение на каждый вызов значило бы
-       * уговаривать после отказа — и платить токенами за то, от чего человек
-       * отказался. Отказ панели (`shellTailOff`) действует так же.
-       *
-       * Выключенные блоки — та же история с другого конца: собирать их некому,
-       * и оба инструмента отвечали бы «off» на каждый вызов, стоя при этом
-       * токенов в КАЖДОМ запросе. Объявлять то, что заведомо ничего не вернёт,
-       * — платить за обещание, которое не исполнится.
-       */
-      ...(settings.blocks.enabled && settings.ai.contextBlocks > 0 && !conv.shellTailOff
-        ? { blockTools: true }
-        : {}),
-      ...(enginePromptAppend(
-        settings.ai.enginePromptExtra,
-        settings.ai.backgroundLongCommands,
-        settings.ai.paneMessages
-      )
-        ? {
-            appendPrompt: enginePromptAppend(
-              settings.ai.enginePromptExtra,
-              settings.ai.backgroundLongCommands,
-              settings.ai.paneMessages
-            )
-          }
-        : {}),
+      // Инструменты «посмотреть команды человека» и «прочитать вывод» —
+      // по тому же согласию, что и автоматическая подача консоли (см. выше).
+      ...(blockTools ? { blockTools: true } : {}),
+      ...(appendPrompt ? { appendPrompt } : {}),
       // SECURITY: permissionMode is always 'default' and gate-weakening comes only
       // from АВТОПИЛОТ — see nativeGateOpts, which owns that invariant and is
       // guarded by tests/startOpts.test.ts.

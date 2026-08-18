@@ -24,6 +24,37 @@ describe('enginePromptAppend', () => {
     expect(out).toMatch(/no tools of its own/)
   })
 
+  /*
+   * ЗДЕСЬ ВИЗИТКА ВРАЛА. Стояло «no tools of its own beyond those named in this
+   * prompt» — а инструменты блоков в промпте не названы нигде и при настройках
+   * по умолчанию объявлены. Модель, поверив приписке, отвечала человеку «у меня
+   * нет доступа к вашей консоли», имея его.
+   */
+  it('визитка отсылает к списку инструментов, а не к самой себе', () => {
+    const out = enginePromptAppend('', false, false, true)
+    expect(out).not.toMatch(/beyond those named in this prompt/)
+    expect(out).toMatch(/mcp__zarya__ ones that appear/)
+  })
+
+  it('приписка про команды человека едет только при объявленных инструментах', () => {
+    expect(enginePromptAppend('', false, false, true)).toMatch(/mcp__zarya__list_blocks/)
+    expect(enginePromptAppend('', false, false, false)).not.toMatch(/list_blocks/)
+    // Записки и блоки — разные согласия, и одно не тянет за собой другое.
+    expect(enginePromptAppend('', false, true, false)).not.toMatch(/list_blocks/)
+    expect(enginePromptAppend('', false, false, true)).not.toMatch(/list_panes/)
+  })
+
+  it('и не обещает, что команды доступны: отказ возможен и ему надо верить', () => {
+    /*
+     * Приписка применяется при ЗАПУСКЕ сессии и не перечитывается, а человек
+     * закрывает консоль кнопкой посреди работы — и в панели по SSH её не было
+     * вовсе. Обещание «у тебя есть» протухло бы через минуту.
+     */
+    const out = enginePromptAppend('', false, false, true)
+    expect(out).toMatch(/refuse in words/)
+    expect(out).toMatch(/believe the refusal/)
+  })
+
   it('и не заслоняет текст человека: тот по-прежнему последний', () => {
     const out = enginePromptAppend(свой, false)
     expect(out).toContain(свой)

@@ -33,6 +33,17 @@ export interface RawMcpTool {
   name?: unknown
   serverName?: unknown
   tokens?: unknown
+  /**
+   * Лежит ли его описание в контексте ПРЯМО СЕЙЧАС.
+   *
+   * Движок по умолчанию описания инструментов ОТКЛАДЫВАЕТ: в старте едут имена,
+   * а полное описание подгружается, когда модель за ним потянется. Мы это поле
+   * не смотрели вовсе и складывали всё подряд — а потом писали человеку «занимают
+   * ~N токенов в каждом запросе». Живой замер (scripts/live/mcp-self-cost.mjs)
+   * показал разрыв в лицо: 25 966 токенов инструментов, и движок называет их
+   * отложенными, при 42 165 занятого окна.
+   */
+  isLoaded?: unknown
 }
 
 const KNOWN_STATUS = ['connected', 'failed', 'needs-auth', 'pending', 'disabled'] as const
@@ -97,7 +108,7 @@ function originOf(config: Record<string, unknown> | undefined): {
 }
 
 /** Одна строка для окна: имя, состояние, причина, происхождение — и ничего больше. */
-export function mcpRowFrom(raw: RawMcpStatus, tokens?: number): McpServerRow {
+export function mcpRowFrom(raw: RawMcpStatus, tokens?: number, loaded?: number): McpServerRow {
   const { transport, origin } = originOf(raw.config)
   const row: McpServerRow = {
     name: asText(raw.name) ?? '?',
@@ -113,16 +124,30 @@ export function mcpRowFrom(raw: RawMcpStatus, tokens?: number): McpServerRow {
   if (version) row.version = version
   if (Array.isArray(raw.tools)) row.tools = raw.tools.length
   if (typeof tokens === 'number' && tokens > 0) row.tokens = tokens
+  /*
+   * Ноль здесь — ЗНАЧИМОЕ число, в отличие от строки выше.
+   *
+   * «Ноль токенов в запросе» значит «описания отложены целиком» — это ответ, а
+   * не отсутствие ответа. Поэтому проверяем только тип: выбросив ноль как
+   * пустоту, мы получили бы неотличимое «движок промолчал» и снова стали бы
+   * догадываться за него.
+   */
+  if (typeof loaded === 'number') row.loadedTokens = loaded
   return row
 }
 
 /**
- * Сколько токенов стоят инструменты КАЖДОГО сервера.
+ * Сколько токенов стоят инструменты КАЖДОГО сервера, если их описания раскрыть.
  *
  * Складываем по имени сервера, потому что человек выключает сервер целиком, а
  * не отдельный инструмент: цена решения — это сумма его инструментов. Числа
  * считает движок, мы только группируем; своей арифметики поверх не изобретаем,
  * иначе итог разойдётся с `/context` и веры не будет ни одной из двух цифр.
+ *
+ * ЭТО НЕ «ЦЕНА В КАЖДОМ ЗАПРОСЕ», и интерфейс раньше называл её именно так.
+ * Движок описания откладывает и подгружает по надобности — сколько лежит
+ * сейчас, считает `foldMcpLoaded` ниже. Разница огромна: в замере на этой
+ * машине вся сумма — 25 966 токенов, а в окне из них не лежало ничего.
  */
 export function foldMcpTokens(tools: RawMcpTool[] | undefined): Record<string, number> {
   const out: Record<string, number> = {}
@@ -132,6 +157,32 @@ export function foldMcpTokens(tools: RawMcpTool[] | undefined): Record<string, n
     const tokens = typeof t?.tokens === 'number' && t.tokens > 0 ? t.tokens : 0
     if (!server || !tokens) continue
     out[server] = (out[server] ?? 0) + tokens
+  }
+  return out
+}
+
+/**
+ * Сколько из этого лежит в контексте ПРЯМО СЕЙЧАС.
+ *
+ * Движок помечает каждый инструмент полем `isLoaded`; неотложенных может не
+ * быть вовсе, и тогда честный ответ — ноль, а не «нет данных».
+ *
+ * СЧИТАЕМ ОТДЕЛЬНО, А НЕ ВЫЧИТАЕМ, потому что вычитание — та самая своя
+ * арифметика: сервер мог отдать инструмент без цены, и разность двух неполных
+ * сумм разошлась бы с `/context` в третью сторону.
+ *
+ * Сервер, у которого движок не назвал `isLoaded` ни у одного инструмента, сюда
+ * не попадает вовсе: пустое место в ответе честнее нуля, который читается как
+ * «ничего не лежит».
+ */
+export function foldMcpLoaded(tools: RawMcpTool[] | undefined): Record<string, number> {
+  const out: Record<string, number> = {}
+  if (!Array.isArray(tools)) return out
+  for (const t of tools) {
+    const server = asText(t?.serverName)
+    if (!server || typeof t?.isLoaded !== 'boolean') continue
+    const tokens = typeof t?.tokens === 'number' && t.tokens > 0 ? t.tokens : 0
+    out[server] = (out[server] ?? 0) + (t.isLoaded ? tokens : 0)
   }
   return out
 }

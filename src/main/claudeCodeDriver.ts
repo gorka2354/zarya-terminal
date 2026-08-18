@@ -72,9 +72,13 @@ import { toolFacts } from '@shared/toolFacts'
 import { backgroundSet, taskDone, taskHidden, taskOutcome } from '@shared/agentTasks'
 import { paneToolServer } from './paneTools'
 import { foldContextParts } from '@shared/contextParts'
+import { defuseLine } from '@shared/untrusted'
 import {
+  foldMcpLoaded,
   foldMcpTokens,
+  hostOf,
   markIndex,
+  mcpLoginCommand,
   mcpRowFrom,
   skillsFrom,
   sortMcpRows,
@@ -1068,6 +1072,44 @@ export class ClaudeCodeDriver implements AgentDriver {
           }
         : {}),
       abortController: abort,
+      /*
+       * СЕРВЕР ПОПРОСИЛ ЧЕЛОВЕКА — ЧЕЛОВЕК ОБ ЭТОМ УЗНАЕТ.
+       *
+       * MCP разрешает серверу попросить у человека ввод: войти в аккаунт,
+       * подтвердить действие, заполнить поля. SDK об этом спрашивает нас, и
+       * сказано у него прямо: «If not provided, elicitation requests … will be
+       * declined automatically». То есть без этой функции Заря МОЛЧА
+       * отказывала за человека — сервер оставался неработающим, а человек
+       * видел лишь «needs-auth» без единого слова о том, что его спрашивали.
+       *
+       * Показать форму мы пока не умеем, и врать об этом не будем: отказ
+       * остаётся отказом. Но отказ теперь НАЗВАН — вместе с ручным путём,
+       * который в приложении уже есть (та же команда входа, что во вкладке
+       * «Инструменты»). Честный отказ с ручным путём — то, чем Заря заменяет
+       * кнопку, которая соврёт.
+       */
+      onElicitation: async (req: {
+        serverName?: string
+        message?: string
+        mode?: string
+        url?: string
+      }) => {
+        const name = typeof req?.serverName === 'string' ? req.serverName : '?'
+        // Текст сервера — чужой и однострочный: в ленте это одна строка, и
+        // многострочным в ней рисуют что угодно.
+        const what = defuseLine(typeof req?.message === 'string' ? req.message : '', 200)
+        const login = mcpLoginCommand(name)
+        const text =
+          req?.mode === 'url'
+            ? tm('drv.elicitUrl', {
+                name,
+                host: (typeof req?.url === 'string' ? hostOf(req.url) : '') || '—',
+                how: login ?? tm('drv.elicitNoCmd')
+              })
+            : tm('drv.elicitForm', { name, what: what || '—', how: login ?? tm('drv.elicitNoCmd') })
+        this.emit(requestId, { type: 'notice', level: 'warn', text })
+        return { action: 'decline' as const }
+      },
       canUseTool,
       // Always 'default' (or acceptEdits/plan) — never 'bypassPermissions'. Bypass
       // is implemented as an auto-allow inside canUseTool instead, so the callback
@@ -2524,6 +2566,9 @@ export class ClaudeCodeDriver implements AgentDriver {
     // отдаёт, но это не повод не показать состояние серверов: без цены список
     // всё ещё полезен, а без состояния — бессмыслен.
     let tokensBy: Record<string, number> = {}
+    // Сколько из этой цены лежит в окне сейчас — отдельным вопросом: движок
+    // описания откладывает, и «стоит» с «занято» это разные числа.
+    let loadedBy: Record<string, number> = {}
     let contextTokens: number | undefined
     let contextMax: number | undefined
     let contextParts: import('@shared/contextParts').ContextPart[] | undefined
@@ -2533,6 +2578,7 @@ export class ClaudeCodeDriver implements AgentDriver {
       try {
         const usage = await q.getContextUsage()
         tokensBy = foldMcpTokens(usage?.mcpTools)
+        loadedBy = foldMcpLoaded(usage?.mcpTools)
         if (typeof usage?.totalTokens === 'number') contextTokens = usage.totalTokens
         if (typeof usage?.maxTokens === 'number') contextMax = usage.maxTokens
         // Разбор по статьям. Остаток окна и отложенное отделяются здесь же —
@@ -2561,7 +2607,11 @@ export class ClaudeCodeDriver implements AgentDriver {
     }
     const servers = sortMcpRows(
       (Array.isArray(raw) ? raw : []).map((r) =>
-        mcpRowFrom(r, tokensBy[typeof r?.name === 'string' ? r.name : ''])
+        mcpRowFrom(
+          r,
+          tokensBy[typeof r?.name === 'string' ? r.name : ''],
+          loadedBy[typeof r?.name === 'string' ? r.name : '']
+        )
       )
     )
     return { servers, at: Date.now(), contextTokens, contextMax, contextParts, memoryFiles, skills }

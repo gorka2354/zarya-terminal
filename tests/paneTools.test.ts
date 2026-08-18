@@ -34,6 +34,10 @@ interface FakeTool {
   name: string
   description: string
   handler: (args: unknown, extra: unknown) => Promise<{ content: { type: 'text'; text: string }[] }>
+  extras?: {
+    annotations?: Record<string, unknown>
+    searchHint?: string
+  }
 }
 
 /** Подделка SDK: отдаёт то, что ему передали, чтобы можно было позвать вручную. */
@@ -43,8 +47,9 @@ const sdk = {
     name: string,
     description: string,
     _schema: Record<string, unknown>,
-    handler: FakeTool['handler']
-  ) => ({ name, description, handler })
+    handler: FakeTool['handler'],
+    extras?: FakeTool['extras']
+  ) => ({ name, description, handler, extras })
 } as never
 
 const server = (opts: { panes: boolean; blocks: boolean }): { name: string; tools: FakeTool[] } =>
@@ -99,6 +104,46 @@ describe('состав сервера зависит от согласия', () 
 
   it('оба выключены — сервер пустой', () => {
     expect(server({ panes: false, blocks: false }).tools).toHaveLength(0)
+  })
+})
+
+describe('о себе Заря заявляет то же, что спрашивает у чужих серверов', () => {
+  /*
+   * Асимметрия была налицо: с чужих MCP-серверов Заря пометки СПРАШИВАЕТ и
+   * пускает в гейт (помеченное разрушающим не проскакивает автопилот), а о
+   * своих четырёх молчала вовсе.
+   */
+  const tools = server({ panes: true, blocks: true }).tools
+
+  it('у каждого инструмента есть пометки', () => {
+    for (const t of tools) expect(t.extras?.annotations).toBeTruthy()
+  })
+
+  it('читающие помечены читающими', () => {
+    for (const name of ['list_panes', 'list_blocks', 'read_block']) {
+      const a = tools.find((t) => t.name === name)?.extras?.annotations
+      expect(a?.readOnlyHint).toBe(true)
+      expect(a?.destructiveHint).toBe(false)
+    }
+  })
+
+  it('записка не читающая — но и не разрушающая', () => {
+    const a = tools.find((t) => t.name === 'send_to_pane')?.extras?.annotations
+    expect(a?.readOnlyHint).toBe(false)
+    expect(a?.destructiveHint).toBe(false)
+    // Две одинаковые записки — это две записки, а не одна.
+    expect(a?.idempotentHint).toBe(false)
+  })
+
+  it('наружу не ходит ни один', () => {
+    // Все четверо читают то, что уже открыто на этой машине; сети за ними нет.
+    for (const t of tools) expect(t.extras?.annotations?.openWorldHint).toBe(false)
+  })
+
+  it('у каждого есть подсказка для поиска по инструментам', () => {
+    // Движок описания откладывает: в старте у него только имена и подсказки,
+    // и по ним он решает, за каким описанием тянуться.
+    for (const t of tools) expect(String(t.extras?.searchHint ?? '').length).toBeGreaterThan(10)
   })
 })
 
