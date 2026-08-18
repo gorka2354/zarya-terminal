@@ -14,22 +14,13 @@ import { CH } from '@shared/ipc'
  * не дождавшись, значит соврать ему ровно так же, как соврала бы кнопка.
  */
 
-/** Блок в том виде, в каком его видит агент. */
-export interface BlockBrief {
-  id: string
-  command: string
-  exitCode?: number
-  /**
-   * Сколько символов вывода ХРАНИТСЯ — чтобы агент знал, есть ли смысл читать.
-   *
-   * Именно хранится, а не было напечатано: длинный вывод терминал режет ещё
-   * при записи. Называть это число полным размером значило бы обещать агенту
-   * то, чего в памяти нет.
-   */
-  chars: number
-  /** Когда закончилась, мс от эпохи. Незавершённая — без него. */
-  endedAt?: number
-}
+/*
+ * Блок в том виде, в каком его видит агент, живёт в @shared/types: он
+ * пересекает IPC, и окно собирает его тем же типом, каким главный процесс
+ * его читает. Две копии одной формы однажды разошлись бы молча.
+ */
+import type { BlockBrief } from '@shared/types'
+export type { BlockBrief }
 
 export type BlocksAnswer =
   | { ok: true; kind: 'list'; blocks: BlockBrief[] }
@@ -76,9 +67,14 @@ class BlockBridge {
     })
   }
 
-  /** Какие команды человек запускал в панели этой беседы. */
-  list(convId: string, limit: number): Promise<BlocksAnswer> {
-    return this.ask({ kind: 'list', convId, limit })
+  /**
+   * Какие команды человек запускал в панели этой беседы.
+   *
+   * `contains` — поиск по команде и по её выводу. Без него список как был:
+   * последние N команд без единой строки вывода.
+   */
+  list(convId: string, limit: number, contains?: string): Promise<BlocksAnswer> {
+    return this.ask({ kind: 'list', convId, limit, ...(contains ? { contains } : {}) })
   }
 
   /** Полный вывод одной команды. */

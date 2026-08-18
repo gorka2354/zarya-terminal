@@ -7,6 +7,7 @@ import type {
   AiMessage,
   AiStreamEvent,
   AiToolDef,
+  BlockBrief,
   BlockRecord,
   ClaudeCliQuestion
 } from '@shared/types'
@@ -51,6 +52,15 @@ const TOOL_TIMEOUT_MS = 45_000
 const TOOL_OUTPUT_CAP = 4000
 /** Cap on per-block output attached as automatic system-prompt context. */
 const CONTEXT_BLOCK_OUTPUT_CAP = 1500
+/**
+ * Поиск по своей консоли: сколько блоков и сколько знаков на совпадение.
+ *
+ * Отрывок приезжает агенту БЕЗ отдельного решения человека про конкретный блок
+ * — карточку он одобрил на поиск, а не на чтение каждого найденного. Отсюда
+ * пределы: это ответ «смотри туда», а не способ вычитать журнал по кусочкам.
+ */
+const SEARCH_HITS = 5
+const SNIPPET_CAP = 200
 
 const RUN_COMMAND_TOOL: AiToolDef = {
   name: 'run_command',
@@ -1007,17 +1017,47 @@ function answerBlocksQuery(q: Record<string, unknown>): void {
 
   if (q.kind === 'list') {
     const limit = Math.min(50, Math.max(1, Number(q.limit) || 10))
-    return reply({
-      ok: true,
-      kind: 'list',
-      blocks: all.slice(-limit).map((b) => ({
-        id: b.id,
-        command: b.command,
-        ...(b.exitCode === undefined ? {} : { exitCode: b.exitCode }),
-        chars: (b.output ?? '').length,
-        ...(b.endedAt === undefined ? {} : { endedAt: b.endedAt })
-      }))
+    const needle = typeof q.contains === 'string' ? q.contains.trim() : ''
+    const brief = (b: BlockRecord): BlockBrief => ({
+      id: b.id,
+      command: b.command,
+      ...(b.exitCode === undefined ? {} : { exitCode: b.exitCode }),
+      chars: (b.output ?? '').length,
+      ...(b.endedAt === undefined ? {} : { endedAt: b.endedAt })
     })
+    if (!needle) {
+      return reply({ ok: true, kind: 'list', blocks: all.slice(-limit).map(brief) })
+    }
+    /*
+     * ПОИСК ПО СВОЕЙ ЖЕ КОНСОЛИ — вместо чтения всего подряд.
+     *
+     * Без него «где я это видел» стоило серии read_block, и каждый тащил в
+     * контекст тысячи знаков чужого вывода ради одной строки. Здесь наоборот:
+     * несколько блоков, у каждого одна совпавшая строка.
+     *
+     * ПРЕДЕЛЫ ЖЁСТКИЕ И НАМЕРЕННЫЕ. Отрывок приезжает БЕЗ отдельного решения
+     * человека про конкретный блок — в отличие от `read_block`, где он видит
+     * на карточке, что именно читают. Поэтому пара сотен знаков на совпадение
+     * и не больше пяти блоков за вызов: это ответ «смотри туда», а не способ
+     * вычитать журнал по кусочкам.
+     */
+    const low = needle.toLowerCase()
+    const found: BlockBrief[] = []
+    for (let i = all.length - 1; i >= 0 && found.length < SEARCH_HITS; i--) {
+      const b = all[i]
+      const lines = (b.output ?? '').split(/\r?\n/)
+      const hits = lines.filter((l) => l.toLowerCase().includes(low))
+      const inCommand = (b.command ?? '').toLowerCase().includes(low)
+      if (!hits.length && !inCommand) continue
+      found.push({
+        ...brief(b),
+        matches: hits.length,
+        // Совпало в самой команде, а в выводе нет — отрывку взяться неоткуда,
+        // и придумывать его нельзя: пустое поле честнее выдуманной строки.
+        ...(hits.length ? { snippet: hits[0].slice(0, SNIPPET_CAP) } : {})
+      })
+    }
+    return reply({ ok: true, kind: 'list', blocks: found.reverse() })
   }
 
   const found = all.find((b) => b.id === String(q.blockId ?? ''))

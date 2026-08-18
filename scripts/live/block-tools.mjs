@@ -104,6 +104,27 @@ try {
   const t3 = await answer(page, a)
   note('ответ:', JSON.stringify(t3.slice(-200)))
   ok('видит только свою панель, а не соседнюю', !/6|шест/i.test(t3), t3.slice(-200))
+  section('[4а] Поиск по своей консоли — вместо чтения всего подряд')
+  /*
+   * Без поиска «где я это видел» стоило серии read_block, и каждый тащил в
+   * контекст тысячи знаков ради одной строки. Проверяем ровно это: агент
+   * находит нужный блок ОДНИМ вызовом и цитирует совпавшую строку.
+   */
+  await page.evaluate(
+    ([id]) =>
+      window.__zaryaSendTo?.(
+        id,
+        'Позови mcp__zarya__list_blocks с contains "modules transformed". Назови команду найденного блока и процитируй совпавшую строку. Больше ничего не вызывай.'
+      ),
+    [a]
+  )
+  await waitIdle(page, a, 300_000)
+  await page.waitForTimeout(2500)
+  const t5 = await answer(page, a)
+  note('ответ:', JSON.stringify(t5.slice(-320)))
+  ok('нашёл нужную команду поиском', /npm run build/i.test(t5), t5.slice(-320))
+  ok('и процитировал совпавшую строку', /modules transformed/i.test(t5), t5.slice(-320))
+
   section('[5] Сказал «консоль не давать» — инструментов нет вовсе')
   /*
    * Ноль в настройке подачи значит «мою консоль агенту не давать». Оставить

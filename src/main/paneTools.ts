@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { paneRegistry } from './paneRegistry'
 import { blockBridge, type BlockBrief } from './blockBridge'
 import { defuseLine, defuseOutput } from '@shared/untrusted'
+import { samePath } from '@shared/projects'
 
 /**
  * Пределы полей в ответе `list_panes`.
@@ -104,8 +105,11 @@ export function paneToolServer(
    * Записки и чтение консоли — разное согласие. Человек, поставивший подачу
    * команд в ноль, сказал «мою консоль агенту не давать»; оставить ему
    * инструмент и спрашивать разрешение на каждый вызов значило бы уговаривать
-   * после отказа. Каждый инструмент ещё и стоит токенов в каждом запросе —
-   * платить за отклонённое вдвойне неправильно.
+   * после отказа.
+   *
+   * Цена была вторым доводом, и она оказалась меньше, чем я писал: живой замер
+   * (scripts/live/mcp-self-cost.mjs) показал, что описания движок ОТКЛАДЫВАЕТ —
+   * в старте лежат только имена. Согласие держится и без этого довода.
    */
   const tools: unknown[] = []
   if (opts.panes)
@@ -122,6 +126,19 @@ export function paneToolServer(
         async () => {
           const panes = paneRegistry.list(fromConvId)
           if (!panes.length) return say('No other panes are open right now.')
+          /*
+           * ОДНА ПАПКА НА ДВЕ ПАНЕЛИ — ЕДИНСТВЕННОЕ МЕСТО, ГДЕ РАБОТА ТЕРЯЕТСЯ.
+           *
+           * Два агента в одной папке правят одни файлы, и правка второго
+           * молча ложится поверх первой. Данные для предупреждения у нас уже
+           * были — путь каждой панели лежит в реестре, — а сказать об этом
+           * было некому.
+           *
+           * ГОВОРИМ «РАБОТАЕТ РЯДОМ», А НЕ «КОНФЛИКТ ПРЕДОТВРАЩЁН». Заря файлы
+           * не блокирует и блокировать не собирается; обещание изоляции было
+           * бы тем же враньём, что и кнопка, которая ничего не делает.
+           */
+          const mine = paneRegistry.cwdOf(fromConvId)
           /*
            * ЭТО ТОЖЕ ЧУЖОЙ ТЕКСТ, И ОН ТОЖЕ ИДЁТ МИМО ЧЕЛОВЕКА.
            *
@@ -142,7 +159,14 @@ export function paneToolServer(
                 const title = defuseLine(p.title ?? '', FIELD_CAP) || 'pane'
                 const cwd = defuseLine(p.cwd ?? '', PATH_CAP) || 'unknown'
                 const doing = p.doing ? defuseLine(p.doing, FIELD_CAP) : ''
-                return `- ${title} (id=${p.convId}) — folder: ${cwd}; engine: ${p.engine}; ${p.busy ? 'busy' : 'idle'}${doing ? `; doing: ${doing}` : ''}`
+                // Сравниваем ПУТИ, а не подписи: одна папка приходит в разном
+                // виде — с обратными слэшами от диалога, с прямыми от оболочки.
+                const together = mine && p.cwd ? samePath(mine, p.cwd) : false
+                return `- ${title} (id=${p.convId}) — folder: ${cwd}; engine: ${p.engine}; ${p.busy ? 'busy' : 'idle'}${doing ? `; doing: ${doing}` : ''}${
+                  together
+                    ? ' — SAME FOLDER as yours: you are both working in it, and Zarya does not lock files. Say so before you edit what that pane may be editing.'
+                    : ''
+                }`
               })
               .join('\n')
           )
@@ -210,30 +234,57 @@ export function paneToolServer(
           'output is cut at capture, keeping the tail). Use it when their ' +
           'question is about something they ran — what failed, what a build ' +
           'printed — instead of asking them to paste it again or running the ' +
-          'command yourself a second time. Returns no output text: call ' +
-          'read_block for the one you need.',
+          'command yourself a second time. Pass `contains` to find where ' +
+          'something appeared: you get back only the commands whose text or ' +
+          'output matches, each with one matching line. Without it the list ' +
+          'carries no output at all — call read_block for the one you need.',
         {
           limit: z
             .number()
             .optional()
-            .describe('How many of the most recent commands to list. Default 10, max 50.')
+            .describe('How many of the most recent commands to list. Default 10, max 50.'),
+          contains: z
+            .string()
+            .optional()
+            .describe(
+              'Find commands whose text or output contains this, case-insensitive. ' +
+                'Returns at most 5 of the most recent matches, one short line each — ' +
+                'read_block for the whole output.'
+            )
         },
         async (args: never) => {
-          const a = args as unknown as { limit?: number }
+          const a = args as unknown as { limit?: number; contains?: string }
           const limit = Math.min(50, Math.max(1, Math.round(Number(a.limit ?? 10)) || 10))
-          const res = await blockBridge.list(fromConvId, limit)
+          const needle = String(a.contains ?? '').trim()
+          const res = await blockBridge.list(fromConvId, limit, needle || undefined)
           if (!res.ok) return say(blocksProblem(res.reason))
           if (res.kind !== 'list') return say(blocksProblem('silent'))
           if (!res.blocks.length)
-            return say('No commands are recorded in this pane yet.')
+            return say(
+              needle
+                ? // «Не нашлось» и «искать негде» — разные ответы, и второй уже
+                  // отдан причиной выше. Здесь именно первый.
+                  `No command in this pane matches ${JSON.stringify(defuseLine(needle, FIELD_CAP))}. It may have scrolled out of what is stored, or the words may differ.`
+                : 'No commands are recorded in this pane yet.'
+            )
           return say(
             res.blocks
-              .map(
-                (b: BlockBrief) =>
-                  `- id=${b.id} — ${defuseLine(b.command, FIELD_CAP) || '(command unknown)'}; exit: ${
-                    b.exitCode ?? 'still running or unknown'
-                  }; output: ${b.chars} chars stored`
-              )
+              .map((b: BlockBrief) => {
+                const head = `- id=${b.id} — ${defuseLine(b.command, FIELD_CAP) || '(command unknown)'}; exit: ${
+                  b.exitCode ?? 'still running or unknown'
+                }; output: ${b.chars} chars stored${
+                  b.matches === undefined ? '' : `; matching lines: ${b.matches}`
+                }`
+                /*
+                 * ОТРЫВОК — ТОТ ЖЕ ЧУЖОЙ ВЫВОД, что и в `read_block`, и едет он
+                 * в той же обёртке и через ту же чистку. Иначе поиск стал бы
+                 * дорогой в обход защиты: строка `</untrusted-terminal-output>`
+                 * в найденной строке закрыла бы разметку так же успешно.
+                 */
+                return b.snippet
+                  ? `${head}\n  <untrusted-terminal-output>\n  ${defuseOutput(b.snippet).replace(/\s+/g, ' ').trim()}\n  </untrusted-terminal-output>`
+                  : head
+              })
               .join('\n')
           )
         },
