@@ -8,7 +8,7 @@ import { t, useLang } from '@/lib/i18n'
 import { askText } from '@/components/AskText'
 import { formatRelative, shortenPath } from '@/lib/ansi'
 import { fuzzyFilter } from '@/lib/fuzzy'
-import { useAiStore, attentionOf, waitingSince } from '@/features/ai/aiStore'
+import { useAiStore, attentionOf, awaitingNow, waitingSince } from '@/features/ai/aiStore'
 import { focusPane } from '@/terminal/paneFocus'
 import { listLeaves, useSessionsStore } from '@/state/sessionsStore'
 import { useSettingsStore } from '@/state/settingsStore'
@@ -251,7 +251,21 @@ export function SessionsPanel(): React.JSX.Element {
 
   const waitingCrew = conversations.filter((c) => attentionOf(c) === 'waiting')
   const workingCrew = conversations.filter((c) => attentionOf(c) === 'working')
-  const crewActive = [...waitingCrew, ...workingCrew]
+  /*
+   * ТРЕТИЙ СЛУЧАЙ: панель СКАЗАЛА, что ждёт ответа соседа.
+   *
+   * Она при этом свободна — ни гейтов, ни хода, — и `attentionOf` честно
+   * назовёт её свободной. Но человеку она интересна ровно как занятая: с виду
+   * панель стоит без дела, а на самом деле её агент ждёт соседа и сам ничего
+   * не сделает. Раньше это было видно только тому, кто читал ленту.
+   *
+   * Заявление модели, а не состояние приложения — так и подписано ниже, и
+   * поэтому же пометка сама гаснет (`awaitingNow`).
+   */
+  const awaitingCrew = conversations.filter(
+    (c) => attentionOf(c) === 'idle' && awaitingNow(c.awaiting, nowTick)
+  )
+  const crewActive = [...waitingCrew, ...workingCrew, ...awaitingCrew]
 
   // Session ids currently open in a tab — excluded from the saved list so an
   // open terminal shows once (in ОТКРЫТЫЕ), never duplicated below.
@@ -855,6 +869,9 @@ export function SessionsPanel(): React.JSX.Element {
           crewActive.map((conv) => {
             const waits = attentionOf(conv) === 'waiting'
             const since = waits ? waitingSince(conv) : null
+            // Свободна, но сказала, что ждёт соседа: цвет спокойный — нажимать
+            // тут нечего, и звать человека к экрану эта пометка не должна.
+            const asked = !waits && attentionOf(conv) === 'idle' ? conv.awaiting : undefined
             return (
               <div key={conv.id} className="zy-item" onClick={() => openCrewMember(conv.id)}>
                 <span
@@ -865,9 +882,13 @@ export function SessionsPanel(): React.JSX.Element {
                     flexShrink: 0,
                     // Ждущий — цветом действия: он и есть предложение нажать.
                     // Работающий — спокойным зелёным: его трогать не надо.
-                    background: waits ? 'var(--accent)' : 'var(--success)',
-                    boxShadow: `0 0 8px ${waits ? 'var(--accent)' : 'var(--success)'}`,
-                    animation: 'zy-crew-pulse 1.6s ease-in-out infinite'
+                    background: waits ? 'var(--accent)' : asked ? 'var(--fg-dim)' : 'var(--success)',
+                    boxShadow: asked
+                      ? 'none'
+                      : `0 0 8px ${waits ? 'var(--accent)' : 'var(--success)'}`,
+                    // Ждущая соседа не пульсирует: пульс — это «здесь что-то
+                    // происходит», а здесь как раз не происходит ничего.
+                    animation: asked ? 'none' : 'zy-crew-pulse 1.6s ease-in-out infinite'
                   }}
                 />
                 <div className="zy-item-body">
@@ -875,7 +896,9 @@ export function SessionsPanel(): React.JSX.Element {
                   <div className="zy-item-sub" style={crewStatusStyle}>
                     {waits
                       ? t('sidebar.crewWaiting', { time: waitedFor(since, nowTick) })
-                      : t('sidebar.crewBusy')}
+                      : asked
+                        ? t('sidebar.crewAsked', { name: asked.pane })
+                        : t('sidebar.crewBusy')}
                   </div>
                 </div>
               </div>

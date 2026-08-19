@@ -29,7 +29,7 @@ import { CH } from '@shared/ipc'
  */
 /** Что окно сделало с запиской. Слова для агента строятся из этого. */
 export type NoteAck =
-  { ok: true; held?: 'autopilot' | 'busy' } | { ok: false; reason: 'gone' | 'off' }
+  { ok: true; held?: 'autopilot' | 'busy' | 'budget' } | { ok: false; reason: 'gone' | 'off' }
 
 /** Сколько ждём ответа окна. Дольше — и агент решит, что мы зависли. */
 const ACK_TIMEOUT_MS = 4000
@@ -92,7 +92,8 @@ class PaneRegistry {
   async send(
     from: string,
     address: string,
-    text: string
+    text: string,
+    expectReply = false
   ): Promise<{ ok: boolean; message: string }> {
     const body = clampText(text)
     if (!body) return { ok: false, message: 'Message text is empty — nothing was sent.' }
@@ -162,7 +163,10 @@ class PaneRegistry {
         noteId,
         toConvId: found.pane.convId,
         fromConvId: from,
-        text: body
+        text: body,
+        // «Жду ответа» — заявление агента, и метку по нему ставит окно: только
+        // там известно, приняли записку или придержали.
+        ...(expectReply ? { expect: 'reply' } : {})
       })
     })
 
@@ -176,17 +180,25 @@ class PaneRegistry {
       }
     }
     if (ack.held) {
-      return {
-        ok: true,
-        message:
-          ack.held === 'autopilot'
-            ? `The note is shown in "${found.pane.title}", but its agent has NOT been given it: that pane runs without permission prompts, so notes wait for the person there. Do not expect a reply.`
-            : `The note is shown in "${found.pane.title}", but its agent is mid-turn and has not been given it yet. Do not expect a reply.`
+      /*
+       * ПРИДЕРЖАНО — НЕ ПОТЕРЯНО, и агенту надо сказать РАЗНОЕ.
+       *
+       * «Занят» — про момент, и через минуту можно снова. «Деньги» — про то,
+       * что Заря больше не начнёт платный ход по чужой записке в этот час:
+       * повторять бессмысленно, и агент должен обратиться к человеку.
+       */
+      const why: Record<string, string> = {
+        autopilot: `The note is shown in "${found.pane.title}", but its agent has NOT been given it: that pane runs without permission prompts, so notes wait for the person there. Do not expect a reply.`,
+        busy: `The note is shown in "${found.pane.title}", but its agent is mid-turn and has not been given it yet. Do not expect a reply.`,
+        budget: `The note is shown in "${found.pane.title}", but Zarya did not start a turn for it: this pair of panes has already run up more work this hour than it starts unattended. Do not send more notes there — tell the person what you needed, and let them decide.`
       }
+      return { ok: true, message: why[ack.held] ?? why.busy }
     }
     return {
       ok: true,
-      message: `Delivered to "${found.pane.title}". The person there sees it as a message from another pane, and its agent decides what to do with it.`
+      message: expectReply
+        ? `Delivered to "${found.pane.title}". Your pane is now marked as waiting for its answer, so the person can see who waits for whom — the mark fades on its own. Nothing blocks and no answer is guaranteed: if it matters, tell the person what you asked.`
+        : `Delivered to "${found.pane.title}". The person there sees it as a message from another pane, and its agent decides what to do with it.`
     }
   }
 }

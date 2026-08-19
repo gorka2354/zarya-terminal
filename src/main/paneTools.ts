@@ -193,14 +193,23 @@ export function paneToolServer(
           pane: z
             .string()
             .describe('Target pane: its exact name, or the id from list_panes when names repeat.'),
-          text: z.string().describe('The note itself, plain text, a couple of sentences.')
+          text: z.string().describe('The note itself, plain text, a couple of sentences.'),
+          expect: z
+            .enum(['reply', 'none'])
+            .optional()
+            .describe(
+              'Say "reply" when you are asking and will wait for that pane to write back. ' +
+                'Zarya then marks YOUR pane so the person can see who is waiting for whom. ' +
+                'It is a label, not a promise: nothing blocks, and no reply is guaranteed.'
+            )
         },
         async (args: never) => {
-          const a = args as unknown as { pane?: string; text?: string }
+          const a = args as unknown as { pane?: string; text?: string; expect?: string }
           const res = await paneRegistry.send(
             fromConvId,
             String(a.pane ?? ''),
-            String(a.text ?? '')
+            String(a.text ?? ''),
+            a.expect === 'reply'
           )
           return say(res.message)
         },

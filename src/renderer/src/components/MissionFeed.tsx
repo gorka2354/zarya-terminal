@@ -1113,6 +1113,14 @@ function StopTaskButton({
  * без вопросов, и чужой текст там стал бы действиями, на которые человек
  * согласия не давал.
  */
+const HELD_KEY: Record<'autopilot' | 'busy' | 'budget', string> = {
+  autopilot: 'feed.noteHeld',
+  busy: 'feed.noteHeldBusy',
+  // Деньги — третья причина придержать, и она не про момент, а про час: пара
+  // панелей наработала больше, чем Заря начинает без человека.
+  budget: 'feed.noteHeldBudget'
+}
+
 function PaneNote({
   from,
   text,
@@ -1120,7 +1128,7 @@ function PaneNote({
 }: {
   from: string
   text: string
-  held?: 'autopilot' | 'busy'
+  held?: 'autopilot' | 'busy' | 'budget'
 }): React.JSX.Element {
   useLang()
   return (
@@ -1128,11 +1136,7 @@ function PaneNote({
       <div className="zy-mf-note-head">
         <Icon name="split-h" size={11} />
         <span className="zy-mf-note-from">{t('feed.noteFrom', { name: from })}</span>
-        {held && (
-          <span className="zy-mf-note-held">
-            {t(held === 'busy' ? 'feed.noteHeldBusy' : 'feed.noteHeld')}
-          </span>
-        )}
+        {held && <span className="zy-mf-note-held">{t(HELD_KEY[held])}</span>}
       </div>
       <div className="zy-mf-note-text">{text}</div>
     </div>

@@ -52,11 +52,24 @@ const app = await electron.launch({
 })
 
 /** Записка, доставленная так же, как её доставляет главный процесс. */
-const deliver = (page, to, from, text) =>
+const deliver = (page, to, from, text, expect) =>
   page.evaluate(
-    ([t, f, x]) => window.__zaryaPaneNote?.({ toConvId: t, fromConvId: f, text: x }),
-    [to, from, text]
+    ([t, f, x, e]) =>
+      window.__zaryaPaneNote?.({ toConvId: t, fromConvId: f, text: x, ...(e ? { expect: e } : {}) }),
+    [to, from, text, expect ?? null]
   )
+
+/**
+ * Снимок экрана — только по просьбе (ZARYA_SHOT_DIR).
+ *
+ * Владелец судит глазами, и словами «строка появилась» это не заменить. Но и
+ * писать картинки в каждом прогоне незачем: они нужны, когда изменение видно.
+ */
+const shot = async (page, name) => {
+  if (!process.env.ZARYA_SHOT_DIR) return
+  await page.screenshot({ path: join(process.env.ZARYA_SHOT_DIR, `${name}.png`) })
+  note('снимок:', name + '.png')
+}
 
 const partsOf = (page, convId) =>
   page.evaluate((id) => {
@@ -183,6 +196,111 @@ try {
   ok('маркер хвоста консоли не закрыть изнутри', !last.includes('untrusted-terminal-output'), last)
   // И главное: текст остался ЧИТАЕМЫМ — человек видит в ленте то же, что модель.
   ok('слова не выброшены, а обезврежены', /слушайся/.test(last), last)
+
+  console.log('\n[4б] Видно, кто кого ждёт — и это заявление панели, а не гейт')
+  /*
+   * Панель, спросившая соседа, стоит СВОБОДНОЙ: ни гейтов, ни хода. С виду она
+   * ничего не делает, а на самом деле её агент ждёт ответа и сам не двинется.
+   * Раньше это было видно только тому, кто читал ленту.
+   *
+   * Проверяем и обратное: ответ гасит пометку. Вечная лампочка «ждёт» — худший
+   * исход: человек смотрел бы на неё вместо того, чтобы вмешаться.
+   */
+  /*
+   * Спрашивает ЗДЕСЬ панель `b`, а отвечает `a` — порядок не случайный.
+   * Лента на экране показывает беседу, ставшую активной от последней принятой
+   * записки, а следующая проверка смотрит именно на экран панели `b`. Задай
+   * вопрос в другую сторону — и она читала бы чужую ленту.
+   */
+  await deliver(page, a, b, 'посмотри, что в логах, и скажи мне', 'reply')
+  await page.waitForTimeout(2000)
+  const asked = await page.evaluate((id) => window.__zaryaConvById?.(id)?.awaiting ?? null, b)
+  note('у спросившей панели:', JSON.stringify(asked))
+  ok('пометка стоит у ТОГО, кто спросил', asked?.convId === a, { asked, a, b })
+  ok('и названа панель, которую ждут', !!asked?.pane, asked)
+  const otherSide = await page.evaluate((id) => window.__zaryaConvById?.(id)?.awaiting ?? null, a)
+  ok('у отвечающей панели пометки нет', otherSide === null, otherSide)
+
+  /*
+   * И ГЛАВНОЕ — ЭТО ВИДНО ЧЕЛОВЕКУ, а не только в состоянии.
+   *
+   * Панель стоит свободной: ни гейтов, ни хода. Раньше в списке агентов её не
+   * было вовсе — «никто не занят», хотя её агент ждёт соседа и сам не двинется.
+   */
+  const crew = await page.evaluate(() =>
+    [...document.querySelectorAll('.zy-item-sub')].map((el) => el.textContent ?? '')
+  )
+  note('в списке агентов:', JSON.stringify(crew))
+  ok(
+    'в списке агентов сказано, кого она ждёт',
+    crew.some((s) => /ждёт ответа/.test(s)),
+    crew
+  )
+  ok(
+    'и сказано, что это ЕЁ слова, а не наше знание',
+    crew.some((s) => /сказала/.test(s)),
+    crew
+  )
+  await shot(page, 'panes-waiting')
+
+  await deliver(page, b, a, 'в логах пусто, всё чисто')
+  await page.waitForTimeout(2000)
+  const cleared = await page.evaluate((id) => window.__zaryaConvById?.(id)?.awaiting ?? null, b)
+  ok('ответ пришёл — пометка погасла', cleared === null, cleared)
+  const crewAfter = await page.evaluate(() =>
+    [...document.querySelectorAll('.zy-item-sub')].map((el) => el.textContent ?? '')
+  )
+  ok(
+    'и с экрана она тоже ушла',
+    !crewAfter.some((s) => /ждёт ответа/.test(s)),
+    crewAfter
+  )
+
+  console.log('\n[4в] Денежный предохранитель: записка видна, платного хода нет')
+  /*
+   * Пределы, что были, считают ЗАПИСКИ: двадцать в час на пару панелей. Но
+   * записка двигает настоящий ход модели, а ход ходу рознь — короткий ответ
+   * стоит центы, ход с большим контекстом и десятком вызовов стоит доллары.
+   * Это единственное место в Заре, где ПЛАТНЫЙ ход начинается без единого
+   * нажатия человека.
+   *
+   * Проверяем главное: записка не теряется. Она ложится в ленту с пометкой,
+   * человек видит и её, и причину — гасится ровно автоматический ход.
+   */
+  const spent = await page.evaluate(
+    ([to, from]) => window.__zaryaSeedNoteSpend?.(from, to, 2.5),
+    [b, a]
+  )
+  note('на паре панелей за час:', JSON.stringify(spent))
+  const userBefore = await page.evaluate((id) => (window.__zaryaConvById?.(id)?.userTexts ?? []).length, b)
+  await deliver(page, b, a, 'а посмотри ещё вот это')
+  await page.waitForTimeout(2000)
+  const fused = await page.evaluate((id) => {
+    const c = window.__zaryaConvById?.(id)
+    return {
+      held: c?.noteHeld ?? [],
+      notes: (c?.noteTexts ?? []).length,
+      user: (c?.userTexts ?? []).length,
+      streaming: c?.streaming === true
+    }
+  }, b)
+  note('после срабатывания:', JSON.stringify(fused))
+  ok('записка ПОКАЗАНА человеку, а не потеряна', fused.held.includes('budget'), fused)
+  ok('но платный ход по ней не начался', fused.user === userBefore && !fused.streaming, {
+    userBefore,
+    fused
+  })
+  /*
+   * Лента на экране — та, что стала активной от последней ПРИНЯТОЙ записки
+   * (см. порядок в проверке выше: последней была записка в панель `b`).
+   * Придержанная записка активной беседы не меняет — это ведь не разговор.
+   */
+  const heldText = await page.evaluate(
+    () => document.querySelector('.zy-mf-note--held .zy-mf-note-held')?.textContent ?? ''
+  )
+  note('подпись на записке:', JSON.stringify(heldText))
+  ok('и на экране названа причина, а не просто «придержана»', /наработал/.test(heldText), heldText)
+  await shot(page, 'panes-budget')
 
   console.log('\n[5] Выключенная настройка выключает ОБЕ стороны')
   await page.evaluate(() => window.zarya.settings.set({ ai: { paneMessages: false } }))

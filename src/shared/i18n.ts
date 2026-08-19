@@ -43,6 +43,7 @@ export const RU: Dict = {
   'sidebar.crew': 'Агенты',
   'sidebar.crewIdle': 'Никто не занят',
   'sidebar.crewBusy': 'выполняется',
+  'sidebar.crewAsked': 'сказала, что ждёт ответа от «{name}»',
   'sidebar.crewWaiting': 'ждёт вас · {time}',
   'sidebar.crewWaitCount': 'Агенты · {n} ждёт',
   'sidebar.waitJustNow': 'только что',
@@ -1064,6 +1065,7 @@ export const RU: Dict = {
   'feed.noteFrom': 'записка от панели «{name}»',
   'feed.noteHeld': 'придержана: автопилот',
   'feed.noteHeldBusy': 'придержана: панель занята',
+  'feed.noteHeldBudget': 'придержана: переписка панелей за час наработала слишком много',
   'feed.side': 'спросить мимо контекста',
   'feed.sideHint':
     'Вопрос и ответ на него останутся в ленте, но в следующий ход не поедут — он продолжится от того места, где вы были до вопроса. Стоит токенов один раз, в момент ответа.',
@@ -1738,6 +1740,7 @@ export const EN: Dict = {
   'sidebar.crew': 'Agents',
   'sidebar.crewIdle': 'Nobody working',
   'sidebar.crewBusy': 'working',
+  'sidebar.crewAsked': 'says it is waiting for “{name}” to answer',
   'sidebar.crewWaiting': 'waiting for you · {time}',
   'sidebar.crewWaitCount': 'Agents · {n} waiting',
   'sidebar.waitJustNow': 'just now',
@@ -3224,6 +3227,7 @@ export const EN: Dict = {
   'feed.noteFrom': 'note from pane “{name}”',
   'feed.noteHeld': 'held: autopilot',
   'feed.noteHeldBusy': 'held: pane is busy',
+  'feed.noteHeldBudget': 'held: these panes have run up too much work this hour',
   'feed.side': 'ask on the side',
   'feed.sideHint':
     'The question and its answer stay in the feed but do not ride into your next turn — that one continues from where you were before you asked. Costs tokens once, when answered.',

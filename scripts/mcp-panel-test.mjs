@@ -151,6 +151,11 @@ try {
   )
   ok('итог больше не обещает расход на каждый запрос', !/в каждом запросе/.test(total), total)
   ok('и сказано, сколько лежит в окне сейчас', /наготове|в окне/.test(total), total)
+  if (process.env.ZARYA_SHOT_DIR) {
+    // Владелец судит глазами: цена во вкладке — как раз то, что он читает.
+    await page.screenshot({ path: `${process.env.ZARYA_SHOT_DIR}/mcp-price.png` })
+    console.log('   · снимок: mcp-price.png')
+  }
 
   console.log('\n[3б] Чем именно занято окно')
   // Свёрнут по умолчанию: разбор нужен тому, кто уже спросил «а чем?», и

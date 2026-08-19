@@ -30,7 +30,7 @@ import { applySubagentEvent, type SubagentRun } from './subagents'
 import type { BackgroundTask } from '@shared/agentTasks'
 import { enginePromptAppend } from '@shared/enginePrompt'
 import { shellTail, type ShellTail } from '@shared/shellTail'
-import { clampText } from '@shared/paneMessage'
+import { clampText, overSpend, rememberSpend, spentInHour, type Spend } from '@shared/paneMessage'
 import { sameModel } from './modelMatch'
 import { nativeGateOpts } from './startOpts'
 import { irreversible } from '@shared/irreversible'
@@ -61,6 +61,43 @@ const CONTEXT_BLOCK_OUTPUT_CAP = 1500
  */
 const SEARCH_HITS = 5
 const SNIPPET_CAP = 200
+
+/**
+ * ЧТО НАРАБОТАЛА ПЕРЕПИСКА ПАНЕЛЕЙ — по парам, за последний час.
+ *
+ * Ключ — «кто написал → кому», потому что предохранитель именно про пару: своя
+ * работа человека сюда не попадает вовсе, считаются только ходы, начатые ЧУЖОЙ
+ * запиской. Это единственное место в Заре, где платный ход стартует без единого
+ * нажатия.
+ *
+ * ЖИВЁТ В ОКНЕ, а не в главном процессе, потому что деньги знает окно: цифру
+ * хода приносит движок в конце, и здесь же она копится по беседе. Отдавать её
+ * в главный процесс ради проверки значило бы завести вторую копию, которая
+ * однажды разойдётся с первой.
+ *
+ * НЕ ПЕРЕЖИВАЕТ ПЕРЕЗАПУСК намеренно: окно предохранителя — час, а перезапуск
+ * Зари — это уже человек за клавиатурой.
+ */
+const notePairSpend = new Map<string, Spend[]>()
+const pairKey = (from: string, to: string): string => `${from} -> ${to}`
+
+/**
+ * Сколько живёт пометка «сказала, что ждёт ответа».
+ *
+ * Десять минут — это заметно больше, чем идёт ход соседа, и заметно меньше,
+ * чем человек готов смотреть на лампочку, которая уже ничего не значит.
+ * Ожидание объявила модель; забыть о нём она может молча, и пометка,
+ * пережившая свой смысл, врёт ровно как любой другой протухший индикатор.
+ */
+const AWAIT_TTL_MS = 10 * 60_000
+
+/** Пометка ещё в силе? Проверяется при показе — таймеров ради неё не заводим. */
+export function awaitingNow(
+  awaiting: { at: number } | undefined,
+  now: number
+): boolean {
+  return !!awaiting && now - awaiting.at < AWAIT_TTL_MS
+}
 
 const RUN_COMMAND_TOOL: AiToolDef = {
   name: 'run_command',
@@ -204,6 +241,31 @@ export interface Conversation {
    * ровно тем враньём, ради которого плашка и заведена.
    */
   shellTailOff?: boolean
+  /**
+   * Этот ход начала записка ВОТ ЭТОЙ панели — и до его конца.
+   *
+   * Нужна одному: денежному предохранителю. Стоимость движок называет в конце
+   * хода, а к тому времени о том, кто его начал, знать уже неоткуда. Без
+   * пометки предохранитель считал бы работу человека тоже и гасил бы
+   * переписку за то, чего она не тратила.
+   *
+   * НЕ ХРАНИТСЯ и не переживает перезапуск: это про один идущий ход.
+   */
+  noteFrom?: string
+  /**
+   * Эта панель СКАЗАЛА, что ждёт ответа от соседа.
+   *
+   * ЭТО ЗАЯВЛЕНИЕ АГЕНТА, А НЕ СОСТОЯНИЕ ПРИЛОЖЕНИЯ, и подпись на экране
+   * обязана говорить именно так. Никакого ожидания в коде не происходит: ход
+   * закончен, гейтов нет, `attentionOf` по-прежнему честно скажет «свободна».
+   * Модель может о своём ожидании забыть, передумать или уйти в другой
+   * разговор — потому и живёт эта пометка недолго и гаснет сама.
+   *
+   * Гаснет: от первой же записки в обратную сторону и по времени
+   * (`AWAIT_TTL_MS`). Вечная лампочка «ждёт» была бы худшим исходом: человек
+   * смотрел бы на неё вместо того, чтобы вмешаться.
+   */
+  awaiting?: { pane: string; convId: string; at: number }
   /**
    * Куда вернуть беседу, когда боковой вопрос отвечен.
    *
@@ -479,7 +541,7 @@ interface AiState {
        * Отправить как ЗАПИСКУ соседней панели: в ленте она получит свой вид с
        * именем отправителя, а не пузырь человека.
        */
-      paneNote?: { from: string }
+      paneNote?: { from: string; fromConvId?: string }
       /**
        * БОКОВОЙ ВОПРОС: спросить и не потащить это дальше.
        *
@@ -1104,6 +1166,7 @@ function receivePaneNote(m: {
   toConvId: string
   fromConvId: string
   text: string
+  expect?: string
 }): void {
   /*
    * ЧИСТИМ НА ПРИЁМЕ ТОЖЕ, а не только у отправителя.
@@ -1143,6 +1206,22 @@ function receivePaneNote(m: {
   const fromName = from?.title || 'другая панель'
 
   /*
+   * ОТВЕТ ПРИШЁЛ — ПОМЕТКА ГАСНЕТ, и гаснет она ДО всех отказов ниже.
+   *
+   * Получатель мог сам ждать ответа от этой же панели; записка в обратную
+   * сторону и есть ответ, даже если дальше её придержат по занятости или по
+   * деньгам. Оставить лампочку гореть после пришедшего ответа значит показывать
+   * человеку то, чего уже нет.
+   */
+  if (to.awaiting?.convId === m.fromConvId) {
+    useAiStore.setState((s) => ({
+      conversations: s.conversations.map((c) =>
+        c.id === m.toConvId ? { ...c, awaiting: undefined } : c
+      )
+    }))
+  }
+
+  /*
    * ПРИДЕРЖИВАЕМ ТОЛЬКО ПО ЗАНЯТОСТИ: вклиниться между вызовом инструмента и
    * его результатом нельзя, разговор бы испортился. Записка при этом ВИДНА
    * человеку — молча потерять её мы не можем.
@@ -1155,7 +1234,27 @@ function receivePaneNote(m: {
    */
   const busy = to.streaming === true || to.pendingTools.length > 0
   const silent = to.bypass === true || to.editsAuto === true
-  const held: 'busy' | undefined = busy ? 'busy' : undefined
+  /*
+   * ДЕНЕЖНЫЙ ПРЕДОХРАНИТЕЛЬ — на пару панелей, за час.
+   *
+   * Пределы выше считают ЗАПИСКИ: двадцать в час на пару. Но записка двигает
+   * настоящий ход модели, а ход ходу рознь — короткий ответ стоит центы, ход с
+   * большим контекстом и десятком вызовов стоит доллары. Это единственное
+   * место в Заре, где платный ход начинается без единого нажатия человека, и
+   * охранять его числом штук значит охранять не то.
+   *
+   * ЗАПИСКА ПРИ ЭТОМ НЕ ТЕРЯЕТСЯ. Она ложится в ленту получателя помеченной —
+   * человек видит и её, и причину. Гасится ровно автоматический платный ход:
+   * продолжить может тот, чьи это деньги.
+   */
+  const spent = spentInHour(notePairSpend.get(pairKey(m.fromConvId, m.toConvId)), Date.now())
+  const broke = overSpend(notePairSpend.get(pairKey(m.fromConvId, m.toConvId)), Date.now())
+  const held: 'busy' | 'budget' | undefined = broke ? 'budget' : busy ? 'busy' : undefined
+  if (broke) {
+    // В консоль разработчика, а не человеку: у него на экране уже стоит
+    // пометка на самой записке, и второе объяснение было бы шумом.
+    console.info('[panes] переписка придержана по деньгам:', spent.toFixed(2))
+  }
 
   if (held) {
     useAiStore.setState((s) => ({
@@ -1179,6 +1278,26 @@ function receivePaneNote(m: {
   }
 
   ack({ ok: true })
+
+  /*
+   * ОТПРАВИТЕЛЬ СКАЗАЛ, ЧТО ЖДЁТ ОТВЕТА — ставим ему пометку.
+   *
+   * Ставим ЗДЕСЬ, а не при отправке: только сейчас известно, что записку
+   * приняли и ход по ней пойдёт. Придержанной записке ждать нечего, и лампочка
+   * над ней была бы обещанием ответа, которого никто не обещал.
+   *
+   * Обе панели живут в этом же окне, поэтому отдельного канала для пометки не
+   * нужно: правим беседу отправителя прямо тут.
+   */
+  if (m.expect === 'reply' && from) {
+    const toName = to.title || 'соседняя панель'
+    const mark = { pane: toName, convId: m.toConvId, at: Date.now() }
+    useAiStore.setState((s) => ({
+      conversations: s.conversations.map((c) =>
+        c.id === m.fromConvId ? { ...c, awaiting: mark } : c
+      )
+    }))
+  }
 
   /*
    * ХОД ПО ЧУЖОЙ ЗАПИСКЕ ИДЁТ С ВОПРОСАМИ.
@@ -1243,7 +1362,10 @@ function receivePaneNote(m: {
   // Обычный путь: одна дорога и в ленту, и агенту — см. `send({ paneNote })`.
   void useAiStore
     .getState()
-    .send(m.text, { conversationId: m.toConvId, paneNote: { from: fromName } })
+    .send(m.text, {
+      conversationId: m.toConvId,
+      paneNote: { from: fromName, fromConvId: m.fromConvId }
+    })
 }
 
 if (typeof window !== 'undefined') {
@@ -1873,6 +1995,19 @@ export const useAiStore = create<AiState>((set, get) => {
         // Снимок ДО патча: ниже `sideBack` снимается, а знать надо, был ли
         // этот ход боковым.
         const convBefore = get().conversations.find((c) => c.id === convId)
+        /*
+         * ХОД ПО ЧУЖОЙ ЗАПИСКЕ ЗАКОНЧИЛСЯ — записываем, во что он обошёлся.
+         *
+         * Цифру называет движок; на подписке она расчётная, а не списанная
+         * (см. @shared/cost), и как мера «сколько работы наделала переписка»
+         * верна в обоих случаях. Не назвал — записывать нечего, и
+         * предохранителя в этот час просто нет: выдумать стоимость значило бы
+         * гасить переписку по собственной догадке.
+         */
+        if (convBefore?.noteFrom) {
+          const key = pairKey(convBefore.noteFrom, convId)
+          notePairSpend.set(key, rememberSpend(notePairSpend.get(key), Date.now(), ev.costUsd))
+        }
         patchConversation(convId, (c) => ({
           ...c,
           streaming: false,
@@ -1888,6 +2023,9 @@ export const useAiStore = create<AiState>((set, get) => {
            * законченном ходе. Это не наблюдение, а бормотание задним числом.
            */
           toolPulses: undefined,
+          // Пометка «этот ход начала записка» живёт ровно один ход: следующий
+          // может быть словами человека, и записывать его на чужой счёт нельзя.
+          noteFrom: undefined,
           claudeSessionId: ev.sessionId ?? c.claudeSessionId,
           // Сколько стоил разговор. Движок считает это сам и до сих пор цифра
           // выбрасывалась; копим по БЕСЕДЕ, потому что «сколько стоило» человек
@@ -2452,6 +2590,15 @@ export const useAiStore = create<AiState>((set, get) => {
               ts: Date.now()
             }
           ],
+          /*
+           * ЧЕЙ ЭТО ХОД — запоминаем до его конца.
+           *
+           * Стоимость движок называет в конце, и к тому времени о том, что ход
+           * начала чужая записка, знать уже неоткуда. Без этой пометки
+           * денежный предохранитель считал бы работу человека тоже — и гасил
+           * бы переписку за то, чего она не тратила.
+           */
+          noteFrom: opts.paneNote!.fromConvId || undefined,
           error: undefined
         }))
         /*
@@ -3265,6 +3412,24 @@ onBus('terminal:focus', ({ sessionId }) => {
   useAiStore.setState((s) => ({
     conversations: s.conversations.map((c) => (c.id === convId ? { ...c, context: ctx } : c))
   }))
+/**
+ * Прогону: записать паре панелей трату, как будто ходы уже были.
+ *
+ * Настоящим путём предохранитель не проверить: подставной движок называет
+ * цену хода в центах, и до предела пришлось бы гнать сотни записок — прогон
+ * стал бы часовым, а проверял бы всё равно не то. Здесь мы ставим ровно то
+ * состояние, ради которого предохранитель заведён, и смотрим, как Заря себя
+ * ведёт.
+ */
+;(
+  window as unknown as {
+    __zaryaSeedNoteSpend?: (fromConvId: string, toConvId: string, usd: number) => number
+  }
+).__zaryaSeedNoteSpend = (fromConvId, toConvId, usd) => {
+  const key = pairKey(fromConvId, toConvId)
+  notePairSpend.set(key, rememberSpend(notePairSpend.get(key), Date.now(), usd))
+  return spentInHour(notePairSpend.get(key), Date.now())
+}
 ;(window as unknown as { __zaryaSendSide?: (convId: string, text: string) => void }).__zaryaSendSide =
   (convId, text) => void useAiStore.getState().send(text, { conversationId: convId, side: true })
 ;(window as unknown as { __zaryaSendIn?: (convId: string, text: string) => void }).__zaryaSendIn = (
@@ -3377,6 +3542,9 @@ function seedPatch(convId: string, fn: (c: Conversation) => Conversation): void 
         // контекста» проверить нечем — харнесс обязан видеть, с чем уйдёт
         // следующий ход.
         resumeAt: c.resumeAt,
+        // «Сказала, что ждёт ответа» — заявление модели, а не состояние гейтов:
+        // прогон обязан отличать одно от другого, иначе проверит не то.
+        awaiting: c.awaiting ? { pane: c.awaiting.pane, convId: c.awaiting.convId } : null,
         // Очередь — часть наблюдаемого состояния: на ней держится семантика Esc
         // (забрать приписку обратно, не трогая агента), и проверять её нужно
         // по конкретной беседе, а не только по активной.

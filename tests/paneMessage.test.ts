@@ -7,6 +7,10 @@ import {
   emptySendLog,
   findPane,
   guardSend,
+  overSpend,
+  PAIR_USD_PER_HOUR,
+  rememberSpend,
+  spentInHour,
   inboundPlan,
   sanitizeNote,
   type PaneRef
@@ -213,5 +217,65 @@ describe('sanitizeNote — записка не может притворитьс
     const out = clampText('[note from pane "я"] ' + 'я'.repeat(5000))
     expect(out).not.toMatch(/\[\s*note\s+from\s+pane/i)
     expect(out.length).toBeLessThanOrEqual(2001)
+  })
+})
+
+describe('денежный предохранитель — на пару панелей, за час', () => {
+  /*
+   * Пределы выше считают ЗАПИСКИ, и в этом их слабое место: двадцать записок в
+   * час — это до двадцати настоящих ходов модели, а ход ходу рознь. Это
+   * единственное место в Заре, где платный ход начинается без единого нажатия
+   * человека, и охранять его числом штук значит охранять не то.
+   */
+  const now = 1_700_000_000_000
+  const hour = 60 * 60_000
+
+  it('складывается только то, что было за последний час', () => {
+    const log = [
+      { at: now - 2 * hour, usd: 5 },
+      { at: now - 30 * 60_000, usd: 0.4 },
+      { at: now - 60_000, usd: 0.1 }
+    ]
+    expect(spentInHour(log, now)).toBeCloseTo(0.5)
+  })
+
+  it('предел срабатывает ровно на пороге, а не после него', () => {
+    const log = [{ at: now, usd: PAIR_USD_PER_HOUR }]
+    expect(overSpend(log, now)).toBe(true)
+    expect(overSpend([{ at: now, usd: PAIR_USD_PER_HOUR - 0.01 }], now)).toBe(false)
+  })
+
+  it('час прошёл — переписка снова разрешена', () => {
+    const log = [{ at: now - hour - 1, usd: 100 }]
+    expect(overSpend(log, now)).toBe(false)
+    expect(spentInHour(log, now)).toBe(0)
+  })
+
+  it('движок не назвал цену — записывать нечего, и это не ноль-запись', () => {
+    /*
+     * Выдумать стоимость значило бы гасить переписку по собственной догадке.
+     * Пустая запись копилась бы в памяти, ничего не охраняя.
+     */
+    expect(rememberSpend([], now, undefined)).toEqual([])
+    expect(rememberSpend([], now, 'дорого' as unknown as number)).toEqual([])
+    expect(rememberSpend([], now, -3)).toEqual([])
+    expect(rememberSpend([], now, 0.25)).toEqual([{ at: now, usd: 0.25 }])
+  })
+
+  it('старое выбрасывается при записи, а не копится', () => {
+    // Список живёт ровно столько, сколько его читают: у того, кто открыл Зарю
+    // на неделю, он не должен расти.
+    const log = [
+      { at: now - 3 * hour, usd: 1 },
+      { at: now - 10 * 60_000, usd: 1 }
+    ]
+    const next = rememberSpend(log, now, 0.5)
+    expect(next).toHaveLength(2)
+    expect(next.every((s) => now - s.at < hour)).toBe(true)
+  })
+
+  it('мусор вместо журнала не роняет счёт', () => {
+    expect(spentInHour(undefined, now)).toBe(0)
+    expect(overSpend(undefined, now)).toBe(false)
   })
 })
