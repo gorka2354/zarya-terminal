@@ -45,9 +45,12 @@ no account, no telemetry.
   focus you get one system notification per stop — never a stream. Turned off with a
   single checkbox.
 - **🧰 Tools you can see** — **Settings → Tools** lists the MCP servers of a chosen pane
-  with their real state, the engine's own words for a failure, what each one costs you
-  in tokens **per request**, and buttons to reconnect or turn one off. The tools of 14
-  servers can quietly eat half your context; now that number is on screen.
+  with their real state, the engine's own words for a failure, **what their descriptions
+  cost and how much of that is in the window right now**, and buttons to reconnect or
+  turn one off. Both numbers, because they differ: the engine keeps tool descriptions
+  ready and loads them when they are needed, so the price of 14 servers is not what you
+  pay on every request — and a tab that says otherwise sends you turning off servers
+  that cost you nothing today.
 - **📊 Skills, priced** — the same tab prices every skill you have. A skill's
   description sits in the context of *every* request, so it is billed whether it fires
   or not: on the author's machine that is 83 skills and **5,347 tokens per request**.
@@ -450,8 +453,8 @@ Details: [docs/shell-integration.md](docs/shell-integration.md).
 
 ## Tests
 
-Numbers on today's main (0.7.6 plus the increments since): **1166 unit checks**
-(plus 6 skipped on this platform) across 85 files and **120 end-to-end runs**
+Numbers on today's main (0.7.6 plus the increments since): **1222 unit checks**
+(plus 6 skipped on this platform) across 87 files and **120 end-to-end runs**
 that drive the real application.
 
 **Unit** (`tests/`, vitest) — the pure logic where a silent mistake costs the most:

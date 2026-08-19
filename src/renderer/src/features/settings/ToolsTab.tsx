@@ -483,8 +483,18 @@ export function ToolsTab(): React.JSX.Element {
    * `undefined` значит «движок не сказал», и это не ноль: показывать в таком
    * случае нечего, а догадываться — снова врать.
    */
-  const loadedKnown = rows.some((s) => s.loadedTokens !== undefined)
-  const mcpLoaded = rows.reduce((sum, s) => sum + (s.loadedTokens ?? 0), 0)
+  /*
+   * ИТОГ — ТОЛЬКО КОГДА ИЗВЕСТНО ПРО ВСЕХ, у кого есть цена.
+   *
+   * Ревью поймало заявление о целом по данным о части: хватало одного сервера
+   * с `isLoaded`, чтобы под общей суммой появилась строка про окно, а
+   * промолчавшие считались нулём — при том что их цена в сумму входила.
+   * Человек читал «в окне ничего не лежит» и оставлял включённым сервер,
+   * который на самом деле в окне.
+   */
+  const priced = rows.filter((s) => s.tokens !== undefined)
+  const loadedKnown = priced.length > 0 && priced.every((s) => s.loadedTokens !== undefined)
+  const mcpLoaded = priced.reduce((sum, s) => sum + (s.loadedTokens ?? 0), 0)
 
   return (
     <section className="zy-set-section">

@@ -86,6 +86,35 @@ describe('правила «до конца сессии»', () => {
     expect(matchesRule(rules, ...bash('git status --short'))).toBe(false)
   })
 
+  it('ПОИСК ПО КОНСОЛИ — отдельное решение, а не тот же список команд', () => {
+    /*
+     * Ревью нашло здесь дыру. `list_blocks` без аргументов отдаёт только имена
+     * команд и коды возврата — «Returns no output text» сказано в его же
+     * описании. С полем `contains` тот же вызов возвращает СТРОКИ ВЫВОДА, а в
+     * них ключи, пути и всё, что человек когда-то запускал. Правило же строится
+     * по имени инструмента, и разрешение, выданное когда-то на безобидный
+     * список, молча начало бы пускать вывод.
+     */
+    const plain: [string, unknown] = ['mcp__zarya__list_blocks', { limit: 10 }]
+    const search: [string, unknown] = ['mcp__zarya__list_blocks', { contains: 'ECONNREFUSED' }]
+    expect(ruleFor(...plain)).toBe('mcp__zarya__list_blocks')
+    expect(ruleFor(...search)).toBe('mcp__zarya__list_blocks: contains')
+    // Главное: разрешение на список НЕ покрывает поиск.
+    expect(matchesRule([ruleFor(...plain)!], ...search)).toBe(false)
+    expect(matchesRule([ruleFor(...search)!], ...search)).toBe(true)
+  })
+
+  it('но поиск не дробится по искомому слову', () => {
+    // Решение человека здесь про ВИД данных, а не про строку поиска: иначе
+    // каждый новый запрос спрашивал бы заново, и он перестал бы читать карточки.
+    const rules = [ruleFor('mcp__zarya__list_blocks', { contains: 'error' })!]
+    expect(matchesRule(rules, 'mcp__zarya__list_blocks', { contains: 'timeout' })).toBe(true)
+  })
+
+  it('пустой contains — это не поиск', () => {
+    expect(ruleFor('mcp__zarya__list_blocks', { contains: '   ' })).toBe('mcp__zarya__list_blocks')
+  })
+
   it('для прочих инструментов правило — имя', () => {
     expect(ruleFor('Read', { file_path: 'a.ts' })).toBe('Read')
     expect(matchesRule(['Read'], 'Read', { file_path: 'другой.ts' })).toBe(true)

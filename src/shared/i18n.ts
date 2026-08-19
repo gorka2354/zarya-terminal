@@ -377,10 +377,11 @@ export const RU: Dict = {
     'Это НАШИ копии: перед откатом Заря сохраняет то, что рискует пропасть. Копии самого движка живут отдельно и удаляются им же.',
   'eng.cpQa': 'В изолированном прогоне выключено принудительно: копии лежат вне подменяемой папки.',
   'drv.elicitForm':
-    'Сервер MCP «{name}» просит у вас ввод: {what}. Показать эту форму Заря пока не умеет, поэтому запрос отклонён — сервер об этом знает. Сделать это можно в терминале: {how}',
+    'Сервер MCP «{name}» просит у вас ввод: {what}. Показать эту форму Заря пока не умеет, поэтому запрос отклонён — сервер об этом знает. То же действие проходит в самом Claude Code: запустите его в терминале и повторите там.',
   'drv.elicitUrl':
     'Сервер MCP «{name}» просит вход через браузер ({host}). Заря этого пока не показывает, поэтому запрос отклонён — сервер об этом знает. Войти можно в терминале: {how}',
-  'drv.elicitNoCmd': 'там, где вы настраивали этот сервер',
+  'drv.elicitNoCmd':
+    'готовую команду Заря не даёт: в имени сервера есть символы, которые оболочка примет за команды. Наберите «claude mcp login» сами и подставьте имя',
   'drv.ccNoRewindFlag':
     'Этот Claude Code не понимает флаг для отката кода — ход повторён без него. Чекпоинты файлов недоступны на этой версии CLI.',
   'rw.btn': 'Откатить файлы',
@@ -2060,10 +2061,11 @@ export const EN: Dict = {
     'These are OUR copies: before a rewind Zarya saves what is at risk. The engine keeps its own copies separately and removes them itself.',
   'eng.cpQa': 'Force-disabled in an isolated run: the copies live outside the overridden folder.',
   'drv.elicitForm':
-    'MCP server “{name}” is asking you for input: {what}. Zarya cannot show that form yet, so the request was declined — the server knows. You can do it in a terminal: {how}',
+    'MCP server “{name}” is asking you for input: {what}. Zarya cannot show that form yet, so the request was declined — the server knows. The same step goes through in Claude Code itself: run it in a terminal and answer there.',
   'drv.elicitUrl':
     'MCP server “{name}” wants a browser sign-in ({host}). Zarya does not show that yet, so the request was declined — the server knows. You can sign in from a terminal: {how}',
-  'drv.elicitNoCmd': 'wherever you configured this server',
+  'drv.elicitNoCmd':
+    'Zarya will not hand you a ready line: the server name contains characters a shell would treat as commands. Type «claude mcp login» yourself and paste the name',
   'drv.ccNoRewindFlag':
     'This Claude Code does not understand the code-rewind flag — the turn was retried without it. File checkpoints are unavailable on this CLI version.',
   'rw.btn': 'Rewind files',

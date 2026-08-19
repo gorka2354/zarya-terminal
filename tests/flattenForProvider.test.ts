@@ -150,3 +150,64 @@ describe('flattenForProvider — сообщение не остаётся пус
     expect(out.map((m) => m.role)).toEqual(['user', 'assistant', 'user'])
   })
 })
+
+describe('придержанная записка не доезжает до провайдера', () => {
+  /*
+   * Записку придерживают по двум причинам: панель в середине хода или пара
+   * панелей уже наработала за час больше, чем Заря начинает без человека.
+   * Отправителю в обоих случаях сказано «его агенту НЕ отдали, ответа не жди».
+   *
+   * У родных движков это поле уважается при сборке промпта, а здесь история
+   * уезжает провайдеру ЦЕЛИКОМ каждым запросом — и придержанная записка
+   * приезжала к модели следующим же ходом. То есть придержание обходилось само
+   * собой, только на шаг позже и за те же деньги.
+   */
+  const note = (held?: 'busy' | 'budget'): AiMessage => ({
+    role: 'assistant',
+    content: [{ type: 'pane-note', from: 'сосед', text: 'посмотри логи', ...(held ? { held } : {}) }]
+  })
+
+  it('придержанная по занятости — мимо', () => {
+    const out = flattenForProvider([user({ type: 'text', text: 'привет' }), note('busy')])
+    expect(out).toHaveLength(1)
+  })
+
+  it('придержанная по деньгам — тоже', () => {
+    const out = flattenForProvider([user({ type: 'text', text: 'привет' }), note('budget')])
+    expect(JSON.stringify(out)).not.toContain('посмотри логи')
+  })
+
+  it('а доставленная — доезжает, помеченная как чужая речь', () => {
+    const out = flattenForProvider([user({ type: 'text', text: 'привет' }), note()])
+    expect(out).toHaveLength(2)
+    const part = out[1].content[0] as { type: string; text: string }
+    expect(part.type).toBe('text')
+    expect(part.text).toContain('[note from pane "сосед"]')
+  })
+
+  it('сообщение не осиротеет: выбрасывается целиком, а не одна его часть', () => {
+    // Пустой `content` провайдер встречает четырёхсотой ошибкой, и разговор
+    // встаёт навсегда — ровно то, от чего сторожит тест выше.
+    for (const m of flattenForProvider([user({ type: 'text', text: 'раз' }), note('busy')])) {
+      expect(m.content.length).toBeGreaterThan(0)
+    }
+  })
+
+  it('записка рядом со словами человека остаётся, даже если помечена', () => {
+    /*
+     * Такого в ленте не бывает — придержанная кладётся одна, — но правило
+     * должно резать по сообщению целиком, а не по «есть ли там pane-note».
+     * Иначе однажды с запиской уехали бы чужие слова.
+     */
+    const mixed: AiMessage = {
+      role: 'assistant',
+      content: [
+        { type: 'pane-note', from: 'сосед', text: 'придержано', held: 'busy' },
+        { type: 'text', text: 'мои слова' }
+      ]
+    }
+    const out = flattenForProvider([user({ type: 'text', text: 'раз' }), mixed])
+    expect(out).toHaveLength(2)
+    expect(JSON.stringify(out)).toContain('мои слова')
+  })
+})

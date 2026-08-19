@@ -31,6 +31,7 @@ import type { BackgroundTask } from '@shared/agentTasks'
 import { enginePromptAppend } from '@shared/enginePrompt'
 import { shellTail, type ShellTail } from '@shared/shellTail'
 import { clampText, overSpend, rememberSpend, spentInHour, type Spend } from '@shared/paneMessage'
+import { searchBlocks } from '@shared/blockSearch'
 import { sameModel } from './modelMatch'
 import { nativeGateOpts } from './startOpts'
 import { irreversible } from '@shared/irreversible'
@@ -65,10 +66,9 @@ const SNIPPET_CAP = 200
 /**
  * ЧТО НАРАБОТАЛА ПЕРЕПИСКА ПАНЕЛЕЙ — по парам, за последний час.
  *
- * Ключ — «кто написал → кому», потому что предохранитель именно про пару: своя
- * работа человека сюда не попадает вовсе, считаются только ходы, начатые ЧУЖОЙ
- * запиской. Это единственное место в Заре, где платный ход стартует без единого
- * нажатия.
+ * Считаются ТОЛЬКО ходы, начатые чужой запиской: своя работа человека сюда не
+ * попадает вовсе. Это единственное место в Заре, где платный ход стартует без
+ * единого нажатия.
  *
  * ЖИВЁТ В ОКНЕ, а не в главном процессе, потому что деньги знает окно: цифру
  * хода приносит движок в конце, и здесь же она копится по беседе. Отдавать её
@@ -77,9 +77,25 @@ const SNIPPET_CAP = 200
  *
  * НЕ ПЕРЕЖИВАЕТ ПЕРЕЗАПУСК намеренно: окно предохранителя — час, а перезапуск
  * Зари — это уже человек за клавиатурой.
+ *
+ * ЧЕГО ОН НЕ ОХРАНЯЕТ, и знать это надо: встроенный движок (`builtin`) цены
+ * хода не называет — её приносит движок агента отдельным событием в конце, а у
+ * своего провайдера такого нет. Значит в беседах на встроенном движке денежного
+ * предела нет, и держится там только потолок по числу записок (`guardSend`).
+ * Считать эти деньги своей арифметикой мы не станем: она разойдётся со счётом
+ * провайдера, и тогда врать будут обе цифры.
  */
 const notePairSpend = new Map<string, Spend[]>()
-const pairKey = (from: string, to: string): string => `${from} -> ${to}`
+/**
+ * Ключ пары — БЕЗ НАПРАВЛЕНИЯ, как у счётчика записок рядом.
+ *
+ * Сперва здесь стояло «кто → кому», и ревью показало цену: `A → B` и `B → A`
+ * оказывались разными ячейками по два доллара каждая, то есть настоящий потолок
+ * был вдвое выше объявленного — ровно в том сценарии, ради которого
+ * предохранитель и заведён (ответ на ответ). Соседний `guardSend` сортирует
+ * пару намеренно и объясняет почему; здесь та же причина.
+ */
+const pairKey = (from: string, to: string): string => [from, to].sort().join(' | ')
 
 /**
  * Сколько живёт пометка «сказала, что ждёт ответа».
@@ -1053,11 +1069,18 @@ function answerBlocksQuery(q: Record<string, unknown>): void {
    * там, где на них ответили «нет». Но решение о согласии не может жить только
    * в моменте запуска — человек меняет его тогда, когда захочет.
    */
-  const refused =
-    conv?.shellTailOff === true ||
-    useAiStore.getState().shellTailOffBySession[sid] === true ||
-    getSettings().ai.contextBlocks <= 0
-  if (refused) return reply({ ok: false, reason: 'refused' })
+  /*
+   * ДВЕ РАЗНЫЕ ПРИЧИНЫ, И АГЕНТУ ОНИ ГОВОРЯТ РАЗНОЕ.
+   *
+   * Ревью поймало, что мы сводили их в одну: «человек закрыл вам консоль в
+   * ЭТОЙ панели» звучало и тогда, когда подача выключена во всём приложении.
+   * Агент отправлял человека искать кнопку не там — та плашка живёт на панели,
+   * а настройка в другом месте.
+   */
+  const paneRefused =
+    conv?.shellTailOff === true || useAiStore.getState().shellTailOffBySession[sid] === true
+  if (paneRefused) return reply({ ok: false, reason: 'refused' })
+  if (getSettings().ai.contextBlocks <= 0) return reply({ ok: false, reason: 'tail-off' })
   const all = useBlocksStore.getState().bySession[sid] ?? []
 
   /*
@@ -1102,24 +1125,18 @@ function answerBlocksQuery(q: Record<string, unknown>): void {
      * на карточке, что именно читают. Поэтому пара сотен знаков на совпадение
      * и не больше пяти блоков за вызов: это ответ «смотри туда», а не способ
      * вычитать журнал по кусочкам.
+     *
+     * Сами правила — в @shared/blockSearch: они чистые, и проверять их надо
+     * тестом, а не живым прогоном через окно и мост.
      */
-    const low = needle.toLowerCase()
+    const byId = new Map(all.map((b) => [b.id, b]))
     const found: BlockBrief[] = []
-    for (let i = all.length - 1; i >= 0 && found.length < SEARCH_HITS; i--) {
-      const b = all[i]
-      const lines = (b.output ?? '').split(/\r?\n/)
-      const hits = lines.filter((l) => l.toLowerCase().includes(low))
-      const inCommand = (b.command ?? '').toLowerCase().includes(low)
-      if (!hits.length && !inCommand) continue
-      found.push({
-        ...brief(b),
-        matches: hits.length,
-        // Совпало в самой команде, а в выводе нет — отрывку взяться неоткуда,
-        // и придумывать его нельзя: пустое поле честнее выдуманной строки.
-        ...(hits.length ? { snippet: hits[0].slice(0, SNIPPET_CAP) } : {})
-      })
+    for (const m of searchBlocks(all, needle, { hits: SEARCH_HITS, cap: SNIPPET_CAP })) {
+      const b = byId.get(m.id)
+      if (!b) continue
+      found.push({ ...brief(b), matches: m.matches, ...(m.snippet ? { snippet: m.snippet } : {}) })
     }
-    return reply({ ok: true, kind: 'list', blocks: found.reverse() })
+    return reply({ ok: true, kind: 'list', blocks: found })
   }
 
   const found = all.find((b) => b.id === String(q.blockId ?? ''))
@@ -1277,8 +1294,6 @@ function receivePaneNote(m: {
     return
   }
 
-  ack({ ok: true })
-
   /*
    * ОТПРАВИТЕЛЬ СКАЗАЛ, ЧТО ЖДЁТ ОТВЕТА — ставим ему пометку.
    *
@@ -1289,7 +1304,8 @@ function receivePaneNote(m: {
    * Обе панели живут в этом же окне, поэтому отдельного канала для пометки не
    * нужно: правим беседу отправителя прямо тут.
    */
-  if (m.expect === 'reply' && from) {
+  const marked = m.expect === 'reply' && !!from
+  if (marked) {
     const toName = to.title || 'соседняя панель'
     const mark = { pane: toName, convId: m.toConvId, at: Date.now() }
     useAiStore.setState((s) => ({
@@ -1298,6 +1314,15 @@ function receivePaneNote(m: {
       )
     }))
   }
+  /*
+   * ОТЧИТЫВАЕМСЯ ПОСЛЕ, А НЕ ДО.
+   *
+   * Ревью поймало: отправителю говорилось «ваша панель помечена как ждущая»
+   * по одному лишь его же аргументу, ещё до того, как окно эту пометку
+   * поставило, — а беседы отправителя могло уже не быть. Теперь ack несёт
+   * факт, и слова строятся по нему.
+   */
+  ack({ ok: true, ...(marked ? { marked: true } : {}) })
 
   /*
    * ХОД ПО ЧУЖОЙ ЗАПИСКЕ ИДЁТ С ВОПРОСАМИ.
@@ -2542,7 +2567,17 @@ export const useAiStore = create<AiState>((set, get) => {
           window.zarya.ai.abort(conv.activeRequestId)
           requestConv.delete(conv.activeRequestId)
         }
-        const conversations = s.conversations.filter((c) => c.id !== id)
+        /*
+         * КОГО ЖДАЛИ — БОЛЬШЕ НЕТ, и лампочка «жду ответа» обязана погаснуть.
+         *
+         * Иначе в списке агентов до десяти минут висит «сказала, что ждёт
+         * ответа от «X»» про панель, которой уже нет на экране. Пометка и так
+         * гаснет сама, но пережить закрытие ждущей стороны — значит показывать
+         * человеку то, чего заведомо не случится.
+         */
+        const conversations = s.conversations
+          .filter((c) => c.id !== id)
+          .map((c) => (c.awaiting?.convId === id ? { ...c, awaiting: undefined } : c))
         const activeId =
           s.activeId === id ? (conversations[conversations.length - 1]?.id ?? null) : s.activeId
         return { conversations, activeId }
@@ -2702,6 +2737,19 @@ export const useAiStore = create<AiState>((set, get) => {
         messages: [...c.messages, { role: 'user', content: parts, ts: Date.now() }],
         pendingContext: [],
         error: undefined,
+        /*
+         * ЭТОТ ХОД НАЧАЛ ЧЕЛОВЕК — и чужой счёт его не касается.
+         *
+         * Ревью поймало дыру: пометка «ход по записке» снималась только в
+         * УСПЕШНОМ конце хода. Ход, упавший с ошибкой движка или отменённый по
+         * Esc, оставлял её висеть — и следующий ход, набранный человеком
+         * руками, ложился на счёт переписки панелей. Дальше предохранитель
+         * придерживал записки и объяснял это перепиской, которой не было.
+         *
+         * Снимаем ЗДЕСЬ, на входе любой отправки: так ни один пропущенный
+         * выход из хода не перенесёт пометку на чужой счёт.
+         */
+        noteFrom: undefined,
         /*
          * Куда вернуться после ответа. Держим в беседе, а не в замыкании: ход
          * может кончиться перезапуском или отменой, и «висящая» переменная в
@@ -3430,6 +3478,11 @@ onBus('terminal:focus', ({ sessionId }) => {
   notePairSpend.set(key, rememberSpend(notePairSpend.get(key), Date.now(), usd))
   return spentInHour(notePairSpend.get(key), Date.now())
 }
+/** Прогону: сколько пара наработала за час — только прочитать, не меняя. */
+;(
+  window as unknown as { __zaryaNoteSpend?: (fromConvId: string, toConvId: string) => number }
+).__zaryaNoteSpend = (fromConvId, toConvId) =>
+  spentInHour(notePairSpend.get(pairKey(fromConvId, toConvId)), Date.now())
 ;(window as unknown as { __zaryaSendSide?: (convId: string, text: string) => void }).__zaryaSendSide =
   (convId, text) => void useAiStore.getState().send(text, { conversationId: convId, side: true })
 ;(window as unknown as { __zaryaSendIn?: (convId: string, text: string) => void }).__zaryaSendIn = (
@@ -3544,7 +3597,9 @@ function seedPatch(convId: string, fn: (c: Conversation) => Conversation): void 
         resumeAt: c.resumeAt,
         // «Сказала, что ждёт ответа» — заявление модели, а не состояние гейтов:
         // прогон обязан отличать одно от другого, иначе проверит не то.
-        awaiting: c.awaiting ? { pane: c.awaiting.pane, convId: c.awaiting.convId } : null,
+        awaiting: c.awaiting
+          ? { pane: c.awaiting.pane, convId: c.awaiting.convId, at: c.awaiting.at }
+          : null,
         // Очередь — часть наблюдаемого состояния: на ней держится семантика Esc
         // (забрать приписку обратно, не трогая агента), и проверять её нужно
         // по конкретной беседе, а не только по активной.

@@ -32,7 +32,7 @@ const stand = makeStand({ 'README.md': '# Стенд записок\n' })
 note('проект:', stand)
 const { app, page, userData } = await launchZarya({
   work: stand,
-  // Инструменты выключены по умолчанию — они платные в каждом запросе.
+  // Инструменты выключены по умолчанию: это доступ к соседним панелям.
   settings: { ai: { paneMessages: true } }
 })
 

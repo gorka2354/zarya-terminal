@@ -267,8 +267,16 @@ try {
    * Проверяем главное: записка не теряется. Она ложится в ленту с пометкой,
    * человек видит и её, и причину — гасится ровно автоматический ход.
    */
+  /*
+   * СЕЕМ ТРАТУ В ОБРАТНУЮ СТОРОНУ — и это главная проверка этой секции.
+   *
+   * Ключ пары не должен зависеть от направления. Ревью поймало, что сперва он
+   * зависел: `A → B` и `B → A` были разными ячейками по два доллара каждая, то
+   * есть настоящий потолок был вдвое выше объявленного — ровно в том сценарии,
+   * ради которого предохранитель и заведён (ответ на ответ).
+   */
   const spent = await page.evaluate(
-    ([to, from]) => window.__zaryaSeedNoteSpend?.(from, to, 2.5),
+    ([to, from]) => window.__zaryaSeedNoteSpend?.(to, from, 2.5),
     [b, a]
   )
   note('на паре панелей за час:', JSON.stringify(spent))
@@ -301,6 +309,24 @@ try {
   note('подпись на записке:', JSON.stringify(heldText))
   ok('и на экране названа причина, а не просто «придержана»', /наработал/.test(heldText), heldText)
   await shot(page, 'panes-budget')
+
+  console.log('\n[4г] Своя работа человека на счёт переписки не ложится')
+  /*
+   * Ревью нашло здесь дыру: пометка «этот ход начала записка» снималась только
+   * в УСПЕШНОМ конце хода. Ход, упавший с ошибкой или отменённый, оставлял её
+   * висеть — и следующий ход, набранный человеком руками, ложился на счёт
+   * переписки панелей. Дальше предохранитель придерживал записки и объяснял
+   * это перепиской, которой не было.
+   */
+  const spentBefore = await page.evaluate(([x, y]) => window.__zaryaNoteSpend?.(x, y), [a, b])
+  await page.evaluate((id) => window.__zaryaSendIn?.(id, 'дальше я сам, спасибо'), b)
+  await page.waitForTimeout(2500)
+  const spentAfter = await page.evaluate(([x, y]) => window.__zaryaNoteSpend?.(x, y), [a, b])
+  note('на паре до и после хода человека:', JSON.stringify({ spentBefore, spentAfter }))
+  ok('ход человека не записан на пару панелей', spentAfter === spentBefore, {
+    spentBefore,
+    spentAfter
+  })
 
   console.log('\n[5] Выключенная настройка выключает ОБЕ стороны')
   await page.evaluate(() => window.zarya.settings.set({ ai: { paneMessages: false } }))

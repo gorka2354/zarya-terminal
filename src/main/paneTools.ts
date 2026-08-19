@@ -251,7 +251,10 @@ export function paneToolServer(
           limit: z
             .number()
             .optional()
-            .describe('How many of the most recent commands to list. Default 10, max 50.'),
+            .describe(
+              'How many of the most recent commands to list. Default 10, max 50. ' +
+                'Ignored when `contains` is given: a search returns at most 5 matches.'
+            ),
           contains: z
             .string()
             .optional()
@@ -282,7 +285,18 @@ export function paneToolServer(
                 const head = `- id=${b.id} — ${defuseLine(b.command, FIELD_CAP) || '(command unknown)'}; exit: ${
                   b.exitCode ?? 'still running or unknown'
                 }; output: ${b.chars} chars stored${
-                  b.matches === undefined ? '' : `; matching lines: ${b.matches}`
+                  /*
+                   * НОЛЬ СОВПАВШИХ СТРОК — НЕ ЧИСЛО, А ДРУГОЙ ОТВЕТ.
+                   *
+                   * Ревью поймало: при совпадении в самой команде агент получал
+                   * «matching lines: 0» без отрывка — в результатах поиска это
+                   * читается как поломка, а не как «нашлось в команде».
+                   */
+                  b.matches === undefined
+                    ? ''
+                    : b.matches > 0
+                      ? `; matching lines: ${b.matches}`
+                      : '; matched in the command itself, not in its output'
                 }`
                 /*
                  * ОТРЫВОК — ТОТ ЖЕ ЧУЖОЙ ВЫВОД, что и в `read_block`, и едет он
@@ -368,6 +382,12 @@ function blocksProblem(reason: string): string {
       return 'Command blocks are turned off in this Zarya, so nothing was recorded. The person can turn them on in settings.'
     case 'refused':
       return 'The person has closed their console to you in this pane. Do not ask again this turn: ask them to paste what you need, or to reopen it themselves.'
+    /*
+     * ОТКАЗ ПАНЕЛИ И ВЫКЛЮЧЕННАЯ ПОДАЧА — РАЗНЫЕ МЕСТА, где человек это менял.
+     * Сведи их в одну фразу, и агент отправит его искать кнопку не там.
+     */
+    case 'tail-off':
+      return 'Feeding shell commands to the agent is switched off for this Zarya (the setting is in Engine settings, not on this pane). Nothing is available to read; ask the person to paste what you need.'
     case 'no-integration':
       return 'The shell in this pane does not report its commands to Zarya (an SSH session or a plain cmd.exe), so nothing is recorded here. Ask the person to paste what you need — they are not looking at an empty terminal.'
     case 'no-pane':

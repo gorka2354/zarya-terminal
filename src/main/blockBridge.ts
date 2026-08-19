@@ -27,7 +27,15 @@ export type BlocksAnswer =
   | { ok: true; kind: 'one'; block: BlockBrief; output: string; truncated: boolean }
   | {
       ok: false
-      reason: 'no-window' | 'silent' | 'no-pane' | 'not-found' | 'off' | 'refused' | 'no-integration'
+      reason:
+        | 'no-window'
+        | 'silent'
+        | 'no-pane'
+        | 'not-found'
+        | 'off'
+        | 'refused'
+        | 'tail-off'
+        | 'no-integration'
     }
 
 /** Сколько ждать ответ окна. Чтение из памяти мгновенно; запас — на занятое окно. */

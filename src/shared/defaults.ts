@@ -94,7 +94,8 @@ export const DEFAULT_SETTINGS: Settings = {
      * решает сам, а короткие команды остаются на переднем плане.
      */
     backgroundLongCommands: true,
-    // Выключено: инструменты платные в каждом запросе (см. types.ts).
+    // Выключено: это доступ к соседним панелям, и включают его осознанно
+    // (см. types.ts — там же про цену, которая меньше, чем мы думали).
     paneMessages: false,
     claudeModel: '',
     claudeEffort: ''

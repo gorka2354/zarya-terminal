@@ -18,6 +18,13 @@ import { irreversible } from './irreversible'
 /** Правило — это точная команда или имя инструмента. Никаких шаблонов. */
 export type AllowRule = string
 
+/** Ищет ли этот вызов по выводу — или только перечисляет команды. */
+function hasSearch(input: unknown): boolean {
+  if (!input || typeof input !== 'object') return false
+  const v = (input as Record<string, unknown>).contains
+  return typeof v === 'string' && v.trim().length > 0
+}
+
 function commandOf(input: unknown): string {
   if (typeof input === 'string') return input.trim()
   if (!input || typeof input !== 'object') return ''
@@ -56,6 +63,24 @@ export function ruleFor(toolName: string, input: unknown): AllowRule | null {
    * ничего не защищает. Кнопка обещала бы удобство, а забирала бы гарантию.
    */
   if (tool === 'ExitPlanMode') return null
+  /*
+   * ПОИСК ПО КОНСОЛИ — НЕ ТО ЖЕ РЕШЕНИЕ, ЧТО СПИСОК КОМАНД.
+   *
+   * `mcp__zarya__list_blocks` без аргументов отдаёт только имена команд и коды
+   * возврата — «Returns no output text» сказано в его же описании. С полем
+   * `contains` тот же вызов возвращает СТРОКИ ВЫВОДА, а в них ключи, пути и
+   * всё, что человек когда-то запускал.
+   *
+   * Правило же строится по имени инструмента, и разрешение, выданное когда-то
+   * на безобидный список, молча начало бы пускать вывод. Ревью поймало это
+   * ровно тем словом, которым мы сами описываем свой принцип: человек
+   * разрешал одно, а получил бы другое.
+   *
+   * Поэтому у поиска своё правило и своя карточка. Оно намеренно НЕ включает
+   * искомое слово: иначе каждый новый запрос спрашивал бы заново, а решение
+   * человека здесь про вид данных, а не про строку поиска.
+   */
+  if (tool === 'mcp__zarya__list_blocks' && hasSearch(input)) return `${tool}: contains`
   const shellish = ['bash', 'run_command', 'shell', 'execute', 'terminal', 'powershell', 'cmd']
   if (shellish.some((x) => tool.toLowerCase().includes(x))) {
     if (!cmd) return null

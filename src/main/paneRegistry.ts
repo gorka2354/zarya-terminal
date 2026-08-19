@@ -29,7 +29,8 @@ import { CH } from '@shared/ipc'
  */
 /** Что окно сделало с запиской. Слова для агента строятся из этого. */
 export type NoteAck =
-  { ok: true; held?: 'autopilot' | 'busy' | 'budget' } | { ok: false; reason: 'gone' | 'off' }
+  | { ok: true; held?: 'autopilot' | 'busy' | 'budget'; marked?: boolean }
+  | { ok: false; reason: 'gone' | 'off' }
 
 /** Сколько ждём ответа окна. Дольше — и агент решит, что мы зависли. */
 const ACK_TIMEOUT_MS = 4000
@@ -194,9 +195,13 @@ class PaneRegistry {
       }
       return { ok: true, message: why[ack.held] ?? why.busy }
     }
+    /*
+     * ПРО ПОМЕТКУ ГОВОРИМ ПО ФАКТУ, а не по тому, что агент её попросил:
+     * ставит её окно, и оно же о ней отчитывается.
+     */
     return {
       ok: true,
-      message: expectReply
+      message: ack.marked
         ? `Delivered to "${found.pane.title}". Your pane is now marked as waiting for its answer, so the person can see who waits for whom — the mark fades on its own. Nothing blocks and no answer is guaranteed: if it matters, tell the person what you asked.`
         : `Delivered to "${found.pane.title}". The person there sees it as a message from another pane, and its agent decides what to do with it.`
     }

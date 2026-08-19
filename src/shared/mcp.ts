@@ -178,11 +178,32 @@ export function foldMcpTokens(tools: RawMcpTool[] | undefined): Record<string, n
 export function foldMcpLoaded(tools: RawMcpTool[] | undefined): Record<string, number> {
   const out: Record<string, number> = {}
   if (!Array.isArray(tools)) return out
+  /*
+   * СЕРВЕР СЧИТАЕТСЯ, ТОЛЬКО ЕСЛИ ДВИЖОК НАЗВАЛ ВСЕ ЕГО ИНСТРУМЕНТЫ.
+   *
+   * Ревью поймало полумеру: пропуская инструмент без `isLoaded`, мы всё равно
+   * заводили сервер по первому помеченному — и подпись «отложены» относилась ко
+   * всем десяти по данным о двух. Поле в типе SDK необязательное у КАЖДОГО
+   * инструмента, так что частичный ответ — не выдумка.
+   *
+   * Неполный ответ теперь не даёт числа вовсе: пустое место читается как
+   * «движок не сказал», а ноль — как «ничего не лежит», и второе было бы
+   * заявлением, которого мы не проверяли.
+   */
+  const sum: Record<string, number> = {}
+  const named: Record<string, number> = {}
+  const all: Record<string, number> = {}
   for (const t of tools) {
     const server = asText(t?.serverName)
-    if (!server || typeof t?.isLoaded !== 'boolean') continue
+    if (!server) continue
+    all[server] = (all[server] ?? 0) + 1
+    if (typeof t?.isLoaded !== 'boolean') continue
+    named[server] = (named[server] ?? 0) + 1
     const tokens = typeof t?.tokens === 'number' && t.tokens > 0 ? t.tokens : 0
-    out[server] = (out[server] ?? 0) + (t.isLoaded ? tokens : 0)
+    sum[server] = (sum[server] ?? 0) + (t.isLoaded ? tokens : 0)
+  }
+  for (const [server, count] of Object.entries(all)) {
+    if (named[server] === count) out[server] = sum[server] ?? 0
   }
   return out
 }
