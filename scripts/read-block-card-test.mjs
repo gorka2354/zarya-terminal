@@ -138,6 +138,38 @@ try {
     said,
     id: last.id
   })
+  console.log('\n[5] Человек успел запустить ещё одну команду, пока читал карточку')
+  /*
+   * ИМЕННО ЭТО НАШЁЛ АУДИТ. Карточка висит и говорит «читает вывод команды X».
+   * Человек уходит в свою консоль, делает `gh auth token` или `cat .env`,
+   * возвращается и жмёт «выполнить». Пока закрепление читало состояние в
+   * момент нажатия, агенту уезжал НОВЫЙ последний блок — тот, которого карточка
+   * не называла. Теперь блок решается при появлении карточки.
+   */
+  await ask(page, conv, 'perm-3', { id: 'last' })
+  await page.waitForTimeout(800)
+  const named = await cardText(page)
+  note('карточка назвала:', JSON.stringify(named))
+  // Человек запускает ещё одну команду: список пересобирается, последним
+  // становится другой блок.
+  await page.evaluate((s) => window.__zaryaSeedBlocks?.(s, 6, 4), sid)
+  await page.waitForTimeout(600)
+  const nowBlocks = await page.evaluate((s) => window.__zaryaDumpBlocks?.(s), sid)
+  const newest = nowBlocks[nowBlocks.length - 1]
+  ok('последним стал другой блок', newest.id !== last.id, { was: last.id, now: newest.id })
+
+  await page.evaluate((c) => window.__zaryaApproveIn?.(c), conv)
+  await page.waitForTimeout(1200)
+  const said2 = await page.evaluate((c) => {
+    const conv = window.__zaryaConvById?.(c)
+    return (conv?.notices ?? []).join(' | ')
+  }, conv)
+  note('драйвер получил:', JSON.stringify(said2.slice(-120)))
+  ok('уехал блок, который НАЗВАЛА карточка', said2.includes(last.id), { said2, named })
+  ok('а не тот, что стал последним потом', !said2.includes(newest.id), {
+    said2,
+    newest: newest.id
+  })
 } catch (e) {
   ok('ПРОГОН УПАЛ', false, e?.message || String(e))
 } finally {

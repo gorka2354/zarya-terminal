@@ -1066,7 +1066,7 @@ export const RU: Dict = {
     'Сборку, тесты и dev-сервер агент запустит в фоне и продолжит разговор, а результат заберёт позже. Увести УЖЕ идущую команду в фон движок не умеет — поэтому это просьба на старте, а не кнопка. Выполнит её модель или нет, решает она.',
   'eng.panes': 'Разрешить агенту писать соседним панелям',
   'eng.panesWhy':
-    'Агент увидит другие панели и сможет передать им короткую записку — например, что миграция прошла. Записка приходит отдельным видом, а не вашими словами: одобрить разрешение или поменять настройки она не может. По умолчанию выключено: это доступ к соседним панелям, и включать его стоит осознанно. Цена невелика — имена инструментов лежат в контексте всегда, а описания движок держит наготове и подгружает по надобности. Инструменты появляются у бесед, начатых ПОСЛЕ изменения: состав объявляется движку при запуске сессии. Пока умеет только Claude Code — у остальных движков этих инструментов не будет.',
+    'Агент увидит другие панели и сможет передать им короткую записку — например, что миграция прошла. Записка приходит отдельным видом, а не вашими словами: одобрить разрешение или поменять настройки она не может. ВАЖНО ПРО ДЕНЬГИ: доставленная записка НАЧИНАЕТ ХОД у соседа, то есть тратит без вашего нажатия. Заря держит потолок на пару панелей за час и придерживает записки, когда он выбран, — но включать это стоит осознанно. По умолчанию выключено. Инструменты появляются у бесед, начатых ПОСЛЕ изменения: состав объявляется движку при запуске сессии. Пока умеет только Claude Code — у остальных движков этих инструментов не будет.',
   'feed.noteFrom': 'записка от панели «{name}»',
   'feed.noteHeld': 'придержана: автопилот',
   'feed.noteHeldBusy': 'придержана: панель занята',
@@ -3233,7 +3233,7 @@ export const EN: Dict = {
     'Builds, test suites and dev servers get started in the background so the conversation keeps moving, with the result collected later. The engine cannot move an already-running command to the background — hence a request up front rather than a button. Whether the model honours it is up to the model.',
   'eng.panes': 'Let the agent message other panes',
   'eng.panesWhy':
-    'The agent sees your other panes and can hand one a short note — that the migration landed, say. The note arrives in its own form, never as your words, and it cannot approve a permission or change settings. Off by default because it opens your other panes to it, which is worth deciding on purpose. The price is small: tool names sit in the context always, while their descriptions are kept ready and loaded only when needed. The tools reach conversations started AFTER the change: the tool set is declared to the engine when a session starts. Claude Code only for now — the other engines get no such tools.',
+    'The agent sees your other panes and can hand one a short note — that the migration landed, say. The note arrives in its own form, never as your words, and it cannot approve a permission or change settings. ABOUT MONEY: a delivered note STARTS A TURN in the other pane, so it spends without you pressing anything. Zarya caps what a pair of panes may run up in an hour and holds notes once that is reached — but this is worth switching on deliberately. Off by default. The tools reach conversations started AFTER the change: the tool set is declared to the engine when a session starts. Claude Code only for now — the other engines get no such tools.',
   'feed.noteFrom': 'note from pane “{name}”',
   'feed.noteHeld': 'held: autopilot',
   'feed.noteHeldBusy': 'held: pane is busy',

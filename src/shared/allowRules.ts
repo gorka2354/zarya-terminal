@@ -81,6 +81,21 @@ export function ruleFor(toolName: string, input: unknown): AllowRule | null {
    * человека здесь про вид данных, а не про строку поиска.
    */
   if (tool === 'mcp__zarya__list_blocks' && hasSearch(input)) return `${tool}: contains`
+  /*
+   * ЧТЕНИЕ ВЫВОДА КОМАНДЫ «ДО КОНЦА СЕССИИ» НЕ РАЗРЕШАЕТСЯ ВООБЩЕ.
+   *
+   * Правило для не-shell инструментов — это ИМЯ, без аргументов. Для
+   * `read_block` такое правило означает не «читай вывод этой команды», а
+   * «читай вывод любой моей команды до конца беседы», включая `id: "last"`,
+   * то есть все будущие. Человек при этом нажимал кнопку на карточке, которая
+   * назвала ему ОДНУ команду.
+   *
+   * Аудит перед 0.7.7 описал цену прямо: агент получает живой хвост чужой
+   * консоли по одному нажатию, а дальше человек в своей же панели делает
+   * `gh auth token`, `cat .env`, `docker login` — и полный вывод каждой уезжает
+   * в контекст. Разовое одобрение здесь остаётся, а вечное — нет.
+   */
+  if (tool === 'mcp__zarya__read_block') return null
   const shellish = ['bash', 'run_command', 'shell', 'execute', 'terminal', 'powershell', 'cmd']
   if (shellish.some((x) => tool.toLowerCase().includes(x))) {
     if (!cmd) return null

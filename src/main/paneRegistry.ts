@@ -8,6 +8,7 @@ import {
   type SendLog
 } from '@shared/paneMessage'
 import { CH } from '@shared/ipc'
+import { defuseLine } from '@shared/untrusted'
 
 /**
  * Кто сейчас на экране и как передать соседу записку.
@@ -31,6 +32,19 @@ import { CH } from '@shared/ipc'
 export type NoteAck =
   | { ok: true; held?: 'autopilot' | 'busy' | 'budget'; marked?: boolean }
   | { ok: false; reason: 'gone' | 'off' }
+
+/**
+ * Имя и папка ЧУЖОЙ панели — недоверенный текст, даже в наших же ответах.
+ *
+ * Заголовок панель ставит себе сама (программа в ней — последовательностью в
+ * терминале), путь приходит из оболочки. `list_panes` чистит их с прошлого
+ * инкремента, а вот ответы `send_to_pane` подставляли их СЫРЫМИ: «Delivered to
+ * "<заголовок>"» едет в контекст агента ровно так же и мимо человека. Аудит
+ * перед 0.7.7 это назвал; чистим тем же правилом и теми же пределами.
+ */
+const NAME_CAP = 120
+const PATH_CAP = 200
+const name = (s: string | undefined): string => defuseLine(s ?? '', NAME_CAP) || 'pane'
 
 /** Сколько ждём ответа окна. Дольше — и агент решит, что мы зависли. */
 const ACK_TIMEOUT_MS = 4000
@@ -106,7 +120,7 @@ class PaneRegistry {
       }
       if (found.reason === 'ambiguous') {
         const names = (found.candidates ?? [])
-          .map((p) => `${p.title} (${p.cwd ?? 'no folder'}) id=${p.convId}`)
+          .map((p) => `${name(p.title)} (${defuseLine(p.cwd ?? '', PATH_CAP) || 'no folder'}) id=${p.convId}`)
           .join('; ')
         return {
           ok: false,
@@ -114,7 +128,7 @@ class PaneRegistry {
         }
       }
       const known = this.list(from)
-        .map((p) => p.title)
+        .map((p) => name(p.title))
         .join(', ')
       return {
         ok: false,
@@ -177,7 +191,7 @@ class PaneRegistry {
         message:
           ack.reason === 'off'
             ? 'That pane does not accept notes: the person turned pane messaging off.'
-            : `Pane "${found.pane.title}" is no longer open; the note was not delivered.`
+            : `Pane "${name(found.pane.title)}" is no longer open; the note was not delivered.`
       }
     }
     if (ack.held) {
@@ -189,9 +203,9 @@ class PaneRegistry {
        * повторять бессмысленно, и агент должен обратиться к человеку.
        */
       const why: Record<string, string> = {
-        autopilot: `The note is shown in "${found.pane.title}", but its agent has NOT been given it: that pane runs without permission prompts, so notes wait for the person there. Do not expect a reply.`,
-        busy: `The note is shown in "${found.pane.title}", but its agent is mid-turn and has not been given it yet. Do not expect a reply.`,
-        budget: `The note is shown in "${found.pane.title}", but Zarya did not start a turn for it: this pair of panes has already run up more work this hour than it starts unattended. Do not send more notes there — tell the person what you needed, and let them decide.`
+        autopilot: `The note is shown in "${name(found.pane.title)}", but its agent has NOT been given it: that pane runs without permission prompts, so notes wait for the person there. Do not expect a reply.`,
+        busy: `The note is shown in "${name(found.pane.title)}", but its agent is mid-turn and has not been given it yet. Do not expect a reply.`,
+        budget: `The note is shown in "${name(found.pane.title)}", but Zarya did not start a turn for it: this pair of panes has already run up more work this hour than it starts unattended. Do not send more notes there — tell the person what you needed, and let them decide.`
       }
       return { ok: true, message: why[ack.held] ?? why.busy }
     }
@@ -202,8 +216,8 @@ class PaneRegistry {
     return {
       ok: true,
       message: ack.marked
-        ? `Delivered to "${found.pane.title}". Your pane is now marked as waiting for its answer, so the person can see who waits for whom — the mark fades on its own. Nothing blocks and no answer is guaranteed: if it matters, tell the person what you asked.`
-        : `Delivered to "${found.pane.title}". The person there sees it as a message from another pane, and its agent decides what to do with it.`
+        ? `Delivered to "${name(found.pane.title)}". Your pane is now marked as waiting for its answer, so the person can see who waits for whom — the mark fades on its own. Nothing blocks and no answer is guaranteed: if it matters, tell the person what you asked.`
+        : `Delivered to "${name(found.pane.title)}". The person there sees it as a message from another pane, and its agent decides what to do with it.`
     }
   }
 }

@@ -23,7 +23,6 @@ import type { RewindSummary } from '@shared/rewindPlan'
 import { canRewindTurn } from '@shared/rewindGate'
 import { useEditorStore } from '@/features/editor/editorStore'
 import { useBlocksStore } from '@/state/blocksStore'
-import { blockForId } from '@shared/blockSearch'
 import { useSessionsStore } from '@/state/sessionsStore'
 import { setBarModeOf, setRaw, useUiStore } from '@/state/uiStore'
 import { convForSession, useAiStore, type Conversation } from '@/features/ai/aiStore'
@@ -2859,14 +2858,15 @@ const CARD_CMD_CAP = 80
  * Чтобы карточка не разошлась с делом, одобрение закрепляет тот же блок,
  * который здесь назван (см. `approveTool` и `blockForId`).
  */
-function readsBlock(pending: { name: string; input: unknown }, conv?: Conversation): string | null {
+function readsBlock(pending: { name: string; blockPin?: { command: string } }): string | null {
   if (pending.name !== 'mcp__zarya__read_block') return null
-  const sid = conv?.sessionId
-  if (!sid) return null
-  const id = (pending.input as { id?: unknown } | null)?.id
-  if (typeof id !== 'string') return null
-  const found = blockForId(useBlocksStore.getState().bySession[sid] ?? [], id)
-  const cmd = (found?.command ?? '').trim().replace(/\s+/g, ' ')
+  /*
+   * Берём то, что решили при ПОЯВЛЕНИИ карточки (см. `blockPin`), а не то, что
+   * в хранилище сейчас. Карточка — `memo` и на новые команды не
+   * перерисовывается; спрашивай мы хранилище здесь, надпись осталась бы старой,
+   * а закрепление ушло бы на другой блок. Теперь источник один на оба.
+   */
+  const cmd = (pending.blockPin?.command ?? '').trim().replace(/\s+/g, ' ')
   if (!cmd) return null
   return cmd.length > CARD_CMD_CAP ? `${cmd.slice(0, CARD_CMD_CAP)}…` : cmd
 }
@@ -2990,7 +2990,7 @@ const ToolCard = memo(function ToolCard({
              читается как поломка тумблера, а не как защита от потери работы. */
           <div className="zy-mf-tool-stop">{t('feed.irreversible', { hit: stop.hit })}</div>
         )}
-        {readsBlock(pending, conv) && (
+        {readsBlock(pending) && (
           /*
              КАКУЮ КОМАНДУ ЧИТАЮТ — словами, а не идентификатором.
              
@@ -3002,7 +3002,7 @@ const ToolCard = memo(function ToolCard({
              названа (см. approveTool).
           */
           <div className="zy-mf-tool-mark">
-            {t('feed.readsBlock', { cmd: readsBlock(pending, conv) as string })}
+            {t('feed.readsBlock', { cmd: readsBlock(pending) as string })}
           </div>
         )}
         {pending.mcpMark?.destructive && (

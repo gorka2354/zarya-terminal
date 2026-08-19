@@ -1,4 +1,5 @@
 import { tm } from './lang'
+import { defuseLine } from '@shared/untrusted'
 import { parseModelList } from '@shared/modelCatalog'
 import type { BrowserWindow } from 'electron'
 import { CH } from '@shared/ipc'
@@ -384,7 +385,12 @@ export function flattenForProvider(messages: AiMessage[]): AiMessage[] {
       .filter((p) => p.type !== 'pane-note' || !p.held)
       .map((p) =>
         p.type === 'pane-note'
-          ? ({ type: 'text', text: `[note from pane "${p.from}"] ${p.text}` } as const)
+          ? // Имя отправителя чистим так же, как текст записки: панель называет
+            // себя сама, и в заголовок влезает и кавычка, и поддельная пометка.
+            ({
+                type: 'text',
+                text: `[note from pane "${defuseLine(p.from, 120)}"] ${p.text}`
+              } as const)
           : p.type === 'shell-tail'
             ? ({ type: 'text', text: p.text } as const)
             : p

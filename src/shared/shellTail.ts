@@ -77,6 +77,8 @@ export const TOTAL_CAP = 5000
  */
 export const COMMAND_CAP = 200
 
+import { defuse, defuseOutput } from './untrusted'
+
 /** Маркер, внутри которого едет чужой вывод. */
 const MARK = 'untrusted-terminal-output'
 const MARK_RE = new RegExp(`</?${MARK}>`, 'gi')
@@ -119,7 +121,18 @@ function tailClip(s: string, max: number, truncated: string): string {
  * рассуждение «сюда не дотянутся» стоило бы дыры, если дотянутся.
  */
 function commandLine(command: string, labels: TailLabels): string {
-  const safe = (command ?? '').replace(MARK_RE, labels.stripped).replace(/\s*[\r\n]+\s*/g, ' ⏎ ')
+  /*
+   * ЧИСТКА ТА ЖЕ, ЧТО У ЗАПИСКИ СОСЕДА, а не только замена маркера.
+   *
+   * Аудит перед 0.7.7 поймал главное: здесь гасился ДОСЛОВНЫЙ маркер и больше
+   * ничего. `Human:`, `<system-reminder>`, невидимые символы — всё это ехало в
+   * КАЖДОМ ходе нетронутым, а хвост консоли включён по умолчанию. То есть
+   * самая широкая дорога чужого текста в контекст была и самой голой.
+   */
+  const safe = defuse((command ?? '').replace(MARK_RE, labels.stripped)).replace(
+    /\s*[\r\n]+\s*/g,
+    ' ⏎ '
+  )
   const trimmed = safe.trim()
   if (!trimmed) return labels.unknownCmd
   /*
@@ -144,9 +157,21 @@ function blockText(b: TailBlock, labels: TailLabels): string {
   const out = tailClip(b.output ?? '', PER_BLOCK_CAP, labels.truncated)
   if (out) {
     lines.push(`<${MARK}>`)
-    // Полезная нагрузка может попытаться закрыть маркер раньше времени и
-    // выдать остаток за обычный текст разговора. Гасим обе скобки.
-    lines.push(out.replace(MARK_RE, labels.stripped))
+    /*
+     * Полезная нагрузка может закрыть маркер раньше времени и выдать остаток за
+     * обычный разговор — гасим обе скобки. И не только их: `defuseOutput`
+     * снимает ещё поддельные системные пометки, границы ходов и невидимые
+     * символы, которыми всё это маскируют. Тот же вывод через `read_block`
+     * чистился так с самого начала, а здесь — не чистился вовсе.
+     */
+    /*
+     * ПОРЯДОК ЗДЕСЬ ЗНАЧИМ: сперва наша локализованная подпись на дословный
+     * маркер, потом общая чистка. Наоборот — и человек с моделью читали бы
+     * английское «(marker stripped)» посреди русского хвоста, а подпись,
+     * которую хвост объявляет в своём же вступлении, не встречалась бы ни разу.
+     * Двойник скобки чистка всё равно поймает и заменит по-своему.
+     */
+    lines.push(defuseOutput(out.replace(MARK_RE, labels.stripped)))
     lines.push(`</${MARK}>`)
   }
   return lines.join('\n')

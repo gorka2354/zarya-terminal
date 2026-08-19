@@ -32,6 +32,7 @@ import { enginePromptAppend } from '@shared/enginePrompt'
 import { shellTail, type ShellTail } from '@shared/shellTail'
 import { clampText, overSpend, rememberSpend, spentInHour, type Spend } from '@shared/paneMessage'
 import { blockForId, searchBlocks } from '@shared/blockSearch'
+import { defuseLine } from '@shared/untrusted'
 import { samePath } from '@shared/projects'
 import { sameModel } from './modelMatch'
 import { nativeGateOpts } from './startOpts'
@@ -109,6 +110,27 @@ const pairKey = (from: string, to: string): string => [from, to].sort().join(' |
 const AWAIT_TTL_MS = 10 * 60_000
 
 /**
+ * Какой блок прочитает этот вызов — на момент ПОЯВЛЕНИЯ карточки.
+ *
+ * Возвращает кусок `PendingTool`, чтобы разрешение блока случилось ровно один
+ * раз: и надпись на карточке, и закрепление при одобрении берут потом отсюда.
+ * Пока это считалось дважды, надпись и дело успевали разойтись — см. `blockPin`.
+ */
+function pinFor(
+  convId: string,
+  toolName: string,
+  input: unknown
+): { blockPin: { id: string; command: string } } | null {
+  if (toolName !== 'mcp__zarya__read_block') return null
+  const id = (input as { id?: unknown } | null)?.id
+  if (typeof id !== 'string') return null
+  const sid = useAiStore.getState().conversations.find((c) => c.id === convId)?.sessionId
+  if (!sid) return null
+  const found = blockForId(useBlocksStore.getState().bySession[sid] ?? [], id)
+  return found ? { blockPin: { id: found.id, command: found.command } } : null
+}
+
+/**
  * Закрепить «last» на конкретном блоке при одобрении.
  *
  * Карточка назвала человеку команду (см. `readsBlock` в ленте); между нажатием
@@ -117,16 +139,15 @@ const AWAIT_TTL_MS = 10 * 60_000
  * (`blockForId`), иначе они однажды разойдутся.
  */
 function pinLastBlock(
-  conv: Conversation,
-  tool: { name: string; input?: unknown }
+  _conv: Conversation,
+  tool: { name: string; input?: unknown; blockPin?: { id: string } }
 ): Record<string, unknown> | null {
   if (tool.name !== 'mcp__zarya__read_block') return null
   const id = (tool.input as { id?: unknown } | null)?.id
   if (typeof id !== 'string' || id.trim().toLowerCase() !== 'last') return null
-  const sid = conv.sessionId
-  if (!sid) return null
-  const found = blockForId(useBlocksStore.getState().bySession[sid] ?? [], 'last')
-  return found ? { id: found.id } : null
+  // Берём то, что решили при показе карточки, а НЕ состояние на момент нажатия:
+  // между тем и этим человек мог запустить ещё одну команду.
+  return tool.blockPin ? { id: tool.blockPin.id } : null
 }
 
 /**
@@ -217,6 +238,21 @@ export interface PendingTool {
    * назвать причину, иначе вопрос при снятом гейте читается как поломка.
    */
   irreversible?: { kind: string; hit: string }
+  /**
+   * Какой блок консоли прочитает этот вызов — РАЗРЕШЁННЫЙ В МОМЕНТ ПОКАЗА.
+   *
+   * `read_block` принимает `id: "last"`, то есть «самый свежий». Карточка
+   * называет человеку конкретную команду, и между её появлением и нажатием
+   * человек успевает запустить в своей же панели что угодно — `gh auth token`,
+   * `cat .env`. Аудит перед 0.7.7 показал, что происходило дальше: карточка
+   * висела со старой надписью (она не перерисовывается — `memo` и данные из
+   * контекста беседы), а закрепление при нажатии читало состояние ЗАНОВО и
+   * брало новый последний блок. Названо одно, прочиталось бы другое.
+   *
+   * Поэтому решаем один раз — здесь, когда карточка родилась, — и дальше и
+   * надпись, и закрепление берут отсюда.
+   */
+  blockPin?: { id: string; command: string }
   /**
    * Чем пометил инструмент САМ сервер (MCP-аннотации). Отличать от
    * {@link irreversible}: то — наш список необратимого, это — заявление
@@ -1612,7 +1648,11 @@ export const useAiStore = create<AiState>((set, get) => {
         p.type === 'text'
           ? p.text
           : p.type === 'pane-note' && !p.held
-            ? `[note from pane "${p.from}"] ${p.text}`
+            ? // ИМЯ ОТПРАВИТЕЛЯ — ТОЖЕ ЧУЖОЙ ТЕКСТ: панель называет себя сама
+              // (программа в ней ставит заголовок последовательностью в
+              // терминале), и в имя влезает и кавычка, и поддельная пометка.
+              // Текст записки чистится с самого начала, а имя ехало сырым.
+              `[note from pane "${defuseLine(p.from, 120)}"] ${p.text}`
             : // Хвост консоли уже собран и обёрнут при отправке — здесь только
               // сериализуем. Пропустить эту ветку значит молча выбросить то,
               // о чём плашка в ленте уже сказала человеку «уехало».
@@ -1937,6 +1977,9 @@ export const useAiStore = create<AiState>((set, get) => {
               allowAlwaysOnly: ev.allowAlwaysOnly,
               irreversible: ev.irreversible,
               mcpMark: ev.mcpMark,
+              // Какой именно блок прочитают — решаем СЕЙЧАС, пока карточка
+              // рождается. Позже «последний» будет уже другим.
+              ...(pinFor(convId, ev.toolName, ev.input) ?? {}),
               askedAt: Date.now()
             }
           ]
@@ -1946,7 +1989,21 @@ export const useAiStore = create<AiState>((set, get) => {
         // независимо от списка (пол выше правил).
         if (!ev.questions) {
           const conv = get().conversations.find((c) => c.id === convId)
-          if (matchesRule(conv?.sessionAllows, ev.toolName, ev.input)) {
+          /*
+           * НО НЕ В ХОДУ ПО ЧУЖОЙ ЗАПИСКЕ.
+           *
+           * Приём записки снимает автопилот и «правки без спроса» — и объясняет
+           * это так: сосед может рассказать и спросить, но не может чужими
+           * руками молча переписать файлы. Правила «до конца сессии» при этом
+           * оставались, а они выдаются ПО ИМЕНИ инструмента: одно нажатие на
+           * `Edit` — и до конца беседы любые правки идут молча, включая ходы,
+           * которые начал не человек. Аудит перед 0.7.7 показал, что обещание
+           * держалось только наполовину.
+           *
+           * Согласие «делай молча» человек давал СВОИМ словам. Пометка
+           * `noteFrom` живёт ровно один ход — этого и достаточно.
+           */
+          if (!conv?.noteFrom && matchesRule(conv?.sessionAllows, ev.toolName, ev.input)) {
             void get().approveTool(convId, ev.toolUseId)
           }
         }
