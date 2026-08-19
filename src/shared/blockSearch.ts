@@ -124,3 +124,25 @@ function windowAround(text: string, at: number, len: number, cap: number): strin
   }
   return `${start > 0 ? '…' : ''}${line.slice(start, end)}${end < line.length ? '…' : ''}`
 }
+
+/**
+ * Какой блок имеет в виду вызов `read_block`.
+ *
+ * `last` — самый свежий: без него самый частый случай («покажи, что сейчас
+ * упало») стоил лишнего вызова, лишней карточки и лишнего хода.
+ *
+ * ЖИВЁТ ЗДЕСЬ, ПОТОМУ ЧТО У ЭТОГО ПРАВИЛА ТРИ ЧИТАТЕЛЯ: карточка разрешения
+ * (показать человеку, какую команду читают), закрепление выбора при одобрении
+ * и само чтение. Разойдись они — и карточка называла бы одну команду, а агент
+ * получал бы другую; это ровно то враньё, ради предотвращения которого
+ * «last» и делался так осторожно.
+ */
+export function blockForId<T extends { id: string }>(
+  blocks: readonly T[],
+  id: string
+): T | undefined {
+  const want = (id ?? '').trim()
+  if (!want) return undefined
+  if (want.toLowerCase() === 'last') return blocks[blocks.length - 1]
+  return blocks.find((b) => b.id === want)
+}

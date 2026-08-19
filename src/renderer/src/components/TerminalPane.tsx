@@ -1,7 +1,7 @@
 import { PANE_DRAG_CWD, PANE_DRAG_SESSION } from '@shared/types'
 import { rememberProject } from '@/actions/projects'
 import type { DropSide } from '@shared/paneTree'
-import { memo, useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { XtermView } from '@/terminal/XtermView'
 import { MissionFeed, PaneFeedButtons } from './MissionFeed'
 import { AgentBar } from './AgentBar'
@@ -15,7 +15,7 @@ import { useSettingsStore } from '@/state/settingsStore'
 import { isRaw, setRaw, useUiStore } from '@/state/uiStore'
 import { useContextMenu } from './ContextMenu'
 import { Icon } from './Icon'
-import { attentionOf, convForSession, useAiStore } from '@/features/ai/aiStore'
+import { attentionOf, convForSession, panesSharingFolder, useAiStore } from '@/features/ai/aiStore'
 
 interface Props {
   sessionId: string
@@ -301,6 +301,37 @@ const PaneHeader = memo(function PaneHeader({
   const cwd = useSessionsStore((s) => s.sessions[sessionId]?.cwd)
   const searchOpenFor = useUiStore((s) => s.searchOpenFor)
 
+  /*
+   * КТО ЕЩЁ РАБОТАЕТ В ЭТОЙ ПАПКЕ.
+   *
+   * Два агента в одной папке правят одни файлы, и правка второго молча ложится
+   * поверх первой. Агенту про это говорит `list_panes`; человеку — вот эта
+   * строка, и стоит она там же, где названа сама папка.
+   *
+   * Подписки строками, а не массивами: селектор, возвращающий новый объект,
+   * перерисовывал бы шапку на каждое изменение любого из двух хранилищ.
+   */
+  const paneSig = useSessionsStore((s) =>
+    Object.entries(s.sessions)
+      .map(([id, x]) => `${id}:${x.cwd}:${x.title}`)
+      .join('|')
+  )
+  const convSig = useAiStore((s) =>
+    s.conversations.map((c) => `${c.sessionId ?? ''}:${c.messages.length ? 1 : 0}`).join('|')
+  )
+  const neighbours = useMemo(
+    () => panesSharingFolder(sessionId),
+    // Сигнатуры — и есть зависимости: пересчитываем, когда изменилось то, из
+    // чего ответ собран.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sessionId, paneSig, convSig]
+  )
+  const shared = neighbours.length
+    ? neighbours.length > 2
+      ? `${neighbours.slice(0, 2).join(', ')} +${neighbours.length - 2}`
+      : neighbours.join(', ')
+    : ''
+
   return (
     <div
       style={{
@@ -356,6 +387,31 @@ const PaneHeader = memo(function PaneHeader({
             }}
           >
             {cwd}
+          </span>
+        )}
+        {shared && (
+          /*
+             ТИХО И БЕЗ ОБЕЩАНИЙ. Цвет предупреждения здесь был бы неправдой:
+             ничего не сломалось и нажимать нечего — это факт о соседе, а не
+             требование к человеку. Поэтому тот же приглушённый тон, что у пути,
+             и объяснение целиком — в подсказке.
+          */
+          <span
+            className="zy-pane-together"
+            title={t('pane.sameFolderWhy', { name: shared })}
+            style={{
+              fontFamily: 'var(--font-tech)',
+              fontSize: 10,
+              letterSpacing: '0.06em',
+              color: 'var(--fg-dim)',
+              border: '1px solid var(--border)',
+              borderRadius: 3,
+              padding: '1px 5px',
+              whiteSpace: 'nowrap',
+              flexShrink: 0
+            }}
+          >
+            {t('pane.sameFolder', { name: shared })}
           </span>
         )}
       </div>

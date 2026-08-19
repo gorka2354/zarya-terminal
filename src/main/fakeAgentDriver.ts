@@ -1074,6 +1074,29 @@ export class FakeAgentDriver implements AgentDriver {
 
   resolvePermission(requestId: string, toolUseId: string, decision: AgentPermissionDecision): void {
     this.pendingGates.get(requestId)?.delete(toolUseId)
+    /*
+     * ЧТО ИМЕННО ПРИШЛО ОТ ОКНА — обратно в ленту, для прогонов.
+     *
+     * Одно решение окно принимает НЕ по кнопке: одобряя чтение блока с
+     * `id: "last"`, оно закрепляет конкретный блок — тот, который карточка
+     * назвала человеку (иначе между нажатием и чтением закончится ещё одна
+     * команда, и агент прочитает не то, что одобрили). Проверить это со
+     * стороны окна нечем: мост `window.zarya` заморожен и подменить его вызов
+     * прогон не может. Поэтому подставной драйвер говорит вслух, что получил.
+     *
+     * Только у подставного и только по просьбе прогона
+     * (`ZARYA_FAKE_ECHO_INPUT`): `updatedInput` приходит и с ответом на вопрос
+     * агента, и лишняя служебная строка в ленте сбила бы прогоны, которые
+     * считают её содержимое. В настоящем драйвере такой строки нет и быть не
+     * должно.
+     */
+    if (process.env.ZARYA_FAKE_ECHO_INPUT && decision.behavior === 'allow' && decision.updatedInput) {
+      this.emit(requestId, {
+        type: 'notice',
+        level: 'info',
+        text: `fake: updatedInput ${JSON.stringify(decision.updatedInput)}`
+      })
+    }
     // «slow» в запросе — инструмент, который ДОЛГО работает. Настоящая команда
     // агента (клонирование, установка пакетов) идёт секунды и минуты, и всё,
     // что показывает лента в это время, проверить на мгновенном ответе нельзя:

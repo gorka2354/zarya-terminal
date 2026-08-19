@@ -23,6 +23,7 @@ import type { RewindSummary } from '@shared/rewindPlan'
 import { canRewindTurn } from '@shared/rewindGate'
 import { useEditorStore } from '@/features/editor/editorStore'
 import { useBlocksStore } from '@/state/blocksStore'
+import { blockForId } from '@shared/blockSearch'
 import { useSessionsStore } from '@/state/sessionsStore'
 import { setBarModeOf, setRaw, useUiStore } from '@/state/uiStore'
 import { convForSession, useAiStore, type Conversation } from '@/features/ai/aiStore'
@@ -2844,6 +2845,32 @@ function ChangedFileRow({
 
 type DiffRow = ReturnType<typeof lineDiff>[number]
 
+/** Сколько знаков команды помещаем в карточку: подпись, а не рассказ. */
+const CARD_CMD_CAP = 80
+
+/**
+ * Какую команду прочитает `read_block` — чтобы карточка назвала её словами.
+ *
+ * ПОВОД. Карточка показывает аргументы вызова как есть, а у этого инструмента
+ * аргумент — идентификатор блока: `{"id":"b17"}` человеку не говорит НИЧЕГО, и
+ * он одобряет чтение вслепую. Команду мы знаем — блоки лежат в этом же окне.
+ *
+ * Для `id: "last"` это ещё и единственный способ увидеть, что именно прочтут.
+ * Чтобы карточка не разошлась с делом, одобрение закрепляет тот же блок,
+ * который здесь назван (см. `approveTool` и `blockForId`).
+ */
+function readsBlock(pending: { name: string; input: unknown }, conv?: Conversation): string | null {
+  if (pending.name !== 'mcp__zarya__read_block') return null
+  const sid = conv?.sessionId
+  if (!sid) return null
+  const id = (pending.input as { id?: unknown } | null)?.id
+  if (typeof id !== 'string') return null
+  const found = blockForId(useBlocksStore.getState().bySession[sid] ?? [], id)
+  const cmd = (found?.command ?? '').trim().replace(/\s+/g, ' ')
+  if (!cmd) return null
+  return cmd.length > CARD_CMD_CAP ? `${cmd.slice(0, CARD_CMD_CAP)}…` : cmd
+}
+
 const ToolCard = memo(function ToolCard({
   id,
   name,
@@ -2962,6 +2989,21 @@ const ToolCard = memo(function ToolCard({
           /* Почему спросили при включённом автопилоте. Без этой строки вопрос
              читается как поломка тумблера, а не как защита от потери работы. */
           <div className="zy-mf-tool-stop">{t('feed.irreversible', { hit: stop.hit })}</div>
+        )}
+        {readsBlock(pending, conv) && (
+          /*
+             КАКУЮ КОМАНДУ ЧИТАЮТ — словами, а не идентификатором.
+             
+             Карточка показывает аргументы как есть, а у `read_block` аргумент —
+             это `id` блока: `{"id":"b17"}` человеку не говорит ничего, и он
+             одобряет вслепую. Команду мы знаем: блоки лежат здесь же, в окне.
+             Для `last` это ещё и единственный способ увидеть, что именно
+             прочтут, — и одобрение закрепляет ровно ту команду, которая тут
+             названа (см. approveTool).
+          */
+          <div className="zy-mf-tool-mark">
+            {t('feed.readsBlock', { cmd: readsBlock(pending, conv) as string })}
+          </div>
         )}
         {pending.mcpMark?.destructive && (
           /*

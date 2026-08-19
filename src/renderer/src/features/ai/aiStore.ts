@@ -31,7 +31,8 @@ import type { BackgroundTask } from '@shared/agentTasks'
 import { enginePromptAppend } from '@shared/enginePrompt'
 import { shellTail, type ShellTail } from '@shared/shellTail'
 import { clampText, overSpend, rememberSpend, spentInHour, type Spend } from '@shared/paneMessage'
-import { searchBlocks } from '@shared/blockSearch'
+import { blockForId, searchBlocks } from '@shared/blockSearch'
+import { samePath } from '@shared/projects'
 import { sameModel } from './modelMatch'
 import { nativeGateOpts } from './startOpts'
 import { irreversible } from '@shared/irreversible'
@@ -106,6 +107,56 @@ const pairKey = (from: string, to: string): string => [from, to].sort().join(' |
  * пережившая свой смысл, врёт ровно как любой другой протухший индикатор.
  */
 const AWAIT_TTL_MS = 10 * 60_000
+
+/**
+ * Закрепить «last» на конкретном блоке при одобрении.
+ *
+ * Карточка назвала человеку команду (см. `readsBlock` в ленте); между нажатием
+ * и чтением может закончиться ещё одна, и тогда агент получил бы не то, что
+ * одобрили. Правило выбора блока — общее с карточкой и с самим чтением
+ * (`blockForId`), иначе они однажды разойдутся.
+ */
+function pinLastBlock(
+  conv: Conversation,
+  tool: { name: string; input?: unknown }
+): Record<string, unknown> | null {
+  if (tool.name !== 'mcp__zarya__read_block') return null
+  const id = (tool.input as { id?: unknown } | null)?.id
+  if (typeof id !== 'string' || id.trim().toLowerCase() !== 'last') return null
+  const sid = conv.sessionId
+  if (!sid) return null
+  const found = blockForId(useBlocksStore.getState().bySession[sid] ?? [], 'last')
+  return found ? { id: found.id } : null
+}
+
+/**
+ * Какие ЕЩЁ панели работают в этой же папке.
+ *
+ * Единственное место, где два агента молча теряют работу человека: правку
+ * второго кладут поверх первой, и узнаёт он об этом позже всех. Агенту про это
+ * говорит `list_panes` (см. paneTools), а человеку до сих пор не говорил никто
+ * — при том что данные лежали в двух шагах отсюда.
+ *
+ * СЧИТАЕМ ТОЛЬКО ПАНЕЛИ С АГЕНТОМ: два терминала в одной папке — это обычная
+ * работа человека, и предупреждать о ней значило бы кричать волками каждый
+ * день. «С агентом» — там, где разговор уже начался: пустая беседа ещё ничего
+ * не правит.
+ *
+ * И ЭТО ПРЕДУПРЕЖДЕНИЕ, А НЕ ЗАЩИТА. Заря файлы не блокирует и не собирается;
+ * обещание изоляции было бы той же ложью, что снятая в inc-35 кнопка «В фон».
+ */
+export function panesSharingFolder(sessionId: string): string[] {
+  const sessions = useSessionsStore.getState().sessions
+  const mine = sessions[sessionId]?.cwd
+  if (!mine) return []
+  const convs = useAiStore.getState().conversations
+  const hasAgent = (sid: string): boolean =>
+    convs.some((c) => c.sessionId === sid && c.messages.length > 0)
+  if (!hasAgent(sessionId)) return []
+  return Object.entries(sessions)
+    .filter(([sid, s]) => sid !== sessionId && !!s.cwd && samePath(s.cwd, mine) && hasAgent(sid))
+    .map(([, s]) => s.title || s.cwd.split(/[\/]/).filter(Boolean).pop() || '?')
+}
 
 /** Пометка ещё в силе? Проверяется при показе — таймеров ради неё не заводим. */
 export function awaitingNow(
@@ -1139,7 +1190,11 @@ function answerBlocksQuery(q: Record<string, unknown>): void {
     return reply({ ok: true, kind: 'list', blocks: found })
   }
 
-  const found = all.find((b) => b.id === String(q.blockId ?? ''))
+  /*
+   * `last` — самый свежий блок. Правило одно на три места (см. blockForId):
+   * карточка показывает ту же команду, что потом прочитает агент.
+   */
+  const found = blockForId(all, String(q.blockId ?? ''))
   if (!found) return reply({ ok: false, reason: 'not-found' })
   /*
    * ПРЕДЕЛ — ТОТ ЖЕ, ЧТО У ЛЮБОГО ИТОГА ИНСТРУМЕНТА.
@@ -3157,9 +3212,25 @@ export const useAiStore = create<AiState>((set, get) => {
         // и тогда кнопка, которую нажали, называлась «РАЗРЕШИТЬ ВСЕГДА». Без
         // этого флага драйвер откажется выбирать постоянное разрешение и ответит
         // «отменено»: молча повысить разовое одобрение до сессионного нельзя.
+        /*
+         * «last» ЗАКРЕПЛЯЕТСЯ НА ТОМ, ЧТО НАЗВАЛА КАРТОЧКА.
+         *
+         * `read_block` с `id: "last"` означает «самый свежий блок», а карточка
+         * показала человеку КОНКРЕТНУЮ команду. Между его нажатием и чтением
+         * может закончиться ещё одна — и агент прочитал бы не то, что человек
+         * одобрил. Поэтому одобрение уезжает с уже разрешённым id: движок
+         * поддерживает `updatedInput`, и это ровно тот случай, для которого он
+         * и нужен.
+         *
+         * Не нашли (блок вытеснили за это время) — не подставляем ничего:
+         * инструмент честно ответит «такого блока нет», и это лучше, чем
+         * прочитать соседний.
+         */
+        const pinned = pinLastBlock(conv, tool)
         window.zarya.agent.permission(conv.engine, conv.id, tool.id, {
           behavior: 'allow',
-          always: tool.allowAlwaysOnly === true
+          always: tool.allowAlwaysOnly === true,
+          ...(pinned ? { updatedInput: pinned } : {})
         })
         /*
          * План принят — режим плана кончился.
@@ -3636,6 +3707,17 @@ function seedPatch(convId: string, fn: (c: Conversation) => Conversation): void 
          * она НЕ текст человека и не ответ агента.
          */
         partKinds: c.messages.flatMap((m) => m.content.map((p) => p.type)),
+        /*
+         * Служебные строки движка — отдельным полем: в `text` им не место (это
+         * не ответ агента), а проверять их надо. Через них же прогон видит то,
+         * что иначе не увидеть со стороны окна: мост `window.zarya` заморожен,
+         * и подставной драйвер отвечает в ленту.
+         */
+        notices: c.messages.flatMap((m) =>
+          m.content
+            .filter((p): p is Extract<AiContentPart, { type: 'notice' }> => p.type === 'notice')
+            .map((p) => p.text)
+        ),
         /*
          * Записки — отдельным полем, и это не удобство прогона, а следствие
          * главного решения инкремента: в `text` они НЕ попадают, потому что не

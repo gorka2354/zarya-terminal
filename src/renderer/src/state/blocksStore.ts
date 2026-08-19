@@ -146,6 +146,9 @@ if (typeof window !== 'undefined') {
   ).__zaryaDumpBlocks = (sessionId) => {
     const by = useBlocksStore.getState().bySession
     const slim = (b: BlockRecord): unknown => ({
+      // Идентификатор — прогону: карточка чтения адресует блок именно им, и
+      // без него проверить «карточка назвала ту команду» нечем.
+      id: b.id,
       command: b.command,
       cwd: b.cwd,
       exitCode: b.exitCode,

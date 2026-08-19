@@ -82,6 +82,9 @@ export const RU: Dict = {
   'pane.splitRight': 'Разделить вправо',
   'pane.splitDown': 'Разделить вниз',
   'pane.openBeside': 'Открыть панель рядом',
+  'pane.sameFolder': 'та же папка · {name}',
+  'pane.sameFolderWhy':
+    'В этой папке работает и панель «{name}». Заря файлы не блокирует — договоритесь, кто что правит, иначе правка одного агента ляжет поверх другой.',
   'pane.grip':
     'Перетащи: на другую панель — перенести, в список слева — вынести в отдельную вкладку',
   'pane.tabClickHint': 'Клик — открыть этот рабочий стол · 2×клик — переименовать',
@@ -315,6 +318,7 @@ export const RU: Dict = {
   'extras.done': 'Подхвачено: команд {commands}, MCP-серверов {mcp}. Сессия не перезапускалась.',
   'extras.nothing': 'Живой сессии нет — следующая и так запустится со свежим списком',
   'extras.unsupported': 'Этот движок не умеет перечитывать на ходу — понадобится новая сессия',
+  'feed.readsBlock': 'читает вывод команды: {cmd}',
   'feed.serverDestructive': 'Сервер помечает этот инструмент как разрушающий',
   'ob.aria': 'Знакомство',
   'ob.step': 'Шаг {i} из {n}',
@@ -1779,6 +1783,9 @@ export const EN: Dict = {
   'pane.splitRight': 'Split right',
   'pane.splitDown': 'Split down',
   'pane.openBeside': 'Open a pane beside',
+  'pane.sameFolder': 'same folder · {name}',
+  'pane.sameFolderWhy':
+    'Pane “{name}” is working in this folder too. Zarya does not lock files — agree between you who edits what, or one agent’s change will land on top of the other.',
   'pane.grip':
     'Drag: onto another pane to move it, into the list on the left to give it its own desk',
   'pane.tabClickHint': 'Click to open this desk · double-click to rename',
@@ -2003,6 +2010,7 @@ export const EN: Dict = {
     'Picked up: {commands} commands, {mcp} MCP servers. The session was not restarted.',
   'extras.nothing': 'No live session — the next one starts with a fresh list anyway',
   'extras.unsupported': 'This engine cannot reload on the fly — a new session is needed',
+  'feed.readsBlock': 'reads the output of: {cmd}',
   'feed.serverDestructive': 'The server marks this tool as destructive',
   'ob.aria': 'Getting started',
   'ob.step': 'Step {i} of {n}',
