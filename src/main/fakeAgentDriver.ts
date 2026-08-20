@@ -186,7 +186,12 @@ export class FakeAgentDriver implements AgentDriver {
             // нельзя: чип показывает НАМЕРЕНИЕ, а спор идёт о том, что и правда
             // уехало драйверу — единственное, что определяет поведение агента.
             permissionMode: opts.permissionMode ?? null,
-            bypass: opts.bypass === true
+            bypass: opts.bypass === true,
+            // С какой моделью и усилием ушёл ход. На экране это не проверить:
+            // подпись под строкой ввода пер-панельная и обновляется по ответу
+            // движка, а спор идёт ровно о том, что уехало ДО ответа.
+            model: opts.model ?? null,
+            effort: opts.effort ?? null
           }) + '\n'
         )
       } catch {

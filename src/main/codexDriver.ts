@@ -1,4 +1,5 @@
 import { tm } from './lang'
+import { irreversible } from '@shared/irreversible'
 import { spawn, type ChildProcess } from 'child_process'
 import { type BrowserWindow } from 'electron'
 import { CH } from '@shared/ipc'
@@ -84,6 +85,26 @@ function friendlyError(e: unknown): string {
  * server-initiated requests and surface to the renderer as `permission` events,
  * resolved by a UI click — symmetric to Claude's canUseTool. See inc-10 plan.
  */
+/**
+ * Показать ли карточку, НЕСМОТРЯ на автопилот.
+ *
+ * ОТДЕЛЬНОЙ ФУНКЦИЕЙ, ПОТОМУ ЧТО ЭТО ОБЕЩАНИЕ, А НЕ ДЕТАЛЬ. Интерфейс говорит
+ * про автопилот одно и то же для всех движков: «не спрашиваю про рутину, но
+ * необратимое покажу». У Claude Code это правило жило в гейте, у Codex не жило
+ * нигде — он в автопилоте не спрашивал вовсе. Здесь оно названо и проверяется
+ * тестом, а не спрятано в ветке обработчика.
+ *
+ * Вне автопилота — `undefined`, и не потому, что необратимого нет: там карточка
+ * будет в любом случае, спрашивают всё.
+ */
+export function codexFloor(
+  bypass: boolean,
+  command: string
+): { kind: string; hit: string } | undefined {
+  if (!bypass) return undefined
+  return irreversible('Bash', { command }) ?? undefined
+}
+
 export class CodexDriver implements AgentDriver {
   readonly engine: AgentEngine = 'codex'
   readonly capabilities: AgentCapabilities = {
@@ -372,16 +393,47 @@ export class CodexDriver implements AgentDriver {
       return
     }
     session.approvals.set(toolUseId, c.id)
+    /*
+     * ПОЛ ПОД АВТОПИЛОТОМ — И У ЭТОГО ДВИЖКА ТОЖЕ.
+     *
+     * Раньше автопилот здесь означал `approvalPolicy: 'never'`: codex не
+     * спрашивал ВООБЩЕ, и необратимая команда проходила молча. У Claude Code
+     * автопилот устроен иначе — он тоже не спрашивает про рутину, но список
+     * необратимого (`@shared/irreversible`) всё равно показывает карточку. А
+     * обещание в интерфейсе было одно на оба движка: и подпись чипа, и строка
+     * «показано несмотря на автопилот».
+     *
+     * Теперь политика всегда `on-request`, а «не спрашивать» делаем САМИ:
+     * одобряем молча всё, кроме необратимого. Разница видна ровно там, где
+     * важна, — на `rm -rf`, `git push --force`, `DROP TABLE`.
+     *
+     * ЧЕГО ЭТОТ ПОЛ НЕ ЛОВИТ, и это надо знать: codex спрашивает не обо всём.
+     * Правку внутри рабочей папки он в режиме `workspaceWrite` одобряет сам и
+     * нам о ней не сообщает — туда пол не дотянется. Обещать больше, чем
+     * можем, мы не станем: об этом сказано в подписи автопилота для Codex.
+     */
+    const silent = (): void => {
+      session.approvals.delete(toolUseId)
+      this.respond(c.id, { decision: 'accept' })
+    }
     if (c.method === CODEX_APPROVAL.command) {
       const p = params as CodexCommandApprovalParams
       const command = p.command == null ? '' : String(p.command)
       const cwd = p.cwd == null ? '' : String(p.cwd)
+      const stop = codexFloor(session.bypass === true, command)
+      if (session.bypass && !stop) {
+        silent()
+        return
+      }
       this.emit(requestId, {
         type: 'permission',
         toolUseId,
         toolName: 'Bash',
         input: { command, cwd },
-        displayName: command || tm('drv.command')
+        displayName: command || tm('drv.command'),
+        // Почему спросили при включённом автопилоте: без этой строки вопрос
+        // читается как поломка тумблера, а не как защита от потери работы.
+        ...(stop ? { irreversible: stop } : {})
       })
     } else if (c.method === CODEX_APPROVAL.fileChange) {
       const p = params as CodexFileChangeApprovalParams
@@ -395,6 +447,16 @@ export class CodexDriver implements AgentDriver {
       const root = p.grantRoot == null ? '' : String(p.grantRoot)
       const what = paths.length ? paths.join(', ') : root
       const label = what ? tm('drv.fileChange', { what }) : tm('drv.fileChangeNoPath')
+      /*
+       * Правка файлов в автопилоте идёт молча — как и у Claude Code, где
+       * автопилот на них карточку не показывает. Откат по ходам делает её
+       * обратимой, и спрашивать про каждую значило бы не выключать вопросы, а
+       * переносить их в другое место.
+       */
+      if (session.bypass) {
+        silent()
+        return
+      }
       this.emit(requestId, {
         type: 'permission',
         toolUseId,
@@ -432,7 +494,13 @@ export class CodexDriver implements AgentDriver {
         cwd: opts.cwd
       }
       this.sessions.set(requestId, session)
-      const approvalPolicy = opts.bypass ? 'never' : 'on-request'
+      /*
+       * ВСЕГДА `on-request`, даже в автопилоте. «Не спрашивать» мы делаем сами
+       * в `handleServerRequest` — так у автопилота остаётся пол из
+       * `@shared/irreversible`, тот же, что у Claude Code. С `never` codex не
+       * спрашивал вовсе, и необратимое проходило молча.
+       */
+      const approvalPolicy = 'on-request'
       // SECURITY: the sandbox is a second, quieter gate switch and must follow the
       // same АВТОПИЛОТ toggle as the approval policy. With a writable workspace,
       // `on-request` only asks about things OUTSIDE it — a patch inside the open
@@ -502,7 +570,9 @@ export class CodexDriver implements AgentDriver {
         input: [{ type: 'text', text }],
         model: session.model,
         effort: session.effort,
-        approvalPolicy: session.bypass ? 'never' : 'on-request',
+        // См. выше: политика всегда `on-request`, тишину даёт наш собственный
+        // гейт, и пол под автопилотом остаётся на месте.
+        approvalPolicy: 'on-request',
         // Sent ONLY when the chip has drifted from the sandbox the thread was
         // opened with: the thread's sandbox is fixed at thread/start, so toggling
         // АВТОПИЛОТ mid-conversation would otherwise leave the workspace writable

@@ -356,6 +356,22 @@ export interface Conversation {
    */
   noteFrom?: string
   /**
+   * Модель и усилие ЭТОЙ беседы.
+   *
+   * ПОВОД. Раньше в каждом ходе КАЖДОЙ панели уезжала одна глобальная
+   * настройка, а движок переключал живую сессию на входе хода. Значит смена
+   * модели в одной панели молча переводила на неё и соседнюю — а подпись под
+   * строкой ввода у соседней ещё говорила прежнее, потому что она-то как раз
+   * пер-панельная и обновляется по ответу движка. Интерфейс показывал HAIKU в
+   * тот самый миг, когда ход уходил на OPUS.
+   *
+   * Снимок берётся при СОЗДАНИИ беседы: настройка — это «чем начинать
+   * новые», а не «чем работают все сразу». Дальше беседа живёт со своим
+   * выбором, пока человек не сменит его в этой же панели.
+   */
+  model?: string
+  effort?: string
+  /**
    * Эта панель СКАЗАЛА, что ждёт ответа от соседа.
    *
    * ЭТО ЗАЯВЛЕНИЕ АГЕНТА, А НЕ СОСТОЯНИЕ ПРИЛОЖЕНИЯ, и подпись на экране
@@ -632,6 +648,14 @@ interface AiState {
     title?: string
     engine?: 'builtin' | AgentEngine
   }) => string
+  /**
+   * Закрепить модель и усилие за ОДНОЙ беседой.
+   *
+   * Зовётся, когда человек выбрал их в пусковой площадке этой панели. Настройка
+   * при этом тоже обновляется — но как «чем начинать новые», а не «чем работают
+   * все живые».
+   */
+  setConvModel: (id: string, model?: string, effort?: string) => void
   setActiveConversation: (id: string) => void
   deleteConversation: (id: string) => void
   activeConversation: () => Conversation | undefined
@@ -1746,9 +1770,16 @@ export const useAiStore = create<AiState>((set, get) => {
       // guarded by tests/startOpts.test.ts.
       ...nativeGateOpts(settings.ai, conv.bypass, conv.planMode, conv.editsAuto),
       ultracode: useUiStore.getState().ultracode,
-      model: settings.ai.claudeModel || undefined,
-      // Ultracode forces xhigh; otherwise use the user's effort override.
-      effort: useUiStore.getState().ultracode ? 'xhigh' : settings.ai.claudeEffort || undefined,
+      /*
+       * Модель — ЭТОЙ беседы, а не последняя выбранная в окне. Иначе смена
+       * модели в одной панели молча уводила соседнюю: движок переключает живую
+       * сессию на входе хода, а её подпись обновляется только после ответа.
+       */
+      model: conv.model ?? settings.ai.claudeModel ?? undefined,
+      // Ultracode forces xhigh; otherwise use this conversation's effort.
+      effort: useUiStore.getState().ultracode
+        ? 'xhigh'
+        : (conv.effort ?? settings.ai.claudeEffort ?? undefined),
       // After a restart there's no live session for this conversation — resume the
       // real on-disk session so context is intact. The driver only uses `resume`
       // when spawning fresh; a live follow-up in the same run ignores it.
@@ -2638,6 +2669,13 @@ export const useAiStore = create<AiState>((set, get) => {
         sessionId: opts?.sessionId,
         engine: opts?.engine ?? 'builtin',
         cwd,
+        /*
+         * Чем начинать — берём из настройки ОДИН раз, здесь. Дальше эта беседа
+         * работает своей моделью: настройка отвечает за новые разговоры, а не
+         * за все живые сразу.
+         */
+        model: getSettings().ai.claudeModel || undefined,
+        effort: getSettings().ai.claudeEffort || undefined,
         // A native agent engine drives its own agentic tool loop — agent mode implicit.
         agentMode: (opts?.engine ?? 'builtin') !== 'builtin',
         // Автопилот — из намерения ЭТОЙ панели, а не из настроек и не от соседа.
@@ -2664,6 +2702,10 @@ export const useAiStore = create<AiState>((set, get) => {
           : s.activeBySession
       }))
       return id
+    },
+
+    setConvModel: (id, model, effort) => {
+      patchConversation(id, (c) => ({ ...c, model, effort }))
     },
 
     setActiveConversation: (id) => {
@@ -3952,6 +3994,18 @@ function seedPatch(convId: string, fn: (c: Conversation) => Conversation): void 
 ;(window as unknown as { __zaryaDeleteConv?: (id: string) => void }).__zaryaDeleteConv = (id) => {
   useAiStore.getState().deleteConversation(id)
 }
+/*
+ * QA-хук: закрепить модель за беседой — ТЕМ ЖЕ действием, что зовёт пусковая
+ * площадка по нажатию «ПУСК». Гонять ради этого её интерфейс значило бы
+ * проверять заодно и её вёрстку.
+ */
+;(
+  window as unknown as {
+    __zaryaSetConvModel?: (convId: string, model?: string, effort?: string) => void
+  }
+).__zaryaSetConvModel = (convId, model, effort) =>
+  useAiStore.getState().setConvModel(convId, model, effort)
+
 /* QA-хук: встать в другую беседу — так же, как это делает щелчок человека. */
 ;(window as unknown as { __zaryaSetActiveConv?: (id: string) => void }).__zaryaSetActiveConv = (
   id

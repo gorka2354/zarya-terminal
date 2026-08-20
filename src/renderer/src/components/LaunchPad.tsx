@@ -162,18 +162,30 @@ export function LaunchPad(): React.JSX.Element | null {
   const clockRef = useRef<HTMLSpanElement>(null)
   const openedAt = useRef(0)
 
+  /*
+   * Показываем модель ЭТОЙ панели, а не последнюю выбранную в окне.
+   *
+   * Настройка теперь значит «чем начинать новые беседы», а живая беседа держит
+   * свой выбор (см. `Conversation.model`). Открой площадку в соседней панели —
+   * и она обязана показать то, чем работает соседняя.
+   */
+  const paneConv = useAiStore((s) => convForSession(s, activeSessionId))
   const [provider, setProvider] = useState<AiProviderKind>(ai.provider)
-  const [model, setModel] = useState(claudeMode ? ai.claudeModel : ai.model)
+  const [model, setModel] = useState(
+    claudeMode ? (paneConv?.model ?? ai.claudeModel) : ai.model
+  )
   // Effort holds AiEffort (builtin) OR a ClaudeEffortLevel string incl. 'xhigh'.
-  const [effort, setEffort] = useState<string>((claudeMode ? ai.claudeEffort : ai.effort) || 'high')
+  const [effort, setEffort] = useState<string>(
+    (claudeMode ? (paneConv?.effort ?? ai.claudeEffort) : ai.effort) || 'high'
+  )
   const [ultracode, setUltra] = useState(ultracodeOn)
   const [launching, setLaunching] = useState(false)
 
   useEffect(() => {
     if (open) {
       setProvider(ai.provider)
-      setModel(claudeMode ? ai.claudeModel : ai.model)
-      setEffort((claudeMode ? ai.claudeEffort : ai.effort) || 'high')
+      setModel(claudeMode ? (paneConv?.model ?? ai.claudeModel) : ai.model)
+      setEffort((claudeMode ? (paneConv?.effort ?? ai.claudeEffort) : ai.effort) || 'high')
       setUltra(ultracodeOn)
       setLaunching(false)
       openedAt.current = Date.now()
@@ -426,6 +438,15 @@ export function LaunchPad(): React.JSX.Element | null {
       const sid = useSessionsStore.getState().activeSessionId()
       const conv = convForSession(useAiStore.getState(), sid)
       if (conv?.engine === 'claude-code') {
+        /*
+         * ЗАКРЕПЛЯЕМ ВЫБОР ЗА ЭТОЙ БЕСЕДОЙ, а не только за настройкой.
+         *
+         * Живой сессии мы говорим об этом сразу (setModel ниже), но следующий
+         * ход собирается заново — и без пина он собрался бы с глобальной
+         * настройкой. Раньше это и означало, что выбор в одной панели уводит
+         * соседнюю: настройка одна, а панелей четыре.
+         */
+        useAiStore.getState().setConvModel(conv.id, model || undefined, effEffort || undefined)
         window.zarya.claudeCode.setModel(conv.id, model || undefined)
         window.zarya.claudeCode.setUltracode(conv.id, ultracode)
         if (!ultracode) window.zarya.claudeCode.setEffort(conv.id, effEffort || undefined)
