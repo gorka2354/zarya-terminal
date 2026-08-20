@@ -332,10 +332,10 @@ export const RU: Dict = {
   'ob.s1.panes':
     'Окно делится на панели, и у каждой свой агент, своя папка и своё одобрение. Инструмент, который агент хочет выполнить, показывается карточкой — с командой или правкой целиком, до нажатия.',
   'ob.s1.local':
-    'Ключей и аккаунтов Заря не просит и никуда ничего не отправляет: агенты работают под вашим логином, всё остальное остаётся на этой машине.',
+    'Ключей и аккаунтов Заря не просит: агенты работают под вашим логином, разговоры и настройки остаются на этой машине. Единственное, куда Заря ходит сама, — проверка обновлений на GitHub при запуске; её можно выключить в настройках.',
   'ob.s2.title': 'Чем работать',
   'ob.s2.checking': 'Смотрю, что установлено…',
-  'ob.s2.found': 'Нашлись и готовы к запуску:',
+  'ob.s2.found': 'Нашлись на этой машине (вход в каждый — в нём самом):',
   'ob.s2.restMore': 'Остальных на машине нет. Если нужны — вот как ставятся:',
   'ob.s2.restNone': 'Ни одного агента не нашлось. Вот как их поставить:',
   'ob.s2.copy': 'Копировать',
@@ -1142,6 +1142,10 @@ export const RU: Dict = {
   'drv.sdkFail': 'Не удалось загрузить Claude Agent SDK: {err}',
   'drv.aborted': 'Прервано',
   'drv.ccFail': 'Claude Code не запустился: {err}',
+  'drv.ccAuth':
+    'Claude Code не авторизован. Выполните `claude login` в терминале (можно в этой же панели) и повторите — ключ Заре не нужен, вход делается в самом CLI.',
+  'drv.ccMissing':
+    'Claude Code не найден. Установите его — `npm i -g @anthropic-ai/claude-code` — и откройте панель заново.',
   'drv.session': 'Сессия',
   'drv.geminiMissing':
     'Gemini CLI не найден. Установи `npm i -g @google/gemini-cli`, затем войди в аккаунт.',
@@ -1699,6 +1703,14 @@ export const RU: Dict = {
   'set.platform': 'Платформа',
   'set.dataFolder': 'Папка данных',
   'set.repo': 'GitHub репозиторий',
+  'crash.title': 'Заря сорвалась на отрисовке',
+  'crash.what': 'Что случилось',
+  'crash.hint':
+    'Окно осталось в ненадёжном состоянии — продолжать нельзя, но и пропасть без следа это больше не может: подробности записаны в журнал на этой машине. Перезагрузка вернёт работу; сессии и разговоры на месте.',
+  'crash.reload': 'Перезагрузить окно',
+  'crash.copy': 'Скопировать подробности',
+  'crash.log': 'Показать журнал',
+  'set.showLog': 'Журнал сбоев',
   'set.openDataFolder': 'Открыть папку данных',
   'common.save': 'Сохранить',
   'common.deleteShort': 'Удалить',
@@ -2029,10 +2041,10 @@ export const EN: Dict = {
   'ob.s1.panes':
     'The window splits into panes, and each has its own agent, its own folder and its own approvals. A tool the agent wants to run appears as a card — with the full command or edit, before you press anything.',
   'ob.s1.local':
-    'Zarya asks for no keys and no account, and sends nothing anywhere: agents run under your own login, everything else stays on this machine.',
+    'Zarya asks for no keys and no account: agents run under your own login, and conversations and settings stay on this machine. The one thing Zarya does on its own is check GitHub for updates at start-up — and that can be switched off in settings.',
   'ob.s2.title': 'What to work with',
   'ob.s2.checking': 'Checking what is installed…',
-  'ob.s2.found': 'Found and ready to launch:',
+  'ob.s2.found': 'Found on this machine (each signs you in on its own):',
   'ob.s2.restMore': 'The rest are not on this machine. If you want them:',
   'ob.s2.restNone': 'No agents found. Here is how to install them:',
   'ob.s2.copy': 'Copy',
@@ -2668,6 +2680,14 @@ export const EN: Dict = {
   'set.platform': 'Platform',
   'set.dataFolder': 'Data folder',
   'set.repo': 'GitHub repository',
+  'crash.title': 'Zarya failed while drawing',
+  'crash.what': 'What happened',
+  'crash.hint':
+    'The window is left in an unreliable state — carrying on is not honest, but this can no longer vanish without a trace: the details are written to a log on this machine. Reloading brings the app back; your sessions and conversations are intact.',
+  'crash.reload': 'Reload the window',
+  'crash.copy': 'Copy details',
+  'crash.log': 'Show the log',
+  'set.showLog': 'Crash log',
   'set.openDataFolder': 'Open data folder',
   'common.save': 'Save',
   'common.deleteShort': 'Delete',
@@ -3317,6 +3337,10 @@ export const EN: Dict = {
   'drv.sdkFail': 'Could not load the Claude Agent SDK: {err}',
   'drv.aborted': 'Aborted',
   'drv.ccFail': 'Claude Code did not start: {err}',
+  'drv.ccAuth':
+    'Claude Code is not signed in. Run `claude login` in a terminal (this pane will do) and try again — Zarya needs no key of its own; the sign-in lives in the CLI.',
+  'drv.ccMissing':
+    'Claude Code was not found. Install it — `npm i -g @anthropic-ai/claude-code` — and open the pane again.',
   'drv.session': 'Session',
   'drv.geminiMissing': 'Gemini CLI not found. Install `npm i -g @google/gemini-cli`, then sign in.',
   'drv.kimiMissing': 'Kimi CLI not found. Install Kimi Code CLI (`kimi`) and run `kimi /login`.',

@@ -1,5 +1,6 @@
 import ReactDOM from 'react-dom/client'
 import App from './App'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 // Fonts (bundled offline, cyrillic + latin subsets) — constructivist voice.
 import '@fontsource/ruslan-display/cyrillic-400.css'
 import '@fontsource/ruslan-display/latin-400.css'
@@ -32,6 +33,36 @@ import './styles/features.css'
 import '@/features/themes/themePack'
 import '@/features/themes/themeDawn'
 
+/*
+ * ТО, ЧТО ИНАЧЕ ИСЧЕЗАЕТ БЕССЛЕДНО.
+ *
+ * Ошибку вне отрисовки (обработчик события, промис) React не ловит: она уходит
+ * в консоль, которой человек не видит, и остаётся только «оно как-то странно
+ * себя ведёт». Журнал лежит в папке данных и никуда не отправляется.
+ */
+window.addEventListener('error', (e) => {
+  void window.zarya?.app?.logError?.(
+    `renderer: ${e.message}
+${e.error instanceof Error ? (e.error.stack ?? '') : ''}`
+  )
+})
+window.addEventListener('unhandledrejection', (e) => {
+  const r = e.reason
+  void window.zarya?.app?.logError?.(
+    `renderer: unhandledRejection
+${r instanceof Error ? (r.stack ?? r.message) : String(r)}`
+  )
+})
+
 // NB: no StrictMode — xterm.js instances are imperative singletons per session
 // and StrictMode's double-mount in dev would duplicate terminal DOM/handlers.
-ReactDOM.createRoot(document.getElementById('root')!).render(<App />)
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  /*
+   * Обёртка — вокруг ВСЕГО приложения. Сорванная отрисовка снимала дерево
+   * целиком: окно становилось пустым, и вернуть его можно было только
+   * перезапуском (см. ErrorBoundary — повод не гипотетический).
+   */
+  <ErrorBoundary>
+    <App />
+  </ErrorBoundary>
+)

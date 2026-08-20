@@ -2,6 +2,8 @@ import { BrowserWindow, Notification, app, dialog, ipcMain, shell } from 'electr
 import { tm } from './lang'
 import { APP_VERSION } from './appVersion'
 import { existsSync } from 'fs'
+import { dirname } from 'path'
+import { errorLogPath, logError } from './errorLog'
 import { writeFile } from 'fs/promises'
 import { CH } from '@shared/ipc'
 import type {
@@ -297,6 +299,20 @@ export function registerIpc(ctx: IpcContext): void {
     n.show()
     }
   )
+
+  /*
+   * Журнал сбоев. Пишет окно (упавшая отрисовка, необработанное исключение), а
+   * показывает — проводник: файл лежит в папке данных этой машины и никуда не
+   * отправляется.
+   */
+  ipcMain.on(CH.logError, (_e, text: string) => logError(String(text ?? '').slice(0, 20_000)))
+  ipcMain.on(CH.showLog, () => {
+    const file = errorLogPath()
+    // Пустого журнала может не быть на диске вовсе — тогда показываем папку,
+    // а не молчим: «ничего не произошло» после нажатия читается как поломка.
+    if (existsSync(file)) shell.showItemInFolder(file)
+    else shell.openPath(dirname(file))
+  })
 
   ipcMain.handle(CH.sttState, () => ctx.stt.state())
   /**

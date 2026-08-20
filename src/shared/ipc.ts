@@ -107,6 +107,9 @@ export const CH = {
    * который приводит не туда, куда звал, — половина зова.
    */
   revealPane: 'app:reveal-pane',
+  /** Записать аварию окна в журнал и показать его человеку. */
+  logError: 'app:log-error',
+  showLog: 'app:show-log',
   /** Команды движка для палитры «/». */
   agentListCommands: 'agent:list-commands',
   /** Перечитать скиллы/плагины/MCP на живой сессии, не перезапуская её. */

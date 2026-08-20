@@ -12,6 +12,7 @@ import { AcpDriver, ACP_CAPABILITIES, parseAcpArgs } from './acpDriver'
 import { ClaudeCodeDriver } from './claudeCodeDriver'
 import { CodexDriver } from './codexDriver'
 import { FakeAgentDriver } from './fakeAgentDriver'
+import { installMainErrorLog } from './errorLog'
 import { HistoryStore } from './historyStore'
 import { flushSkillUsage, registerIpc } from './ipc'
 import { PtyManager } from './ptyManager'
@@ -442,6 +443,13 @@ if (!gotLock) {
     }
     void folderFromArgv(argv, workingDirectory || process.cwd()).then(sendFolderArg)
   })
+
+  /*
+   * Ловим свои сбои ДО всего остального: необработанное исключение в главном
+   * процессе валит приложение целиком, и без записи от него не остаётся даже
+   * имени. Журнал лежит в папке данных и никуда не отправляется.
+   */
+  installMainErrorLog()
 
   app.whenReady().then(async () => {
     await settingsStore.init()

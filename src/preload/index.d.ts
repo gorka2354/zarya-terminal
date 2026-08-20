@@ -390,6 +390,8 @@ export interface ZaryaApi {
     windowCommand(cmd: WindowCommand): void
     onMaximized(cb: (maximized: boolean) => void): Unsub
     openExternal(url: string): void
+    logError(text: string): void
+    showLog(): void
     showItemInFolder(path: string): void
     backupUsage(): Promise<{ dir: string; bytes: number; runs: number }>
     backupClear(): Promise<{ dir: string; bytes: number; runs: number }>

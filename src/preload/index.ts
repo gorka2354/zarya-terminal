@@ -318,6 +318,10 @@ const api = {
     windowCommand: (cmd: WindowCommand) => ipcRenderer.send(CH.windowCommand, cmd),
     onMaximized: (cb: (maximized: boolean) => void) => on(CH.windowMaximized, cb),
     openExternal: (url: string) => ipcRenderer.send(CH.openExternal, url),
+    /** Записать аварию окна: журнал живёт в папке данных и никуда не уезжает. */
+    logError: (text: string) => ipcRenderer.send(CH.logError, text),
+    /** Показать журнал сбоев в проводнике. */
+    showLog: () => ipcRenderer.send(CH.showLog),
     showItemInFolder: (path: string) => ipcRenderer.send(CH.showItemInFolder, path),
     checkpointUsage: () => ipcRenderer.invoke(CH.checkpointUsage),
     backupUsage: () => ipcRenderer.invoke(CH.backupUsage),

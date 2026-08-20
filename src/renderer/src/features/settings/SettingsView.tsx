@@ -2174,6 +2174,14 @@ function AboutTab(): React.JSX.Element {
             {t('set.openDataFolder')}
           </button>
         )}
+        {/*
+          Журнал сбоев — рядом с кнопкой «сообщить»: до сих пор она вела на
+          главную страницу репозитория, то есть предлагала рассказать то, чего
+          человек не знает. Теперь есть что приложить.
+        */}
+        <button type="button" className="zy-btn" onClick={() => window.zarya.app.showLog()}>
+          {t('set.showLog')}
+        </button>
       </div>
     </section>
   )

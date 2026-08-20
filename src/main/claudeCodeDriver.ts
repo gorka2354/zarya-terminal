@@ -111,6 +111,27 @@ const loadSdk = new Function('m', 'return import(m)') as (
  * launch"); it is asar-unpacked, so point at the real on-disk copy. In dev it
  * sits in node_modules.
  */
+/**
+ * Почему движок не пошёл — СЛОВАМИ, а не пересказом стека.
+ *
+ * ПОВОД. У всех остальных движков такая подсказка есть: `drv.codexAuth`
+ * («выполни `codex login`»), `drv.kimiMissing`, `main.acp.noAuth`. Не хватало
+ * ровно у движка по умолчанию: любая беда — от невыполненного входа до
+ * отсутствующего бинарника — выходила общей строкой «Claude Code не
+ * запустился: …». Человек в первые пятнадцать минут читал чужой текст ошибки и
+ * не знал, что делать; слово `claude login` не встречалось в приложении нигде.
+ *
+ * Разбираем ровно два случая, в которых человек может что-то сделать сам.
+ * Остальное отдаём дословно: наша догадка поверх чужой ошибки — это ещё одна
+ * ошибка, только с нашей подписью.
+ */
+export function ccFailure(e: unknown): string {
+  const msg = e instanceof Error ? e.message : String(e)
+  if (/unauthor|not logged in|login|authentication|api key/i.test(msg)) return tm('drv.ccAuth')
+  if (/ENOENT|not found|spawn .*claude|не найден/i.test(msg)) return tm('drv.ccMissing')
+  return tm('drv.ccFail', { err: msg })
+}
+
 function bundledClaudePath(): string | undefined {
   const pkg = bundledPkgName(process.platform, process.arch)
   const exe = claudeExeName(process.platform)
@@ -1207,7 +1228,7 @@ export class ClaudeCodeDriver implements AgentDriver {
     } catch (e) {
       this.emit(requestId, {
         type: 'error',
-        message: tm('drv.ccFail', { err: e instanceof Error ? e.message : String(e) })
+        message: ccFailure(e)
       })
       return
     }
