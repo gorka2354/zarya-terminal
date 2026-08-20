@@ -1068,6 +1068,7 @@ export const RU: Dict = {
   'eng.panes': 'Разрешить агенту писать соседним панелям',
   'eng.panesWhy':
     'Агент увидит другие панели и сможет передать им короткую записку — например, что миграция прошла. Записка приходит отдельным видом, а не вашими словами: одобрить разрешение или поменять настройки она не может. ВАЖНО ПРО ДЕНЬГИ: доставленная записка НАЧИНАЕТ ХОД у соседа, то есть тратит без вашего нажатия. Заря держит потолок на пару панелей за час и придерживает записки, когда он выбран, — но включать это стоит осознанно. По умолчанию выключено. Инструменты появляются у бесед, начатых ПОСЛЕ изменения: состав объявляется движку при запуске сессии. Пока умеет только Claude Code — у остальных движков этих инструментов не будет.',
+  'feed.copyAnswer': 'Скопировать ответ',
   'feed.noteFrom': 'записка от панели «{name}»',
   'feed.noteHeld': 'придержана: автопилот',
   'feed.noteHeldBusy': 'придержана: панель занята',
@@ -3240,6 +3241,7 @@ export const EN: Dict = {
   'eng.panes': 'Let the agent message other panes',
   'eng.panesWhy':
     'The agent sees your other panes and can hand one a short note — that the migration landed, say. The note arrives in its own form, never as your words, and it cannot approve a permission or change settings. ABOUT MONEY: a delivered note STARTS A TURN in the other pane, so it spends without you pressing anything. Zarya caps what a pair of panes may run up in an hour and holds notes once that is reached — but this is worth switching on deliberately. Off by default. The tools reach conversations started AFTER the change: the tool set is declared to the engine when a session starts. Claude Code only for now — the other engines get no such tools.',
+  'feed.copyAnswer': 'Copy this answer',
   'feed.noteFrom': 'note from pane “{name}”',
   'feed.noteHeld': 'held: autopilot',
   'feed.noteHeldBusy': 'held: pane is busy',

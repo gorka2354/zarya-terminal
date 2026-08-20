@@ -1629,11 +1629,37 @@ const AgentMessage = memo(function AgentMessage({
       {msg.content.map((p, i) => {
         if (p.type === 'text') {
           return p.text.trim() ? (
-            <div
-              key={i}
-              className="zy-mf-answer zy-md"
-              dangerouslySetInnerHTML={{ __html: renderMarkdown(p.text) }}
-            />
+            /*
+               КНОПКА «СКОПИРОВАТЬ ОТВЕТ» — у самого ответа.
+               
+               Выделение мышью теперь работает (см. lib/copySelection), но
+               длинный ответ так не возьмёшь: он не влезает на экран, и
+               выделение приходится тянуть с прокруткой. Кнопка копирует ИСХОДНЫЙ
+               markdown, а не то, что видно: заголовки, списки и ссылки
+               человек несёт в заметки или в переписку, и разметка ему там нужнее
+               плоского текста.
+               
+               Появляется по наведению — ответ читают чаще, чем копируют, и
+               постоянная кнопка спорила бы с текстом за внимание.
+            */
+            <div key={i} className="zy-mf-answer-wrap">
+              <div
+                className="zy-mf-answer zy-md"
+                dangerouslySetInnerHTML={{ __html: renderMarkdown(p.text) }}
+              />
+              <button
+                type="button"
+                className="zy-mf-answer-copy"
+                title={t('feed.copyAnswer')}
+                aria-label={t('feed.copyAnswer')}
+                onClick={() => {
+                  void navigator.clipboard.writeText(p.text)
+                  useUiStore.getState().toast(t('common.copied'), 'success')
+                }}
+              >
+                <Icon name="copy" size={12} />
+              </button>
+            </div>
           ) : null
         }
         if (p.type === 'notice') {

@@ -1,4 +1,5 @@
 import { PANE_DRAG_CWD, PANE_DRAG_SESSION } from '@shared/types'
+import { selectionToCopy } from '@/lib/copySelection'
 import { rememberProject } from '@/actions/projects'
 import type { DropSide } from '@shared/paneTree'
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
@@ -85,15 +86,20 @@ export const TerminalPane = memo(function TerminalPane({
       void navigator.clipboard.readText().then((t) => t && handle?.term.paste(t))
       return
     }
-    const hasSelection = !!handle?.term.getSelection()
+    /*
+     * Выделение считаем и в ЛЕНТЕ тоже. Меню висит на всей панели, а в блочном
+     * режиме лента закрывает терминал собой: человек выделял ответ агента и
+     * получал неактивный пункт «Копировать» — потому что смотрели не туда.
+     */
+    const selection = selectionToCopy(handle?.term.getSelection())
+    const hasSelection = !!selection
     open(e.clientX, e.clientY, [
       {
         label: t('common.copy'),
         hint: 'Ctrl+Shift+C',
         disabled: !hasSelection,
         onClick: () => {
-          const sel = handle?.term.getSelection()
-          if (sel) void navigator.clipboard.writeText(sel)
+          if (selection) void navigator.clipboard.writeText(selection)
         }
       },
       {

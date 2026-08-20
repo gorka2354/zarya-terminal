@@ -7,6 +7,7 @@ import {
   toggleMaximizePane
 } from '@/actions/panes'
 import { askText } from '@/components/AskText'
+import { domSelection } from '@/lib/copySelection'
 import { openFolderAsPane, openFolderAsTab } from '@/actions/projects'
 import { useBlocksStore } from '@/state/blocksStore'
 import { listLeaves, useSessionsStore } from '@/state/sessionsStore'
@@ -398,11 +399,22 @@ export function registerCoreActions(): void {
       id: 'terminal.copy',
       title: t('act.copy'),
       category: t('act.cat.terminal'),
-      run: () =>
+      /*
+       * Сперва лента, потом терминал: человек копирует то, что видит. В блочном
+       * режиме лента закрывает терминал, и выделенный в ней ответ агента
+       * копировать было нечем.
+       */
+      run: () => {
+        const fromFeed = domSelection()
+        if (fromFeed) {
+          void navigator.clipboard.writeText(fromFeed)
+          return
+        }
         withActiveTerm((h) => {
           const sel = h.term.getSelection()
           if (sel) void navigator.clipboard.writeText(sel)
         })
+      }
     },
     {
       id: 'terminal.paste',

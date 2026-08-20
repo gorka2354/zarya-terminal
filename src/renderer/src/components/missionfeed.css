@@ -301,6 +301,39 @@
   letter-spacing: 0.06em;
   color: var(--fg-faint);
 }
+/* Обёртка ответа — только ради кнопки «скопировать»: она стоит в верхнем правом
+   углу самого ответа и появляется по наведению. Ответ читают чаще, чем
+   копируют, и постоянная кнопка спорила бы с текстом за внимание. */
+.zy-mf-answer-wrap {
+  position: relative;
+}
+.zy-mf-answer-copy {
+  position: absolute;
+  top: 0;
+  right: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-elev1);
+  color: var(--fg-faint);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.zy-mf-answer-wrap:hover .zy-mf-answer-copy,
+.zy-mf-answer-copy:focus-visible {
+  opacity: 1;
+}
+.zy-mf-answer-copy:hover {
+  color: var(--fg);
+  border-color: var(--accent);
+}
+
 /* Печатающийся ответ берёт ТУ ЖЕ запись, а не свою похожую: это один и тот же
    текст в двух состояниях, и в миг, когда поток сменится целым сообщением, он
    не должен ни дёрнуться, ни сменить гарнитуру. Два похожих правила рядом

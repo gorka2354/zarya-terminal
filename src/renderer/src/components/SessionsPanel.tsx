@@ -65,6 +65,18 @@ const crewStatusStyle: React.CSSProperties = {
  * строке ввода, лента этой беседы. Панель ИИ оставляем включённой для тех, у
  * кого IDE есть: там разговор живёт сбоку и это по-прежнему верно.
  */
+/**
+ * Как ЭТА панель называется на экране.
+ *
+ * Одно правило на сайдбар, уведомление и инструменты агента: адрес панели —
+ * то, что человек видит на вкладке. Беседа своё имя выводит из первого
+ * запроса, и для адреса оно не годится.
+ */
+function paneTitleOf(conv: { sessionId?: string; title: string }): string {
+  const s = conv.sessionId ? useSessionsStore.getState().sessions[conv.sessionId] : undefined
+  return s?.title || conv.title
+}
+
 function openCrewMember(conversationId: string): void {
   if (getSettings().ideMode) useUiStore.getState().set({ aiPanelOpen: true })
   revealConversation(conversationId)
@@ -904,7 +916,25 @@ export function SessionsPanel(): React.JSX.Element {
                   }}
                 />
                 <div className="zy-item-body">
-                  <div className="zy-item-title">{conv.title}</div>
+                  {/*
+                    ИМЯ ПАНЕЛИ, А НЕ ПЕРВЫЕ СЛОВА РАЗГОВОРА.
+                    
+                    Здесь стояло `conv.title` — то есть первые сорок символов
+                    ПЕРВОГО запроса человека («почини сборку на windows, там
+                    падает пост…»). Выше в этом же сайдбаре панели названы
+                    своими именами, и человек должен был сам вспоминать, в какой
+                    из четырёх он это писал десять минут назад: два списка одних
+                    и тех же агентов под несвязанными именами, в пяти
+                    сантиметрах друг от друга.
+                    
+                    Главный процесс для инструментов агента давно решил это
+                    иначе и объяснил почему: «человек обращается к тому, что
+                    написано на вкладке». Здесь то же правило; а первый запрос
+                    остаётся — но как содержание, в подсказке.
+                  */}
+                  <div className="zy-item-title" title={conv.title}>
+                    {paneTitleOf(conv)}
+                  </div>
                   <div className="zy-item-sub" style={crewStatusStyle}>
                     {waits
                       ? t('sidebar.crewWaiting', { time: waitedFor(since, nowTick) })
