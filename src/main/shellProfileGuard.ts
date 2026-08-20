@@ -34,7 +34,7 @@ const MAX_ARGS = 64
 const MAX_ENV_KEYS = 64
 const MAX_PROFILES = 32
 
-const INTEGRATIONS: ShellIntegrationKind[] = ['powershell', 'bash', 'zsh', 'none']
+const INTEGRATIONS: ShellIntegrationKind[] = ['powershell', 'bash', 'zsh', 'cmd', 'wsl', 'none']
 
 /**
  * Environment a profile may carry — an ALLOW list, deliberately.

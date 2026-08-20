@@ -13,6 +13,7 @@ import { ClaudeCodeDriver } from './claudeCodeDriver'
 import { CodexDriver } from './codexDriver'
 import { FakeAgentDriver } from './fakeAgentDriver'
 import { installMainErrorLog } from './errorLog'
+import { initialBounds, trackWindow } from './windowState'
 import { HistoryStore } from './historyStore'
 import { flushSkillUsage, registerIpc } from './ipc'
 import { PtyManager } from './ptyManager'
@@ -254,14 +255,16 @@ function createWindow(): void {
   rendererReady = false
   const settings = settingsStore.get()
   const useAcrylic = process.platform === 'win32' && settings.appearance.acrylic
+  // Каким окно оставили в прошлый раз — если этот прямоугольник ещё достижим
+  // на сегодняшних экранах (монитор могли отключить). См. windowState.ts.
+  const { bounds, maximized } = initialBounds()
 
   mainWindow = new BrowserWindow({
     // Explicit window icon (the pixel «заря») so the taskbar shows it directly,
     // independent of the exe-icon cache. A multi-size .ico with crisp native
     // entries per size → Windows picks the right one instead of blurring.
     icon: join(builtinResourcesDir(), 'zarya-icon.ico'),
-    width: 1360,
-    height: 860,
+    ...bounds,
     minWidth: 920,
     minHeight: 560,
     frame: false,
@@ -277,6 +280,12 @@ function createWindow(): void {
       spellcheck: false
     }
   })
+
+  // Разворачиваем ДО показа: иначе человек увидит окно обычного размера,
+  // которое тут же прыгает на весь экран. И до trackWindow — чтобы наш же
+  // вызов не превратился в лишнюю запись на диск.
+  if (maximized) mainWindow.maximize()
+  trackWindow(mainWindow)
 
   let shown = false
   const reveal = (): void => {

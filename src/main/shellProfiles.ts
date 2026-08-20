@@ -57,7 +57,7 @@ async function detectWindows(): Promise<ShellProfile[]> {
       name: 'Command Prompt',
       path: comspec,
       args: [],
-      integration: 'none',
+      integration: 'cmd',
       icon: 'CMD',
       detected: true
     })
@@ -104,7 +104,7 @@ async function detectWindows(): Promise<ShellProfile[]> {
         name: `WSL · ${name}`,
         path: wslExe,
         args: ['-d', name],
-        integration: 'none',
+        integration: 'wsl',
         icon: 'WSL',
         detected: true
       })

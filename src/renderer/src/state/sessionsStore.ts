@@ -11,6 +11,7 @@ import type {
 } from '@shared/types'
 import { uid } from '@/lib/uid'
 import { MAX_PANES, autoLayout, isAutoLayout } from '@shared/autoLayout'
+import { integrationGuaranteed } from '@shared/shellIntegration'
 import {
   closePane,
   insertBeside,
@@ -244,7 +245,10 @@ async function spawnSession(
           shellIcon: res.profile?.icon ?? cur.shellIcon,
           profileId: res.profile?.id ?? cur.profileId,
           nonce: res.nonce,
-          integration: (res.profile?.integration ?? 'none') !== 'none'
+          // Не «мы что-то ей подсунули», а «за эту оболочку можно ручаться»:
+          // cmd.exe сообщает каталог, но о командах молчит, а внутри WSL
+          // оболочку выбирает не Заря. См. @shared/shellIntegration.
+          integration: integrationGuaranteed(res.profile?.integration ?? 'none')
         }
       }
     }

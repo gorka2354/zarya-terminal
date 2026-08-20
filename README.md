@@ -453,8 +453,8 @@ Details: [docs/shell-integration.md](docs/shell-integration.md).
 
 ## Tests
 
-Numbers as of 0.7.7: **1241 unit checks**
-(plus 6 skipped on this platform) across 89 files and **122 end-to-end runs**
+Numbers as of 0.7.7: **1260 unit checks**
+(plus 6 skipped on this platform) across 91 files and **139 end-to-end runs**
 that drive the real application.
 
 **Unit** (`tests/`, vitest) — the pure logic where a silent mistake costs the most:
@@ -465,14 +465,19 @@ shell-profile validation, and the completeness of both language dictionaries.
 
 **End-to-end** (`scripts/*.mjs`, Playwright driving Electron) — the real app in a
 throwaway profile, never touching your sessions or settings — and offscreen, so a run
-never steals focus while you work. Panes (140 checks), the language switch across every
+never steals focus while you work — with one deliberate exception: the last part of the
+window-memory run shows a real window, because a window parked off-screen is exactly
+what Zarya refuses to remember, so the round trip cannot be proven any other way.
+Panes (140 checks), the language switch across every
 screen (10), download progress and the tool clock (16), the agent engines on a
 protocol-accurate fake driver (21), the model picker (41), the update page (30), menus
 (27), key badges (9), command history and its off switch (13), who is waiting for you
 and when Zarya may call (11), the floor under autopilot (26), the health of the agent's
 MCP servers (27), the skills tab (49), writing skill state into Claude Code's own
 settings on a redirected home (14), the usage counter across restarts (12), pane
-signals (36), and the first-run screen (18). Plus `npm run perf`, which measures drag,
+signals (36), the first-run screen (19), the working directory a pane reports in
+cmd.exe and WSL (12), and the window's memory of its own size and place (11). Plus
+`npm run perf`, which measures drag,
 streaming and gutter latency against fixed budgets.
 
 ```bash

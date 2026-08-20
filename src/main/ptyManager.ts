@@ -7,6 +7,7 @@ import { homedir } from 'os'
 import { join } from 'path'
 import * as pty from '@lydell/node-pty'
 import { CH } from '@shared/ipc'
+import { cmdPrompt, wslIntegrationEnv } from '@shared/shellIntegration'
 import type { PtySpawnRequest, PtySpawnResult, ShellProfile } from '@shared/types'
 import { builtinResourcesDir } from './workflowStore'
 
@@ -72,6 +73,14 @@ export class PtyManager {
         } else {
           args.push('-i')
         }
+      } else if (profile.integration === 'cmd') {
+        // У Командной строки нет ни rc-файла, ни хуков — только приглашение.
+        env.PROMPT = cmdPrompt(env.PROMPT)
+      } else if (profile.integration === 'wsl') {
+        const script = join(siDir, 'integration.bash')
+        // Скрипт лежит на диске Windows; `WSLENV=…/p` просит систему саму
+        // перевести путь в вид, понятный внутри дистрибутива.
+        if (existsSync(script)) Object.assign(env, wslIntegrationEnv(script, env.WSLENV))
       } else if (profile.integration === 'zsh') {
         const script = join(siDir, 'integration.zsh')
         if (existsSync(script)) {

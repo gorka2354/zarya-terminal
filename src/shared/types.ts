@@ -11,7 +11,20 @@ import type { CustomSttModel } from './sttCustom'
 // Shell profiles & PTY
 // ---------------------------------------------------------------------------
 
-export type ShellIntegrationKind = 'powershell' | 'bash' | 'zsh' | 'none'
+/**
+ * Как именно оболочке рассказывают о Заре.
+ *
+ * Первые три грузят скрипт: `powershell`/`bash`/`zsh` понимают файл, который мы
+ * подсовываем при запуске. Две последние — про оболочки БЕЗ такой возможности:
+ *
+ * - `cmd` — у Командной строки нет ни rc-файла, ни хуков; единственный шов —
+ *   строка приглашения (`PROMPT`), и через неё сообщается хотя бы каталог.
+ * - `wsl` — `wsl.exe` запускает оболочку ВНУТРИ дистрибутива, аргументы до неё
+ *   не доходят; наш bash-скрипт подключается изнутри, через `PROMPT_COMMAND`.
+ *
+ * `none` — «оболочка о нас не знает»: так и остаётся, врать про неё нечем.
+ */
+export type ShellIntegrationKind = 'powershell' | 'bash' | 'zsh' | 'cmd' | 'wsl' | 'none'
 
 export interface ShellProfile {
   id: string
