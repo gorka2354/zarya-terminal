@@ -759,16 +759,6 @@ function AppearanceTab(): React.JSX.Element {
             onChange={(v) => void update({ appearance: { acrylic: v } as never })}
           />
         </Row>
-        <Row title={t('set.density')} sub="UI DENSITY">
-          <SegmentedField
-            value={a.uiDensity}
-            options={[
-              { value: 'cozy', label: t('set.densityCozy') },
-              { value: 'compact', label: t('set.densityCompact') }
-            ]}
-            onChange={(v) => void update({ appearance: { uiDensity: v } as never })}
-          />
-        </Row>
       </section>
     </>
   )

@@ -1,5 +1,6 @@
 import { attentionOf, useAiStore } from './aiStore'
 import { t } from '@/lib/i18n'
+import { useSessionsStore } from '@/state/sessionsStore'
 
 /**
  * Позвать человека, когда агент встал и ждёт решения.
@@ -18,6 +19,21 @@ import { t } from '@/lib/i18n'
  *    когда он появился, а не каждую перерисовку.
  * 3. Только по фактическим гейтам (attentionOf), без догадок по выводу.
  */
+
+/**
+ * Имя ПАНЕЛИ, а не первые слова разговора.
+ *
+ * `conv.title` — это `deriveTitle()` от первого запроса человека («почини
+ * сборку на windows, там падает пост…»). В уведомлении оно звучит хуже всего:
+ * человек читает его вдали от машины, свериться с экраном не может, а панели
+ * он знает по вкладкам. Главный процесс для инструментов агента давно берёт имя
+ * у панели и объясняет почему — «человек обращается к тому, что написано на
+ * вкладке». Здесь то же правило.
+ */
+function paneName(conv: { sessionId?: string; title: string }): string {
+  const s = conv.sessionId ? useSessionsStore.getState().sessions[conv.sessionId] : undefined
+  return s?.title || conv.title
+}
 
 /** Что мы уже отзвонили: id беседы → id гейта, о котором звали. */
 const called = new Map<string, string>()
@@ -53,9 +69,13 @@ export function installWaitingCall(): () => void {
         // Имя панели и что именно спрашивают: «Заря ждёт» без подробностей
         // заставляет открыть окно, чтобы узнать, стоило ли открывать.
         t('notify.waitingBody', {
-          pane: conv.title,
+          pane: paneName(conv),
           tool: tool?.displayName || tool?.title || tool?.name || ''
-        })
+        }),
+        'waiting',
+        // Куда вести по щелчку. Без этого зов поднимал окно и оставлял человека
+        // на том столе, где он был, — а звали его из другого.
+        conv.sessionId
       )
     }
   })

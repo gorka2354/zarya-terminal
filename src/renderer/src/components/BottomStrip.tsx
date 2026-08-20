@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { revealNextWaiting } from '@/actions/panes'
 import { convForSession, useAiStore } from '@/features/ai/aiStore'
 import { nextGate } from '@/features/ai/gates'
 import { useUiStore } from '@/state/uiStore'
@@ -122,9 +123,22 @@ export function BottomStrip(): React.JSX.Element {
       </button>
       <div className="zy-strip-spacer" />
       {waiting > 0 && (
-        <span className="zy-strip-waiting" title={t('strip.pendingHint')}>
+        /*
+           СЧЁТЧИК — КНОПКА, а не надпись.
+           
+           Он говорит «ждут решения: 2» и до сих пор был просто текстом: человек
+           читал число и шёл искать ждущую панель глазами по столам. Нажатие
+           ведёт к первому из ждущих, повторное — к следующему по кругу
+           (см. `revealNextWaiting`).
+        */
+        <button
+          type="button"
+          className="zy-strip-waiting"
+          title={t('strip.pendingGo')}
+          onClick={() => revealNextWaiting()}
+        >
           {t('strip.pendingLower', { n: waiting })}
-        </span>
+        </button>
       )}
     </div>
   )

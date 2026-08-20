@@ -270,7 +270,9 @@ export function registerIpc(ctx: IpcContext): void {
    * означал бы, что выключение первого молча гасит второй. Настройка, которая
    * выключает не только то, что названо, — худший вид настройки.
    */
-  ipcMain.on(CH.notifyWaiting, (_e, title: string, body: string, kind?: string) => {
+  ipcMain.on(
+    CH.notifyWaiting,
+    (_e, title: string, body: string, kind?: string, sessionId?: string) => {
     const win = getWindow()
     if (!win || win.isFocused()) return
     const rules = settingsStore.get().notifications
@@ -285,9 +287,16 @@ export function registerIpc(ctx: IpcContext): void {
       if (win.isMinimized()) win.restore()
       win.show()
       win.focus()
+      /*
+       * И ПОКАЗАТЬ ТУ САМУЮ ПАНЕЛЬ. Поднять окно мало: человек оказывался на
+       * том столе, где был, а звали его из другого. Панель называет окно при
+       * отправке зова — здесь мы только возвращаем её обратно.
+       */
+      if (sessionId) win.webContents.send(CH.revealPane, sessionId)
     })
     n.show()
-  })
+    }
+  )
 
   ipcMain.handle(CH.sttState, () => ctx.stt.state())
   /**

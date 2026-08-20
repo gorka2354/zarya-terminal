@@ -754,6 +754,21 @@
   color: var(--accent);
   letter-spacing: 0.06em;
   text-transform: uppercase;
+  /* Стал кнопкой: сбрасываем оформление кнопки, но оставляем курсор — он и
+     говорит, что сюда можно нажать. Раньше это была надпись, и человек читал
+     число, а шёл искать ждущую панель глазами. */
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+}
+.zy-strip-waiting:hover {
+  color: var(--fg);
+}
+.zy-strip-waiting:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* Вложенные картинки: видно, что уедет с этим ходом, и можно снять до отправки. */

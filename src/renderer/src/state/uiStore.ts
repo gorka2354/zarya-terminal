@@ -420,5 +420,13 @@ export function forgetSessionUi(sessionId: string): void {
    * описаний» значит гадать: движок добавляет к ним схему параметров и свою
    * обвязку.
    */
-  agentContext: useUiStore.getState().agentContext
+  agentContext: useUiStore.getState().agentContext,
+  /*
+   * Открытые оверлеи — наблюдаемое состояние: сторож мёртвых нажатий
+   * (scripts/dead-clicks-test.mjs) проверяет по ним, что предложенное действие
+   * ведёт куда обещало, а не в невидимый слой.
+   */
+  aiPanelOpen: useUiStore.getState().aiPanelOpen,
+  quickOpenOpen: useUiStore.getState().quickOpenOpen,
+  settingsOpen: useUiStore.getState().settingsOpen
 })

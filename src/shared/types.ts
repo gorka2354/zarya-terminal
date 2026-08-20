@@ -221,7 +221,6 @@ export interface AppearanceSettings {
   windowOpacity: number
   /** Windows 11 acrylic background material. Needs restart. */
   acrylic: boolean
-  uiDensity: 'cozy' | 'compact'
 }
 
 export interface TerminalSettings {

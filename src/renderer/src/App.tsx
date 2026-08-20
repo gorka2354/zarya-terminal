@@ -1,5 +1,6 @@
 import { installKeyRouter } from '@/features/ai/keyRouter'
 import { installWaitingCall } from '@/features/ai/waitingCall'
+import { revealPane } from '@/actions/panes'
 import { installLongCommandCall } from '@/terminal/longCommandCall'
 import { t } from '@/lib/i18n'
 import { useEffect, useRef, useState } from 'react'
@@ -49,6 +50,13 @@ export default function App(): React.JSX.Element {
   useEffect(() => installKeyRouter(), [])
   // Зов к панели, которая встала: только когда окно не в фокусе (см. модуль).
   useEffect(() => installWaitingCall(), [])
+  /*
+   * Щелчок по системному уведомлению ведёт К ТОЙ САМОЙ ПАНЕЛИ.
+   *
+   * Главный процесс поднимает окно, а какую панель показать — знает только
+   * оно: столы, разворот и фокус живут здесь.
+   */
+  useEffect(() => window.zarya.app.onRevealPane?.((sid) => revealPane(sid)), [])
   // Зов о законченной долгой команде — по тем же правилам, что и зов агента.
   useEffect(() => installLongCommandCall(), [])
   const [booted, setBooted] = useState(false)

@@ -25,3 +25,14 @@ export function setIdeMode(on: boolean): void {
 export function toggleIdeMode(): void {
   setIdeMode(!getSettings().ideMode)
 }
+
+/*
+ * Прогону: включить/выключить надстройку напрямую.
+ *
+ * Нужен сторожу мёртвых нажатий: он проверяет КАЖДОЕ действие при выключенном
+ * слое, а одно из них слой включает намеренно (быстрое открытие файла). Без
+ * сброса между действиями все следующие проверялись бы уже во включённом слое,
+ * то есть ни в чём.
+ */
+;(window as unknown as { __zaryaSetIde?: (on: boolean) => void }).__zaryaSetIde = (on) =>
+  setIdeMode(on)

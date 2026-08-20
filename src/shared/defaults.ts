@@ -18,6 +18,10 @@ export const DEFAULT_KEYBINDINGS: Record<string, string> = {
   'terminal.split-right': 'Ctrl+Shift+D',
   'terminal.split-down': 'Ctrl+Shift+S',
   'terminal.close-pane': 'Ctrl+Shift+X',
+  // К ждущему решения — по кругу. Соседние Alt+стрелки ходят по панелям
+  // подряд; этот аккорд ведёт туда, где стоит работа.
+  'agent.focus-waiting': 'Alt+ArrowDown',
+  'terminal.maximize-pane': 'Ctrl+Alt+Z',
   'terminal.focus-next-pane': 'Alt+ArrowRight',
   'terminal.focus-prev-pane': 'Alt+ArrowLeft',
   'terminal.clear': 'Ctrl+Shift+K',
@@ -44,8 +48,7 @@ export const DEFAULT_SETTINGS: Settings = {
     cursorBlink: true,
     terminalPadding: 14,
     windowOpacity: 1,
-    acrylic: false,
-    uiDensity: 'cozy'
+    acrylic: false
   },
   terminal: {
     scrollback: 10000,

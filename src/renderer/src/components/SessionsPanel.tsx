@@ -1,7 +1,7 @@
 import { PANE_DRAG_CWD, PANE_DRAG_SESSION } from '@shared/types'
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import type { SessionMeta, TabState } from '@shared/types'
-import { closePaneAsking, closeTabAsking, setPaneMaximized } from '@/actions/panes'
+import { closePaneAsking, closeTabAsking, revealConversation, setPaneMaximized } from '@/actions/panes'
 import { forgetProject, openFolderAsPane, openFolderAsTab, openProject } from '@/actions/projects'
 import { deskTitle } from '@shared/deskTitle'
 import { t, useLang } from '@/lib/i18n'
@@ -11,7 +11,7 @@ import { fuzzyFilter } from '@/lib/fuzzy'
 import { useAiStore, attentionOf, awaitingNow, waitingSince } from '@/features/ai/aiStore'
 import { focusPane } from '@/terminal/paneFocus'
 import { listLeaves, useSessionsStore } from '@/state/sessionsStore'
-import { useSettingsStore } from '@/state/settingsStore'
+import { getSettings, useSettingsStore } from '@/state/settingsStore'
 import { useUiStore } from '@/state/uiStore'
 import { useContextMenu, type MenuItem } from './ContextMenu'
 import { Icon, ShellGlyph } from './Icon'
@@ -53,9 +53,21 @@ const crewStatusStyle: React.CSSProperties = {
   color: 'var(--fg-faint)'
 }
 
+/**
+ * Перейти к агенту из строки сайдбара.
+ *
+ * Прежде здесь открывалась панель ИИ (`aiPanelOpen`) — а она рисуется ТОЛЬКО
+ * под IDE-надстройкой, выключенной по умолчанию. То есть щелчок по
+ * пульсирующей строке «ждёт вас · 4 мин» при обычных настройках не делал
+ * ничего: ни перехода, ни отклика, ни объяснения.
+ *
+ * Ведём туда, где решение и принимается, — в саму панель: нужный стол, фокус в
+ * строке ввода, лента этой беседы. Панель ИИ оставляем включённой для тех, у
+ * кого IDE есть: там разговор живёт сбоку и это по-прежнему верно.
+ */
 function openCrewMember(conversationId: string): void {
-  useUiStore.getState().set({ aiPanelOpen: true })
-  useAiStore.getState().setActiveConversation(conversationId)
+  if (getSettings().ideMode) useUiStore.getState().set({ aiPanelOpen: true })
+  revealConversation(conversationId)
 }
 
 /**

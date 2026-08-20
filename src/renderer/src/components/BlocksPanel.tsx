@@ -9,6 +9,24 @@ import { aiExplainBlock } from '@/features/ai/aiBridge'
 import { Icon } from './Icon'
 
 /**
+ * ПУСТОЙ СПИСОК — ОДИН НА ВСЕХ, и это не микрооптимизация.
+ *
+ * Селектор здесь возвращал `[]` литералом: новый массив на КАЖДЫЙ вызов. Стор
+ * сравнивает результат по ссылке, ссылка всегда новая — и подписка будила
+ * перерисовку, которая будила подписку. React обрывал это ошибкой #185
+ * («Maximum update depth exceeded») и снимал ВСЁ дерево: окно становилось
+ * пустым, и вернуть его можно было только перезапуском.
+ *
+ * Дотянуться до этого было проще некуда: действие «Панель блоков» из палитры
+ * при настройках по умолчанию, когда блоков в панели ещё нет. Соседний
+ * MissionFeed эту же грабли обошёл константой (`NO_BLOCKS`) — здесь её забыли.
+ *
+ * Нашёл сторож мёртвых нажатий (scripts/dead-clicks-test.mjs): он проверяет,
+ * что окно живо после каждого действия реестра.
+ */
+const NO_BLOCKS: BlockRecord[] = []
+
+/**
  * Command blocks of the active session as cards (Warp-style):
  * click to scroll, copy command/output, re-run, ask AI about a failure.
  */
@@ -20,7 +38,7 @@ export function BlocksPanel(): React.JSX.Element {
   const tabs = useSessionsStore((s) => s.tabs)
   const activeTabId = useSessionsStore((s) => s.activeTabId)
   const sessionId = tabs.find((t) => t.id === activeTabId)?.activeSessionId ?? null
-  const blocks = useBlocksStore((s) => (sessionId ? (s.bySession[sessionId] ?? []) : []))
+  const blocks = useBlocksStore((s) => (sessionId ? (s.bySession[sessionId] ?? NO_BLOCKS) : NO_BLOCKS))
   const toast = useUiStore((s) => s.toast)
 
   const rerun = (b: BlockRecord): void => {
@@ -72,10 +90,11 @@ export function BlocksPanel(): React.JSX.Element {
       </div>
       <div className="zy-sidebar-body">
         {!blocks.length && (
-          <div className="zy-empty">
-            {t('blocks.empty')}
-            integration — PowerShell/bash/zsh).
-          </div>
+          // Хвост английского предложения жил тут голым текстом в JSX —
+          // остаток комментария, который когда-то не убрали. В русском окне
+          // пустая панель читалась как «Блоки появятся здесь. integration —
+          // PowerShell/bash/zsh).»
+          <div className="zy-empty">{t('blocks.empty')}</div>
         )}
         {[...blocks].reverse().map((b) => {
           const badge = exitBadge(b)

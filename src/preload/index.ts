@@ -305,8 +305,15 @@ const api = {
   },
   app: {
     /** Позвать человека: агент встал, а окно не в фокусе. */
-    notifyWaiting: (title: string, body: string, kind?: 'waiting' | 'done') =>
-      ipcRenderer.send(CH.notifyWaiting, title, body, kind ?? 'waiting'),
+    notifyWaiting: (
+      title: string,
+      body: string,
+      kind?: 'waiting' | 'done',
+      sessionId?: string
+    ) => ipcRenderer.send(CH.notifyWaiting, title, body, kind ?? 'waiting', sessionId),
+    /** Главный процесс просит показать панель — это клик по уведомлению. */
+    onRevealPane: (cb: (sessionId: string) => void) =>
+      on(CH.revealPane, (sessionId: string) => cb(sessionId)),
     info: () => ipcRenderer.invoke(CH.appInfo),
     windowCommand: (cmd: WindowCommand) => ipcRenderer.send(CH.windowCommand, cmd),
     onMaximized: (cb: (maximized: boolean) => void) => on(CH.windowMaximized, cb),

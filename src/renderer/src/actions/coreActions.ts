@@ -1,12 +1,18 @@
 import { registerActions } from '@/lib/actionRegistry'
 import { onLangChange, t } from '@/lib/i18n'
-import { closePaneAsking, closeTabAsking } from '@/actions/panes'
+import {
+  closePaneAsking,
+  closeTabAsking,
+  revealNextWaiting,
+  toggleMaximizePane
+} from '@/actions/panes'
+import { askText } from '@/components/AskText'
 import { openFolderAsPane, openFolderAsTab } from '@/actions/projects'
 import { useBlocksStore } from '@/state/blocksStore'
 import { listLeaves, useSessionsStore } from '@/state/sessionsStore'
 import { getSettings, useSettingsStore } from '@/state/settingsStore'
 import { activeAgentCaps, isRaw, setRaw, useUiStore } from '@/state/uiStore'
-import { convForSession, useAiStore } from '@/features/ai/aiStore'
+import { attentionOf, convForSession, useAiStore } from '@/features/ai/aiStore'
 import { getTerminal } from '@/terminal/terminalRegistry'
 import { aiOpenCommandBar, aiOpenPanel } from '@/features/ai/aiBridge'
 import { setIdeMode, toggleIdeMode } from '@/features/ide/ideMode'
@@ -60,7 +66,21 @@ export function registerCoreActions(): void {
       id: 'app.quick-open',
       title: t('act.quickOpen'),
       category: t('act.cat.app'),
-      run: () => ui.set({ quickOpenOpen: true })
+      /*
+       * СНАЧАЛА СЛОЙ, ПОТОМ ПОИСК ФАЙЛА.
+       *
+       * Редактор рисуется только под надстройкой IDE, выключенной по
+       * умолчанию, — и Ctrl+P честно находил файл, клал его в стор и не
+       * показывал НИЧЕГО: ни редактора, ни объяснения. Второй раз человек это
+       * пробует, чтобы убедиться, что не промахнулся; третьего раза не бывает.
+       *
+       * Жест однозначен: «открой мне файл». Поэтому включаем слой, как это уже
+       * делает соседнее `app.toggle-ai-panel`, — а не отказываем молча.
+       */
+      run: () => {
+        if (!getSettings().ideMode) setIdeMode(true)
+        ui.set({ quickOpenOpen: true })
+      }
     },
     {
       id: 'app.settings',
@@ -286,6 +306,65 @@ export function registerCoreActions(): void {
       run: () => {
         const id = activeSessionId()
         if (id) void closePaneAsking(id)
+      }
+    },
+    /*
+     * К ТОМУ, КТО ЖДЁТ. Раньше такого действия не было вовсе: значит его не
+     * было ни в палитре, ни на экране клавиш, и назначить аккорд было не на
+     * что. При четырёх панелях гейт находили глазами по столам.
+     */
+    {
+      id: 'agent.focus-waiting',
+      title: t('act.focusWaiting'),
+      category: t('act.cat.agent'),
+      // Нечего показывать — действия нет: палитра не должна предлагать переход
+      // туда, где никто не ждёт.
+      enabled: () => useAiStore.getState().conversations.some((c) => attentionOf(c) === 'waiting'),
+      run: () => void revealNextWaiting()
+    },
+    /*
+     * РАЗВЕРНУТЬ, ВЫНЕСТИ, ПЕРЕИМЕНОВАТЬ — были только мышью.
+     *
+     * Функции существовали давно, но жили в контекстном меню и в кнопке шапки;
+     * в реестре их не было, поэтому на экране клавиш их нельзя было даже
+     * назначить. Разворот при этом — самое частое движение в сетке 2×2.
+     */
+    {
+      id: 'terminal.maximize-pane',
+      title: t('act.maximizePane'),
+      category: t('act.cat.terminal'),
+      run: () => {
+        const id = activeSessionId()
+        if (id) toggleMaximizePane(id)
+      }
+    },
+    {
+      id: 'terminal.detach-pane',
+      title: t('act.detachPane'),
+      category: t('act.cat.terminal'),
+      // Одна панель на столе — выносить нечего: стол просто сменит номер.
+      enabled: () => {
+        const st = useSessionsStore.getState()
+        const tab = st.tabs.find((x) => x.id === st.activeTabId)
+        return !!tab && listLeaves(tab.layout).length > 1
+      },
+      run: () => {
+        const id = activeSessionId()
+        if (id) useSessionsStore.getState().detachPane(id)
+      }
+    },
+    {
+      id: 'terminal.rename-pane',
+      title: t('act.renamePane'),
+      category: t('act.cat.terminal'),
+      run: async () => {
+        const id = activeSessionId()
+        if (!id) return
+        const st = useSessionsStore.getState()
+        // Тот же вопрос, что и по двойному клику в сайдбаре: одно окно, одна
+        // подпись — иначе переименование выглядело бы двумя разными вещами.
+        const name = await askText(t('common.sessionName'), st.sessions[id]?.title ?? '')
+        if (name !== null) void st.renameSession(id, name)
       }
     },
     {

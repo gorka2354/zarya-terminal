@@ -1,4 +1,5 @@
-import { useAiStore } from '@/features/ai/aiStore'
+import { attentionOf, useAiStore } from '@/features/ai/aiStore'
+import { focusPane } from '@/terminal/paneFocus'
 import { nextGate } from '@/features/ai/gates'
 import { listLeaves, useSessionsStore } from '@/state/sessionsStore'
 import { paneDraft } from '@/state/paneDrafts'
@@ -164,6 +165,65 @@ export function setPaneMaximized(sessionId: string, on: boolean): void {
   }
   store.setActiveSession(sessionId)
   setMaximized(tab.id, sessionId)
+}
+
+/**
+ * ПОКАЗАТЬ ПАНЕЛЬ ЧЕЛОВЕКУ — один путь на все четыре двери.
+ *
+ * ПОВОД. К агенту, который ждёт решения, не вело НИЧЕГО. Счётчик «ждут решения»
+ * в нижней полосе был просто текстом; строка в разделе «Агенты» открывала
+ * панель ИИ, которой при выключенном IDE не существует (то есть при настройках
+ * по умолчанию клик не делал ровно ничего); клик по системному уведомлению
+ * поднимал окно, но оставлял человека на том столе, где он был; действия
+ * «перейти к ждущему» не было в реестре вовсе. При четырёх панелях каждый гейт
+ * превращался в поиск пульсирующей рамки глазами по столам.
+ *
+ * Кирпичи всё это время лежали готовыми: `setActiveSession` сам находит стол
+ * панели, переключает вкладку и переносит на неё разворот соседа, а `focusPane`
+ * ставит курсор туда, где Enter одобряет гейт. Не хватало одной функции,
+ * которую можно позвать из четырёх мест, — и одинакового поведения у всех
+ * четырёх.
+ */
+export function revealPane(sessionId: string): void {
+  const store = useSessionsStore.getState()
+  if (!store.sessions[sessionId]) return
+  store.setActiveSession(sessionId)
+  focusPane(sessionId)
+}
+
+/**
+ * То же по БЕСЕДЕ: сайдбар и уведомление знают агента, а не панель.
+ *
+ * Кроме показа панели переводит на эту беседу и ленту: у панели их может быть
+ * несколько, и показать панель, оставив в ленте прошлый разговор, значило бы
+ * привести человека почти туда.
+ */
+export function revealConversation(convId: string): void {
+  const conv = useAiStore.getState().conversations.find((c) => c.id === convId)
+  if (!conv) return
+  useAiStore.getState().setActiveConversation(convId)
+  if (conv.sessionId) revealPane(conv.sessionId)
+}
+
+/**
+ * Следующий из тех, кто ждёт решения, — по кругу.
+ *
+ * По кругу, а не «первый попавшийся»: ждущих бывает несколько, и человек,
+ * нажавший клавишу дважды, должен попасть ко второму, а не топтаться на первом.
+ * Порядок — тот же, что в сайдбаре (порядок бесед), чтобы обход совпадал с тем,
+ * что человек видит списком.
+ *
+ * Возвращает id беседы, к которой перешли, или null — прогонам и вызывающему
+ * коду нужно отличать «перешли» от «ждать некого».
+ */
+export function revealNextWaiting(): string | null {
+  const st = useAiStore.getState()
+  const waiting = st.conversations.filter((c) => attentionOf(c) === 'waiting' && c.sessionId)
+  if (!waiting.length) return null
+  const at = waiting.findIndex((c) => c.id === st.activeId)
+  const next = waiting[(at + 1) % waiting.length]
+  revealConversation(next.id)
+  return next.id
 }
 
 /** Развёрнута ли панель своей вкладки — для строк сайдбара и шапки панели. */

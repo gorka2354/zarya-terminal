@@ -379,7 +379,13 @@ export interface ZaryaApi {
      * `waiting` — агент ждёт решения, `done` — долгая команда закончилась.
      * Один гейт на оба означал бы, что выключение первого гасит и второй.
      */
-    notifyWaiting(title: string, body: string, kind?: 'waiting' | 'done'): void
+    notifyWaiting(
+      title: string,
+      body: string,
+      kind?: 'waiting' | 'done',
+      sessionId?: string
+    ): void
+    onRevealPane(cb: (sessionId: string) => void): () => void
     info(): Promise<AppInfo>
     windowCommand(cmd: WindowCommand): void
     onMaximized(cb: (maximized: boolean) => void): Unsub

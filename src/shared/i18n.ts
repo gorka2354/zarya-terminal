@@ -695,6 +695,7 @@ export const RU: Dict = {
   'search.next': 'Далее (Enter)',
   'search.close': 'Закрыть (Esc)',
   'usage.planLimits': 'Лимиты подписки',
+  'strip.pendingGo': 'Перейти к тому, кто ждёт решения (ещё раз — к следующему)',
   'strip.pendingHint':
     'Панели, где агент ждёт вашего решения. Клавишами отвечает только та, что в фокусе',
   'strip.pendingLower': 'ждут решения: {n}',
@@ -1146,8 +1147,10 @@ export const RU: Dict = {
   'drv.kimiMissing': 'Kimi CLI не найден. Установи Kimi Code CLI (`kimi`) и выполни `kimi /login`.',
   'drv.qwenMissing':
     'Qwen Code не найден. Установи `npm i -g @qwen-code/qwen-code`, затем войди в аккаунт.',
-  'main.err.noAnthropicKey': 'Не задан API-ключ Anthropic (Settings → AI).',
-  'main.err.noOpenaiKey': 'Не задан API-ключ OpenAI (Settings → AI).',
+  'main.err.noAnthropicKey':
+    'Не задан API-ключ Anthropic. Он живёт в надстройке IDE: включите её внизу слева в настройках, затем вкладка «AI-агент».',
+  'main.err.noOpenaiKey':
+    'Не задан API-ключ OpenAI. Он живёт в надстройке IDE: включите её внизу слева в настройках, затем вкладка «AI-агент».',
   'main.err.noBaseUrl': 'Для OpenAI-compatible провайдера нужен Base URL.',
   'main.err.noGit': 'git не найден в доверенных путях',
   // --- базовый слой
@@ -1422,6 +1425,10 @@ export const RU: Dict = {
   'act.splitFolder': 'Новая панель в папке…',
   'act.splitFolderKw': 'split folder проект панель папка другой',
   'act.splitDown': 'Разделить вниз',
+  'act.focusWaiting': 'Перейти к тому, кто ждёт решения',
+  'act.maximizePane': 'Развернуть панель',
+  'act.detachPane': 'Вынести панель на свой стол',
+  'act.renamePane': 'Переименовать панель',
   'act.closePane': 'Закрыть панель',
   'act.focusNext': 'Фокус: следующая панель',
   'act.focusPrev': 'Фокус: предыдущая панель',
@@ -1477,9 +1484,6 @@ export const RU: Dict = {
   'set.opacity': 'Прозрачность окна',
   'set.acrylic': 'Акриловый эффект (Windows 11)',
   'set.acrylicDesc': 'Полупрозрачный размытый фон окна. Нужен перезапуск приложения.',
-  'set.density': 'Плотность интерфейса',
-  'set.densityCozy': 'Уютно',
-  'set.densityCompact': 'Компактно',
   'set.auto': 'Автоматически',
   'set.defaultProfile': 'Профиль по умолчанию',
   'set.defaultProfileDesc': 'Какая оболочка открывается для новых вкладок.',
@@ -2337,6 +2341,7 @@ export const EN: Dict = {
   'search.next': 'Next (Enter)',
   'search.close': 'Close (Esc)',
   'usage.planLimits': 'Plan limits',
+  'strip.pendingGo': 'Go to the agent waiting on you (again — the next one)',
   'strip.pendingHint':
     'Panes where the agent is waiting for you. Only the focused one answers to keys',
   'strip.pendingLower': 'awaiting decision: {n}',
@@ -2456,9 +2461,6 @@ export const EN: Dict = {
   'set.opacity': 'Window opacity',
   'set.acrylic': 'Acrylic effect (Windows 11)',
   'set.acrylicDesc': 'A translucent blurred window background. Needs a restart.',
-  'set.density': 'UI density',
-  'set.densityCozy': 'Cozy',
-  'set.densityCompact': 'Compact',
   'set.auto': 'Automatic',
   'set.defaultProfile': 'Default profile',
   'set.defaultProfileDesc': 'Which shell new tabs open with.',
@@ -2699,6 +2701,10 @@ export const EN: Dict = {
   'act.splitFolder': 'New pane in folder…',
   'act.splitFolderKw': 'split folder project pane another',
   'act.splitDown': 'Split down',
+  'act.focusWaiting': 'Go to the agent waiting on you',
+  'act.maximizePane': 'Maximize pane',
+  'act.detachPane': 'Move pane to its own desk',
+  'act.renamePane': 'Rename pane',
   'act.closePane': 'Close pane',
   'act.focusNext': 'Focus: next pane',
   'act.focusPrev': 'Focus: previous pane',
@@ -3313,8 +3319,10 @@ export const EN: Dict = {
   'drv.geminiMissing': 'Gemini CLI not found. Install `npm i -g @google/gemini-cli`, then sign in.',
   'drv.kimiMissing': 'Kimi CLI not found. Install Kimi Code CLI (`kimi`) and run `kimi /login`.',
   'drv.qwenMissing': 'Qwen Code not found. Install `npm i -g @qwen-code/qwen-code`, then sign in.',
-  'main.err.noAnthropicKey': 'No Anthropic API key is set (Settings → AI).',
-  'main.err.noOpenaiKey': 'No OpenAI API key is set (Settings → AI).',
+  'main.err.noAnthropicKey':
+    'No Anthropic API key is set. It lives in the IDE layer: switch it on at the bottom left of Settings, then open the “AI agent” tab.',
+  'main.err.noOpenaiKey':
+    'No OpenAI API key is set. It lives in the IDE layer: switch it on at the bottom left of Settings, then open the “AI agent” tab.',
   'main.err.noBaseUrl': 'An OpenAI-compatible provider needs a Base URL.',
   'main.err.noGit': 'git was not found in the trusted paths',
   'activity.workflows': 'Workflows (IDE)',
