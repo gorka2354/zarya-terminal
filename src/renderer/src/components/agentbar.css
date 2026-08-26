@@ -748,6 +748,70 @@
 .zy-strip-spacer {
   flex: 1;
 }
+/*
+ * Заполнение контекста активной панели — рядом с расходом подписки.
+ *
+ * Соседство рискованное: два показателя в проценте на одной полосе читаются как
+ * каша, если выглядят одинаково. Поэтому форма у них разная — расход подписки
+ * набран отдельными ячейками цветом `--accent-2`, контекст — сплошная серая
+ * шкала. Тише соседа намеренно: лимит подписки считается на неделю, а контекст
+ * кончается к концу разговора.
+ */
+.zy-strip-ctx {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  cursor: default;
+}
+.zy-strip-ctx-track {
+  width: 26px;
+  height: 5px;
+  background: var(--border);
+  overflow: hidden;
+}
+.zy-strip-ctx-fill {
+  display: block;
+  height: 100%;
+  background: var(--fg-dim);
+  transition: width 0.2s ease;
+}
+.zy-strip-ctx-val {
+  font-family: var(--font-tech);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: var(--fg-dim);
+}
+/*
+ * Почти полное окно — ЗДЕСЬ ЭТО ДЕРЖИТСЯ НА ФОРМЕ, А НЕ НА ЦВЕТЕ.
+ *
+ * В теме `--warn` и `--accent-2` — один и тот же золотой (#e0b15a), а
+ * `--accent-2` носит расход подписки в десяти пикселях левее. Покрасить порог
+ * «как положено» значило бы поставить рядом два одинаково золотых числа: на
+ * снимке они читались как один показатель, разорванный пополам. Ровно та каша,
+ * из-за которой контекст когда-то убрали с этой полосы.
+ *
+ * Поэтому здесь: пунктирная обводка, знак «!» и число в полную яркость вместо
+ * приглушённой. Цветное предупреждение живёт в САМОЙ панели — там оно одно и
+ * спорить ему не с чем.
+ */
+.zy-strip-ctx--full {
+  padding: 1px 5px;
+  border: 1px dashed var(--warn);
+  border-radius: var(--radius-sm);
+}
+.zy-strip-ctx--full .zy-strip-ctx-fill {
+  background: var(--fg);
+}
+.zy-strip-ctx--full .zy-strip-ctx-val,
+.zy-strip-ctx-warn {
+  color: var(--fg);
+}
+.zy-strip-ctx-warn {
+  font-family: var(--font-tech);
+  font-size: 12px;
+  line-height: 1;
+}
 /* Ждущая панель может быть той, куда вы сейчас не смотрите: невидимый вопрос —
    это агент, вставший навсегда. */
 .zy-strip-waiting {

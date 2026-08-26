@@ -45,16 +45,31 @@ const app = await electron.launch({
 })
 
 const conv = (page, id) => page.evaluate((x) => window.__zaryaConvById?.(x), id)
+/**
+ * Показатель в НИЖНЕЙ ПОЛОСЕ — там он теперь и живёт, рядом с лимитами
+ * подписки. В ряду чипов над строкой ввода он отнимал место у самой строки:
+ * при сетке 2×2 органы управления упирались в поле ввода.
+ */
 const gauge = (page) =>
   page.evaluate(() => {
-    const el = document.querySelector('.zy-agentbar-ctx')
+    const el = document.querySelector('.zy-strip-ctx')
     if (!el) return null
     return {
       text: el.textContent?.trim() ?? '',
       title: el.getAttribute('title') ?? '',
-      width: el.querySelector('.zy-agentbar-ctx-fill')?.style?.width ?? null,
+      width: el.querySelector('.zy-strip-ctx-fill')?.style?.width ?? null,
       full: el.className.includes('--full')
     }
+  })
+/**
+ * Предупреждение в САМОЙ панели. Ниже порога его нет вовсе; с 80% заполнение
+ * перестаёт быть показателем и становится предупреждением — прочитать о нём
+ * надо там, куда человек смотрит, и именно про ЭТУ панель, а не про активную.
+ */
+const paneWarn = (page) =>
+  page.evaluate(() => {
+    const els = [...document.querySelectorAll('.zy-agentbar-ctx')]
+    return els.map((el) => el.textContent?.trim() ?? '')
   })
 
 try {
@@ -62,8 +77,11 @@ try {
   await page.waitForLoadState('domcontentloaded')
   await page.waitForTimeout(2500)
 
-  console.log('\n[1] Показатель виден БЕЗ единого нажатия')
+  console.log('\n[1] Показатель виден БЕЗ единого нажатия — в нижней полосе')
   ok('до первого хода показывать нечего', (await gauge(page)) === null)
+  // Панель, в которой идёт первый разговор: полоса показывает АКТИВНУЮ, и
+  // ниже проверяется, что она идёт за фокусом туда и обратно.
+  const sid1 = await page.evaluate(() => window.__zaryaDumpSessions?.()?.activeSessionId)
   const a = await page.evaluate(() => window.__zaryaStartAgent?.('codex', 'привет'))
   await page.waitForTimeout(2500)
   const g1 = await gauge(page)
@@ -71,6 +89,12 @@ try {
   ok('после хода показатель на месте', !!g1, g1)
   ok('и называет число, а не только рисует полосу', /\d+%/.test(g1?.text ?? ''), g1?.text)
   ok('полоса заполнена на то же число', g1?.width === '37%', g1?.width)
+  /*
+   * Ряд чипов панели — органы управления: каждый отвечает на вопрос «что
+   * случится с этим ходом». Показателю среди них не место, пока он не стал
+   * предупреждением (проверка [4]).
+   */
+  ok('в самой панели чипа нет — ряд чипов разгружен', (await paneWarn(page)).length === 0)
 
   console.log('\n[2] Числа — движка, а не наши')
   /*
@@ -111,14 +135,26 @@ try {
   const active = await page.evaluate(() => window.__zaryaDumpSessions?.()?.activeSessionId)
   ok('фокус действительно на свежей панели', active === sid3, { active, sid3 })
   /*
-   * Считаем чипы, а не смотрим на первый попавшийся: панелей на экране
-   * несколько, у каждой свой бар, и `querySelector` возвращал чип соседа. Ходы
-   * были в двух панелях из трёх — значит и чипов должно быть ровно два.
+   * ГЛАВНАЯ ОПАСНОСТЬ ПЕРЕЕЗДА. Полоса одна на окно, а разговоров в нём столько
+   * же, сколько панелей: она обязана показывать ЧИСЛО АКТИВНОЙ панели и пустеть
+   * на свежей. Показать здесь соседское число — ровно то враньё, ради которого
+   * контекст в прошлом выпуске переехал в беседу.
    */
-  const chips = await page.evaluate(() => document.querySelectorAll('.zy-agentbar-ctx').length)
   const panes = await page.evaluate(() => document.querySelectorAll('.zy-agentbar').length)
-  note('панелей на экране:', panes, '· чипов контекста:', chips)
-  ok('чип есть только у панелей со своим ходом', chips === 2 && panes >= 3, { chips, panes })
+  const strips = await page.evaluate(() => document.querySelectorAll('.zy-strip').length)
+  note('панелей на экране:', panes, '· полос:', strips)
+  ok('полоса одна на окно, панелей больше', strips === 1 && panes >= 3, { strips, panes })
+  ok('на свежей панели полоса пуста — чужого не показывает', (await gauge(page)) === null)
+
+  console.log('\n[3b] Полоса идёт за фокусом, а не запоминает первое увиденное')
+  await page.evaluate((s) => window.__zaryaFocusPane?.(s), sid2)
+  await page.waitForTimeout(1200)
+  const back = await gauge(page)
+  note('вернулись во вторую панель:', JSON.stringify(back))
+  ok('число вернулось вместе с фокусом', /37%/.test(back?.text ?? ''), back?.text)
+  // Возвращаемся в первую: дальше проверяется её порог.
+  await page.evaluate((s) => window.__zaryaFocusPane?.(s), sid1)
+  await page.waitForTimeout(1200)
 
   console.log('\n[4] Порог «почти полно» помечен, но не только цветом')
   await page.evaluate(
@@ -136,10 +172,23 @@ try {
    * раньше. Сравниваем разметку двух состояний, стили не смотрим.
    */
   ok('у порога есть знак, а не только оттенок', /!/.test(g2?.text ?? ''), g2?.text)
+  /*
+   * И ГЛАВНОЕ ПРО ПОРОГ: предупреждение возвращается в САМУ панель.
+   *
+   * Общая полоса говорит об активной панели, а «скоро сжатие» — это про ту, где
+   * идёт разговор. С 80% чип встаёт обратно в ряд чипов: там, куда человек
+   * смотрит, и ровно у той панели, которой это грозит.
+   */
+  const warn2 = await paneWarn(page)
+  note('чипы-предупреждения в панелях:', JSON.stringify(warn2))
+  ok('на пороге предупреждение вернулось в панель', warn2.length === 1, warn2)
+  ok('и оно со знаком, а не одним оттенком', /!/.test(warn2[0] ?? ''), warn2[0])
+  ok('и называет число', /88%/.test(warn2[0] ?? ''), warn2[0])
   await page.evaluate((id) => window.__zaryaSeedContext?.(id, { pct: 40, tokens: 80000, window: 200000 }), a)
   await page.waitForTimeout(500)
   const g3 = await gauge(page)
   ok('ниже порога знака нет — разметка РАЗНАЯ', !/!/.test(g3?.text ?? ''), g3?.text)
+  ok('и панель снова разгружена', (await paneWarn(page)).length === 0)
 
   console.log('\n[5] «Агент забыл разговор» — число уходит вместе с памятью')
   /*

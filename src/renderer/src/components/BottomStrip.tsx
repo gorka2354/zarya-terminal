@@ -6,7 +6,8 @@ import { useUiStore } from '@/state/uiStore'
 import { useSessionsStore } from '@/state/sessionsStore'
 import { formatCost } from '@shared/cost'
 import { t, useLang } from '@/lib/i18n'
-import { FuelGauge, UsagePanel } from './AgentBar'
+import { agentStatusOf } from '@/state/uiStore'
+import { fmtTokens, FuelGauge, prettyModel, UsagePanel } from './AgentBar'
 import { Icon } from './Icon'
 import './agentbar.css'
 
@@ -18,8 +19,12 @@ import './agentbar.css'
  * и четыре одинаковых индикатора в четырёх панелях показывали бы одно и то же
  * число, отнимая место у работы.
  *
- * Что НЕ уехало: заполнение контекста беседы. Оно у каждой панели своё, и в общей
- * полосе показывало бы чужое — поэтому остаётся в панели.
+ * Что показывается ПО АКТИВНОЙ панели, а не по окну: цена разговора,
+ * заполнение контекста и подпись модели. Все три у каждой панели свои, и общего
+ * значения у них нет вовсе — полоса показывает ту панель, на которую человек
+ * смотрит, и вместе с ней меняется. Число «последнего отчитавшегося движка»
+ * здесь не показывается никогда: это ровно то враньё, ради которого контекст в
+ * прошлом выпуске переехал в беседу.
  *
  * Счётчик «ждут решения» здесь же: с четырьмя панелями гейт может висеть там,
  * куда вы сейчас не смотрите, а невидимый вопрос — это агент, вставший навсегда.
@@ -30,8 +35,8 @@ export function BottomStrip(): React.JSX.Element {
   useLang()
 
   const claudeStatus = useUiStore((s) => s.claudeStatus)
-  const agentContext = useUiStore((s) => s.agentContext)
   const agentCaps = useUiStore((s) => s.agentCaps)
+  const ultracode = useUiStore((s) => s.ultracode)
   const [usageOpen, setUsageOpen] = useState(false)
   const fuelBtnRef = useRef<HTMLButtonElement>(null)
 
@@ -45,6 +50,26 @@ export function BottomStrip(): React.JSX.Element {
   const activeConv = useAiStore((s) => convForSession(s, activeSessionId))
   const costLabel = formatCost(activeConv?.costUsd)
   const onPlan = !!claudeStatus.usage?.subscriptionType
+  /*
+   * Заполнение контекста и подпись модели — той же активной панели.
+   *
+   * Контекст стоял в ряду чипов над строкой ввода и отнимал место у неё самой:
+   * при сетке 2×2 ряд органов управления упирался в поле ввода. Здесь ему и
+   * место — рядом с лимитами подписки, среди чисел, а не среди кнопок.
+   *
+   * Модель и усилие берутся у ПАНЕЛИ (`agentStatusOf`), а не из настроек: с
+   * прошлого выпуска модель пинится по беседе, и общее значение показывало бы
+   * ту, чей ход закончился последним.
+   */
+  const convContext = activeConv?.context
+  const paneStatus = useUiStore((s) => agentStatusOf(s, activeSessionId))
+  // Движок без выбора моделей подписи не получает: чип обещал бы выбор, которого
+  // у него нет. `builtin` сюда не попадает — у Зари своя подпись в самой строке.
+  const showModel =
+    !!activeConv &&
+    activeConv.engine !== 'builtin' &&
+    !!agentCaps[activeConv.engine]?.models &&
+    (!!paneStatus.model || !!paneStatus.effort || ultracode)
 
   const showFuel = Object.values(agentCaps).some((c) => c?.usage)
   const lead = ((): { short: string; label: string; pct: number } | null => {
@@ -97,6 +122,46 @@ export function BottomStrip(): React.JSX.Element {
           )}
           <Icon name={usageOpen ? 'chevron-down' : 'chevron-up'} size={10} />
         </button>
+        {/*
+        ЗАПОЛНЕНИЕ КОНТЕКСТА АКТИВНОЙ ПАНЕЛИ.
+
+        Стоит рядом с расходом подписки, но говорит о другом, и это разделение
+        держится формой: расход — золотые ячейки лимита на весь аккаунт,
+        контекст — тонкая серая шкала одного разговора. Подсказка называет
+        числа: «контекст: 45K из 200K».
+
+        Нет своего числа — нет и чипа: пустое место честнее чужой цифры, а
+        появится она после первого же хода. Предупреждение о почти полном окне
+        остаётся ТАКЖЕ в самой панели — там, куда человек смотрит.
+      */}
+        {convContext?.pct != null && (
+          <span
+            className={`zy-strip-ctx${convContext.pct >= 80 ? ' zy-strip-ctx--full' : ''}`}
+            title={
+              convContext.tokens != null && convContext.window != null
+                ? `${t('usage.context')}: ${t('usage.tokensOf', {
+                    used: fmtTokens(convContext.tokens),
+                    total: fmtTokens(convContext.window)
+                  })}`
+                : t('usage.context')
+            }
+          >
+            <span className="zy-strip-ctx-track">
+              <span
+                className="zy-strip-ctx-fill"
+                style={{ width: `${Math.min(100, Math.max(0, convContext.pct))}%` }}
+              />
+            </span>
+            {/* Знак, а не только цвет: предупреждение обязано доходить и в
+              оттенках серого — тем же правилом, что и три глифа допуска. */}
+            {convContext.pct >= 80 && (
+              <span className="zy-strip-ctx-warn" aria-hidden="true">
+                !
+              </span>
+            )}
+            <span className="zy-strip-ctx-val">{Math.round(convContext.pct)}%</span>
+          </span>
+        )}
       </div>
       {/*
         Во сколько обошёлся разговор АКТИВНОЙ панели.
@@ -113,6 +178,28 @@ export function BottomStrip(): React.JSX.Element {
         >
           {costLabel}
         </span>
+      )}
+      {/*
+        НА ЧЁМ РАБОТАЕТ ЭТА ПАНЕЛЬ.
+
+        Подпись была задумана в строке ввода и вместе с копией топливной полосы
+        оказалась под условием, которое не выполняется никогда, — то есть её не
+        рисовалось нигде. Панель при этом держит СВОЮ модель, и посмотреть, на
+        какой именно, было негде. Нажатие ведёт в пульт, где её и меняют.
+      */}
+      {showModel && (
+        <button
+          className="zy-agentbar-fuel-model"
+          onClick={() => useUiStore.getState().set({ launchPadOpen: true })}
+          title={t('bar.engineHint')}
+        >
+          {paneStatus.model ? prettyModel(paneStatus.model) : ''}
+          {ultracode
+            ? ' · ⚡ULTRACODE'
+            : paneStatus.effort
+              ? ` · ${paneStatus.effort.toUpperCase()}`
+              : ''}
+        </button>
       )}
       <button
         className="zy-agentbar-fuel-pult"

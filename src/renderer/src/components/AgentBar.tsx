@@ -7,15 +7,7 @@ import { paneDraft, setPaneDraft } from '@/state/paneDrafts'
 import { paneHistory, pushPaneHistory } from '@/state/paneHistory'
 import { currentLang, t } from '@/lib/i18n'
 import { onBus } from '@/lib/bus'
-import { formatCost } from '@shared/cost'
-import {
-  agentStatusOf,
-  barModeOf,
-  setBarModeOf,
-  setPaneBarMode,
-  setRaw,
-  useUiStore
-} from '@/state/uiStore'
+import { barModeOf, setBarModeOf, setPaneBarMode, setRaw, useUiStore } from '@/state/uiStore'
 import { getTerminal } from '@/terminal/terminalRegistry'
 import { convForSession, useAiStore } from '@/features/ai/aiStore'
 import { interruptPane, paneIsRunning } from '@/terminal/paneSignal'
@@ -149,7 +141,7 @@ function isInteractiveCmd(cmd: string): boolean {
 }
 
 /** claude-haiku-4-5-20251001 → HAIKU 4.5 — a compact chip label. */
-function prettyModel(id: string): string {
+export function prettyModel(id: string): string {
   return id
     .replace(/^claude-/, '')
     .replace(/-\d{6,}$/, '')
@@ -188,7 +180,7 @@ function resetLabel(ts?: number): string {
 }
 
 /** Compact token count for the context readout tooltip (45 231 → "45K"). */
-function fmtTokens(n?: number): string {
+export function fmtTokens(n?: number): string {
   if (n == null) return '—'
   return n >= 1000 ? `${Math.round(n / 1000)}K` : String(n)
 }
@@ -354,9 +346,6 @@ export const AgentBar = memo(function AgentBar({
   // и агент, начавший ход в соседней панели, авто-переключал чип ЗДЕСЬ: Enter
   // уводил набранную команду терминала в модель вместо оболочки.
   const mode = useUiStore((s) => barModeOf(s, paneSessionId))
-  const claudeStatus = useUiStore((s) => s.claudeStatus)
-  const agentContext = useUiStore((s) => s.agentContext)
-  const ultracode = useUiStore((s) => s.ultracode)
   const autoApprove = useSettingsStore((s) => s.settings.ai.autoApprove)
   const agentCaps = useUiStore((s) => s.agentCaps)
   // The native engine the bar currently targets (null in shell/zarya) + its
@@ -366,12 +355,9 @@ export const AgentBar = memo(function AgentBar({
   // Начальное значение — черновик своей панели: строка могла уйти с экрана
   // (сырой режим, TUI) и вернуться, и набранное обязано вернуться вместе с ней.
   const [text, setText] = useState(() => paneDraft(paneSessionId))
-  const [usageOpen, setUsageOpen] = useState(false)
   /** Панель разрешений беседы — открывается правым щелчком по замку. */
   const [permOpen, setPermOpen] = useState(false)
   const gateBtnRef = useRef<HTMLButtonElement>(null)
-  /** Кнопка топливной строки — она же открывашка панели расхода. */
-  const fuelBtnRef = useRef<HTMLButtonElement>(null)
   const [voice, setVoice] = useState<'idle' | 'rec' | 'work' | 'load'>('idle')
   const [voiceLevel, setVoiceLevel] = useState(0)
   const [voiceNote, setVoiceNote] = useState('')
@@ -407,29 +393,7 @@ export const AgentBar = memo(function AgentBar({
     })
   }
   // The conversation belongs to the active terminal — each terminal its own chat.
-  /*
-   * Модель и усилие — СВОЕЙ панели.
-   *
-   * Топливо остаётся общим: лимит подписки один на аккаунт, сколько бы панелей
-   * ни работало. А модель и усилие у каждой свои, и общее значение показывало
-   * ту, чей ход закончился последним: панель на Opus подписывалась Sonnet, если
-   * в соседней только что отработал он.
-   *
-   * Читаем ПОСЛЕ того, как известна панель: первая версия стояла выше по файлу
-   * и валила окно на старте («Cannot access before initialization») — панелей
-   * не рисовалось вовсе.
-   */
-  const paneStatus = useUiStore((s) => agentStatusOf(s, activeSessionId))
   const activeConv = useAiStore((s) => convForSession(s, activeSessionId))
-  /*
-   * Стоимость разговора и то, чем она является.
-   *
-   * `subscriptionType` есть — человек на подписке, и сумма расчётная: тарифы
-   * API, по которым ничего не списывается. Нет — работает по своему ключу, и
-   * это счёт. Одну и ту же цифру эти два случая делают противоположной по
-   * смыслу, поэтому подпись выбирается здесь, а не «где-нибудь потом».
-   */
-  const costLabel = formatCost(activeConv?.costUsd)
   /*
    * ЗАПОЛНЕНИЕ КОНТЕКСТА — ТОЛЬКО ЭТОЙ БЕСЕДЫ, БЕЗ ПОДМЕН.
    *
@@ -438,11 +402,11 @@ export const AgentBar = memo(function AgentBar({
    * панель, и свежая, где ход ещё не шёл, показала бы соседское число как своё —
    * ровно то враньё, ради которого контекст и переехал в беседу.
    *
-   * Нет своего числа — нет и чипа. Пустое место честнее чужой цифры, а появится
-   * она после первого же хода.
+   * Само число живёт теперь в нижней полосе, рядом с лимитами (BottomStrip):
+   * ряд чипов — это органы управления, а показателю среди них тесно. Здесь
+   * остаётся только предупреждение о почти полном окне — см. чип ниже.
    */
   const convContext = activeConv?.context
-  const onPlan = !!claudeStatus.usage?.subscriptionType
   // АВТОПИЛОТ показывается по СВОЕЙ беседе: общий переключатель с несколькими
   // панелями врал бы о том, спросят ли вас.
   // Хук вызывается всегда и безусловно: под условием React рвёт порядок хуков,
@@ -640,8 +604,6 @@ ${prev}`
     if (store.activeConversation()?.id !== convId) store.setActiveConversation(convId)
     void store.send(q, { conversationId: convId, ...(side ? { side: true } : {}) })
   }
-
-
 
   // Only "busy" (queue instead of send) when the active conversation's engine
   // matches what THIS bar mode targets — not e.g. a background Zarya chat while
@@ -1570,23 +1532,6 @@ ${prev}`
 
   const isShell = mode === 'shell'
   const isAgent = activeEngine !== null // a native agent mode is selected
-  // Conditional controls driven by the engine's declared capabilities, not by
-  // `=== 'claude-code'`. An engine without usage/models hides those.
-  const showFuel = !!caps?.usage
-  const showModel = !!caps?.models
-
-  // The headline figure is whichever window is closest to running out — that is
-  // the one worth a permanent place in the bar. The others are one click away.
-  const lead = ((): { short: string; label: string; pct: number } | null => {
-    if (!showFuel) return null
-    const u = claudeStatus.usage
-    const five = u?.fiveHourPct
-    const seven = u?.sevenDayPct
-    if (five == null && seven == null) return null
-    if (seven != null && (five == null || seven > five))
-      return { short: t('usage.weekShort'), label: t('usage.weekLimit'), pct: seven }
-    return { short: t('usage.fiveShort'), label: t('usage.fiveLimit'), pct: five as number }
-  })()
 
   // SECURITY: the chip is the one place that answers «will I be asked?», so it
   // is shown in EVERY agent mode and reads the switch that actually governs the
@@ -1655,8 +1600,7 @@ ${prev}`
    * собственный глиф сделал ложь читаемой без наведения — тем более её надо
    * убрать, а не оформить.
    */
-  const gateEdits =
-    !planMode && !isBuiltinMode && editsAuto && !gateOff && caps?.editsAuto === true
+  const gateEdits = !planMode && !isBuiltinMode && editsAuto && !gateOff && caps?.editsAuto === true
   const gateTitle = isBuiltinMode
     ? gateOff
       ? t('bar.gateBuiltinOn')
@@ -1712,16 +1656,6 @@ ${prev}`
           onHover={setCmdCursor}
         />
       )}
-      {usageOpen && (
-        <UsagePanel
-          usage={showFuel ? claudeStatus.usage : undefined}
-          /* Контекст ЭТОЙ беседы, а не последнего ответившего движка: при
-             четырёх панелях общее значение показывало бы соседское. */
-          context={convContext}
-          onClose={() => setUsageOpen(false)}
-          anchor={fuelBtnRef.current}
-        />
-      )}
       {/*
         Что разрешено этой панели — там же, где замок, и по правому щелчку по
         нему. Место выбрано не для экономии: разрешения принадлежат БЕСЕДЕ, у
@@ -1735,93 +1669,14 @@ ${prev}`
           anchor={gateBtnRef.current}
         />
       )}
-      {/* One headline figure, not four readings queued on a single line. The rest
-          opens on demand — see UsagePanel. */}
-      {/* Топливомер общий на окно и живёт в нижней полосе: четыре одинаковых
-          индикатора показывали бы одно и то же число, отнимая место у работы. */}
-      {!paneSessionId && (
-        <div className="zy-agentbar-fuel">
-          <button
-            ref={fuelBtnRef}
-            className="zy-agentbar-fuel-main"
-            title={
-              lead
-                ? t('usage.leadHint', { label: lead.label, pct: Math.round(lead.pct) })
-                : t('usage.allHint')
-            }
-            aria-expanded={usageOpen}
-            onClick={() => setUsageOpen((v) => !v)}
-          >
-            <span className="zy-agentbar-fuel-icon">
-              <svg
-                width="10"
-                height="10"
-                viewBox="0 0 16 16"
-                shapeRendering="crispEdges"
-                fill="var(--accent-2)"
-              >
-                <rect x="4" y="2" width="6" height="2" />
-                <rect x="4" y="4" width="6" height="9" />
-                <rect x="10" y="5" width="3" height="2" />
-                <rect x="12" y="6" width="1" height="4" />
-              </svg>
-            </span>
-            {lead ? (
-              <>
-                <FuelGauge used={lead.pct} />
-                <span className="zy-agentbar-fuel-val">
-                  {lead.short} {Math.round(lead.pct)}%
-                </span>
-              </>
-            ) : (
-              <span className="zy-agentbar-fuel-val">
-                {t(showFuel ? 'strip.fueled' : 'strip.noLimit')}
-              </span>
-            )}
-            <Icon name={usageOpen ? 'chevron-down' : 'chevron-up'} size={10} />
-          </button>
-          <span className="zy-agentbar-fuel-spacer" />
-          {/*
-          Во сколько обошёлся ЭТОТ разговор — цифра самого движка, которую он
-          считал всегда, а мы выбрасывали.
-
-          Подпись обязательна и разная. На подписке это РАСЧЁТ по тарифам API:
-          деньги за ход не списываются, и показать сумму молча значит соврать
-          человеку о его деньгах. По своему ключу — наоборот, это счёт, который
-          он оплатит.
-        */}
-          {costLabel && (
-            <span
-              className="zy-agentbar-fuel-cost"
-              title={t(onPlan ? 'bar.costHintPlan' : 'bar.costHintApi')}
-            >
-              {costLabel}
-            </span>
-          )}
-          {showModel && (paneStatus.model || paneStatus.effort || ultracode) && (
-            <button
-              className="zy-agentbar-fuel-model"
-              onClick={openLaunchPad}
-              title={t('bar.engineHint')}
-            >
-              {paneStatus.model ? prettyModel(paneStatus.model) : ''}
-              {ultracode
-                ? ' · ⚡ULTRACODE'
-                : paneStatus.effort
-                  ? ` · ${paneStatus.effort.toUpperCase()}`
-                  : ''}
-            </button>
-          )}
-          <button
-            className="zy-agentbar-fuel-pult"
-            onClick={openLaunchPad}
-            title={t('bar.launchPad')}
-          >
-            {t('strip.console')}
-          </button>
-        </div>
-      )}
-
+      {/*
+        Топливо, цена, модель и панель расхода живут в нижней полосе окна
+        (BottomStrip). Здесь их копия стояла под условием `!paneSessionId` — и
+        не рисовалась НИ РАЗУ: строка ввода принадлежит панели и заводится
+        только с её идентификатором (TerminalPane). Вместе с копией мёртвой
+        оказалась и подпись модели, которой в полосе не было вовсе: панель
+        работала на своей модели, а посмотреть на какой — негде.
+      */}
       {pendingImages.length > 0 && (
         <div className="zy-img-chips">
           {pendingImages.map((img, i) => (
@@ -1934,25 +1789,26 @@ ${prev}`
           </button>
         )}
         {/*
-          ЗАПОЛНЕНИЕ КОНТЕКСТА — ПОСТОЯННО И В САМОЙ ПАНЕЛИ.
+          КОНТЕКСТ ЗДЕСЬ — ТОЛЬКО ПРЕДУПРЕЖДЕНИЕ, А НЕ ПОКАЗАТЕЛЬ.
 
-          У родного CLI этого нет из коробки: там либо зовёшь `/usage` руками,
-          либо собираешь себе статусную строку. Показатель был и здесь, но
-          26.07 его убрали вместе с перегруженной полосой лимитов — надпись
-          «· контекст 47%» рядом с ними читалась как каша.
+          Само число уехало в нижнюю полосу, к лимитам подписки: ряд чипов —
+          органы управления, каждый отвечает на вопрос «что случится с этим
+          ходом», а показателю среди них тесно. При четырёх панелях он отнимал
+          место у строки ввода, ради которой панель и существует.
 
-          Место другое не для красоты: полоса лимитов принадлежит ОКНУ (расход
-          подписки один на аккаунт) и живёт внизу, а заполнение контекста своё у
-          каждого разговора. Показывать его там значило бы приносить в панель
-          чужое число.
+          Но с восьмидесяти процентов это перестаёт быть показателем и
+          становится предупреждением: скоро сжатие, и оно меняет решения
+          человека — что просить, что сначала сохранить. Прочитать об этом надо
+          там, куда он смотрит, а не в общей полосе окна, где число к тому же
+          принадлежит АКТИВНОЙ панели, а предупреждать надо именно эту.
 
-          Число показываем ВСЕГДА. Сперва я включал его с половины окна, экономя
-          место, — но просьба была именно «видеть», а шкала без числа отвечает
-          «сколько-то». Рядом с ней три символа, и они стоят своего места.
+          Признаков по-прежнему два, и цвет из них второй: «!» рядом с числом и
+          пунктирная рамка чипа — предупреждение обязано доходить и в оттенках
+          серого.
         */}
-        {convContext?.pct != null && (
+        {convContext?.pct != null && convContext.pct >= 80 && (
           <span
-            className={`zy-agentbar-ctx${convContext.pct >= 80 ? ' zy-agentbar-ctx--full' : ''}`}
+            className="zy-agentbar-ctx zy-agentbar-ctx--full"
             title={
               convContext.tokens != null && convContext.window != null
                 ? `${t('usage.context')}: ${t('usage.tokensOf', {
@@ -1968,14 +1824,9 @@ ${prev}`
                 style={{ width: `${Math.min(100, Math.max(0, convContext.pct))}%` }}
               />
             </span>
-            {/* Знак, а не только цвет: предупреждение о почти полном окне
-                обязано доходить и в оттенках серого — тем же правилом, что и
-                три глифа допуска. */}
-            {convContext.pct >= 80 && (
-              <span className="zy-agentbar-ctx-warn" aria-hidden="true">
-                !
-              </span>
-            )}
+            <span className="zy-agentbar-ctx-warn" aria-hidden="true">
+              !
+            </span>
             <span className="zy-agentbar-ctx-val">{Math.round(convContext.pct)}%</span>
           </span>
         )}

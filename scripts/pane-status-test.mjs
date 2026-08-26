@@ -69,14 +69,21 @@ try {
   }, sids)
   await page.waitForTimeout(2500)
 
-  /** Что написано под строкой ввода активной панели. */
+  /**
+   * Что НАПИСАНО НА ЭКРАНЕ, когда активна эта панель.
+   *
+   * Подпись живёт в нижней полосе окна и говорит об активной панели — как и
+   * цена разговора рядом. Раньше эта функция смотрела внутрь панели и не
+   * вызывалась НИ РАЗУ: проверки ниже читали состояние стора, и подпись,
+   * которую по недосмотру перестало рисовать вовсе, прогон считал исправной.
+   * Стор — не то, что видит человек.
+   */
   const shownModel = async (sid) => {
     await page.evaluate((id) => window.__zaryaFocusPane?.(id) ?? window.__zaryaSetActiveSession?.(id), sid)
-    await page.waitForTimeout(500)
-    return page.evaluate(() => {
-      const pane = document.querySelector('.zy-pane--active') ?? document
-      return (pane.querySelector('.zy-agentbar-fuel-model')?.textContent ?? '').trim()
-    })
+    await page.waitForTimeout(600)
+    return page.evaluate(
+      () => (document.querySelector('.zy-agentbar-fuel-model')?.textContent ?? '').trim()
+    )
   }
 
   console.log('\n[2] Каждая панель подписана своей моделью')
@@ -89,6 +96,19 @@ try {
     status[sids[0]]?.model !== status[sids[1]]?.model,
     status
   )
+  /*
+   * То же самое ГЛАЗАМИ. Стор может быть безупречен, а на экране пусто: ровно
+   * так и было — подпись рисовалась под условием, которое не выполняется
+   * никогда, и панель работала на своей модели, а посмотреть на какой было
+   * негде. Поэтому спрашиваем DOM, и по обеим панелям.
+   */
+  const shown0 = await shownModel(sids[0])
+  const shown1 = await shownModel(sids[1])
+  console.log('   ·', 'подписи на экране:', JSON.stringify([shown0, shown1]))
+  ok('подпись первой панели видна человеку', shown0.length > 0, shown0)
+  ok('и называет её движок', /CODEX/i.test(shown0), shown0)
+  ok('подпись второй — свою', /GEMINI/i.test(shown1), shown1)
+  ok('подписи РАЗНЫЕ — полоса идёт за фокусом', shown0 !== shown1, [shown0, shown1])
 
   console.log('\n[3] Топливо остаётся общим — лимит подписки один')
   const usage = await page.evaluate(() => window.__zaryaUi?.().claudeStatus ?? {})
