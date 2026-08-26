@@ -46,7 +46,9 @@ try {
   }
 
   // Open the header "sessions" menu and screenshot it.
-  await page.locator('.zy-mf-head-btn[title*="Сессии"]').click()
+  // Класс — `zy-icon-btn` (MissionFeed.tsx): прежний `zy-mf-head-btn` остался
+  // только в стилях, и прогон годами ждал кнопку, которой в разметке нет.
+  await page.locator('.zy-icon-btn[title*="Сессии"]').click()
   await page.waitForTimeout(500)
   const menuItems = await page.locator('.zy-context-item').allTextContents()
   console.log('resume menu items:', menuItems.length, '| sample:', JSON.stringify(menuItems.slice(0, 3)))
