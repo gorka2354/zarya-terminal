@@ -283,6 +283,68 @@ try {
   ok('задачи показаны', noStop.rows >= 3, noStop)
   ok('а кнопки остановки нет', noStop.stops === 0, noStop)
 
+  /*
+   * [7] ВИДНО ЛИ РАБОТУ, КОГДА ЛЕНТЫ НЕ ВИДНО.
+   *
+   * Волна живёт в ленте своей панели: прокрутил вверх — её нет, при сетке 2×2
+   * три панели из четырёх не видно вовсе, и вопрос «оно ещё работает?» человек
+   * решал глазами по столам. Строка в нижней полосе отвечает на него всегда —
+   * но только если она там есть, показывает то же число и ведёт к работе.
+   *
+   * СТОИТ В КОНЦЕ НАМЕРЕННО. Сперва блок был вставлен между [1б] и [2] — и
+   * сорвал [2]: клик со своим ожиданием съел около секунды, за которую фоновая
+   * задача успевала доработать, и проверка «счёт ещё не полон» падала на
+   * «4/4 задач». Волна из [6] всё ещё идёт, так что проверять можно здесь, ни у
+   * кого не отнимая времени.
+   */
+  console.log('\n[7] Работу видно и из нижней полосы')
+  const strip = await page.evaluate(() => {
+    const el = document.querySelector('.zy-strip-busy')
+    if (!el) return null
+    const r = el.getBoundingClientRect()
+    return {
+      text: el.textContent ?? '',
+      title: el.getAttribute('title') ?? '',
+      dot: !!el.querySelector('.zy-strip-busy-dot'),
+      wave: document.querySelector('.zy-mf-wave-count')?.textContent ?? '',
+      // Полоса низкая: перенос на вторую строку растягивал бы её собой.
+      lines: Math.round(r.height / parseFloat(getComputedStyle(el).fontSize))
+    }
+  })
+  ok('строка о работе есть', !!strip, strip)
+  ok('у неё живая точка, как у фоновых задач', strip?.dot === true, strip)
+  ok('и она называет число идущих', /\d/.test(strip?.text ?? ''), strip?.text)
+  /*
+   * И СЧИТАЕТ ПО ВСЕМУ ОКНУ, А НЕ ПО ЭТОЙ ПАНЕЛИ.
+   *
+   * Здесь сперва стояло сравнение «строка = число строк волны на экране», и оно
+   * упало: 5 против 3. Упало правильно — две оставшиеся задачи работали в
+   * беседе, которой на экране нет. В этом и весь смысл строки: она отвечает про
+   * работу, которую не видно, — иначе хватило бы самой волны.
+   *
+   * К концу прогона живых волн ровно две: остаток от [5] и волна [6].
+   */
+  const n = Number((strip?.text ?? '').match(/\d+/)?.[0])
+  ok('число не меньше, чем видно в этой панели', n >= noStop.rows, {
+    strip: strip?.text,
+    rows: noStop.rows
+  })
+  ok('и считает работу другой панели тоже', n > noStop.rows, {
+    strip: strip?.text,
+    rows: noStop.rows,
+    wave: strip?.wave
+  })
+  ok('в одну строку, а не в две', (strip?.lines ?? 9) <= 2, strip)
+  ok('подсказка объясняет, куда ведёт', /Перейти|Go to/.test(strip?.title ?? ''), strip?.title)
+  // Клик — дорога к панели с работой, как у «ждут решения» по соседству.
+  await page.click('.zy-strip-busy')
+  await page.waitForTimeout(300)
+  ok(
+    'нажатие приводит к панели, где идёт работа',
+    await page.evaluate(() => !!document.querySelector('.zy-mf-wave'))
+  )
+  await shot(page, 'wave-strip')
+
   console.log(`\n[agent-wave] PASS ${pass} · FAIL ${fail}`)
 } finally {
   await app.close()

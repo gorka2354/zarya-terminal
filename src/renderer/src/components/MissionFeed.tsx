@@ -1101,6 +1101,46 @@ function StopTaskButton({
 }
 
 /**
+ * Остановить ВСЮ волну.
+ *
+ * Восемнадцать задач поштучно не останавливают — а именно столько их бывает,
+ * когда останавливать и хочется. Кнопки при этом не было вовсе: единственный
+ * способ прекратить рой был прервать весь ход.
+ *
+ * Появляется по наведению на волну и только когда задач больше одной: работа
+ * обычно идёт нормально, и звать к её прекращению постоянной кнопкой незачем.
+ * Просьбы уходят по одной — движок умеет останавливать задачу, не волну.
+ */
+function StopAllButton({
+  conv,
+  taskIds
+}: {
+  conv: Conversation
+  taskIds: string[]
+}): React.JSX.Element | null {
+  useLang()
+  const [asked, setAsked] = useState(false)
+  const caps = useUiStore((s) => s.agentCaps)
+  const engine = conv.engine
+  if (engine === 'builtin' || !caps?.[engine]?.stopTask) return null
+  if (taskIds.length < 2) return null
+  return (
+    <button
+      type="button"
+      className="zy-mf-wave-stop zy-mf-wave-stopall"
+      disabled={asked}
+      title={t('feed.stopAllHint', { n: taskIds.length })}
+      onClick={() => {
+        setAsked(true)
+        for (const id of taskIds) void window.zarya.agent.stopTask(engine, conv.id, id)
+      }}
+    >
+      {asked ? t('feed.stopTaskAsked') : t('feed.stopAll')}
+    </button>
+  )
+}
+
+/**
  * Записка от СОСЕДНЕЙ ПАНЕЛИ.
  *
  * Главное решение inc-41 — вид. Нарисовать её репликой человека значило бы
@@ -1381,6 +1421,20 @@ function SubagentWave({ conv }: { conv: Conversation }): React.JSX.Element | nul
   const noun = w.mixed
     ? t(w.total === 1 ? 'feed.taskOne' : 'feed.taskMany')
     : t(w.total === 1 ? 'feed.agentOne' : 'feed.agentMany')
+  const shown = w.running.slice(0, 4)
+  /*
+   * ОДИНАКОВЫЙ ИНСТРУМЕНТ — НЕ ДАННЫЕ, А ФОН.
+   *
+   * Рой чаще всего делает одно и то же, и колонка из четырёх `Grep` занимала
+   * место, ничего не различая: читать надо строки, а они как раз слева. Если
+   * инструмент у всех показанных один — он уезжает в шапку одной пометкой; как
+   * только они разошлись, возвращается в строки, где и становится различием.
+   */
+  const shownTools = shown.map((r) => r.lastTool).filter(Boolean)
+  const sameTool =
+    shownTools.length === shown.length && shownTools.length > 1 && new Set(shownTools).size === 1
+      ? shownTools[0]
+      : undefined
   return (
     <div
       className={`zy-mf-wave${allDone ? ' zy-mf-wave--done' : ''}${bad ? ' zy-mf-wave--bad' : ''}`}
@@ -1424,15 +1478,18 @@ function SubagentWave({ conv }: { conv: Conversation }): React.JSX.Element | nul
             <span className="zy-mf-wave-halted">{t('feed.waveHalted', { n: w.halted })}</span>
           </>
         )}
+        {/* Инструмент, общий для всех показанных строк, — один раз здесь. */}
+        {sameTool && <span className="zy-mf-wave-alltool">{sameTool}</span>}
+        <StopAllButton conv={conv} taskIds={w.running.map((r) => r.taskId)} />
       </div>
-      {w.running.slice(0, 4).map((r) => (
+      {shown.map((r) => (
         <div key={r.taskId} className="zy-mf-wave-row">
           <span className="zy-mf-wave-dot" />
           <span className="zy-mf-wave-what">{runLabel(r)}</span>
           {/* Задачу увели в фон: ход идёт дальше, а она осталась работать.
               Без пометки она читалась бы как обычная, задержавшаяся. */}
           {r.backgrounded && <span className="zy-mf-wave-bg">{t('feed.inBackground')}</span>}
-          {r.lastTool && <span className="zy-mf-wave-tool">{r.lastTool}</span>}
+          {r.lastTool && !sameTool && <span className="zy-mf-wave-tool">{r.lastTool}</span>}
           <BackgroundTaskButton conv={conv} run={r} />
           <StopTaskButton conv={conv} taskId={r.taskId} />
         </div>

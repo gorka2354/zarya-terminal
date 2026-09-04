@@ -155,6 +155,55 @@ export function summarizeWave(runs: Record<string, SubagentRun>, now: number): W
   }
 }
 
+/**
+ * Сколько работы идёт ПО ВСЕМУ ОКНУ — для одной строки в нижней полосе.
+ *
+ * ПОВОД. Волна живёт только в ленте своей панели: прокрутил вверх — и её нет, а
+ * при сетке 2×2 три панели из четырёх не видно вовсе. Человек спрашивал «оно
+ * ещё работает?» и шёл смотреть глазами по столам — то же самое, из-за чего в
+ * прошлом выпуске появился счётчик «ждут решения».
+ *
+ * Считается ТО ЖЕ, что показывает волна: незавершённые задачи. Фоновые сюда
+ * входят наравне — их и уводили в фон потому, что ждать перестали, но знать,
+ * что они живы, всё равно надо.
+ *
+ * Масштаб намеренно другой, чем в ленте: здесь счётчик и не более. Подробности
+ * — в панели, куда эта строка и ведёт.
+ */
+export interface BusyTasks {
+  /** Ещё идут. Ноль — строки в полосе нет вовсе. */
+  running: number
+  /** Всего в этих волнах: знаменатель для «4/18». */
+  total: number
+  /** В скольких панелях идёт работа — «в двух панелях» читается иначе, чем «здесь». */
+  panes: number
+  /** Из идущих — уведены в фон: они переживут ход, и это отдельный факт. */
+  backgrounded: number
+}
+
+export function busyTasks(
+  convs: { sessionId?: string; subagents?: Record<string, SubagentRun> }[]
+): BusyTasks {
+  let running = 0
+  let total = 0
+  let backgrounded = 0
+  const panes = new Set<string>()
+  for (const c of convs) {
+    const runs = c.subagents
+    if (!runs) continue
+    for (const r of Object.values(runs)) {
+      total++
+      if (r.done) continue
+      running++
+      if (r.backgrounded) backgrounded++
+      // Панель считаем по РАБОТЕ, а не по наличию волны: беседа, где всё
+      // доделано, в «идёт в двух панелях» попадать не должна.
+      if (c.sessionId) panes.add(c.sessionId)
+    }
+  }
+  return { running, total, panes: panes.size, backgrounded }
+}
+
 /** «1.1M» / «31.9K» / «842» — compact, like the CLI's own readout. */
 export function fmtTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`

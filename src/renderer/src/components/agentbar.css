@@ -835,6 +835,46 @@
   outline-offset: 2px;
 }
 
+/* «Работают: 4/18» — сосед «ждут решения», и оформлен так же: те же размеры,
+   тот же сброс кнопки, тот же фокус. Отличается только цветом — там нужно
+   решение человека, здесь идёт работа, и звать одинаково нельзя.
+
+   Стоит ЛЕВЕЕ ждущих намеренно: если висит и то и другое, глаз должен дойти до
+   ждущих последними — они требуют действия, а работа идёт сама. */
+.zy-strip-busy {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 12px;
+  /* Полоса низкая: без этого «РАБОТАЮТ: 4» ломалось на две строки и растягивало
+     её собой. Проверено снимком — на глаз в разработке это не видно. */
+  white-space: nowrap;
+  color: var(--accent-2);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+}
+.zy-strip-busy:hover {
+  color: var(--fg);
+}
+.zy-strip-busy:focus-visible {
+  outline: 1px solid var(--accent-2);
+  outline-offset: 2px;
+}
+/* Точка живая, но не мигающая: работа идёт минутами, и пульсация всё это время
+   раздражала бы, а не сообщала. Тот же выбор, что у точки фоновых задач. */
+.zy-strip-busy-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent-2);
+  flex: none;
+}
+
 /* Вложенные картинки: видно, что уедет с этим ходом, и можно снять до отправки. */
 .zy-img-chips {
   display: flex;

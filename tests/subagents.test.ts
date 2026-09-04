@@ -4,6 +4,7 @@ import {
   applySubagentEvent,
   fmtElapsed,
   fmtTokens,
+  busyTasks,
   summarizeWave,
   type SubagentRun
 } from '@/features/ai/subagents'
@@ -238,5 +239,73 @@ describe('formatting', () => {
     setUiLang('en')
     expect(fmtElapsed(6_000)).toBe('6s')
     expect(fmtElapsed(666_000)).toBe('11m 6s')
+  })
+})
+
+/**
+ * Строка в нижней полосе: одна на окно, счётчик и не более.
+ *
+ * Волна живёт в ленте своей панели — прокрутил вверх, и её нет; при сетке 2×2
+ * три панели из четырёх не видно вовсе. Тот же довод, по которому в прошлом
+ * выпуске появился счётчик «ждут решения»: невидимая работа читается как
+ * остановившаяся.
+ */
+describe('busyTasks', () => {
+  const run = (over: Partial<SubagentRun> = {}): SubagentRun =>
+    ({ taskId: 't', done: false, startedAt: 0, ...over }) as SubagentRun
+  const conv = (sessionId: string, runs: SubagentRun[]) => ({
+    sessionId,
+    subagents: Object.fromEntries(runs.map((r, i) => [`${sessionId}-${i}`, r]))
+  })
+
+  it('молчит, когда работы нет', () => {
+    expect(busyTasks([])).toEqual({ running: 0, total: 0, panes: 0, backgrounded: 0 })
+    expect(busyTasks([{ sessionId: 's1' }])).toEqual({
+      running: 0,
+      total: 0,
+      panes: 0,
+      backgrounded: 0
+    })
+  })
+
+  it('считает незавершённые и знаменатель — как волна', () => {
+    const b = busyTasks([conv('s1', [run(), run({ done: true }), run()])])
+    expect(b.running).toBe(2)
+    expect(b.total).toBe(3)
+    expect(b.panes).toBe(1)
+  })
+
+  it('складывает работу разных панелей', () => {
+    const b = busyTasks([conv('s1', [run()]), conv('s2', [run(), run()])])
+    expect(b.running).toBe(3)
+    expect(b.panes).toBe(2)
+  })
+
+  it('доделанная панель в счёт панелей не идёт', () => {
+    // Иначе строка сказала бы «идёт в двух панелях», когда во второй всё
+    // кончилось, — и человек пошёл бы искать работу, которой нет.
+    const b = busyTasks([conv('s1', [run()]), conv('s2', [run({ done: true })])])
+    expect(b.running).toBe(1)
+    expect(b.panes).toBe(1)
+    expect(b.total).toBe(2)
+  })
+
+  it('фоновые считаются работой и названы отдельно', () => {
+    // Их увели в фон потому, что перестали ждать, — но живы они по-прежнему.
+    const b = busyTasks([conv('s1', [run({ backgrounded: true }), run()])])
+    expect(b.running).toBe(2)
+    expect(b.backgrounded).toBe(1)
+  })
+
+  it('доделанная фоновая в «в фоне» не попадает', () => {
+    const b = busyTasks([conv('s1', [run({ backgrounded: true, done: true })])])
+    expect(b.running).toBe(0)
+    expect(b.backgrounded).toBe(0)
+  })
+
+  it('беседа без панели считается в работе, но не в панелях', () => {
+    const b = busyTasks([{ subagents: { a: run() } }])
+    expect(b.running).toBe(1)
+    expect(b.panes).toBe(0)
   })
 })
