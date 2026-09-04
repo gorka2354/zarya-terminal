@@ -226,6 +226,26 @@ export function revealNextWaiting(): string | null {
   return next.id
 }
 
+/**
+ * Следующая панель, где ИДЁТ работа, — по тому же кругу, что и ждущие.
+ *
+ * Счётчик в нижней полосе отвечает на вопрос «оно ещё работает?», и без дороги
+ * он был бы просто числом: волна живёт в ленте своей панели, а при сетке 2×2
+ * три панели из четырёх не видно вовсе. Тот же довод, по которому у «ждут
+ * решения» появилась кнопка.
+ */
+export function revealNextBusy(): string | null {
+  const st = useAiStore.getState()
+  const busy = st.conversations.filter(
+    (c) => c.sessionId && Object.values(c.subagents ?? {}).some((r) => !r.done)
+  )
+  if (!busy.length) return null
+  const at = busy.findIndex((c) => c.id === st.activeId)
+  const next = busy[(at + 1) % busy.length]
+  revealConversation(next.id)
+  return next.id
+}
+
 /** Развёрнута ли панель своей вкладки — для строк сайдбара и шапки панели. */
 export function isMaximized(sessionId: string): boolean {
   const store = useSessionsStore.getState()

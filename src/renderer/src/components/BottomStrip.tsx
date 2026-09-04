@@ -1,7 +1,8 @@
-import { useRef, useState } from 'react'
-import { revealNextWaiting } from '@/actions/panes'
+import { useMemo, useRef, useState } from 'react'
+import { revealNextBusy, revealNextWaiting } from '@/actions/panes'
 import { convForSession, useAiStore } from '@/features/ai/aiStore'
 import { nextGate } from '@/features/ai/gates'
+import { busyTasks } from '@/features/ai/subagents'
 import { useUiStore } from '@/state/uiStore'
 import { useSessionsStore } from '@/state/sessionsStore'
 import { formatCost } from '@shared/cost'
@@ -43,6 +44,22 @@ export function BottomStrip(): React.JSX.Element {
   // Сколько панелей ждут решения человека. Считаем по тому же правилу, что и
   // карточка одобрения, — иначе счётчик и карточки разойдутся.
   const waiting = useAiStore((s) => s.conversations.filter((c) => nextGate(c) !== undefined).length)
+
+  /*
+   * Сколько работы идёт по ВСЕМУ окну — рой и фоновые задачи вместе.
+   *
+   * Считается тем же правилом, что показывает волна (`busyTasks`), иначе полоса
+   * и лента разошлись бы в числах — а два разных ответа на один вопрос хуже,
+   * чем один. Тикать каждую секунду здесь незачем: меняется счёт, а не время.
+   *
+   * СЧИТАЕМ ПОСЛЕ ПОДПИСКИ, А НЕ В НЕЙ. Первая версия стояла прямо в селекторе
+   * (`useAiStore((s) => busyTasks(s.conversations))`) — и роняла ВСЁ ОКНО на
+   * React #185: селектор возвращает новый объект каждый раз, zustand сравнивает
+   * результат по ссылке, ререндер назначает себя сам, и так без конца. Поймано
+   * живым прогоном; на экране это выглядело как «Заря сорвалась на отрисовке».
+   */
+  const conversations = useAiStore((s) => s.conversations)
+  const busy = useMemo(() => busyTasks(conversations), [conversations])
 
   // Стоимость — у беседы ТОЙ панели, на которую человек смотрит: полоса одна на
   // окно, а разговоров в нём столько же, сколько панелей.
@@ -209,6 +226,39 @@ export function BottomStrip(): React.JSX.Element {
         {t('strip.console')}
       </button>
       <div className="zy-strip-spacer" />
+      {busy.running > 0 && (
+        /*
+           «ОНО ЕЩЁ РАБОТАЕТ?» — ОТВЕТ, ВИДНЫЙ ВСЕГДА.
+
+           Волна живёт в ленте своей панели: прокрутил вверх — её нет, а при
+           сетке 2×2 три панели из четырёх не видно вовсе. Человек шёл смотреть
+           глазами по столам — ровно то, из-за чего рядом появился счётчик
+           «ждут решения».
+
+           Здесь только счёт: подробности (что делает каждый, сколько стоило,
+           что упало) — в ленте, куда эта кнопка и ведёт. Второе такое же место
+           с теми же строками было бы не видимостью, а шумом.
+        */
+        <button
+          type="button"
+          className="zy-strip-busy"
+          title={
+            t('strip.busyGo') +
+            ' · ' +
+            t('strip.busyHint', { running: busy.running, total: busy.total }) +
+            (busy.panes > 1 ? ' · ' + t('strip.busyPanes', { n: busy.panes }) : '') +
+            (busy.backgrounded > 0 ? ' · ' + t('strip.busyBg', { n: busy.backgrounded }) : '')
+          }
+          onClick={() => revealNextBusy()}
+        >
+          <span className="zy-strip-busy-dot" aria-hidden />
+          {/* Только число идущих, без дроби. Дробь здесь читалась бы как та, что
+              в шапке волны («0/4 задач» — сделано из всех), а значила бы другое:
+              рядом два одинаковых знака с разным смыслом — это хуже, чем короче.
+              Знаменатель и остальное живут в подсказке. */}
+          {t('strip.busy', { running: busy.running })}
+        </button>
+      )}
       {waiting > 0 && (
         /*
            СЧЁТЧИК — КНОПКА, а не надпись.

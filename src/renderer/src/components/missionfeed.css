@@ -984,6 +984,61 @@
 /* Тихая, у самого края строки: это не главное действие в ленте, а выход для
    того, кто уже понял, что задача ушла не туда. Крупной кнопкой она звала бы
    останавливать работу, которая идёт нормально. */
+
+/* ── Кнопки строк появляются по наведению ─────────────────────────────────
+   Восемнадцать агентов давали восемнадцать одинаковых «ОСТАНОВИТЬ» и столько
+   же «В ФОН» — столбик кнопок, где половина пикселей не несёт информации, а
+   читать надо строки. Место за ними сохраняется всегда (opacity, а не display),
+   поэтому строка при наведении не дёргается.
+
+   Клавиатуру это не отнимает: `:focus-visible` показывает кнопку, до которой
+   дошли табом. А нажатая — остаётся видимой при любом наведении: «останавливаю…»
+   должно быть на экране, иначе человек не знает, ушла ли просьба. */
+.zy-mf-wave-row .zy-mf-wave-stop,
+.zy-mf-wave-row .zy-mf-wave-bgbtn,
+.zy-mf-bg-row .zy-mf-wave-stop {
+  opacity: 0;
+  transition: opacity 90ms ease;
+}
+.zy-mf-wave-row:hover .zy-mf-wave-stop,
+.zy-mf-wave-row:hover .zy-mf-wave-bgbtn,
+.zy-mf-bg-row:hover .zy-mf-wave-stop,
+.zy-mf-wave-row .zy-mf-wave-stop:focus-visible,
+.zy-mf-wave-row .zy-mf-wave-bgbtn:focus-visible,
+.zy-mf-bg-row .zy-mf-wave-stop:focus-visible {
+  opacity: 1;
+}
+.zy-mf-wave-row .zy-mf-wave-stop:disabled,
+.zy-mf-wave-row .zy-mf-wave-bgbtn:disabled,
+.zy-mf-bg-row .zy-mf-wave-stop:disabled {
+  opacity: 0.55;
+}
+
+/* Один и тот же инструмент у всех строк — не данные, а фон: он уезжает в шапку
+   одной пометкой. Здесь остаётся то, чем строки различаются. */
+.zy-mf-wave-alltool {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--fg-faint);
+  opacity: 0.8;
+}
+
+/* «Остановить всё» — только при наведении на саму волну и только когда задач
+   больше одной. Поштучно восемнадцать агентов не останавливают, но и звать к
+   этому постоянной кнопкой незачем: работа, как правило, идёт нормально. */
+.zy-mf-wave-stopall {
+  margin-left: auto;
+  opacity: 0;
+  transition: opacity 90ms ease;
+}
+.zy-mf-wave:hover .zy-mf-wave-stopall,
+.zy-mf-wave-stopall:focus-visible {
+  opacity: 1;
+}
+.zy-mf-wave-stopall:disabled {
+  opacity: 0.55;
+}
+
 .zy-mf-wave-stop {
   flex: none;
   margin-left: 6px;

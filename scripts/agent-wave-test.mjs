@@ -278,10 +278,119 @@ try {
   await page.waitForTimeout(1100)
   const noStop = await page.evaluate(() => ({
     rows: document.querySelectorAll('.zy-mf-wave-row').length,
-    stops: document.querySelectorAll('.zy-mf-wave-stop').length
+    // Строчные кнопки: «остановить всё» носит тот же класс, поэтому её здесь
+    // вычитаем — иначе проверка «кнопок нет» прошла бы мимо неё.
+    stops: document.querySelectorAll('.zy-mf-wave-row .zy-mf-wave-stop').length,
+    stopAll: document.querySelectorAll('.zy-mf-wave-stopall').length
   }))
   ok('задачи показаны', noStop.rows >= 3, noStop)
   ok('а кнопки остановки нет', noStop.stops === 0, noStop)
+  // И «остановить всё» тоже: она шлёт те же просьбы, которых этот движок не
+  // принимает. Кнопка, которая ничего не остановит, обещает управление, которого
+  // нет, — и человек узнаёт об этом в худший момент.
+  ok('и «остановить всё» — тоже нет', noStop.stopAll === 0, noStop)
+
+  /*
+   * [7] ВИДНО ЛИ РАБОТУ, КОГДА ЛЕНТЫ НЕ ВИДНО.
+   *
+   * Волна живёт в ленте своей панели: прокрутил вверх — её нет, при сетке 2×2
+   * три панели из четырёх не видно вовсе, и вопрос «оно ещё работает?» человек
+   * решал глазами по столам. Строка в нижней полосе отвечает на него всегда —
+   * но только если она там есть, показывает то же число и ведёт к работе.
+   *
+   * СТОИТ В КОНЦЕ НАМЕРЕННО. Сперва блок был вставлен между [1б] и [2] — и
+   * сорвал [2]: клик со своим ожиданием съел около секунды, за которую фоновая
+   * задача успевала доработать, и проверка «счёт ещё не полон» падала на
+   * «4/4 задач». Волна из [6] всё ещё идёт, так что проверять можно здесь, ни у
+   * кого не отнимая времени.
+   */
+  console.log('\n[7] Работу видно и из нижней полосы')
+  const strip = await page.evaluate(() => {
+    const el = document.querySelector('.zy-strip-busy')
+    if (!el) return null
+    const r = el.getBoundingClientRect()
+    return {
+      text: el.textContent ?? '',
+      title: el.getAttribute('title') ?? '',
+      dot: !!el.querySelector('.zy-strip-busy-dot'),
+      wave: document.querySelector('.zy-mf-wave-count')?.textContent ?? '',
+      // Полоса низкая: перенос на вторую строку растягивал бы её собой.
+      lines: Math.round(r.height / parseFloat(getComputedStyle(el).fontSize))
+    }
+  })
+  ok('строка о работе есть', !!strip, strip)
+  ok('у неё живая точка, как у фоновых задач', strip?.dot === true, strip)
+  ok('и она называет число идущих', /\d/.test(strip?.text ?? ''), strip?.text)
+  /*
+   * И СЧИТАЕТ ПО ВСЕМУ ОКНУ, А НЕ ПО ЭТОЙ ПАНЕЛИ.
+   *
+   * Здесь сперва стояло сравнение «строка = число строк волны на экране», и оно
+   * упало: 5 против 3. Упало правильно — две оставшиеся задачи работали в
+   * беседе, которой на экране нет. В этом и весь смысл строки: она отвечает про
+   * работу, которую не видно, — иначе хватило бы самой волны.
+   *
+   * К концу прогона живых волн ровно две: остаток от [5] и волна [6].
+   */
+  const n = Number((strip?.text ?? '').match(/\d+/)?.[0])
+  ok('число не меньше, чем видно в этой панели', n >= noStop.rows, {
+    strip: strip?.text,
+    rows: noStop.rows
+  })
+  ok('и считает работу другой панели тоже', n > noStop.rows, {
+    strip: strip?.text,
+    rows: noStop.rows,
+    wave: strip?.wave
+  })
+  ok('в одну строку, а не в две', (strip?.lines ?? 9) <= 2, strip)
+  ok('подсказка объясняет, куда ведёт', /Перейти|Go to/.test(strip?.title ?? ''), strip?.title)
+  // Клик — дорога к панели с работой, как у «ждут решения» по соседству.
+  await page.click('.zy-strip-busy')
+  await page.waitForTimeout(300)
+  ok(
+    'нажатие приводит к панели, где идёт работа',
+    await page.evaluate(() => !!document.querySelector('.zy-mf-wave'))
+  )
+  await shot(page, 'wave-strip')
+
+  /*
+   * [8] ОДНА КНОПКА НА ВЕСЬ РОЙ.
+   *
+   * Её не было вовсе: рой из восемнадцати задач прекращали, обрывая весь ход, —
+   * то есть платили за одного заблудившегося субагента всей остальной работой.
+   * Просьбы уходят по одной (движок умеет останавливать задачу, а не волну), и
+   * проверять надо именно исход: встали ВСЕ, а не первая.
+   *
+   * Новая волна, а не остаток прошлых: у движка из [6] остановки нет вовсе, а
+   * трогать волну из [5] значило бы сломать счёт, на который смотрит [7].
+   */
+  console.log('\n[8] «Остановить всё» — одна кнопка на весь рой')
+  await page.evaluate(() => window.__zaryaAskAgent?.('покажи волну', 'codex'))
+  await page.waitForTimeout(1000)
+  const beforeAll = await page.evaluate(() => ({
+    rows: document.querySelectorAll('.zy-mf-wave-row .zy-mf-wave-stop').length,
+    all: !!document.querySelector('.zy-mf-wave-stopall')
+  }))
+  ok('задач больше одной', beforeAll.rows >= 2, beforeAll)
+  ok('и на волну есть одна кнопка', beforeAll.all, beforeAll)
+  await page.click('.zy-mf-wave-stopall')
+  await page.waitForTimeout(300)
+  const askedAll = await page.evaluate(() => {
+    const b = document.querySelector('.zy-mf-wave-stopall')
+    return b ? { text: b.textContent ?? '', off: b.disabled } : null
+  })
+  ok('кнопка сказала, что просьбы ушли', /останавливаю/.test(askedAll?.text ?? ''), askedAll)
+  ok('и второй раз не нажимается', askedAll?.off === true, askedAll)
+  await page.waitForTimeout(1200)
+  const afterAll = await page.evaluate(() => ({
+    running: document.querySelectorAll('.zy-mf-wave-row .zy-mf-wave-stop').length,
+    stopped: document.querySelectorAll('.zy-mf-wave-row--stopped').length,
+    halted: document.querySelector('.zy-mf-wave-halted')?.textContent ?? ''
+  }))
+  // Главное: встала ВСЯ волна. Останься хоть одна — кнопка обещала бы больше,
+  // чем делает, и человек ушёл бы, думая, что работа прекращена.
+  ok('идущих не осталось', afterAll.running === 0, afterAll)
+  ok('и все помечены остановленными, а не упавшими', afterAll.stopped >= 2, afterAll)
+  ok('счётчик назвал это остановкой', /останов/.test(afterAll.halted), afterAll)
 
   console.log(`\n[agent-wave] PASS ${pass} · FAIL ${fail}`)
 } finally {

@@ -5,6 +5,57 @@ All notable changes to Zarya are documented here. This project uses
 
 Русская версия этого файла — [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## 0.7.9 — "The Swarm" (2026-09-04)
+
+The theme: **show the state, not the controls**. Zarya could already display a
+swarm of fifteen agents — but in a way that made you read buttons instead of
+lines, and scrolling the transcript up made the work disappear entirely.
+
+### Changed
+
+- **Row buttons in the wave appear on hover.** Eighteen agents meant eighteen
+  identical "STOP" buttons and as many "BACKGROUND" ones: a column of controls
+  that buried the thing you actually look at — what each agent is doing. Their
+  space is kept, so a row does not jump when you point at it; the keyboard still
+  reaches them with Tab, and a pressed one stays visible — "stopping…" has to be
+  on screen.
+
+- **A shared tool moved into the header.** A swarm usually does the same thing,
+  and a column of four `Grep`s took space while distinguishing nothing. As soon
+  as the tools diverge, they return to the rows, where they are a difference
+  again.
+
+### Added
+
+- **"RUNNING: N" in the bottom strip — visible at all times.** A wave lives in
+  its own pane's transcript: scroll up and it is gone, and in a 2×2 grid three
+  panes out of four are not on screen at all, so "is it still working?" was
+  answered by looking around the desk. The strip answers it, counting the swarm
+  and background tasks across the whole window, and takes you to the pane doing
+  the work — the same round trip "awaiting decision" makes. Count only: the
+  details live in the transcript, and a second place with the same rows would be
+  noise rather than visibility.
+
+- **"Stop all".** There was no such button: an eighteen-task swarm was stopped by
+  aborting the whole turn. It appears on hover over the wave and only when there
+  is more than one task — work usually goes fine, and a permanent button would
+  be an invitation to end it.
+
+### Fixed
+
+- **The permission check stopped being silent about what it does not check.** The
+  scenario claims to test the card round-trip (surfaced → approved → tool ran),
+  but the engine has long executed `echo` itself, bypassing our card. The
+  scenario printed "approved: false" and exited successfully: a check on the most
+  sensitive mechanism in the product only looked like one. It now uses a command
+  with a side effect and fails loudly if no card appears.
+
+### Numbers
+
+- **1285 unit checks across 90 files** (up from 1278). Full offline sweep: 79
+  scenarios, 0 failures; the wave run grew from 35 checks to 51 — all of the new
+  work is covered by it, including stopping a swarm with one button.
+
 ## 0.7.8 — "The Word" (2026-08-26)
 
 The theme: **Zarya keeps its word about itself**. The previous release taught it
