@@ -5,7 +5,7 @@ All notable changes to Zarya are documented here. This project uses
 
 Русская версия этого файла — [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
-## 0.7.9 — "The Swarm" (unreleased)
+## 0.7.9 — "The Swarm" (2026-09-04)
 
 The theme: **show the state, not the controls**. Zarya could already display a
 swarm of fifteen agents — but in a way that made you read buttons instead of
@@ -53,7 +53,8 @@ lines, and scrolling the transcript up made the work disappear entirely.
 ### Numbers
 
 - **1285 unit checks across 90 files** (up from 1278). Full offline sweep: 79
-  scenarios, 0 failures; the wave run grew from 35 checks to 43.
+  scenarios, 0 failures; the wave run grew from 35 checks to 51 — all of the new
+  work is covered by it, including stopping a swarm with one button.
 
 ## 0.7.8 — "The Word" (2026-08-26)
 

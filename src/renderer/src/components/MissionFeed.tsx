@@ -1123,7 +1123,16 @@ function StopAllButton({
   const caps = useUiStore((s) => s.agentCaps)
   const engine = conv.engine
   if (engine === 'builtin' || !caps?.[engine]?.stopTask) return null
-  if (taskIds.length < 2) return null
+  /*
+   * Нажатая кнопка НЕ исчезает, даже когда задач осталось меньше двух.
+   *
+   * Поймано прогоном: просьбы уходят, задачи встают одна за другой, порог
+   * «больше одной» перестаёт выполняться — и кнопка пропадала вместе со словом
+   * «останавливаю…». Нажатие выглядело как «ничего не произошло», а на живом
+   * движке остановка идёт секундами, и всё это время человек не знает, ушла ли
+   * его просьба.
+   */
+  if (taskIds.length < 2 && !asked) return null
   return (
     <button
       type="button"

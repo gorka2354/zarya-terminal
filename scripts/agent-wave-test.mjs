@@ -278,10 +278,17 @@ try {
   await page.waitForTimeout(1100)
   const noStop = await page.evaluate(() => ({
     rows: document.querySelectorAll('.zy-mf-wave-row').length,
-    stops: document.querySelectorAll('.zy-mf-wave-stop').length
+    // Строчные кнопки: «остановить всё» носит тот же класс, поэтому её здесь
+    // вычитаем — иначе проверка «кнопок нет» прошла бы мимо неё.
+    stops: document.querySelectorAll('.zy-mf-wave-row .zy-mf-wave-stop').length,
+    stopAll: document.querySelectorAll('.zy-mf-wave-stopall').length
   }))
   ok('задачи показаны', noStop.rows >= 3, noStop)
   ok('а кнопки остановки нет', noStop.stops === 0, noStop)
+  // И «остановить всё» тоже: она шлёт те же просьбы, которых этот движок не
+  // принимает. Кнопка, которая ничего не остановит, обещает управление, которого
+  // нет, — и человек узнаёт об этом в худший момент.
+  ok('и «остановить всё» — тоже нет', noStop.stopAll === 0, noStop)
 
   /*
    * [7] ВИДНО ЛИ РАБОТУ, КОГДА ЛЕНТЫ НЕ ВИДНО.
@@ -344,6 +351,46 @@ try {
     await page.evaluate(() => !!document.querySelector('.zy-mf-wave'))
   )
   await shot(page, 'wave-strip')
+
+  /*
+   * [8] ОДНА КНОПКА НА ВЕСЬ РОЙ.
+   *
+   * Её не было вовсе: рой из восемнадцати задач прекращали, обрывая весь ход, —
+   * то есть платили за одного заблудившегося субагента всей остальной работой.
+   * Просьбы уходят по одной (движок умеет останавливать задачу, а не волну), и
+   * проверять надо именно исход: встали ВСЕ, а не первая.
+   *
+   * Новая волна, а не остаток прошлых: у движка из [6] остановки нет вовсе, а
+   * трогать волну из [5] значило бы сломать счёт, на который смотрит [7].
+   */
+  console.log('\n[8] «Остановить всё» — одна кнопка на весь рой')
+  await page.evaluate(() => window.__zaryaAskAgent?.('покажи волну', 'codex'))
+  await page.waitForTimeout(1000)
+  const beforeAll = await page.evaluate(() => ({
+    rows: document.querySelectorAll('.zy-mf-wave-row .zy-mf-wave-stop').length,
+    all: !!document.querySelector('.zy-mf-wave-stopall')
+  }))
+  ok('задач больше одной', beforeAll.rows >= 2, beforeAll)
+  ok('и на волну есть одна кнопка', beforeAll.all, beforeAll)
+  await page.click('.zy-mf-wave-stopall')
+  await page.waitForTimeout(300)
+  const askedAll = await page.evaluate(() => {
+    const b = document.querySelector('.zy-mf-wave-stopall')
+    return b ? { text: b.textContent ?? '', off: b.disabled } : null
+  })
+  ok('кнопка сказала, что просьбы ушли', /останавливаю/.test(askedAll?.text ?? ''), askedAll)
+  ok('и второй раз не нажимается', askedAll?.off === true, askedAll)
+  await page.waitForTimeout(1200)
+  const afterAll = await page.evaluate(() => ({
+    running: document.querySelectorAll('.zy-mf-wave-row .zy-mf-wave-stop').length,
+    stopped: document.querySelectorAll('.zy-mf-wave-row--stopped').length,
+    halted: document.querySelector('.zy-mf-wave-halted')?.textContent ?? ''
+  }))
+  // Главное: встала ВСЯ волна. Останься хоть одна — кнопка обещала бы больше,
+  // чем делает, и человек ушёл бы, думая, что работа прекращена.
+  ok('идущих не осталось', afterAll.running === 0, afterAll)
+  ok('и все помечены остановленными, а не упавшими', afterAll.stopped >= 2, afterAll)
+  ok('счётчик назвал это остановкой', /останов/.test(afterAll.halted), afterAll)
 
   console.log(`\n[agent-wave] PASS ${pass} · FAIL ${fail}`)
 } finally {
