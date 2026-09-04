@@ -5,6 +5,146 @@ All notable changes to Zarya are documented here. This project uses
 
 Русская версия этого файла — [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## 0.7.8 — "The Word" (2026-08-26)
+
+The theme: **Zarya keeps its word about itself**. The previous release taught it
+not to lie about others — the engine, the cost, the pane next door. This one is
+about its own promises: what you click, works; what is labelled is called by its
+real name; what is promised for one engine holds for all of them.
+
+### Added
+
+- **There is finally a road to the agent that is waiting.** The counter in the
+  bottom strip was plain text, clicking the notification only raised the window,
+  and an action for "go to whoever is waiting" did not exist at all: you read
+  "waiting: 2" and then hunted for the pane by eye. The counter is now a button,
+  the notification takes you to its own pane, and `Alt+↓` cycles through them.
+
+- **You can take the agent's answer with you.** "Copy" read only the terminal
+  selection, which does not exist in block mode: you selected an answer with the
+  mouse and got a disabled menu item. Now both the feed selection and the whole
+  answer are copyable — the latter by a button next to it, as the ORIGINAL
+  markdown, because headings and lists are what you need in your notes.
+
+- **A crash no longer vanishes without a trace.** A failed render tore down the
+  whole tree: an empty window and not one line about what happened. Now it stops
+  honestly — the error text and three buttons — plus a crash log on disk
+  (`userData/logs/errors.log`, half a megabyte and one spare generation).
+
+- **The pane knows where it is — in Command Prompt and WSL.** The directory
+  froze at the one it was opened from and did not move for any `cd`. This is not
+  a caption under a tab: the agent receives that directory as its working folder
+  and as the boundary of its file access. Each shell got its own seam — `cmd`
+  prints exactly one thing of its own accord, the prompt, so the path went
+  there; in WSL the variables arrive via `WSLENV`. The path is translated into
+  the form Windows understands. As a side effect, WSL also got command blocks.
+
+- **The window remembers how you left it** — size, position, maximised state.
+  With one rule that cuts both ways: a rectangle you could not reach on today's
+  screens is neither restored NOR recorded. Monitors get unplugged, laptops
+  leave the dock — a window opened blind at yesterday's coordinates looks like
+  "the app failed to start".
+
+### Changed
+
+- **The model belongs to each pane.** Every turn of EVERY pane carried one global
+  setting: switching models in one pane silently moved its neighbour too, while
+  the caption under the input said HAIKU at the very moment the turn left for
+  OPUS. A conversation now takes a snapshot of the model when it is created, and
+  the setting governs what NEW ones start with.
+
+- **A pane has one name.** In the "Agents" list a row was labelled with the first
+  forty characters of your first request, while the pane list above called the
+  same pane by its name — two lists of the same agents under unrelated names.
+  The address of a pane is what is written on its tab; the first request stays as
+  content, in the tooltip.
+
+- **The numbers gathered in the bottom strip.** The context gauge sat in the row
+  of chips above the input, among controls, and in a 2×2 grid it took space from
+  the input line itself. It moved next to the subscription limits. What stays in
+  the pane is the warning from 80% on — there the fill stops being a readout and
+  becomes a reason to decide what to ask next, and you must read that on THE pane
+  it threatens, not on whichever is active.
+
+- **Autopilot no longer asks about anything.** There used to be a *floor* beneath
+  it: `rm -rf`, `git push --force`, `DROP TABLE` and anything a server marked as
+  destructive were carded even with the gates off. The chip promised "every tool
+  runs without asking", and Zarya sometimes asked anyway. The floor only ever
+  matched the literal shape of a command — the same delete behind a variable, an
+  alias or a shell script walked straight past it — so it was never protection
+  and could not be one without OS isolation; and a switch that sometimes still
+  asks is worse than either honest state. Autopilot now means autopilot. One
+  exception: `AskUserQuestion` always reaches you — it is a question **to** you
+  and there is nothing to approve. The irreversible mark stays as a caption on
+  the card for those who did not turn the questions off, and it still never gets
+  an "allow for this session" rule.
+
+- **The first screen tells the truth.** It promised that Zarya "sends nothing
+  anywhere", while on startup it checks GitHub for updates. The single exception
+  is now named, along with the fact that you can turn it off. And "found and
+  ready to run" became "found on this machine (sign in to each one inside it)":
+  an installed but signed-out CLI was not ready.
+
+### Fixed
+
+- **Typing instead of answering a card no longer truncates the conversation.**
+  A permission card was waiting for a decision, you typed a message instead of
+  pressing it — and the pane quietly swapped itself for an empty conversation.
+  The transcript with the unanswered card was intact on disk and still listed
+  under "AGENTS · WAITING", but it left the screen with no line saying so, which
+  from the outside is indistinguishable from data loss. Two defects met: the
+  input judged busyness backwards (an *approved* gate counted as busy, one
+  *awaiting a decision* did not), and "start a new conversation" swallowed
+  everything that did not fit "continue". What you type now goes to the queue,
+  and you can see it there.
+
+- **The Enter that sent a message no longer approves the waiting gate.** Found by
+  a live run right after the first fix. One keypress is served by two handlers in
+  order: the input sends the text and clears the field, then the window key
+  dispatcher — seeing an EMPTY field — takes that as a "yes" to a command you
+  never read. The decision is now made from the state of the input *before* it
+  was handled.
+
+- **Four dead clicks in the default configuration.** The "waiting for you" row
+  led to a panel that does not exist without the IDE layer; `Ctrl+P` found a file
+  and did not open it; an API-key error pointed at a tab the list hides; the
+  "interface density" switch had no consumer anywhere in the codebase — removed
+  along with the setting, because a toggle that does nothing is a lie.
+
+- **The crash they were hiding.** The dead-click watchdog paid for itself
+  immediately: the "blocks panel" action crashed the whole window when the block
+  list was empty (React #185).
+
+- **A commit message no longer reads as a command.** A `git commit` whose text
+  listed `rm -rf`, `git push --force` and `DROP TABLE` got the card "this cannot
+  be undone": the rules parsed the whole string, heredoc body included. The
+  caption claimed there was no way back from a harmless commit — and a caption
+  that lies is worse than none. The heredoc body and `-m` are now blanked, and
+  only for `git commit` itself: quotes sometimes hold a real command, and
+  `psql -c "DROP TABLE users"` is still recognised.
+
+- **`claude login` is finally mentioned.** Any trouble with the default engine
+  came out as a generic "Claude Code failed to start", even though Codex, Kimi
+  and ACP had proper hints. Two cases you can fix yourself are now spelled out;
+  everything else is passed through verbatim.
+
+- **The model caption came back to the screen.** It was not rendered ANYWHERE:
+  the block sat behind a condition that is never true — the pane ran on its own
+  model and there was nowhere to see which. 220 lines of dead markup and seven
+  redundant state subscriptions went with it.
+
+### Numbers
+
+- **1278 unit checks across 90 files** (up from 1231 in 87 at 0.7.7). One file
+  fewer: `codexFloor.test.ts` went with the function the removed floor took away.
+- **Full offline sweep: 78 scenarios, 0 failures.** Voice runs as its own set —
+  it needs a speech file and synthesises one itself (7 checks, 0 failures). The
+  live set against the real Claude Code also runs separately: it spends
+  subscription tokens.
+- New runner `scripts/run-all.mjs`: the set is read from disk, and whatever is
+  excluded is printed out loud — a sweep that quietly narrowed reads as
+  "everything was checked".
+
 ## 0.7.7 — "The Reckoning" (2026-08-19)
 
 The theme: **Zarya stopped lying about itself**. The previous release taught panes

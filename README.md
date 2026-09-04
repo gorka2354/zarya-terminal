@@ -8,7 +8,7 @@
 exactly enough light to work by.*
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-ffb05c.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.7.7%20%22The%20Reckoning%22-ffb05c.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.7.8%20%22The%20Word%22-ffb05c.svg)](CHANGELOG.md)
 [![Languages](https://img.shields.io/badge/UI-English%20%7C%20%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9-4fd6d6.svg)](#language)
 [![Electron](https://img.shields.io/badge/Electron-43-4fd6d6.svg)](https://www.electronjs.org/)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-5fb88a.svg)](#install)
@@ -124,12 +124,13 @@ native GUI front-end for the agent — no terminal-scraping, no second chat wind
   showing an empty list.
 - **Bypass mode** — an optional switch that auto-approves ordinary tools (AskUserQuestion
   still always asks). Off by default; a one-click chip, live-toggleable.
-- **"Allow for this session" — with a floor** — between "ask every time" and "ask
-  nothing" there is now a third button, and it shows the exact rule it will create.
-  What it will never cover: `rm -rf`, `git push --force`, `DROP TABLE` and their kin
-  are shown before every run, autopilot or not. This is not a sandbox and we do not
-  call it one — there is no OS isolation here, only a promise about what Zarya always
-  puts in front of you.
+- **"Allow for this session"** — between "ask every time" and "ask nothing" there is a
+  third button, and it shows the exact rule it will create, verbatim, before you press
+  it. It never covers `rm -rf`, `git push --force`, `DROP TABLE` and their kin: those
+  are decided one at a time, and their card says **this cannot be undone**. AUTOPILOT
+  is the separate, deliberate answer — it asks about nothing at all (except the agent's
+  own AskUserQuestion), and the chip says so. None of this is a sandbox and we do not
+  call it one: there is no OS isolation here.
 - **New skills and MCP without a restart** — install a server or a skill and the running
   session picks it up on one click, keeping the conversation. No "please restart".
 
@@ -453,7 +454,7 @@ Details: [docs/shell-integration.md](docs/shell-integration.md).
 
 ## Tests
 
-Numbers as of 0.7.7: **1260 unit checks**
+Numbers as of 0.7.8: **1272 unit checks**
 (plus 6 skipped on this platform) across 91 files and **139 end-to-end runs**
 that drive the real application.
 
@@ -472,7 +473,7 @@ Panes (140 checks), the language switch across every
 screen (10), download progress and the tool clock (16), the agent engines on a
 protocol-accurate fake driver (21), the model picker (41), the update page (30), menus
 (27), key badges (9), command history and its off switch (13), who is waiting for you
-and when Zarya may call (11), the floor under autopilot (26), the health of the agent's
+and when Zarya may call (11), what each permission step actually means (26), the health of the agent's
 MCP servers (27), the skills tab (49), writing skill state into Claude Code's own
 settings on a redirected home (14), the usage counter across restarts (12), pane
 signals (36), the first-run screen (19), the working directory a pane reports in
@@ -492,7 +493,7 @@ window under xvfb: panes, the language switch, download progress, the agent engi
 a fake driver, importing a speech model from disk (folder recognition and its
 refusals — no weights are downloaded), the key router (`Enter` in a rename dialog
 must not also approve a tool waiting in a pane), sidebar folding, the difference
-between "working" and "waiting for you", the floor under autopilot, the MCP health
+between "working" and "waiting for you", what each permission step means, the MCP health
 panel, the three skill runs (what the tab shows, what gets written into Claude Code's
 own settings, and the usage counter's life across restarts), per-pane routing of engine
 commands, the palette, per-pane model and effort, the pane signals (seam, state stripe,
