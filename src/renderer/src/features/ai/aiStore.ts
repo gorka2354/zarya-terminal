@@ -25,7 +25,7 @@ import { useSessionsStore } from '@/state/sessionsStore'
 import { setAgentStatusFor, useUiStore } from '@/state/uiStore'
 import { addCost } from '@shared/cost'
 import { registerAiBridge } from './aiBridge'
-import { gateLabel } from './gates'
+import { gateLabel, isConversationBusy } from './gates'
 import { applySubagentEvent, type SubagentRun } from './subagents'
 import type { BackgroundTask } from '@shared/agentTasks'
 import { enginePromptAppend } from '@shared/enginePrompt'
@@ -571,10 +571,13 @@ export interface Conversation {
   activeRequestId?: string
 }
 
-/** A conversation is "busy" (input blocked) while streaming OR while tools are unresolved. */
-export function isConversationBusy(conv: Conversation): boolean {
-  return conv.streaming || conv.pendingTools.length > 0
-}
+/*
+ * «Занята» живёт в `./gates` — рядом с остальными правилами про гейты, и там же
+ * её проверяет тест. Строка ввода судила о занятости САМА и разошлась с этим
+ * определением: она считала занятой беседу с одобренным гейтом и НЕ считала — с
+ * гейтом, который ещё ждёт решения. Ровно наоборот.
+ */
+export { isConversationBusy } from './gates'
 
 /**
  * The conversation shown/edited for a terminal session — so each terminal keeps

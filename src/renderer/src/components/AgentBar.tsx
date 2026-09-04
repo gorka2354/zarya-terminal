@@ -12,7 +12,7 @@ import { getTerminal } from '@/terminal/terminalRegistry'
 import { convForSession, useAiStore } from '@/features/ai/aiStore'
 import { interruptPane, paneIsRunning } from '@/terminal/paneSignal'
 import { quotePath } from '@/terminal/panePaths'
-import { nextGate } from '@/features/ai/gates'
+import { barTarget, enterApprovesGate, nextGate } from '@/features/ai/gates'
 import { registerPaneKeys } from '@/features/ai/keyRouter'
 import { fileToAttachment, imageFilesFrom } from '@/features/ai/imageAttach'
 import { canAcceptMore, type ImageAttachment } from '@shared/images'
@@ -377,6 +377,21 @@ export const AgentBar = memo(function AgentBar({
   const [dragOver, setDragOver] = useState(false)
   const draftRef = useRef('')
   const ref = useRef<HTMLTextAreaElement>(null)
+  /*
+   * БЫЛ ЛИ ТЕКСТ В СТРОКЕ, КОГДА НАЖАЛИ Enter.
+   *
+   * Одно нажатие обслуживают двое, и в этом порядке: сперва обработчик строки
+   * (React), потом диспетчер клавиш окна. Строка отправляет написанное и чистит
+   * поле — и диспетчер, дойдя до своей очереди, видит поле уже ПУСТЫМ и по этому
+   * признаку одобряет висящий гейт. То есть человек написал сообщение, нажал
+   * Enter — и тем же нажатием молча сказал «да» команде, которую не читал.
+   * Ровно то слепое согласие, ради которого гейт и существует.
+   *
+   * Поэтому решение принимается по состоянию строки ДО обработки. Диспетчер
+   * читает флаг и сбрасывает его: нажатие мимо строки (фокус в терминале, в
+   * ленте) флага не ставит, и одобрение пустым Enter работает как работало.
+   */
+  const enterHadText = useRef(false)
 
   // Своя панель, а не «какая сейчас активная». Спрашивать про активную — это тот
   // самый разрыв, из-за которого можно печатать в одну панель, а Enter уйдёт в
@@ -525,16 +540,28 @@ ${prev}`
         const conv = convForSession(useAiStore.getState(), sid)
         if (!conv) return false
         const pendingRun = nextGate(conv)
-        if (!pendingRun) return false
-        // Одобряет только пустое поле и только когда курсор не в другом поле
-        // ввода: Enter в чужой форме не должен запускать инструмент.
+        // Флаг читается и сбрасывается ВСЕГДА, даже когда гейта нет: иначе он
+        // пережил бы это нажатие и погасил следующее, уже законное одобрение.
+        const hadText = enterHadText.current
+        enterHadText.current = false
+        // Курсор в чужом поле: Enter там означает «закончить здесь», а не
+        // «запускай инструмент».
         const ae = document.activeElement as HTMLElement | null
         const inOtherField =
           !!ae &&
           ae !== ref.current &&
           (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)
-        if (inOtherField || ref.current?.value.trim()) return false
-        void useAiStore.getState().approveTool(conv.id, pendingRun.id)
+        if (
+          !enterApprovesGate({
+            hasGate: !!pendingRun,
+            inOtherField,
+            // `hadText` — строка ДО обработки: её обработчик уже успел отправить
+            // написанное и очистить поле, поэтому `value` здесь врёт.
+            hadText: hadText || !!ref.current?.value.trim()
+          })
+        )
+          return false
+        void useAiStore.getState().approveTool(conv.id, pendingRun!.id)
         return true
       }
     })
@@ -593,14 +620,34 @@ ${prev}`
     setHistIdx(-1)
     setText('')
     const store = useAiStore.getState()
-    // Continue this terminal's own conversation (if it matches the engine and is
-    // idle), otherwise start a fresh one bound to the active terminal session.
+    // Continue this terminal's own conversation, queue onto it while it's busy,
+    // or start a fresh one bound to the active terminal session — see barTarget.
     const conv = convForSession(store, activeSessionId)
-    const reuse =
-      conv && conv.engine === agentEngine && !conv.streaming && conv.pendingTools.length === 0
-    const convId = reuse
-      ? conv!.id
-      : store.newConversation({ sessionId: activeSessionId ?? undefined, engine: agentEngine })
+    const target = barTarget(conv, agentEngine)
+    if (target === 'queue' && conv) {
+      /*
+       * Занятая беседа — В ОЧЕРЕДЬ, А НЕ В НОВУЮ.
+       *
+       * Раньше «занята» падала в ту же ветку, что и «чужой движок», и написать
+       * что-нибудь поверх висящего гейта заводило вторую беседу: панель молча
+       * переключалась на пустую, а разговор с неотвеченной карточкой уходил с
+       * экрана целиком.
+       *
+       * Боковой вопрос сюда не доходит — `canAskSide` не пускает его к занятой
+       * беседе. Если бы дошёл, очередь всё равно потеряла бы его «боковость»,
+       * поэтому текст возвращается в строку, а не отправляется чем-то другим.
+       */
+      if (side) {
+        setText(q)
+        return
+      }
+      store.queueMessage(conv.id, q)
+      return
+    }
+    const convId =
+      target === 'continue' && conv
+        ? conv.id
+        : store.newConversation({ sessionId: activeSessionId ?? undefined, engine: agentEngine })
     if (store.activeConversation()?.id !== convId) store.setActiveConversation(convId)
     void store.send(q, { conversationId: convId, ...(side ? { side: true } : {}) })
   }
@@ -610,10 +657,17 @@ ${prev}`
   // the bar is in Claude Code mode.
   const modeEngine: 'builtin' | AgentEngine | null =
     activeEngine ?? (mode === 'zarya' ? 'builtin' : null)
-  const busyConv =
-    !!modeEngine &&
-    activeConv?.engine === modeEngine &&
-    (activeConv.streaming || activeConv.pendingTools.some((t) => t.settled))
+  /*
+   * Занятость судим ОДНОЙ функцией с остальным экраном (`barTarget`).
+   *
+   * Здесь стояло своё условие — `pendingTools.some((t) => t.settled)`, то есть
+   * ровно наоборот: беседа с ОДОБРЕННЫМ гейтом считалась занятой, а с гейтом,
+   * который ещё ждёт решения, — свободной. Из-за этого сообщение поверх висящей
+   * карточки не вставало в очередь, а уходило в `askAgent` заводить новую беседу;
+   * строка при этом писала обычную подсказку вместо «агент работает», а Ctrl+←
+   * разрешал сменить движок и увести карточку с экрана.
+   */
+  const busyConv = !!modeEngine && barTarget(activeConv, modeEngine) === 'queue'
 
   /**
    * Записать строку в память проекта (`CLAUDE.md` рядом с папкой панели).
@@ -2129,6 +2183,9 @@ ${prev}`
             }
             if (e.key === 'Enter') {
               e.preventDefault()
+              // Запоминаем ДО обработки: `doAction` очистит поле, а диспетчер
+              // клавиш окна получит это же нажатие следом — см. `enterHadText`.
+              enterHadText.current = !!e.currentTarget.value.trim()
               doAction()
             } else if ((e.ctrlKey || e.metaKey) && /^[iшI]$/i.test(e.key)) {
               // Ctrl+I → jump into Claude Code mode (and send if there's text).
