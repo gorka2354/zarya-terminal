@@ -85,26 +85,6 @@ function friendlyError(e: unknown): string {
  * server-initiated requests and surface to the renderer as `permission` events,
  * resolved by a UI click — symmetric to Claude's canUseTool. See inc-10 plan.
  */
-/**
- * Показать ли карточку, НЕСМОТРЯ на автопилот.
- *
- * ОТДЕЛЬНОЙ ФУНКЦИЕЙ, ПОТОМУ ЧТО ЭТО ОБЕЩАНИЕ, А НЕ ДЕТАЛЬ. Интерфейс говорит
- * про автопилот одно и то же для всех движков: «не спрашиваю про рутину, но
- * необратимое покажу». У Claude Code это правило жило в гейте, у Codex не жило
- * нигде — он в автопилоте не спрашивал вовсе. Здесь оно названо и проверяется
- * тестом, а не спрятано в ветке обработчика.
- *
- * Вне автопилота — `undefined`, и не потому, что необратимого нет: там карточка
- * будет в любом случае, спрашивают всё.
- */
-export function codexFloor(
-  bypass: boolean,
-  command: string
-): { kind: string; hit: string } | undefined {
-  if (!bypass) return undefined
-  return irreversible('Bash', { command }) ?? undefined
-}
-
 export class CodexDriver implements AgentDriver {
   readonly engine: AgentEngine = 'codex'
   readonly capabilities: AgentCapabilities = {
@@ -394,23 +374,15 @@ export class CodexDriver implements AgentDriver {
     }
     session.approvals.set(toolUseId, c.id)
     /*
-     * ПОЛ ПОД АВТОПИЛОТОМ — И У ЭТОГО ДВИЖКА ТОЖЕ.
+     * АВТОПИЛОТ ЗДЕСЬ ЗНАЧИТ ТО ЖЕ, ЧТО У CLAUDE CODE: не спрашивать ни о чём.
      *
-     * Раньше автопилот здесь означал `approvalPolicy: 'never'`: codex не
-     * спрашивал ВООБЩЕ, и необратимая команда проходила молча. У Claude Code
-     * автопилот устроен иначе — он тоже не спрашивает про рутину, но список
-     * необратимого (`@shared/irreversible`) всё равно показывает карточку. А
-     * обещание в интерфейсе было одно на оба движка: и подпись чипа, и строка
-     * «показано несмотря на автопилот».
+     * Политика движка всё равно `on-request`, а «не спрашивать» делаем САМИ,
+     * одобряя молча. Так карточка остаётся НАШЕЙ: пока гейты включены, человек
+     * видит команду с подписью «это не отменить», а не голый вопрос codex.
      *
-     * Теперь политика всегда `on-request`, а «не спрашивать» делаем САМИ:
-     * одобряем молча всё, кроме необратимого. Разница видна ровно там, где
-     * важна, — на `rm -rf`, `git push --force`, `DROP TABLE`.
-     *
-     * ЧЕГО ЭТОТ ПОЛ НЕ ЛОВИТ, и это надо знать: codex спрашивает не обо всём.
-     * Правку внутри рабочей папки он в режиме `workspaceWrite` одобряет сам и
-     * нам о ней не сообщает — туда пол не дотянется. Обещать больше, чем
-     * можем, мы не станем: об этом сказано в подписи автопилота для Codex.
+     * Чего этот путь не видит вовсе: правку внутри рабочей папки codex в режиме
+     * `workspaceWrite` одобряет сам и нам о ней не сообщает. Обещать больше,
+     * чем можем, мы не станем — об этом сказано в подписи автопилота для Codex.
      */
     const silent = (): void => {
       session.approvals.delete(toolUseId)
@@ -420,19 +392,19 @@ export class CodexDriver implements AgentDriver {
       const p = params as CodexCommandApprovalParams
       const command = p.command == null ? '' : String(p.command)
       const cwd = p.cwd == null ? '' : String(p.cwd)
-      const stop = codexFloor(session.bypass === true, command)
-      if (session.bypass && !stop) {
+      if (session.bypass) {
         silent()
         return
       }
+      const stop = irreversible('Bash', { command })
       this.emit(requestId, {
         type: 'permission',
         toolUseId,
         toolName: 'Bash',
         input: { command, cwd },
         displayName: command || tm('drv.command'),
-        // Почему спросили при включённом автопилоте: без этой строки вопрос
-        // читается как поломка тумблера, а не как защита от потери работы.
+        // Подпись «это не отменить» на карточке: команда читается иначе, когда
+        // видно, что после неё возврата нет.
         ...(stop ? { irreversible: stop } : {})
       })
     } else if (c.method === CODEX_APPROVAL.fileChange) {
@@ -570,8 +542,8 @@ export class CodexDriver implements AgentDriver {
         input: [{ type: 'text', text }],
         model: session.model,
         effort: session.effort,
-        // См. выше: политика всегда `on-request`, тишину даёт наш собственный
-        // гейт, и пол под автопилотом остаётся на месте.
+        // См. выше: политика всегда `on-request`, тишину при автопилоте даёт наш
+        // собственный гейт — так карточка остаётся нашей, со своими подписями.
         approvalPolicy: 'on-request',
         // Sent ONLY when the chip has drifted from the sandbox the thread was
         // opened with: the thread's sandbox is fixed at thread/start, so toggling

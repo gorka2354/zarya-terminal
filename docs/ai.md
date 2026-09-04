@@ -177,7 +177,7 @@ description only in `displayName` / `input.title`, never in a top-level title, s
 label synthesized from the tool name alone read «Bash» or «Edit» — a card describing
 nothing, in the surface that is always on screen.
 
-### Session allowances, and the floor beneath them
+### Session allowances, and what a card tells you before you press it
 
 Between "ask every time" and AUTOPILOT there is a third button on the card: **allow
 for this session**. It creates a rule scoped to the conversation, and the card shows
@@ -185,13 +185,21 @@ the rule verbatim before you press it — "for the rest of this session, don't a
 about: `git status`" — so an allowance is never wider than what you read
 (`src/shared/allowRules.ts`).
 
-Underneath both sits a floor that neither an allowance nor AUTOPILOT can lift:
-recursive deletes, `git push --force`, `DROP TABLE` and their kin are always shown
-before they run (`src/shared/irreversible.ts`, `tests/irreversible.test.ts`).
+Recursive deletes, `git push --force`, `DROP TABLE` and their kin never get such a
+rule: they are decided one at a time, and their card carries the line **this cannot
+be undone** (`src/shared/irreversible.ts`, `tests/irreversible.test.ts`).
 
-This is **not** a sandbox, and the interface never calls it one: there is no OS
-isolation here. It is a promise about what Zarya always puts in front of you — the
-only claim the mechanism can actually back.
+That list used to be a *floor* as well: those commands were shown even with
+AUTOPILOT on. The floor is gone, deliberately (2026-09-04). It could only ever match the literal
+shape of a command — the same delete behind a variable, an alias or a shell script
+walked straight past it — so it bought little, while a switch that sometimes still
+asks is worse than either honest state. AUTOPILOT now means what the chip says:
+every tool runs without asking, except the agent's own `AskUserQuestion`, which is a
+question **to** you and has nothing to approve.
+
+None of this is a sandbox, and the interface never calls it one: there is no OS
+isolation here. What remains is a claim the mechanism can actually back — that a card
+you are shown names the cost before you decide.
 
 ### MCP servers: state, cost, and whose they are
 

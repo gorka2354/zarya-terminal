@@ -25,7 +25,7 @@ import { useSessionsStore } from '@/state/sessionsStore'
 import { setAgentStatusFor, useUiStore } from '@/state/uiStore'
 import { addCost } from '@shared/cost'
 import { registerAiBridge } from './aiBridge'
-import { gateLabel } from './gates'
+import { gateLabel, isConversationBusy } from './gates'
 import { applySubagentEvent, type SubagentRun } from './subagents'
 import type { BackgroundTask } from '@shared/agentTasks'
 import { enginePromptAppend } from '@shared/enginePrompt'
@@ -234,8 +234,9 @@ export interface PendingTool {
    */
   allowAlwaysOnly?: boolean
   /**
-   * Гейт показан НЕСМОТРЯ на автопилот: команда необратима. Карточка обязана
-   * назвать причину, иначе вопрос при снятом гейте читается как поломка.
+   * После этой команды возврата нет. ПОДПИСЬ на карточке, а не второй гейт:
+   * при автопилоте карточки не будет вовсе (пол снят 2026-09-04), а когда гейты
+   * включены — человек решает, видя цену.
    */
   irreversible?: { kind: string; hit: string }
   /**
@@ -571,10 +572,13 @@ export interface Conversation {
   activeRequestId?: string
 }
 
-/** A conversation is "busy" (input blocked) while streaming OR while tools are unresolved. */
-export function isConversationBusy(conv: Conversation): boolean {
-  return conv.streaming || conv.pendingTools.length > 0
-}
+/*
+ * «Занята» живёт в `./gates` — рядом с остальными правилами про гейты, и там же
+ * её проверяет тест. Строка ввода судила о занятости САМА и разошлась с этим
+ * определением: она считала занятой беседу с одобренным гейтом и НЕ считала — с
+ * гейтом, который ещё ждёт решения. Ровно наоборот.
+ */
+export { isConversationBusy } from './gates'
 
 /**
  * The conversation shown/edited for a terminal session — so each terminal keeps
@@ -2017,8 +2021,8 @@ export const useAiStore = create<AiState>((set, get) => {
           ]
         }))
         // Человек уже разрешил ровно эту команду до конца сессии — исполняем
-        // без вопроса. Необратимое сюда не попадёт: matchesRule отказывает ему
-        // независимо от списка (пол выше правил).
+        // без вопроса. Необратимое сюда не попадёт: правила ему не выдаются, и
+        // matchesRule отказывает независимо от списка.
         if (!ev.questions) {
           const conv = get().conversations.find((c) => c.id === convId)
           /*

@@ -172,8 +172,7 @@ export const RU: Dict = {
   'feed.allowSession': 'ДО КОНЦА СЕССИИ',
   'feed.allowSessionHint':
     'Больше не спрашивать в этой панели про: {rule}. Снять — в списке разрешённого под строкой ввода.',
-  'feed.irreversible':
-    'Это не отменить: {hit}. Заря показывает такие команды всегда, даже при автопилоте.',
+  'feed.irreversible': 'Это не отменить: {hit}. После неё возврата нет.',
   'feed.allowedTitle': 'Разрешено до конца сессии',
   'feed.allowedRevoke': 'снять',
   'feed.wantsToRun': 'агент хочет выполнить',
@@ -1883,8 +1882,7 @@ export const EN: Dict = {
   'feed.allowSession': 'FOR THIS SESSION',
   'feed.allowSessionHint':
     'Stop asking in this pane about: {rule}. Revoke it in the allowed list under the input.',
-  'feed.irreversible':
-    'This cannot be undone: {hit}. Zarya always shows such commands, autopilot or not.',
+  'feed.irreversible': 'This cannot be undone: {hit}. There is no way back after it.',
   'feed.allowedTitle': 'Allowed for this session',
   'feed.allowedRevoke': 'revoke',
   'feed.wantsToRun': 'the agent wants to run',

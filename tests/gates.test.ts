@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
   GATE_HEAD_CHARS,
+  barTarget,
+  enterApprovesGate,
   feedIsBusy,
   gateLabel,
   gateView,
+  isConversationBusy,
   orphanGates,
   toolLabel
 } from '@/features/ai/gates'
@@ -277,5 +280,111 @@ describe('feedIsBusy', () => {
 
   it('is idle with no conversation at all', () => {
     expect(feedIsBusy(undefined)).toBe(false)
+  })
+})
+
+/**
+ * Regression guard for a bug the owner hit head-on: a permission card was waiting
+ * for a decision, he typed a message instead of pressing it — and the pane swapped
+ * itself for an empty conversation. The 615-message transcript with the unanswered
+ * gate was intact on disk and still listed under «АГЕНТЫ · ЖДЁТ», but it left the
+ * screen with no line saying so, which reads exactly like data loss.
+ *
+ * Two defects met: the bar judged busyness with `pendingTools.some(t => t.settled)`
+ * (the inverse of the truth — an APPROVED gate counted as busy, an UNANSWERED one
+ * did not), so the message never reached the queue; and `askAgent` funnelled every
+ * non-reusable case — other engine, streaming, waiting gate — into "start a new
+ * conversation". One function decides both now.
+ */
+describe('barTarget', () => {
+  const cc = (over: Partial<Conversation> = {}): Conversation =>
+    conv({ engine: 'claude-code', ...over })
+
+  it('continues an idle conversation of the same engine', () => {
+    expect(barTarget(cc(), 'claude-code')).toBe('continue')
+  })
+
+  it('NEVER starts a new conversation while a gate awaits a decision', () => {
+    // The bug: this returned 'new', and the waiting transcript left the screen.
+    expect(barTarget(cc({ pendingTools: [gate()] }), 'claude-code')).toBe('queue')
+  })
+
+  it('queues while the agent is streaming', () => {
+    expect(barTarget(cc({ streaming: true }), 'claude-code')).toBe('queue')
+  })
+
+  it('queues while an approved tool is still running', () => {
+    // settled = approved, not finished: a message sent now would land between
+    // tool_use and tool_result, which the provider rejects outright.
+    expect(barTarget(cc({ pendingTools: [gate({ settled: true })] }), 'claude-code')).toBe('queue')
+  })
+
+  it('queues on a pending question too — it is a decision like any other', () => {
+    expect(barTarget(cc({ pendingTools: [gate({ kind: 'question' })] }), 'claude-code')).toBe(
+      'queue'
+    )
+  })
+
+  it('starts a new conversation when the pane has none', () => {
+    expect(barTarget(undefined, 'claude-code')).toBe('new')
+  })
+
+  it('starts a new conversation for a different engine, busy or not', () => {
+    // A Claude conversation must not swallow a message typed in Codex mode —
+    // this is the one case where a fresh conversation is the honest answer.
+    expect(barTarget(cc(), 'codex')).toBe('new')
+    expect(barTarget(cc({ pendingTools: [gate()] }), 'codex')).toBe('new')
+  })
+
+  it('agrees with isConversationBusy on every shape', () => {
+    // The bar and the store diverged once already; keep them provably identical.
+    for (const c of [
+      cc(),
+      cc({ streaming: true }),
+      cc({ pendingTools: [gate()] }),
+      cc({ pendingTools: [gate({ settled: true })] })
+    ]) {
+      expect(barTarget(c, 'claude-code') === 'queue').toBe(isConversationBusy(c))
+    }
+  })
+})
+
+/**
+ * SECURITY regression guard. One keypress is served by two handlers, in this
+ * order: the input's own, then the window key dispatcher. The input sends what
+ * was typed and clears the field — so the dispatcher, when its turn came, saw an
+ * EMPTY field and approved the waiting gate on that evidence. Typing a message
+ * and pressing Enter silently said "yes" to a command the user never read.
+ *
+ * Found by the live run (scripts/gate-queue-test.mjs), not by review: on paper
+ * the guard `ref.current?.value.trim()` looks sufficient.
+ */
+describe('enterApprovesGate', () => {
+  const q = { hasGate: true, inOtherField: false, hadText: false }
+
+  it('approves a bare Enter on an empty input — the whole point of the shortcut', () => {
+    expect(enterApprovesGate(q)).toBe(true)
+  })
+
+  it('does NOT approve when the field had text a moment ago', () => {
+    // The bug: by the time the dispatcher runs, the field is already empty.
+    expect(enterApprovesGate({ ...q, hadText: true })).toBe(false)
+  })
+
+  it('does NOT approve from another input field', () => {
+    expect(enterApprovesGate({ ...q, inOtherField: true })).toBe(false)
+  })
+
+  it('has nothing to approve without a waiting gate', () => {
+    expect(enterApprovesGate({ ...q, hasGate: false })).toBe(false)
+  })
+
+  it('stays false whenever anything argues against it', () => {
+    for (const hasGate of [true, false])
+      for (const inOtherField of [true, false])
+        for (const hadText of [true, false])
+          expect(enterApprovesGate({ hasGate, inOtherField, hadText })).toBe(
+            hasGate && !inOtherField && !hadText
+          )
   })
 })
