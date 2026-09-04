@@ -70,6 +70,63 @@ describe('что показывается всегда', () => {
   })
 })
 
+/**
+ * Поймано вживую: коммит, в сообщении которого перечислялись `rm -rf`,
+ * `git push --force` и `DROP TABLE`, получил карточку «это не отменить».
+ * Правила читали строку целиком вместе с телом heredoc — и подпись утверждала
+ * про безобидный `git commit`, что после него нет пути назад.
+ */
+describe('текст — не команда', () => {
+  it('сообщение коммита в heredoc не делает коммит необратимым', () => {
+    const cmd = [
+      "git commit -F - <<'EOF'",
+      'fix: убрал пол под автопилотом',
+      '',
+      'Раньше rm -rf, git push --force и DROP TABLE показывались всегда.',
+      'EOF',
+      'git log --oneline -1'
+    ].join('\n')
+    expect(irreversible(...bash(cmd))).toBeNull()
+  })
+
+  it('и в обычном -m тоже', () => {
+    expect(irreversible(...bash("git commit -m 'do not run rm -rf here'"))).toBeNull()
+    expect(irreversible(...bash('git commit -m "напоминание про git push --force"'))).toBeNull()
+  })
+
+  it('гасится ТОЛЬКО сообщение коммита — в кавычках бывает и настоящая команда', () => {
+    /*
+     * Первая версия правки убирала кавычки везде и тут же похоронила `psql -c`,
+     * где в кавычках как раз код. Снаружи «данные» от «кода» в кавычках не
+     * отличить, поэтому гасим лишь то, про что знаем наверняка.
+     */
+    expect(irreversible(...bash('psql -c "DROP TABLE users"'))?.kind).toBe('drop')
+    expect(irreversible(...bash('sh -c "rm -rf build"'))?.kind).toBe('delete')
+  })
+
+  it('и рядом с коммитом настоящая команда всё равно видна', () => {
+    // Гасится сообщение, а не вся строка: `&& rm -rf` после коммита остаётся.
+    expect(irreversible(...bash('git commit -m "мелочь" && rm -rf build'))?.kind).toBe('delete')
+  })
+
+  it('сама команда ловится и с аргументом в кавычках', () => {
+    expect(irreversible(...bash("rm -rf 'моя папка'"))?.kind).toBe('delete')
+    expect(irreversible(...bash('rm -rf "C:\\Users\\pesto\\tmp"'))?.kind).toBe('delete')
+    expect(irreversible(...bash('git push --force "origin" main'))?.kind).toBe('force-push')
+  })
+
+  it('и подпись показывает НАСТОЯЩИЙ кусок команды человека', () => {
+    // Разбор идёт по погашенной копии, а `hit` режется из исходной строки:
+    // показать человеку пробелы вместо его пути значило бы соврать иначе.
+    const hit = irreversible(...bash("rm -rf 'моя папка'"))?.hit ?? ''
+    expect(hit).toContain('моя папка')
+  })
+
+  it('незакрытый heredoc не роняет разбор', () => {
+    expect(() => irreversible(...bash("cat <<'EOF'\nrm -rf /"))).not.toThrow()
+  })
+})
+
 describe('правила «до конца сессии»', () => {
   it('для команды правило — сама команда, дословно', () => {
     expect(ruleFor(...bash('git status'))).toBe('Bash: git status')
