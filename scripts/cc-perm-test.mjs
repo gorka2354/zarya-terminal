@@ -23,17 +23,36 @@ const app = await electron.launch({
       ZARYA_NO_ONBOARDING: '1', NODE_ENV: 'production' }
 })
 const errors = []
+let failed = false
 try {
   const page = await app.firstWindow()
   await page.waitForLoadState('domcontentloaded')
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()))
   await page.waitForTimeout(2500)
 
-  await page.evaluate(() =>
-    window.__zaryaAskAgent?.(
-      'Запусти в bash команду: echo zarya-native-ok . Ничего больше не делай.',
-      'claude-code'
-    )
+  /*
+   * КОМАНДА С ПОБОЧНЫМ ДЕЙСТВИЕМ, А НЕ `echo`.
+   *
+   * Здесь стоял `echo zarya-native-ok`, и выпускной прогон 0.7.8 показал, что
+   * карточка на него больше не поднимается: движок считает такую команду
+   * безопасной и выполняет сам, не спрашивая Зарю. Проверка при этом молчала —
+   * печатала «approved: false» и завершалась успехом, то есть сценарий, который
+   * существует ради round-trip разрешения, годами мог не проверять ничего.
+   *
+   * Проверено контролем: на коммите до правок 0.7.8 поведение то же самое, так
+   * что дело в движке, а не в Заре.
+   *
+   * Пишем файл во временную папку прогона: побочное действие — ровно то, ради
+   * чего карточка и существует, а папка уходит вместе с прогоном.
+   */
+  const probe = join(userData, 'zarya-perm-probe.txt').replace(/\\/g, '/')
+  await page.evaluate(
+    (p) =>
+      window.__zaryaAskAgent?.(
+        `Запусти в bash ровно одну команду: echo zarya-native-ok > "${p}" . Ничего больше не делай.`,
+        'claude-code'
+      ),
+    probe
   )
 
   let approved = false
@@ -73,9 +92,37 @@ try {
   }
   console.log('=== console errors (' + errors.length + '):')
   for (const e of errors.slice(0, 10)) console.log('  !', e.slice(0, 200))
+
+  /*
+   * МОЛЧАНИЕ ЗДЕСЬ БЫЛО ХУЖЕ ПАДЕНИЯ.
+   *
+   * Сценарий печатал итог и всегда завершался успехом: «approved: false»
+   * читалось как строка диагностики, а означало, что карточка не поднялась
+   * вовсе — то есть проверять round-trip разрешения было нечем. Прогон, который
+   * молча перестал проверять своё, — это ложное «всё зелено».
+   */
+  const ranTool = (dump?.messages || []).some((m) =>
+    m.content.some((p) => p.type === 'tool_result')
+  )
+  if (!approved) {
+    console.log(
+      '\n✗ ПРОВАЛ: карточка разрешения не поднялась —',
+      ranTool
+        ? 'движок выполнил команду сам, минуя canUseTool'
+        : 'и инструмент не выполнился вовсе'
+    )
+    failed = true
+  } else if (!ranTool) {
+    console.log('\n✗ ПРОВАЛ: карточку одобрили, но результат инструмента не пришёл')
+    failed = true
+  } else {
+    console.log('\n✓ round-trip разрешения работает: карточка → одобрение → результат')
+  }
 } finally {
   await app.close()
   try {
     rmSync(userData, { recursive: true, force: true })
   } catch {}
 }
+
+process.exit(failed ? 1 : 0)
