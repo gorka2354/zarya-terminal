@@ -1,15 +1,15 @@
 /**
- * Пол под автопилотом и «разрешить до конца сессии».
+ * Ступени допуска: «до конца сессии», автопилот и подпись «это не отменить».
  *
  * Раньше выбор был из двух положений: подтверждать `git status` по сто раз за
- * день — или снять гейт целиком и получить `rm -rf` без вопроса. Люди выбирают
- * второе, потому что первое невыносимо, и это худший исход.
- *
- * Прогон проверяет, что появилась середина и что у неё есть дно:
- * — «до конца сессии» больше не спрашивает про ТУ ЖЕ команду;
- * — но про другую спрашивает, даже если начало совпадает;
- * — необратимое показывается всегда, даже при включённом автопилоте, и
- *   разрешить его «до конца сессии» нельзя вообще.
+ * день — или снять гейт целиком. Прогон проверяет, что середина есть и что
+ * каждое положение означает ровно то, что написано:
+ * — «до конца сессии» больше не спрашивает про ТУ ЖЕ команду, но про другую
+ *   спрашивает, даже если начало совпадает;
+ * — автопилот не спрашивает НИ О ЧЁМ, включая `rm -rf` и помеченное сервером
+ *   как разрушающее (пол под автопилотом снят осознанно, см. блок [3]);
+ * — а когда гейты включены, карточка называет цену: «это не отменить», и
+ *   разрешить такое «до конца сессии» по-прежнему нельзя.
  */
 import { _electron as electron } from 'playwright'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
@@ -102,26 +102,58 @@ try {
   const idFresh = await page.evaluate(() => window.__zaryaStartAgent?.('codex', 'run a tool please'))
   ok('в новой беседе спрашивают снова', !!(await waitGate(page, idFresh)))
 
-  console.log('\n[3] Необратимое спрашивают всегда')
-  // Автопилот включаем на самой беседе — он свойство беседы, а не панели.
+  /*
+   * АВТОПИЛОТ ЗНАЧИТ АВТОПИЛОТ.
+   *
+   * Раньше здесь был «пол»: `rm -rf` показывался даже при снятых гейтах. От
+   * него отказались осознанно (решение владельца, 2026-09-04) — тумблер,
+   * который иногда всё-таки спрашивает, хуже обоих честных состояний, а пол
+   * ловил лишь дословную форму команды и защитой не был. Прогон сторожит новое
+   * обещание: при автопилоте не спрашивают НИ О ЧЁМ.
+   *
+   * Ходы идут в ОДНОЙ беседе (`__zaryaSendIn`), потому что автопилот — свойство
+   * беседы: новый запуск проверял бы заодно наследование, а это другой вопрос.
+   */
+  console.log('\n[3] При автопилоте не спрашивают ни о чём')
   const convId = await page.evaluate(() => window.__zaryaStartAgent?.('codex', 'привет'))
   await page.waitForTimeout(800)
   await page.evaluate((c) => window.__zaryaSetBypassFor?.(c, true), convId)
   await page.waitForTimeout(300)
 
-  const id3 = await page.evaluate(() => window.__zaryaStartAgent?.('codex', 'run a tool please'))
-  await page.waitForTimeout(1800)
-  const quiet = await page.evaluate(
-    (id) => window.__zaryaConvById?.(id)?.pendingTools?.filter((x) => !x.settled).length ?? 0,
-    id3
+  const quietAfter = async (text, ms = 2500) => {
+    await page.evaluate(([c, t]) => window.__zaryaSendIn?.(c, t), [convId, text])
+    await page.waitForTimeout(ms)
+    return page.evaluate(
+      (id) => window.__zaryaConvById?.(id)?.pendingTools?.filter((x) => !x.settled).length ?? 0,
+      convId
+    )
+  }
+  ok('рутина проходит молча', (await quietAfter('run a tool please')) === 0)
+  ok('и «rm -rf» тоже — это и есть автопилот', (await quietAfter('run a danger tool')) === 0)
+  ok(
+    'и инструмент, помеченный сервером как разрушающий',
+    (await quietAfter('run an mcp tool')) === 0
   )
-  ok('при автопилоте обычное не спрашивают', quiet === 0, quiet)
 
+  /*
+   * А ВОТ КОГДА ГЕЙТЫ ВКЛЮЧЕНЫ — карточка обязана называть цену.
+   *
+   * Признак необратимого никуда не делся, он сменил роль: был вторым гейтом,
+   * стал подписью. Человек, который спрашивать не отказывался, должен читать не
+   * просто команду, а команду с «это не отменить».
+   */
+  console.log('\n[4] Без автопилота карточка называет цену')
+  await page.evaluate((c) => window.__zaryaSetBypassFor?.(c, false), convId)
+  await page.waitForTimeout(300)
   const id4 = await page.evaluate(() => window.__zaryaStartAgent?.('codex', 'run a danger tool'))
   const danger = await waitGate(page, id4)
-  ok('а «rm -rf» — спрашивают', !!danger, danger)
-  ok('и сказано, почему', !!danger?.irreversible, danger?.irreversible)
-  ok('в подписи видна сама команда', (danger?.irreversible?.hit ?? '').includes('rm -rf'), danger?.irreversible)
+  ok('«rm -rf» спрашивают', !!danger, danger)
+  ok('и сказано, что возврата нет', !!danger?.irreversible, danger?.irreversible)
+  ok(
+    'в подписи видна сама команда',
+    (danger?.irreversible?.hit ?? '').includes('rm -rf'),
+    danger?.irreversible
+  )
 
   const dangerButtons = await page.evaluate(() =>
     [...document.querySelectorAll('.zy-mf-tool-actions button')].map((b) => b.textContent.trim())
@@ -131,18 +163,25 @@ try {
     !dangerButtons.includes('ДО КОНЦА СЕССИИ'),
     dangerButtons
   )
-  const warn = await page.evaluate(() => document.querySelector('.zy-mf-tool-stop')?.textContent ?? '')
+  const warn = await page.evaluate(
+    () => document.querySelector('.zy-mf-tool-stop')?.textContent ?? ''
+  )
   ok('предупреждение на экране', warn.includes('не отменить'), warn.slice(0, 60))
+  ok(
+    'и оно больше не обещает показ при автопилоте',
+    !/автопилот/i.test(warn),
+    warn.slice(0, 80)
+  )
 
   /*
-   * Пометка сервера — не то же, что наш пол.
+   * Пометка сервера — не то же, что наша.
    *
    * MCP разрешает серверу объявить свой инструмент разрушающим. Мы такую
    * пометку показываем, но ручаться за неё не можем: сервер вправе её не
    * заполнить или ошибиться. Поэтому она обязана быть ОТДЕЛЬНОЙ строкой и
    * называть источник — иначе чужое заявление читается как наше обещание.
    */
-  console.log('\n[4] Пометку сервера показываем, но не выдаём за свою')
+  console.log('\n[4a] Пометку сервера показываем, но не выдаём за свою')
   const id5 = await page.evaluate(() => window.__zaryaStartAgent?.('codex', 'run an mcp tool'))
   const mcpGate = await waitGate(page, id5)
   ok('гейт поднялся на инструменте сервера', mcpGate?.name?.startsWith('mcp__'), mcpGate?.name)
